@@ -42,6 +42,17 @@ PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
+    for (auto& op : _operators) {
+        auto& op_state = _operator_stages[op->get_id()];
+        if (op_state != OperatorStage::CLOSED) {
+            auto msg = fmt::format("{} close operator {} failed, may leak resources when deleting",
+                                   to_readable_string(), op->get_name());
+            LOG(ERROR) << msg;
+#ifdef BE_TEST
+            throw std::runtime_error(msg);
+#endif
+        }
+    }
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
@@ -532,6 +543,18 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
         WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
                       fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
     }
+    // check should be CLOSED status
+    for (auto& op : _operators) {
+        auto& op_state = _operator_stages[op->get_id()];
+        if (op_state != OperatorStage::CLOSED) {
+            auto msg = fmt::format("{} close operator {} failed, may leak resources when closing", to_readable_string(),
+                                   op->get_name());
+            LOG(ERROR) << msg;
+#ifdef BE_TEST
+            throw std::runtime_error(msg);
+#endif
+        }
+    }
 }
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
@@ -758,10 +781,12 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
 }
 
 Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+    auto msg = strings::Substitute("[Driver] close operator [driver=$1] [operator=$2]", to_readable_string(),
+                                   op->get_name());
     if (_fragment_ctx->is_canceled()) {
-        RETURN_IF_ERROR(_mark_operator_cancelled(op, state));
+        WARN_IF_ERROR(_mark_operator_cancelled(op, state), msg + " is failed to cancel");
     } else {
-        RETURN_IF_ERROR(_mark_operator_finished(op, state));
+        WARN_IF_ERROR(_mark_operator_finished(op, state), msg + " is failed to finish");
     }
 
     auto& op_state = _operator_stages[op->get_id()];
@@ -769,8 +794,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
-                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
+    VLOG_ROW << msg;
     {
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         SCOPED_TIMER(op->_close_timer);
