@@ -172,7 +172,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       checkpoint, instead of due to timeout (which may cause data loss).
 
   - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
-    respectively. For details, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
+    respectively. For details, see [FE configurations](../loading/Loading_intro.md#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
 
   These configurations are mutable and can be modified by using `ADMIN SET FRONTEND CONFIG`:
 
