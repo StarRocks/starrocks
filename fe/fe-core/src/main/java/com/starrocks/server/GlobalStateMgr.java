@@ -247,6 +247,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -318,6 +319,8 @@ public class GlobalStateMgr {
     // because fair lock has poor performance.
     // Using QueryableReentrantLock to print owner thread in debug mode.
     private QueryableReentrantLock lock;
+
+    private final PortConnectivityChecker portConnectivityChecker;
 
     private Load load;
     private LoadManager loadManager;
@@ -555,6 +558,7 @@ public class GlobalStateMgr {
 
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
+        this.portConnectivityChecker = new PortConnectivityChecker();
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -1230,6 +1234,7 @@ public class GlobalStateMgr {
 
     // start threads that should running on all FE
     private void startNonLeaderDaemonThreads() {
+        portConnectivityChecker.start();
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
