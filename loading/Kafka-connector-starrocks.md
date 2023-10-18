@@ -121,8 +121,8 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 | bufferflush.maxbytes                | 否       | 94371840(90M)                                                | 数据攒批的大小，达到该阈值后将数据通过 Stream Load 批量写入 StarRocks。取值范围：[64MB, 10GB]。 Stream Load SDK buffer可能会启动多个 Stream Load 来缓冲数据，因此这里的阈值是指总数据量大小。 |
 | bufferflush.intervalms              | 否       | 300000                                                       | 数据攒批发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。 |
 | connect.timeoutms                   | 否       | 1000                                                         | 连接 http-url 的超时时间。取值范围：[100, 60000]。           |
-| sink.properties.*                   |          |                                                              | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `sink.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#)。 |
-| sink.properties.format              | 否       | json                                                         | Stream Load 导入时的数据格式。取值为 CSV 或者 JSON。默认为JSON。更多参数说明，参见 [CSV 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD#csv-parameters)和 [JSON 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD#json-parameters)。 |
+| sink.properties.*                   |          |                                                              | 指定 Stream Load 的参数，用于控制导入行为，例如使用 `sink.properties.format` 指定导入数据的格式为 CSV 或者 JSON。更多参数和说明，请参见 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
+| sink.properties.format              | 否       | json                                                         | Stream Load 导入时的数据格式。取值为 CSV 或者 JSON。默认为JSON。更多参数说明，参见 [CSV 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD#csv-适用参数)和 [JSON 适用参数](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD#json-适用参数)。 |
 
 ## 使用限制
 
