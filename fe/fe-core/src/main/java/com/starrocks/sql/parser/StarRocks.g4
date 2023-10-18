@@ -526,7 +526,12 @@ dropTaskStatement
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+<<<<<<< HEAD
     ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+=======
+    ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
+    withRowAccessPolicy*
+>>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
     comment?
     materializedViewDesc*
     AS queryStatement
