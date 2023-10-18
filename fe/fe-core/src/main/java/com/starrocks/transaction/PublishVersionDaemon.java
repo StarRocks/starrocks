@@ -390,7 +390,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                          List<Long> versions, List<TransactionState> transactionStates,
                                          TransactionStateBatch stateBatch) {
         db.readLock();
+        // version -> shadowTablets
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
+        Set<Tablet> normalTablets = null;
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
@@ -409,9 +411,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return false;
             }
 
-            Set<Tablet> normalTablets = null;
-            Set<Tablet> shadowTablets = null;
-
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
                 List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
@@ -422,8 +421,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         continue;
                     }
                     if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
-                        shadowTablets = (shadowTablets == null) ? Sets.newHashSet() : shadowTablets;
-                        shadowTablets.addAll(index.getTablets());
                         if (shadowTabletsMap.containsKey(versions.get(i))) {
                             shadowTabletsMap.get(versions.get(i)).addAll(index.getTablets());
                         } else {
@@ -439,38 +436,37 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
             }
 
-            long startVersion = versions.get(0);
-            long endVersion = versions.get(versions.size() - 1);
-
-            try {
-                for (Map.Entry<Long, Set<Tablet>> item : shadowTabletsMap.entrySet()) {
-                    int index = txnIds.indexOf(item.getKey());
-                    List<Tablet> publishShdowTablets = new ArrayList<>();
-                    publishShdowTablets.addAll(normalTablets);
-                    Utils.publishLogVersionBatch(publishShdowTablets, txnIds.subList(index, txnIds.size()),
-                            versions.subList(index, versions.size()));
-                }
-                if (CollectionUtils.isNotEmpty(normalTablets)) {
-                    Map<Long, Double> compactionScores = new HashMap<>();
-                    List<Tablet> publishTablets = new ArrayList<>();
-                    publishTablets.addAll(normalTablets);
-
-                    // commit time of last transactionState as commitTime
-                    long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
-                    Utils.publishVersion(publishTablets, txnIds,
-                            startVersion - 1, endVersion, commitTime, compactionScores);
-
-                    Quantiles quantiles = Quantiles.compute(compactionScores.values());
-                    stateBatch.setCompactionScore(partitionId, quantiles);
-                }
-            } catch (Throwable e) {
-                LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
-                        txnIds, e.getMessage());
-                return false;
-            }
-
         } finally {
             db.readUnlock();
+        }
+
+        long startVersion = versions.get(0);
+        long endVersion = versions.get(versions.size() - 1);
+
+        try {
+            for (Map.Entry<Long, Set<Tablet>> item : shadowTabletsMap.entrySet()) {
+                int index = versions.indexOf(item.getKey());
+                List<Tablet> publishShdowTablets = new ArrayList<>(item.getValue());
+                Utils.publishLogVersionBatch(publishShdowTablets, txnIds.subList(index, txnIds.size()),
+                        versions.subList(index, versions.size()));
+            }
+            if (CollectionUtils.isNotEmpty(normalTablets)) {
+                Map<Long, Double> compactionScores = new HashMap<>();
+                List<Tablet> publishTablets = new ArrayList<>();
+                publishTablets.addAll(normalTablets);
+
+                // commit time of last transactionState as commitTime
+                long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
+                Utils.publishVersionBatch(publishTablets, txnIds,
+                        startVersion - 1, endVersion, commitTime, compactionScores);
+
+                Quantiles quantiles = Quantiles.compute(compactionScores.values());
+                stateBatch.setCompactionScore(tableId, partitionId, quantiles);
+            }
+        } catch (Throwable e) {
+            LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
+                    txnIds, e.getMessage());
+            return false;
         }
 
         return true;
@@ -533,7 +529,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
                 return CompletableFuture.completedFuture(null);
             }
-            Table table = db.getTable(tableId);
 
             List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
@@ -541,15 +536,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Long partitionId = item.getKey();
 
                 CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-                    boolean success = publishPartitionBatch(db, table.getId(), partitionId, item.getValue(),
+                    boolean success = publishPartitionBatch(db, tableId, partitionId, item.getValue(),
                             partitionVersions.get(partitionId), partitionStates.get(partitionId), txnStateBatch);
-                    partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(table.getId()).
+                    partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(tableId).
                             getIdToPartitionCommitInfo().get(partitionId).setVersionTime(
                                     success ? System.currentTimeMillis() : -System.currentTimeMillis()));
                     return success;
                 }, getLakeTaskExecutor()).exceptionally(ex -> {
                     LOG.error("Fail to publish txn batch ");
-                    partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(table.getId()).
+                    partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(tableId).
                             getIdToPartitionCommitInfo().get(partitionId).setVersionTime(-System.currentTimeMillis()));
                     return false;
                 });
@@ -557,7 +552,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             CompletableFuture<Boolean> publishFuture = CompletableFuture.allOf(
-                    futureList.toArray(new CompletableFuture[0])).
+                            futureList.toArray(new CompletableFuture[0])).
                     thenApply(v -> futureList.stream().allMatch(CompletableFuture::join));
 
             return publishFuture.thenAccept(success -> {

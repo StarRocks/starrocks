@@ -606,7 +606,7 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionState.class);
+                data = TransactionStateBatch.read(in);
                 isRead = true;
                 break;
             }

@@ -104,8 +104,9 @@ public class Utils {
         publishVersion(tablets, txnId, baseVersion, newVersion, commitTimeInSecond, null);
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, List<Long> txnIds, long baseVersion, long newVersion,
-                                      long commitTimeInSecond, Map<Long, Double> compactionScores)
+    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds,
+                                      long baseVersion, long newVersion, long commitTimeInSecond,
+                                           Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
@@ -160,7 +161,7 @@ public class Utils {
                                       long commitTimeInSecond, Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
         List<Long> txnIds = Lists.newArrayList(txnId);
-        publishVersion(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores);
+        publishVersionBatch(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores);
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)

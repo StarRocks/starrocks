@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
@@ -97,52 +96,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
 
     public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
-            TableCommitInfo commitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
-            List<String> validDictCacheColumns = Lists.newArrayList();
-            List<Long> dictCollectedVersions = Lists.newArrayList();
-
-            long maxPartitionVersionTime = -1;
-            long tableId = table.getId();
-            CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
-            for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-                Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
-                long version = partitionCommitInfo.getVersion();
-                long versionTime = partitionCommitInfo.getVersionTime();
-                Quantiles compactionScore = txnStateBatch.getCompactionScoresByPartition(partitionCommitInfo.getPartitionId());
-                Preconditions.checkState(version == partition.getVisibleVersion() + 1);
-
-                partition.updateVisibleVersion(version, versionTime);
-
-                PartitionIdentifier partitionIdentifier =
-                        new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
-                if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
-                    compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore);
-                } else {
-                    compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
-                }
-                if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
-                    for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
-                        IDictManager.getInstance().removeGlobalDict(tableId, column);
-                    }
-                }
-                if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
-                    validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
-                }
-                if (!partitionCommitInfo.getDictCollectedVersions().isEmpty()) {
-                    dictCollectedVersions = partitionCommitInfo.getDictCollectedVersions();
-                }
-                maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
-            }
-
-            if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
-                for (int i = 0; i < validDictCacheColumns.size(); i++) {
-                    String columnName = validDictCacheColumns.get(i);
-                    long collectedVersion = dictCollectedVersions.get(i);
-                    IDictManager.getInstance()
-                            .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
-                }
-            }
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(txnState);
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
+            applyVisibleLog(txnState, tableCommitInfo, db);
         }
     }
 }

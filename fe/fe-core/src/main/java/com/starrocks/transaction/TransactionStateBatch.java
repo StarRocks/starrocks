@@ -28,9 +28,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -41,9 +39,6 @@ public class TransactionStateBatch implements Writable {
     @SerializedName("transactionStates")
     List<TransactionState> transactionStates = new ArrayList<>();
 
-    @SerializedName("compactionScores")
-    private Map<Long, Quantiles> compactionScores = new HashMap<>();
-
     public TransactionStateBatch() {
 
     }
@@ -51,17 +46,9 @@ public class TransactionStateBatch implements Writable {
         this.transactionStates = transactionStates;
     }
 
-    public Map<Long, Quantiles> getCompactionScores() {
-        return compactionScores;
-    }
-
-    public Quantiles getCompactionScoresByPartition(long partitionId) {
-        return compactionScores.get(partitionId);
-    }
-
-
-    public void setCompactionScore(long partitionId, Quantiles quantiles) {
-        compactionScores.put(partitionId, quantiles);
+    public void setCompactionScore(long tableId, long partitionId, Quantiles quantiles) {
+        transactionStates.stream().forEach(transactionState -> transactionState.getTableCommitInfo(tableId).
+                getPartitionCommitInfo(partitionId).setCompactionScore(quantiles));
     }
 
     public void setTransactionMessage() {

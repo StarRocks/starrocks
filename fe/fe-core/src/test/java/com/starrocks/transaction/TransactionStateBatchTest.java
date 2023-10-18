@@ -16,7 +16,6 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.After;
 import org.junit.Assert;
@@ -67,18 +66,14 @@ public class TransactionStateBatchTest {
         transactionStateList.add(transactionState2);
 
         TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
-        stateBatch.setCompactionScore(1, Quantiles.compute(new ArrayList<>()));
-
         stateBatch.write(out);
         out.flush();
         out.close();
 
         // 2. Read objects from file
         DataInputStream in = new DataInputStream(new FileInputStream(file));
-        TransactionStateBatch readTransactionStateBatch = new TransactionStateBatch();
-        readTransactionStateBatch = TransactionStateBatch.read(in);
+        TransactionStateBatch readTransactionStateBatch = TransactionStateBatch.read(in);
 
-        Assert.assertEquals(1, readTransactionStateBatch.getCompactionScores().size());
         Assert.assertEquals(readTransactionStateBatch.getTableId(), tableId.longValue());
         Assert.assertEquals(2, readTransactionStateBatch.getTxnIds().size());
 
