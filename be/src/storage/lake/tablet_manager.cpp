@@ -874,12 +874,8 @@ Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int
     } else if (!st.ok()) {
         return st;
     } else {
-<<<<<<< HEAD
-        (void)fs::delete_file(txn_log_path);
-=======
         delete_files_async({txn_log_path});
         metacache()->erase(CacheKey(txn_log_path));
->>>>>>> 2c93a3cb2a ([Enhancement] optimize thread pool usage in shared data mode (#32823))
         return Status::OK();
     }
 }
