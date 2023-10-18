@@ -20,6 +20,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -131,7 +132,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
             // Calculate local cost and update total cost
             if (curChildIndex == 0 && prevChildIndex == -1) {
-                localCost = CostModel.calculateCost(groupExpression);
+                localCost = CostModel.calculateCostWithInputProperty(new ExpressionContext(groupExpression),
+                        childrenRequiredProperties);
                 curTotalCost += localCost;
             }
 
@@ -317,11 +319,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
     private void recordCostsAndEnforce(PhysicalPropertySet outputProperty,
                                        List<PhysicalPropertySet> childrenOutputProperties) {
-        // re-calculate local cost and update total cost
-        curTotalCost -= localCost;
-        localCost = CostModel.calculateCostWithChildrenOutProperty(groupExpression, childrenOutputProperties);
-        curTotalCost += localCost;
-
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);
         PhysicalPropertySet requiredProperty = context.getRequiredProperty();
         recordPlanEnumInfo(groupExpression, outputProperty, childrenOutputProperties);

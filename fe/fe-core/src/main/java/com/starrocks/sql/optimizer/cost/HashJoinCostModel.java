@@ -89,19 +89,12 @@ public class HashJoinCostModel {
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
-        switch (execMode) {
-            case BROADCAST:
-                buildCost = rightOutput;
-                probeCost = leftOutput * getAvgProbeCost();
-                break;
-            case SHUFFLE:
-                buildCost = rightOutput / parallelFactor;
-                probeCost = leftOutput * getAvgProbeCost();
-                break;
-            default:
-                buildCost = rightOutput;
-                probeCost = leftOutput;
+        if (JoinExecMode.BROADCAST == execMode) {
+            buildCost = rightOutput;
+        } else {
+            buildCost = rightOutput / parallelFactor;
         }
+        probeCost = leftOutput * getAvgProbeCost();
         double joinCost = buildCost + probeCost;
         // should add output cost
         joinCost += joinStatistics.getComputeSize();
