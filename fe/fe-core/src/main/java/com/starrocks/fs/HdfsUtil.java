@@ -108,7 +108,7 @@ public class HdfsUtil {
                     "Fail to parse columnsFromPath, expected: " + columnsFromPath + ", filePath: " + filePath);
         }
         String[] columns = new String[columnsFromPath.size()];
-        for (int i = strings.length - 2; i >= 0; i--) {
+        for (int i = strings.length - 1; i >= 0; i--) {
             String str = strings[i];
             if (str != null && str.isEmpty() || !str.contains("=")) {
                 continue;
