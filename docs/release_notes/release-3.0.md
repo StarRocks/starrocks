@@ -146,7 +146,7 @@ Release date: June 13, 2023
 ### Improvements
 
 - Predicates in a UNION query can be pushed down after the query is rewritten by an asynchronous materialized view. [#23312](https://github.com/StarRocks/starrocks/pull/23312)
-- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-tablets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - Removed the dependency of NetworkTime on system clocks, which fixes incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
 ### Bug Fixes
@@ -176,7 +176,7 @@ Release date: June 1, 2023
 ### Improvements
 
 - Shared-data clusters support using StarRocks external tables to synchronize data with another StarRocks cluster.
-- Added `load_tracking_logs` to [Information Schema](../administration/information_schema.md#loadtrackinglogs) to record recent loading errors.
+- Added `load_tracking_logs` to [Information Schema](../administration/information_schema.md#load_tracking_logs) to record recent loading errors.
 - Ignores special characters in CREATE TABLE statements. [#23885](https://github.com/StarRocks/starrocks/pull/23885)
 
 ### Bug Fixes
