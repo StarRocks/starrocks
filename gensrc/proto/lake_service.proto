@@ -29,6 +29,10 @@ message PublishVersionRequest {
     // it explicitly for more clarity and better forward compatibility.
     optional int64 base_version = 3;
     optional int64 new_version = 4;
+    // Commit time of the transaction to be published.
+    // If the size of txn_ids is greater than 1, commit_time should be the commit time of the last transaction.
+    // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC)
+    optional int64 commit_time = 5;
 }
 
 message PublishVersionResponse {
@@ -47,6 +51,7 @@ message AbortTxnResponse {
 }
 
 message DeleteTabletRequest {
+    // All tablets must be in the same partition.
     repeated int64 tablet_ids = 1;
 }
 
@@ -184,6 +189,7 @@ message AbortCompactionResponse {
 }
 
 message VacuumRequest {
+    // All tablets must be in the same partition.
     repeated int64 tablet_ids = 1;
     // Tablet metadata files with version numbers greater than or equals to min_retain_version
     // will NOT be vacuumed. For tablet metadata files with version numbers less than
@@ -193,9 +199,14 @@ message VacuumRequest {
     // the timestamp after which created tablet metadata files will not be vacuumed.
     // In addition to retaining all versions after grace_timestamp, retain the last version before
     // grace_timestamp.
+    // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC)
     optional int64 grace_timestamp = 3;
     // Delete txn log files with txn IDs less than min_active_txn_id
     optional int64 min_active_txn_id = 4;
+    // Whether need to delete committed txn logs or not.
+    optional bool delete_txn_log = 5;
+    // ID of the partition the tablet belongs to.
+    optional int64 partition_id = 6;
 }
 
 message VacuumResponse {

@@ -718,7 +718,7 @@ public class StmtExecutor {
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
-                coord.cancel();
+                coord.cancel(context.getState().getErrorMessage());
             }
 
             if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
@@ -839,7 +839,7 @@ public class StmtExecutor {
     }
 
     // Because this is called by other thread
-    public void cancel() {
+    public void cancel(String cancelledMessage) {
         if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
@@ -849,12 +849,12 @@ public class StmtExecutor {
         } else {
             if (subStmtExecutors != null && !subStmtExecutors.isEmpty()) {
                 for (StmtExecutor sub : subStmtExecutors) {
-                    sub.cancel();
+                    sub.cancel(cancelledMessage);
                 }
             }
             Coordinator coordRef = coord;
             if (coordRef != null) {
-                coordRef.cancel();
+                coordRef.cancel(cancelledMessage);
             }
         }
     }
@@ -883,7 +883,7 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killStmt.isConnectionKill());
+            killCtx.kill(killStmt.isConnectionKill(), "killed by kiil statement : " + originStmt);
         }
         context.getState().setOk();
     }
@@ -1132,7 +1132,7 @@ public class StmtExecutor {
             statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                             analyzeStmt.getTableName().getCatalog(),
-                            db, table,
+                            db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeType,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
@@ -1908,10 +1908,10 @@ public class StmtExecutor {
                                 execPlan.getExplainString(TExplainLevel.COSTS));
                     }
 
-                    coord.cancel();
+                    coord.cancel(ErrorCode.ERR_QUERY_EXCEPTION.formatErrorMsg());
                     ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
-                    coord.cancel();
+                    coord.cancel(ErrorCode.ERR_QUERY_TIMEOUT.formatErrorMsg());
                     if (coord.isThriftServerHighLoad()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
                                 "Please check the thrift-server-pool metrics, " +

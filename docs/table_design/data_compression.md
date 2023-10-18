@@ -14,7 +14,7 @@ StarRocks supports four data compression algorithms: LZ4, Zstandard (or zstd), z
 
 You can specify a data compression algorithm for a table only when creating the table, and you cannot change it afterwards.
 
-The following example creates a table `data_compression` with the Zstandard algorithm. For detailed instructions, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+The following example creates a table `data_compression` with the Zstandard algorithm. For detailed instructions, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
 ```SQL
 CREATE TABLE `data_compression` (
@@ -34,4 +34,4 @@ PROPERTIES (
 >
 > If no data compression algorithm is specified, StarRocks uses LZ4 by default.
 
-You can view the compression algorithm of a table using [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md).
+You can view the compression algorithm of a table using [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md).

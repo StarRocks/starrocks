@@ -135,6 +135,7 @@ import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
@@ -204,13 +205,13 @@ public class RuleSet {
     static {
         REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
                 new PushDownProjectLimitRule(),
+                new EliminateLimitZeroRule(), // should before MergeLimitWithSortRule
                 new MergeLimitWithSortRule(),
                 new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
                 new PushDownLimitCTEAnchor(),
                 new PushDownLimitUnionRule(),
                 new MergeLimitWithLimitRule(),
-                new EliminateLimitZeroRule(),
                 PushDownLimitDirectRule.PROJECT,
                 PushDownLimitDirectRule.ASSERT_ONE_ROW,
                 PushDownLimitDirectRule.CTE_CONSUME,
@@ -345,7 +346,8 @@ public class RuleSet {
                 new RewriteHllCountDistinctRule(),
                 new RewriteDuplicateAggregateFnRule(),
                 new RewriteSimpleAggToMetaScanRule(),
-                new RewriteSumByAssociativeRule()
+                new RewriteSumByAssociativeRule(),
+                new RewriteCountIfFunction()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(

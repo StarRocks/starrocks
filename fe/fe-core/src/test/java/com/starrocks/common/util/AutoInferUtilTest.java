@@ -16,6 +16,9 @@ package com.starrocks.common.util;
 
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
+import com.starrocks.server.RunMode;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -29,5 +32,14 @@ public class AutoInferUtilTest {
             Assert.assertTrue(e instanceof NoAliveBackendException
                     && e.getMessage().contains("No alive backend"));
         }
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        Assert.assertEquals(1, AutoInferUtil.calDefaultReplicationNum());
     }
 }

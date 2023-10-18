@@ -93,7 +93,8 @@ public:
     static Status generate_delta_column_group_and_cols(const Tablet* new_tablet, const Tablet* base_tablet,
                                                        const RowsetSharedPtr& src_rowset, RowsetId rid, int64_t version,
                                                        ChunkChanger* chunk_changer, DeltaColumnGroupList& dcgs,
-                                                       std::vector<int> last_dcg_counts);
+                                                       std::vector<int> last_dcg_counts,
+                                                       const TabletSchemaCSPtr& base_tablet_schema);
 
 private:
     ChunkChanger* _chunk_changer = nullptr;

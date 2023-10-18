@@ -35,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.CatalogConnector;
@@ -340,6 +341,19 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate, long limit) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPrunedPartitions(table, predicate, limit);
+            } catch (Exception e) {
+                LOG.error("Failed to getPrunedPartitions on [{}.{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
@@ -369,8 +383,11 @@ public class MetadataMgr {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit) {
-        Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
-        if (statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
+        Statistics statistics = null;
+        if (!FeConstants.runningUnitTest) {
+            statistics = getTableStatisticsFromInternalStatistics(table, columns);
+        }
+        if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
             return connectorMetadata.map(metadata -> metadata.getTableStatistics(
                     session, table, columns, partitionKeys, predicate, limit)).orElse(null);

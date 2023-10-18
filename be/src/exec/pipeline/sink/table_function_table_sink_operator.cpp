@@ -49,7 +49,13 @@ StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const Co
     case TYPE_DATETIME: {
         return url_encode(datum.get_timestamp().to_string());
     }
-    case TYPE_CHAR:
+    case TYPE_CHAR: {
+        std::string origin_str = datum.get_slice().to_string();
+        if (origin_str.length() < type_desc.len) {
+            origin_str.append(type_desc.len - origin_str.length(), ' ');
+        }
+        return url_encode(origin_str);
+    }
     case TYPE_VARCHAR: {
         return url_encode(datum.get_slice().to_string());
     }

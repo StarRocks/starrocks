@@ -148,7 +148,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
                 return Arrays.asList("1234567", "1234568", "1234569");
             } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList("20230801", "20230802", "MAXVALUE");
+                return Arrays.asList("20230801", "20230802");
             } else {
                 return partitionNames;
             }

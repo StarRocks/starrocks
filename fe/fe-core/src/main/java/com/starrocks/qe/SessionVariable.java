@@ -327,6 +327,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
+    public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
+
+    public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
@@ -400,6 +404,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -452,6 +460,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -1283,6 +1292,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
+    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST)
+    private boolean enablePruneComplexTypesInUnnest = true;
+
     @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
     public int rangePrunerPredicateMaxLen = 100;
 
@@ -1366,6 +1378,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
     private boolean enablePruneIcebergManifest = true;
 
+    @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
+    private boolean enableReadIcebergPuffinNdv = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
+    private boolean enableIcebergColumnStatistics = true;
+
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
@@ -1377,9 +1395,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneIcebergManifest = enablePruneIcebergManifest;
     }
 
+    public boolean enableReadIcebergPuffinNdv() {
+        return enableReadIcebergPuffinNdv;
+    }
+
+    public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
+        this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public boolean enableIcebergColumnStatistics() {
+        return enableIcebergColumnStatistics;
+    }
+
+    public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
+        this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2489,6 +2528,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
     }
 
+    public boolean getEnablePruneComplexTypesInUnnest() {
+        return this.enablePruneComplexTypesInUnnest;
+    }
+
+    public void setEnablePruneComplexTypesInUnnest(boolean enablePruneComplexTypesInUnnest) {
+        this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
+    }
+
     public int getRangePrunerPredicateMaxLen() {
         return rangePrunerPredicateMaxLen;
     }
@@ -2606,6 +2653,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
+    }
+
+    public boolean getEnableIcebergIdentityColumnOptimize() {
+        return enableIcebergIdentityColumnOptimize;
+    }
+
+    public boolean getEnablePlanSerializeConcurrently() {
+        return enablePlanSerializeConcurrently;
     }
 
     // Serialize to thrift object

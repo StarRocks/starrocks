@@ -86,6 +86,8 @@ public:
     // [thread-safe]
     void close();
 
+    [[nodiscard]] int64_t queueing_memtable_num() const;
+
     [[nodiscard]] int64_t tablet_id() const;
 
     [[nodiscard]] int64_t partition_id() const;

@@ -1320,8 +1320,25 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     uint32_t next_unique_id = 0;
     std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
     TCreateTabletReq normal_request = request;
+    if (request.tablet_schema.storage_type == TStorageType::COLUMN_WITH_ROW) {
+        // TODO: support schemachange
+        if (is_schema_change) {
+            return Status::NotSupported("column with row store does not support schema change");
+        }
+        normal_request.tablet_schema.columns.emplace_back();
+        TColumn& column = normal_request.tablet_schema.columns.back();
+        column.__set_column_name("__row");
+        TColumnType ctype;
+        ctype.__set_type(TPrimitiveType::VARCHAR);
+        //TODO
+        ctype.__set_len(65535);
+        column.__set_column_type(ctype);
+        column.__set_aggregation_type(TAggregationType::REPLACE);
+        column.__set_is_allow_null(false);
+        column.__set_default_value("");
+    }
     if (!is_schema_change) {
-        next_unique_id = request.tablet_schema.columns.size();
+        next_unique_id = normal_request.tablet_schema.columns.size();
         for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
             col_idx_to_unique_id[col_idx] = col_idx;
         }

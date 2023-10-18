@@ -233,7 +233,7 @@ public class WebBaseAction extends BaseAction {
                 request.setAuthorized(true);
 
                 ConnectContext ctx = new ConnectContext(null);
-                ctx.setQualifiedUser(sessionValue.currentUser.getQualifiedUser());
+                ctx.setQualifiedUser(sessionValue.currentUser.getUser());
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
                 ctx.setCurrentUserIdentity(sessionValue.currentUser);

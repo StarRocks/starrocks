@@ -159,6 +159,7 @@ private:
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
     phmap::flat_hash_map<int64_t, std::shared_ptr<QueryStatistics>> _eos_query_stats;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
+    phmap::flat_hash_map<int64_t, TNetworkAddress> _dest_addrs;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
     // but there may be still in-flight RPC running.

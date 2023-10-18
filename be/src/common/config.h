@@ -86,7 +86,7 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
 CONF_Int32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
-CONF_Int32(drop_tablet_worker_count, "3");
+CONF_mInt32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -121,7 +121,7 @@ CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
 CONF_Int32(download_worker_count, "1");
 // The count of thread to make snapshot.
-CONF_Int32(make_snapshot_worker_count, "5");
+CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
 CONF_Int32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
@@ -965,6 +965,12 @@ CONF_Int64(datacache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight cache jobs.
 // Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
 CONF_Int64(datacache_max_flying_memory_mb, "256");
+// Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
+CONF_Bool(datacache_adaptor_enable, "true");
+// A factor to control the io traffic between cache and network. The larger this parameter,
+// the more requests will be sent to the network.
+// Usually there is no need to modify it.
+CONF_Int64(datacache_skip_read_factor, "1");
 // DataCache engines, alternatives: cachelib, starcache.
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
@@ -1081,5 +1087,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
+
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
 } // namespace starrocks::config

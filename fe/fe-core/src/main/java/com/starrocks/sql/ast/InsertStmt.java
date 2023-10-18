@@ -279,7 +279,13 @@ public class InsertStmt extends DmlStmt {
 
         // parse table function properties
         Map<String, String> props = getTableFunctionProperties();
-        boolean writeSingleFile = Boolean.parseBoolean(props.get("single"));
+        String single = props.getOrDefault("single", "false");
+        if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
+            throw new SemanticException("got invalid parameter \"single\" = \"%s\", expect a boolean value (true or false).",
+                    single);
+        }
+
+        boolean writeSingleFile = single.equalsIgnoreCase("true");
         String path = props.get("path");
         String format = props.get("format");
         String partitionBy = props.get("partition_by");
@@ -303,12 +309,12 @@ public class InsertStmt extends DmlStmt {
         if (compressionType == null) {
             throw new SemanticException("compression is a mandatory property. " +
                     "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                    "(uncompressed, gzip, brotli, zstd, lz4, bz2).");
+                    "(uncompressed, gzip, brotli, zstd, lz4).");
         }
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
             throw new SemanticException("compression type " + compressionType + " is not supported. " +
-                    "Use any of (uncompressed, gzip, brotli, zstd, lz4, bz2).");
+                    "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
         }
 
         if (writeSingleFile && partitionBy != null) {

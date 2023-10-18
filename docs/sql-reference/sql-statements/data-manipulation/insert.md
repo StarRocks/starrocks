@@ -4,7 +4,7 @@
 
 Inserts data into a specific table or overwrites a specific table with data. For detailed information about the application scenarios, see [Load data with INSERT](../../../loading/InsertInto.md).
 
-You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulation/SUBMIT%20TASK.md).
+You can submit an asynchronous INSERT task using [SUBMIT TASK](../data-manipulation/SUBMIT_TASK.md).
 
 ## Syntax
 

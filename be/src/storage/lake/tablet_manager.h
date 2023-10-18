@@ -68,7 +68,7 @@ public:
 
     // Returns the the newly created tablet metadata
     StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size);
+                                                const int64_t* txns, int txns_size, int64_t commit_time);
 
     void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
@@ -94,9 +94,13 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+    StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true) {
+        return get_txn_log(path, fill_cache);
+    }
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
@@ -150,6 +154,7 @@ public:
 
     void update_metacache_limit(size_t limit);
 
+    // The return value will never be null.
     Cache* metacache() { return _metacache.get(); }
 
     int64_t in_writing_data_size(int64_t tablet_id);
@@ -160,6 +165,8 @@ public:
 
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
+
+    void update_segment_cache_size(std::string_view key);
 
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
@@ -178,7 +185,7 @@ private:
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
 
     /// Cache operations
-    void fill_metacache(std::string_view key, CacheValue* ptr, int size);
+    void fill_metacache(std::string_view key, CacheValue* ptr, size_t size);
     void erase_metacache(std::string_view key);
 
     TabletMetadataPtr lookup_tablet_metadata(std::string_view key);

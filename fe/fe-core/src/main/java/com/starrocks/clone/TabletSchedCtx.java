@@ -66,7 +66,6 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTaskType;
@@ -896,9 +895,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
             CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
                     tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                    indexMeta.getSchemaHash(), visibleVersion,
+                    indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), visibleVersion,
                     indexMeta.getKeysType(),
-                    TStorageType.COLUMN,
+                    indexMeta.getStorageType(),
                     TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
                     olapTable.getCopiedIndexes(),
                     olapTable.isInMemory(),

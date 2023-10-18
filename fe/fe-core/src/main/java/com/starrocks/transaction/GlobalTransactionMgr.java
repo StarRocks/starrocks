@@ -121,9 +121,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void addDatabaseTransactionMgr(Long dbId) {
-        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId,
-                new DatabaseTransactionMgr(dbId, globalStateMgr, idGenerator)) ==
-                null) {
+        if (dbIdToDatabaseTransactionMgrs.putIfAbsent(dbId, new DatabaseTransactionMgr(dbId, globalStateMgr)) == null) {
             LOG.debug("add database transaction manager for db {}", dbId);
         }
     }
@@ -699,6 +697,21 @@ public class GlobalTransactionMgr implements Writable {
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
             minId = Math.min(minId, dbTransactionMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
+        }
+        return minId;
+    }
+
+    /**
+     * Get the min txn id of running compaction transactions.
+     *
+     * @return the min txn id of running compaction transactions.
+     * If there are no running compaction transactions, return the next transaction id that will be assigned.
+     */
+    public long getMinActiveCompactionTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveCompactionTxnId().orElse(Long.MAX_VALUE));
         }
         return minId;
     }

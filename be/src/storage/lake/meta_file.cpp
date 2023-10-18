@@ -32,9 +32,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
     cache_key_pb.mutable_delvec_page()->CopyFrom(page);
-    std::string cache_key;
-    cache_key_pb.SerializeToString(&cache_key);
-    return cache_key;
+    return cache_key_pb.SerializeAsString();
 }
 
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
@@ -70,10 +68,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
     for (const auto& orphan_file : orphan_files) {
-        _trash_files->push_back(orphan_file);
+        DCHECK(is_segment(orphan_file));
+        _trash_files->push_back(_tablet.segment_location(orphan_file));
     }
     for (const auto& del_file : op_write.dels()) {
-        _trash_files->push_back(del_file);
+        _trash_files->push_back(_tablet.del_location(del_file));
     }
 }
 

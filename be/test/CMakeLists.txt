@@ -216,6 +216,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
+        ./storage/lake/metadata_cache_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -277,6 +278,7 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
+        ./storage/row_store_encoder_test.cpp
         ./storage/storage_engine_test.cpp
         ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp

@@ -1,5 +1,5 @@
 
-For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/Administration/CREATE%20STORAGE%20VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/Administration/SET%20DEFAULT%20STORAGE%20VOLUME.md).
+For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/Administration/SET_DEFAULT_STORAGE_VOLUME.md).
 
 ### Create a database and a cloud-native table
 
@@ -74,7 +74,7 @@ Whether to allow data to be written into object storage asynchronously. Default:
 
 ### View table information
 
-You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW%20PROC.md) for more information.
+You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/Administration/SHOW_PROC.md) for more information.
 
 Example:
 

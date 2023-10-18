@@ -83,13 +83,13 @@ PROPERTIES
 
 ## View JDBC catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a JDBC catalog named `jdbc0`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a JDBC catalog named `jdbc0`:
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
@@ -97,7 +97,7 @@ SHOW CREATE CATALOG jdbc0;
 
 ## Drop a JDBC catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop a JDBC catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop a JDBC catalog.
 
 The following example drops a JDBC catalog named `jdbc0`:
 
@@ -107,13 +107,13 @@ DROP Catalog jdbc0;
 
 ## Query a table in a JDBC catalog
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your JDBC-compatible cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your JDBC-compatible cluster:
 
    ```SQL
    SHOW DATABASES <catalog_name>;
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
     ```SQL
     SET CATALOG <catalog_name>;

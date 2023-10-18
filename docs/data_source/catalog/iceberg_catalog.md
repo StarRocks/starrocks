@@ -4,7 +4,7 @@ An Iceberg catalog is a type of external catalog that is supported by StarRocks 
 
 - Directly query data stored in Iceberg without the need to manually create tables.
 - Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Iceberg and load the data into StarRocks.
-- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
+- Perform operations on StarRocks to create or drop Iceberg databases and tables, or sink data from StarRocks tables to Parquet-formatted Iceberg tables by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) (this feature is supported from v3.1 onwards).
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -776,13 +776,13 @@ PROPERTIES
 
 ## View Iceberg catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of an Iceberg catalog named `iceberg_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of an Iceberg catalog named `iceberg_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
@@ -792,7 +792,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 You can use one of the following methods to switch to an Iceberg catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify an Iceberg catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -809,7 +809,7 @@ You can use one of the following methods to switch to an Iceberg catalog and a d
 
 ## Drop an Iceberg catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
 
@@ -835,7 +835,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ## Query an Iceberg table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your Iceberg cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Iceberg cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -851,7 +851,7 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ## Create an Iceberg database
 
-Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on an Iceberg catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create databases in that Iceberg catalog. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >
@@ -879,7 +879,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop an Iceberg database
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP%20DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that Iceberg database. This feature is supported from v3.1 onwards. You can only drop empty databases.
 
 > **NOTE**
 >
@@ -895,7 +895,7 @@ DROP DATABASE <database_name>;
 
 ## Create an Iceberg table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on an Iceberg database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Iceberg database. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >
@@ -1084,7 +1084,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## Drop an Iceberg table
 
-Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP%20TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on an Iceberg table, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that Iceberg table. This feature is supported from v3.1 onwards.
 
 > **NOTE**
 >

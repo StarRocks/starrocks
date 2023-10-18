@@ -172,8 +172,8 @@ public class Utils {
         return list;
     }
 
-    private static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
-                                                             Predicate<Operator> lambda) {
+    public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
+                                                            Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
             return;

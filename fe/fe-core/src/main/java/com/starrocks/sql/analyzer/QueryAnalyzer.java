@@ -954,6 +954,11 @@ public class QueryAnalyzer {
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+
+            if (table.isExternalTableWithFileSystem() && tableRelation.getPartitionNames() != null) {
+                throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+            }
+
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

@@ -335,7 +335,7 @@ under the License.
             <dependency>
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
-                <version>20230227</version>
+                <version>20231013</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/junit/junit -->
@@ -434,7 +434,7 @@ under the License.
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
-                <version>3.7.9.Final</version>
+                <version>3.8.10.Final</version>
             </dependency>
 
             <!-- support jdk9 -->

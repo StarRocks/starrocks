@@ -1221,8 +1221,10 @@ public class AstToStringBuilder {
             }
             Map<String, String> properties = new HashMap<>(stmt.getProperties());
             StorageVolume.addMaskForCredential(properties);
-            sb.append(" PROPERTIES (").
-                    append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            if (!stmt.getProperties().isEmpty()) {
+                sb.append(" PROPERTIES (")
+                        .append(new PrintableMap<>(properties, "=", true, false)).append(")");
+            }
             return sb.toString();
         }
 

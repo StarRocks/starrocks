@@ -124,7 +124,7 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      std::vector<RowSourceMask>* source_masks, Statistics* statistics) {
     Schema schema = ChunkHelper::convert_schema(_tablet_schema, column_group);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
-                        schema, is_key, mask_buffer);
+                        schema, is_key, mask_buffer, _tablet_schema);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);

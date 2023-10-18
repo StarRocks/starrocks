@@ -54,6 +54,7 @@ struct TTabletSchema {
     9: optional i64 id;
     10: optional list<i32> sort_key_idxes
     11: optional list<i32> sort_key_unique_ids
+    12: optional i32 schema_version;
 }
 
 // this enum stands for different storage format in src_backends
@@ -111,6 +112,8 @@ struct TCreateTabletReq {
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
     19: optional i32 primary_index_cache_expire_sec;
+    // Whether or not need to create a separate file to hold schema information.
+    20: optional bool create_schema_file = true;
 }
 
 struct TDropTabletReq {
@@ -346,7 +349,8 @@ enum TTabletMetaType {
     DISABLE_BINLOG,
     BINLOG_CONFIG,
     BUCKET_SIZE,
-    PRIMARY_INDEX_CACHE_EXPIRE_SEC
+    PRIMARY_INDEX_CACHE_EXPIRE_SEC,
+    STORAGE_TYPE
 }
 
 struct TTabletMetaInfo {

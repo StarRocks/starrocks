@@ -157,6 +157,18 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 tablet_manager->compaction_scheduler()->update_compact_task_queue_count(config::compact_task_queue_count);
             }
         });
+        _config_callback.emplace("drop_tablet_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+            (void)thread_pool->update_max_threads(config::drop_tablet_worker_count);
+        });
+        _config_callback.emplace("make_snapshot_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
+            (void)thread_pool->update_max_threads(config::make_snapshot_worker_count);
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
+            (void)thread_pool->update_max_threads(config::release_snapshot_worker_count);
+        });
     });
 
     Status s = config::set_config(name, value);

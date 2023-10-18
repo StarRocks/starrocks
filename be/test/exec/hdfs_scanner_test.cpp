@@ -49,7 +49,6 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    HdfsScanProfile* _create_profile();
     Status _init_datacache(size_t mem_size, const std::string& engine);
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
@@ -68,75 +67,6 @@ protected:
 void HdfsScannerTest::_create_runtime_profile() {
     _runtime_profile = _pool.add(new RuntimeProfile("test"));
     _runtime_profile->set_metadata(1);
-}
-
-HdfsScanProfile* HdfsScannerTest::_create_profile() {
-    if (!_runtime_profile) {
-        _create_runtime_profile();
-    }
-    HdfsScanProfile* profile = _pool.add(new HdfsScanProfile());
-    profile->runtime_profile = _runtime_profile;
-    profile->rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    profile->rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
-    profile->scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
-
-    profile->reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
-    profile->open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
-    profile->expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
-
-    profile->column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
-    profile->column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
-
-    {
-        static const char* prefix = "SharedBuffered";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        profile->shared_buffered_shared_io_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
-        profile->shared_buffered_shared_io_count =
-                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
-        profile->shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
-        profile->shared_buffered_direct_io_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
-        profile->shared_buffered_direct_io_count =
-                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
-        profile->shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
-    }
-
-    {
-        static const char* prefix = "DataCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
-        profile->datacache_read_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
-        profile->datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
-        profile->datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
-        profile->datacache_write_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
-        profile->datacache_write_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteBytes", TUnit::BYTES, prefix);
-        profile->datacache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheWriteTimer", prefix);
-        profile->datacache_write_fail_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailCounter", TUnit::UNIT, prefix);
-        profile->datacache_write_fail_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailBytes", TUnit::BYTES, prefix);
-        profile->datacache_read_block_buffer_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
-        profile->datacache_read_block_buffer_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
-    }
-
-    {
-        static const char* prefix = "InputStream";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        profile->app_io_bytes_read_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
-        profile->app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
-        profile->app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
-        profile->fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOBytesRead", TUnit::BYTES, prefix);
-        profile->fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
-        profile->fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
-    }
-
-    return profile;
 }
 
 void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
@@ -168,10 +98,10 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
     scan_range->offset = offset;
     scan_range->length = length == 0 ? file_size : length;
     scan_range->file_length = file_size;
-    scan_range->text_file_desc.field_delim = ",";
-    scan_range->text_file_desc.line_delim = "\n";
-    scan_range->text_file_desc.collection_delim = "\003";
-    scan_range->text_file_desc.mapkey_delim = "\004";
+    scan_range->text_file_desc.__set_field_delim(",");
+    scan_range->text_file_desc.__set_line_delim("\n");
+    scan_range->text_file_desc.__set_collection_delim("\003");
+    scan_range->text_file_desc.__set_mapkey_delim("\004");
     return scan_range;
 }
 
@@ -1582,6 +1512,53 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
     }
 }
 
+TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string end_with_r = "./be/test/exec/test_data/csv_scanner/line_delimiter_end_with_r.csv";
+    const std::string end_with_n = "./be/test/exec/test_data/csv_scanner/line_delimiter_end_with_n.csv";
+    Status status;
+
+    {
+        // test line delimiter = \r
+        auto* range = _create_scan_range(end_with_r, 0, 0);
+        range->text_file_desc.__isset.line_delim = false;
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(end_with_r, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 5);
+        scanner->close(_runtime_state);
+    }
+    {
+        // test line delimiter = \r
+        auto* range = _create_scan_range(end_with_n, 0, 0);
+        range->text_file_desc.__isset.line_delim = false;
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(end_with_n, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 5);
+        scanner->close(_runtime_state);
+    }
+}
+
 // =============================================================================
 /*
 UID0,ACTION0
@@ -1674,7 +1651,6 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         auto* range = _create_scan_range(small_file, 0, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(small_file, range, tuple_desc);
-        param->profile = _create_profile();
 #if defined(WITH_STARCACHE)
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();

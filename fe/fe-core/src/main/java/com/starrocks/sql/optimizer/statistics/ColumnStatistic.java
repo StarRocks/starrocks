@@ -22,7 +22,7 @@ import static java.lang.Double.NaN;
 import static java.lang.Double.POSITIVE_INFINITY;
 
 public class ColumnStatistic {
-    private enum StatisticType {
+    public enum StatisticType {
         UNKNOWN,
         ESTIMATE
     }

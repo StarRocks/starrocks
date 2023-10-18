@@ -288,7 +288,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
         chunk->get_column_by_index(0)->append_default(1025);
         input_rows += 1025;
 
-        accumulator.push(std::move(chunk));
+        static_cast<void>(accumulator.push(std::move(chunk)));
         if (ChunkPtr output = accumulator.pull()) {
             output_rows += output->num_rows();
             EXPECT_EQ(kDesiredSize, output->num_rows());
@@ -299,7 +299,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
         chunk->get_column_by_index(0)->append_default(8888);
         input_rows += 8888;
-        accumulator.push(std::move(chunk));
+        static_cast<void>(accumulator.push(std::move(chunk)));
     }
 
     accumulator.finalize();
@@ -312,7 +312,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
     // push empty chunks
     for (int i = 0; i < ChunkAccumulator::kAccumulateLimit; i++) {
         auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
-        accumulator.push(std::move(chunk));
+        static_cast<void>(accumulator.push(std::move(chunk)));
     }
     EXPECT_TRUE(accumulator.reach_limit());
     auto output = accumulator.pull();

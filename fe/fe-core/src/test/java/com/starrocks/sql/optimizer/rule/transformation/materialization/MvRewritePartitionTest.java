@@ -138,7 +138,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
-                    "     partitions=4/6");
+                    "     partitions=4/5");
         }
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
@@ -147,28 +147,28 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             System.out.println(pr);
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "partitions=4/6\n" +
+            PlanTestBase.assertContains(plan, "partitions=4/5\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-03-01' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "partitions=3/6\n" +
+            PlanTestBase.assertContains(plan, "partitions=3/5\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-04-01' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "partitions=2/6\n" +
+            PlanTestBase.assertContains(plan, "partitions=2/5\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-05-01' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "partitions=1/6\n" +
+            PlanTestBase.assertContains(plan, "partitions=1/5\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
         {

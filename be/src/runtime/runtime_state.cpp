@@ -212,10 +212,9 @@ void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_me
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
-Status RuntimeState::init_instance_mem_tracker() {
+void RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
-    return Status::OK();
 }
 
 ObjectPool* RuntimeState::global_obj_pool() const {

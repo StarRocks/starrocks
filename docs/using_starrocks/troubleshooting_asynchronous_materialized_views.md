@@ -12,14 +12,14 @@ To get a whole picture of asynchronous materialized views that you are working w
 
 ### Check the working state of an asynchronous materialized view
 
-You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md). Among all the information returned, you can focus on the following fields:
+You can check the working state of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md). Among all the information returned, you can focus on the following fields:
 
 - `is_active`: Whether the state of the materialized view is active. Only an active materialized view can be used for query acceleration and rewrite.
 - `last_refresh_state`: The state of the last refresh, including PENDING, RUNNING, FAILED, and SUCCESS.
 - `last_refresh_error_message`: The reason why the last refresh failed (if the materialized view state is not active).
 - `rows`: The number of data rows in the materialized view. Please note that this value can be different from the actual row count of the materialized view because the updates can be deferred.
 
-For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md#returns).
+For detailed information on other fields returned, see [SHOW MATERIALIZED VIEWS - Returns](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md#returns).
 
 Example:
 
@@ -109,7 +109,7 @@ You can monitor and analyze the resource consumed by an asynchronous materialize
 
 #### Monitor resource consumption during refresh
 
-During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/Administration/SHOW%20PROC.md).
+During a refresh task, you can monitor its real-time resource consumption using [SHOW PROC '/current_queries'](../sql-reference/sql-statements/Administration/SHOW_PROC.md).
 
 Among all the information returned, you can focus on the following fields:
 

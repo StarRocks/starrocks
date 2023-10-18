@@ -108,8 +108,8 @@ public abstract class Coordinator {
 
     public abstract void updateAuditStatistics(TReportAuditStatisticsParams params);
 
-    public void cancel() {
-        cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
+    public void cancel(String cancelledMessage) {
+        cancel(PPlanFragmentCancelReason.USER_CANCEL, cancelledMessage);
     }
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);

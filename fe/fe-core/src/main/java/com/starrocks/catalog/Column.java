@@ -66,6 +66,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 
@@ -77,9 +78,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public static final String CAN_NOT_CHANGE_DEFAULT_VALUE = "Can not change default value";
     public static final int COLUMN_UNIQUE_ID_INIT_VALUE = -1;
 
-
+    // logical name, rename will change this name.
     @SerializedName(value = "name")
     private String name;
+
+    // physicalName is the column name used in the storage engine and will never change.
+    // The name saved in the storage engine remains unchanged after the logical column name is changed.
+    // By default, this value is null, which expresses the same as name (logical name).
+    // If the column name is changed, the value of name (logical name) will be updated to the new column name
+    // and the value of physicalName will be set to the old column name.
+    @SerializedName(value = "physicalName")
+    private String physicalName;
+
     @SerializedName(value = "type")
     private Type type;
     // column is key: aggregate type is null
@@ -244,8 +254,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.name;
     }
 
-    public String getNameWithoutPrefix(String prefix) {
-        if (isNameWithPrefix(prefix)) {
+    public String getNameWithoutPrefix(String prefix, String name) {
+        if (name.startsWith(prefix)) {
             return name.substring(prefix.length());
         }
         return name;
@@ -373,7 +383,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public TColumn toThrift() {
         TColumn tColumn = new TColumn();
-        tColumn.setColumn_name(this.name);
+        tColumn.setColumn_name(this.getPhysicalName());
         tColumn.setIndex_len(this.getOlapColumnIndexSize());
         tColumn.setType_desc(this.type.toThrift());
         if (null != this.aggregationType) {
@@ -760,6 +770,16 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
     }
 
+    public String getPhysicalName() {
+        return physicalName != null ? physicalName : name;
+    }
+
+    public void renameColumn(String newName) {
+        if (physicalName == null) {
+            physicalName = name;
+        }
+        this.name = newName;
+    }
 
     public void setUniqueId(int colUniqueId) {
         this.uniqueId = colUniqueId;
@@ -769,7 +789,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return this.uniqueId;
     }
 
-    public void setIndexFlag(TColumn tColumn, List<Index> indexes) {
+    public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<String> bfColumns) {
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
                 List<String> columns = index.getColumns();
@@ -777,6 +797,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                     tColumn.setHas_bitmap_index(true);
                 }
             }
+        }
+        if (bfColumns != null && bfColumns.contains(this.name)) {
+            tColumn.setIs_bloom_filter_column(true);
         }
     }
 }

@@ -84,6 +84,9 @@ message TabletMetadataPB {
     repeated FileMetaPB orphan_files = 10;
     optional bool enable_persistent_index = 11;
     optional PersistentIndexTypePB persistent_index_type = 12;
+    // The commit time on the FE for the transaction that created this tablet metadata.
+    // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC).
+    optional int64 commit_time = 13;
 }
 
 message MetadataUpdateInfoPB {

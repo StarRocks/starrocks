@@ -225,8 +225,8 @@ public class HiveMetastoreOperations {
         metastore.dropPartition(dbName, tableName, partitionValues, deleteData);
     }
 
-    public boolean partitionExists(String dbName, String tableName, List<String> partitionValues) {
-        return metastore.partitionExists(dbName, tableName, partitionValues);
+    public boolean partitionExists(Table table, List<String> partitionValues) {
+        return metastore.partitionExists(table, partitionValues);
     }
 
     public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {

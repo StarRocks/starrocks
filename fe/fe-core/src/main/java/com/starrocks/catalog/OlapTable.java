@@ -60,9 +60,6 @@ import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -133,6 +130,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 import javax.annotation.Nullable;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW;
 
 /**
  * Internal representation of tableFamilyGroup-related metadata. A
@@ -522,7 +522,7 @@ public class OlapTable extends Table {
             Preconditions.checkState(storageType != null);
         } else {
             // The new storage type must be TStorageType.COLUMN
-            Preconditions.checkState(storageType == TStorageType.COLUMN);
+            Preconditions.checkState(storageType == TStorageType.COLUMN || storageType == TStorageType.COLUMN_WITH_ROW);
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
@@ -808,6 +808,10 @@ public class OlapTable extends Table {
         return new ArrayList<Column>();
     }
 
+    /**
+     * NOTE: The result key columns are not in the creating order because `nameToColumn`
+     * uses unordered hashmap to keeps name to column's mapping.
+     */
     public List<Column> getKeyColumns() {
         return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
     }
@@ -1844,8 +1848,8 @@ public class OlapTable extends Table {
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
-        OlapTable copied = new OlapTable();
-        if (!DeepCopy.copy(this, copied, OlapTable.class)) {
+        OlapTable copied = DeepCopy.copyWithGson(this, OlapTable.class);
+        if (copied == null) {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }
@@ -2187,6 +2191,38 @@ public class OlapTable extends Table {
             return BinlogConfig.INVALID;
         }
         return tableProperty.getBinlogConfig().getVersion();
+    }
+
+    public String storageType() {
+        if (tableProperty != null) {
+            return tableProperty.storageType();
+        }
+        return PROPERTIES_STORAGE_TYPE_COLUMN;
+    }
+
+    public TStorageType getStorageType() {
+        if (storageType() == null) {
+            return TStorageType.COLUMN;
+        }
+        switch (storageType().toLowerCase()) {
+            case PROPERTIES_STORAGE_TYPE_COLUMN:
+                return TStorageType.COLUMN;
+            case PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW:
+                return TStorageType.COLUMN_WITH_ROW;
+            default:
+                throw new SemanticException("getStorageType type not support: " + storageType());
+        }
+    }
+
+    public void setStorageType(String storageType) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        if (storageType == null) {
+            storageType = PROPERTIES_STORAGE_TYPE_COLUMN;
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, storageType);
+        tableProperty.buildStorageType();
     }
 
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
@@ -2853,6 +2889,15 @@ public class OlapTable extends Table {
     @Override
     public boolean supportInsert() {
         return true;
+    }
+
+    public boolean supportColumnWithRow() {
+        List<Column> noKeys = getColumns().stream().filter(column -> !column.isKey()).collect(Collectors.toList());
+        return noKeys.size() > 0;
+    }
+
+    public boolean hasRowStorageType() {
+        return TStorageType.ROW == getStorageType() || TStorageType.COLUMN_WITH_ROW == getStorageType();
     }
 
     // ------ for lake table and lake materialized view start ------
