@@ -23,11 +23,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-<<<<<<< HEAD
-import com.starrocks.analysis.IntLiteral;
-=======
 import com.starrocks.analysis.IndexDef;
->>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -276,15 +273,12 @@ public class MaterializedViewAnalyzer {
             List<Column> mvColumns = genMaterializedViewColumns(statement);
             statement.setMvColumnItems(mvColumns);
 
-<<<<<<< HEAD
             Map<TableName, Table> aliasTableMap = getAllBaseTables(queryStatement, context);
-=======
+
             // set the Indexes into createMaterializedViewStatement
             List<Index> mvIndexes = genMaterializedViewIndexes(statement);
             statement.setMvIndexes(mvIndexes);
 
-            Map<TableName, Table> aliasTableMap = getNormalizedBaseTables(queryStatement, context);
->>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
             for (int i = 0; i < outputExpressions.size(); ++i) {
@@ -556,11 +550,6 @@ public class MaterializedViewAnalyzer {
             return reorderedColumns;
         }
 
-<<<<<<< HEAD
-        private void checkExpInColumn(CreateMaterializedViewStatement statement,
-                                      Map<Column, Expr> columnExprMap, ConnectContext connectContext,
-                                      Map<TableName, Table> aliasTableMap) {
-=======
         private List<Index> genMaterializedViewIndexes(CreateMaterializedViewStatement statement) {
             List<IndexDef> indexDefs = statement.getIndexDefs();
             List<Index> indexes = new ArrayList<>();
@@ -582,8 +571,8 @@ public class MaterializedViewAnalyzer {
                             }
                         }
                         if (!found) {
-                            throw new SemanticException("BITMAP column does not exist in table. invalid column: " + indexColName,
-                                    indexDef.getPos());
+                            throw new SemanticException(
+                                    "BITMAP column does not exist in table. invalid column: " + indexColName);
                         }
                     }
                     indexes.add(new Index(indexDef.getIndexName(), indexDef.getColumns(), indexDef.getIndexType(),
@@ -605,8 +594,9 @@ public class MaterializedViewAnalyzer {
             return indexes;
         }
 
-        private void checkExpInColumn(CreateMaterializedViewStatement statement) {
->>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
+        private void checkExpInColumn(CreateMaterializedViewStatement statement,
+                                      Map<Column, Expr> columnExprMap, ConnectContext connectContext,
+                                      Map<TableName, Table> aliasTableMap) {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             List<Column> columns = statement.getMvColumnItems();
             SlotRef slotRef = getSlotRef(expressionPartitionDesc.getExpr());
