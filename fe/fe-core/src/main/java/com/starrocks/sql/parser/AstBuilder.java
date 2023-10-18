@@ -1531,16 +1531,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     "you can set FE config enable_experimental_mv=true to enable it.");
         }
 
-<<<<<<< HEAD
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
-                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement);
-=======
         return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
-                refreshSchemeDesc,
-                expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
->>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
+                refreshSchemeDesc, expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement);
     }
 
     @Override

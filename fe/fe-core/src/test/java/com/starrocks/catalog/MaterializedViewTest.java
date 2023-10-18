@@ -38,6 +38,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
@@ -793,8 +794,6 @@ public class MaterializedViewTest {
         System.out.println(showResultSet.getMetaData().toString());
         System.out.println(showResultSet.getResultRows());
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testAlterViewWithIndex() throws Exception {
@@ -899,7 +898,6 @@ public class MaterializedViewTest {
         testCreateMV(mvSqlWithBloomFilter);
     }
 
-
     @Test
     public void testCreateMVWithDuplicateIndexOrDuplicateColumn() throws Exception {
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
@@ -958,5 +956,4 @@ public class MaterializedViewTest {
                 UserException.class,
                 () -> starRocksAssert.withMaterializedView(mvSql2));
     }
->>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
 }
