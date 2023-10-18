@@ -3515,7 +3515,7 @@ public class GlobalStateMgr {
     }
 
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
-        throw new DdlException("not implemented");
+        localMetastore.renameColumn(db, table, renameClause);
     }
 
     public void modifyTableDynamicPartition(Database db, OlapTable table, Map<String, String> properties)
