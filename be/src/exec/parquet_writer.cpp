@@ -34,11 +34,9 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
-          _driver_id(driver_id) {
-    init_rolling_writer();
-}
+          _driver_id(driver_id) {}
 
-Status RollingAsyncParquetWriter::init_rolling_writer() {
+Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(
             _fs, FileSystem::CreateUniqueFromString(_table_info.partition_location, FSOptions(&_table_info.cloud_conf)))
     _schema = _table_info.schema;
