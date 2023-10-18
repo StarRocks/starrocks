@@ -61,21 +61,10 @@ Status HorizontalGeneralTabletWriter::finish() {
 
 void HorizontalGeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
-<<<<<<< HEAD
-        // Delete files
-        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
-        if (maybe_fs.ok()) {
-            auto fs = std::move(maybe_fs).value();
-            for (const auto& name : _files) {
-                auto path = _tablet.segment_location(name);
-                (void)fs->delete_file(path);
-            }
-=======
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
             full_paths_to_delete.emplace_back(_tablet.segment_location(f));
->>>>>>> 2c93a3cb2a ([Enhancement] optimize thread pool usage in shared data mode (#32823))
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
