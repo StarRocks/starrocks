@@ -27,7 +27,7 @@ import java.io.IOException;
 
 public final class FakeTransactionIDGenerator extends MockUp<TransactionIdGenerator> {
 
-    private long currentId = 1000L;
+    private long nextId = 1000L;
 
     @Mock
     public void init() {
@@ -42,7 +42,7 @@ public final class FakeTransactionIDGenerator extends MockUp<TransactionIdGenera
     @Mock
     public synchronized long getNextTransactionId() {
         System.out.println("getNextTransactionId is called");
-        return currentId++;
+        return nextId++;
     }
 
     @Mock
@@ -55,7 +55,8 @@ public final class FakeTransactionIDGenerator extends MockUp<TransactionIdGenera
         // do nothing
     }
 
-    public void setCurrentId(long newId) {
-        this.currentId = newId;
+    @Mock
+    public synchronized long peekNextTransactionId() {
+        return nextId;
     }
 }
