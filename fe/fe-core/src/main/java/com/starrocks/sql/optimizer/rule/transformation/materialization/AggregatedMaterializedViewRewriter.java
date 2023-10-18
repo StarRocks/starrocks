@@ -68,6 +68,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     private static final Map<String, String> ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
             .put(FunctionSet.COUNT, FunctionSet.SUM)
+            .put(FunctionSet.ARRAY_AGG, FunctionSet.ARRAY_UNION_AGG)
             .build();
 
     private static final Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
@@ -653,17 +654,16 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (!SUPPORTED_ROLLUP_FUNCTIONS.contains(aggCall.getFnName())) {
             return null;
         }
-        if (ROLLUP_FUNCTION_MAP.containsKey(aggCall.getFnName())) {
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                Type[] argTypes = {targetColumn.getType()};
-                Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
-                return new CallOperator(FunctionSet.SUM, aggCall.getFunction().getReturnType(),
-                        Lists.newArrayList(targetColumn), sumFn);
-            } else {
-                // impossible to reach here
-                LOG.warn("unsupported rollup function:{}", aggCall.getFnName());
+        String mappedFn = ROLLUP_FUNCTION_MAP.get(aggCall.getFnName());
+        if (mappedFn != null) {
+            Type[] argTypes = {targetColumn.getType()};
+            Function fn = findArithmeticFunction(argTypes, mappedFn);
+            if (fn == null) {
+                LOG.warn("get rollup function {}({})) failed", mappedFn, argTypes);
                 return null;
             }
+            return new CallOperator(mappedFn, aggCall.getFunction().getReturnType(),
+                    Lists.newArrayList(targetColumn), fn);
         } else {
             // NOTE:
             // 1. Change fn's type  as 1th child has change, otherwise physical plan

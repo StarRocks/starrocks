@@ -290,12 +290,14 @@ public class FunctionSet {
     public static final String BITMAP_DICT = "bitmap_dict";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
     public static final String EXCHANGE_SPEED = "exchange_speed";
+
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
+    public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_INTERSECT = "array_intersect";
     public static final String ARRAY_SLICE = "array_slice";
     public static final String ARRAYS_OVERLAP = "arrays_overlap";
@@ -316,6 +318,7 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_UNION_AGG = "array_union_agg";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
 
@@ -1154,29 +1157,27 @@ public class FunctionSet {
 
     private void registerBuiltinArrayAggDistinctFunction() {
         // array_agg(distinct)
-        for (ScalarType type : Type.getNumericTypes()) {
+        // array_flatten
+        List<ScalarType> supportedTypes =
+                ImmutableList.<ScalarType>builder()
+                        .addAll(Type.getNumericTypes())
+                        .addAll(Type.STRING_TYPES)
+                        .addAll(Type.DATE_TYPES)
+                        .build();
+        for (ScalarType type : supportedTypes) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
                     false, false, false));
-        }
-        for (ScalarType type : Type.STRING_TYPES) {
-            Type arrayType = new ArrayType(type);
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
-                    Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
-        }
-
-        for (ScalarType type : Type.DATE_TYPES) {
-            Type arrayType = new ArrayType(type);
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
-                    Lists.newArrayList(type), arrayType, arrayType,
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_FLATTEN,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
                     false, false, false));
         }
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
                 false, false, false));
     }
+
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         for (ScalarType type : Type.FLOAT_TYPES) {
