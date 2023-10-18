@@ -97,7 +97,7 @@ StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definit
 
 ### 外部表
 
-StarRocks 支持多种外部表：[MySQL 外部表](../data_source/External_table.md#deprecated-mysql-外部表)，[Elasticsearch 外部表](../data_source/External_table.md#-elasticsearch-外部表)，[Apache Hive™ 外表](../data_source/External_table.md#deprecated-hive-外部表)，[StarRocks 外部表](../data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](../data_source/External_table.md#iceberg-外部表)，[Apache Hudi 外表](../data_source/External_table.md#deprecated-hudi-外部表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
+StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#deprecated-mysql-外部表)，[Elasticsearch 外部表](/data_source/External_table.md#deprecated-elasticsearch-外部表)，[Apache Hive™ 外表](/data_source/External_table.md#deprecated-hive-外部表)，[StarRocks 外部表](/data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/data_source/External_table.md#deprecated-iceberg-外部表)，[Apache Hudi 外表](/data_source/External_table.md#deprecated-hudi-外部表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
 
 ## 慢查询分析
 
