@@ -57,7 +57,7 @@ jobs:
     if: >
       contains(github.event.pull_request.title, '(sync #') &&
       contains(needs.pr-label.outputs.labels, 'sync') &&
-      !contains(needs.pr-label.outputs.labels, 'pending')
+      !contains(needs.pr-label.outputs.labels, 'pending') &&
       !contains(needs.pr-label.outputs.labels, 'force-check')
     name: RUN CHECKER
     steps:
