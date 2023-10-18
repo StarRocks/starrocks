@@ -31,7 +31,7 @@ bool BucketProcessSinkOperator::need_input() const {
 }
 
 bool BucketProcessSinkOperator::is_finished() const {
-    return _ctx->all_input_finishing && _ctx->sink->is_finished();
+    return _ctx->finished || (_ctx->all_input_finishing && _ctx->sink->is_finished());
 }
 
 Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
@@ -71,7 +71,7 @@ bool BucketProcessSourceOperator::has_output() const {
     return _ctx->current_bucket_sink_finished && (_ctx->source->has_output() || _ctx->source->is_finished());
 }
 bool BucketProcessSourceOperator::is_finished() const {
-    return _ctx->all_input_finishing && _ctx->source->is_finished();
+    return _ctx->finished || (_ctx->all_input_finishing && _ctx->source->is_finished());
 }
 Status BucketProcessSourceOperator::set_finished(RuntimeState* state) {
     _ctx->finished = true;
