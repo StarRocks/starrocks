@@ -152,7 +152,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     return new_metadata;
 }
 
-Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64 log_version) {
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t log_version) {
     auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
     auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
     // TODO: use rename() API if supported by the underlying filesystem.

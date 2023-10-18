@@ -60,7 +60,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 //
 // Return:
 // - Returns OK if the copy was successful, asynchronous deletion does not affect the return value.
-Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64 log_version);
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t log_version);
 
 // Aborts a transaction with the specified transaction IDs on the given tablet.
 //
