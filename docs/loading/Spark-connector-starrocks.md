@@ -366,3 +366,341 @@ The following example explains how to load data with Spark SQL by using the `INS
     +------+-----------+-------+
     2 rows in set (0.00 sec)
     ```
+<<<<<<< HEAD
+=======
+
+## Best Practices
+
+### Load data to Primary Key table
+
+This section will show how to load data to StarRocks Primary Key table to achieve partial updates, and conditional updates.
+You can see [Change data through loading](../loading/Load_to_Primary_Key_tables) for the detailed introduction of these features.
+These examples use Spark SQL.
+
+#### Preparations
+
+Create a database `test` and create a Primary Key table `score_board` in StarRocks.
+
+```SQL
+CREATE DATABASE `test`;
+
+CREATE TABLE `test`.`score_board`
+(
+    `id` int(11) NOT NULL COMMENT "",
+    `name` varchar(65533) NULL DEFAULT "" COMMENT "",
+    `score` int(11) NOT NULL DEFAULT "0" COMMENT ""
+)
+ENGINE=OLAP
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`);
+```
+
+#### Partial updates
+
+This example will show how to only update data in the column `name` through loading:
+
+1. Insert initial data to StarRocks table in MySQL client.
+
+   ```sql
+   mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
+
+   mysql> select * from score_board;
+   +------+-----------+-------+
+   | id   | name      | score |
+   +------+-----------+-------+
+   |    1 | starrocks |   100 |
+   |    2 | spark     |   100 |
+   +------+-----------+-------+
+   2 rows in set (0.02 sec)
+   ```
+
+2. Create a Spark table `score_board` in Spark SQL client.
+
+   - Set the option `starrocks.write.properties.partial_update` to `true` which tells the connector to do partial update.
+   - Set the option `starrocks.columns` to `"id,name"` to tell the connector which columns to write.
+
+   ```SQL
+   CREATE TABLE `score_board`
+   USING starrocks
+   OPTIONS(
+       "starrocks.fe.http.url"="127.0.0.1:8030",
+       "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
+       "starrocks.table.identifier"="test.score_board",
+       "starrocks.user"="root",
+       "starrocks.password"="",
+       "starrocks.write.properties.partial_update"="true",
+       "starrocks.columns"="id,name"
+    );
+   ```
+
+3. Insert data into the table in Spark SQL client, and only update the column `name`.
+
+   ```SQL
+   INSERT INTO `score_board` VALUES (1, 'starrocks-update'), (2, 'spark-update');
+   ```
+
+4. Query the StarRocks table in MySQL client.
+
+   You can see that only values for `name` change, and the values for `score` does not change.
+
+   ```SQL
+   mysql> select * from score_board;
+   +------+------------------+-------+
+   | id   | name             | score |
+   +------+------------------+-------+
+   |    1 | starrocks-update |   100 |
+   |    2 | spark-update     |   100 |
+   +------+------------------+-------+
+   2 rows in set (0.02 sec)
+   ```
+
+#### Conditional updates
+
+This example will show how to do conditional updates according to the values of column `score`. The update for an `id`
+takes effect only when the new value for `score` is has a greater or equal to the old value.
+
+1. Insert initial data to StarRocks table in MySQL client.
+
+    ```SQL
+    mysql> INSERT INTO `score_board` VALUES (1, 'starrocks', 100), (2, 'spark', 100);
+
+    mysql> select * from score_board;
+    +------+-----------+-------+
+    | id   | name      | score |
+    +------+-----------+-------+
+    |    1 | starrocks |   100 |
+    |    2 | spark     |   100 |
+    +------+-----------+-------+
+    2 rows in set (0.02 sec)
+    ```
+
+2. Create a Spark table `score_board` in the following ways.
+
+   - Set the option `starrocks.write.properties.merge_condition` to `score` which tells the connector to use the column `score` as the condition.
+   - Make sure that the Spark connector use Stream Load interface to load data, rather than Stream Load transaction interface, because the latter does not support this feature.
+
+   ```SQL
+   CREATE TABLE `score_board`
+   USING starrocks
+   OPTIONS(
+       "starrocks.fe.http.url"="127.0.0.1:8030",
+       "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
+       "starrocks.table.identifier"="test.score_board",
+       "starrocks.user"="root",
+       "starrocks.password"="",
+       "starrocks.write.properties.merge_condition"="score"
+    );
+   ```
+
+3. Insert data to the table in Spark SQL client, and update the row whose `id` is 1 with a smaller score value, and the row whose `id` is 2 with a larger score value.
+
+   ```SQL
+   INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'spark-update', 101);
+   ```
+
+4. Query the StarRocks table in MySQL client.
+
+   You can see that only the row whose `id` is 2 changes, and the row whose `id` is 1 does not change.
+
+   ```SQL
+   mysql> select * from score_board;
+   +------+--------------+-------+
+   | id   | name         | score |
+   +------+--------------+-------+
+   |    1 | starrocks    |   100 |
+   |    2 | spark-update |   101 |
+   +------+--------------+-------+
+   2 rows in set (0.03 sec)
+   ```
+
+### Load data into columns of BITMAP type
+
+[`BITMAP`](../sql-reference/sql-statements/data-types/BITMAP.md) is often used to accelerate count distinct, such as counting UV, see [Use Bitmap for exact Count Distinct](../using_starrocks/Using_bitmap.md).
+Here we take the counting of UV as an example to show how to load data into columns of the `BITMAP` type. **`BITMAP` is supported since version 1.1.1**.
+
+1. Create a StarRocks Aggregate table.
+
+   In the database `test`, create an Aggregate table `page_uv` where the column `visit_users` is defined as the `BITMAP` type and configured with the aggregate function `BITMAP_UNION`.
+
+    ```SQL
+    CREATE TABLE `test`.`page_uv` (
+      `page_id` INT NOT NULL COMMENT 'page ID',
+      `visit_date` datetime NOT NULL COMMENT 'access time',
+      `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT 'user ID'
+    ) ENGINE=OLAP
+    AGGREGATE KEY(`page_id`, `visit_date`)
+    DISTRIBUTED BY HASH(`page_id`);
+    ```
+
+2. Create a Spark table.
+
+    The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `BITMAP` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) function to convert the data of `BIGINT` type into `BITMAP` type.
+
+    Run the following DDL in `spark-sql`:
+
+    ```SQL
+    CREATE TABLE `page_uv`
+    USING starrocks
+    OPTIONS(
+       "starrocks.fe.http.url"="127.0.0.1:8030",
+       "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
+       "starrocks.table.identifier"="test.page_uv",
+       "starrocks.user"="root",
+       "starrocks.password"="",
+       "starrocks.column.types"="visit_users BIGINT"
+    );
+    ```
+
+3. Load data into StarRocks table.
+
+    Run the following DML in `spark-sql`:
+
+    ```SQL
+    INSERT INTO `page_uv` VALUES
+       (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 13),
+       (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 23),
+       (1, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 33),
+       (1, CAST('2020-06-23 02:30:30' AS TIMESTAMP), 13),
+       (2, CAST('2020-06-23 01:30:30' AS TIMESTAMP), 23);
+    ```
+
+4. Calculate page UVs from the StarRocks table.
+
+    ```SQL
+    MySQL [test]> SELECT `page_id`, COUNT(DISTINCT `visit_users`) FROM `page_uv` GROUP BY `page_id`;
+    +---------+-----------------------------+
+    | page_id | count(DISTINCT visit_users) |
+    +---------+-----------------------------+
+    |       2 |                           1 |
+    |       1 |                           3 |
+    +---------+-----------------------------+
+    2 rows in set (0.01 sec)
+    ```
+
+> **NOTICE:**
+>
+> The connector uses [`to_bitmap`](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
+> function to convert data of the `TINYINT`, `SMALLINT`, `INTEGER`, and `BIGINT` types in Spark to the `BITMAP` type in StarRocks, and uses
+> [`bitmap_hash`](../sql-reference/sql-functions/bitmap-functions/bitmap_hash.md) function for other Spark data types.
+
+### Load data into columns of HLL type
+
+[`HLL`](../sql-reference/sql-statements/data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
+
+Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.  **`HLL` is supported since version 1.1.1**.
+
+1. Create a StarRocks Aggregate table.
+
+   In the database `test`, create an Aggregate table `hll_uv` where the column `visit_users` is defined as the `HLL` type and configured with the aggregate function `HLL_UNION`.
+
+    ```SQL
+    CREATE TABLE `hll_uv` (
+    `page_id` INT NOT NULL COMMENT 'page ID',
+    `visit_date` datetime NOT NULL COMMENT 'access time',
+    `visit_users` HLL HLL_UNION NOT NULL COMMENT 'user ID'
+    ) ENGINE=OLAP
+    AGGREGATE KEY(`page_id`, `visit_date`)
+    DISTRIBUTED BY HASH(`page_id`);
+    ```
+
+2. Create a Spark table.
+
+   The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `HLL` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash.md) function to convert the data of `BIGINT` type into `HLL` type.
+
+    Run the following DDL in `spark-sql`:
+
+    ```SQL
+    CREATE TABLE `hll_uv`
+    USING starrocks
+    OPTIONS(
+       "starrocks.fe.http.url"="127.0.0.1:8030",
+       "starrocks.fe.jdbc.url"="jdbc:mysql://127.0.0.1:9030",
+       "starrocks.table.identifier"="test.hll_uv",
+       "starrocks.user"="root",
+       "starrocks.password"="",
+       "starrocks.column.types"="visit_users BIGINT"
+    );
+    ```
+
+3. Load data into StarRocks table.
+
+    Run the following DML in `spark-sql`:
+
+    ```SQL
+    INSERT INTO `hll_uv` VALUES
+       (3, CAST('2023-07-24 12:00:00' AS TIMESTAMP), 78),
+       (4, CAST('2023-07-24 13:20:10' AS TIMESTAMP), 2),
+       (3, CAST('2023-07-24 12:30:00' AS TIMESTAMP), 674);
+    ```
+
+4. Calculate page UVs from the StarRocks table.
+
+    ```SQL
+    MySQL [test]> SELECT `page_id`, COUNT(DISTINCT `visit_users`) FROM `hll_uv` GROUP BY `page_id`;
+    +---------+-----------------------------+
+    | page_id | count(DISTINCT visit_users) |
+    +---------+-----------------------------+
+    |       4 |                           1 |
+    |       3 |                           2 |
+    +---------+-----------------------------+
+    2 rows in set (0.01 sec)
+    ```
+
+### Load data into columns of ARRAY type
+
+The following example explains how to load data into columns of the [`ARRAY`](../sql-reference/sql-statements/data-types/Array.md) type.
+
+1. Create a StarRocks table.
+
+   In the database `test`, create a Primary Key table `array_tbl` that includes one `INT` column and two `ARRAY` columns.
+
+   ```SQL
+   CREATE TABLE `array_tbl` (
+       `id` INT NOT NULL,
+       `a0` ARRAY<STRING>,
+       `a1` ARRAY<ARRAY<INT>>
+    )
+    ENGINE=OLAP
+    PRIMARY KEY(`id`)
+    DISTRIBUTED BY HASH(`id`)
+    ;
+    ```
+
+2. Write data to StarRocks.
+
+   Because some versions of StarRocks does not provide the metadata of `ARRAY` column, the connector can not infer the corresponding Spark data type for this column. However, you can explicitly specify the corresponding Spark data type of the column in the option `starrocks.column.types`. In this example, you can configure the option as `a0 ARRAY<STRING>,a1 ARRAY<ARRAY<INT>>`.
+
+   Run the following codes in `spark-shell`:
+
+   ```scala
+    val data = Seq(
+       |  (1, Seq("hello", "starrocks"), Seq(Seq(1, 2), Seq(3, 4))),
+       |  (2, Seq("hello", "spark"), Seq(Seq(5, 6, 7), Seq(8, 9, 10)))
+       | )
+    val df = data.toDF("id", "a0", "a1")
+    df.write
+         .format("starrocks")
+         .option("starrocks.fe.http.url", "127.0.0.1:8030")
+         .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
+         .option("starrocks.table.identifier", "test.array_tbl")
+         .option("starrocks.user", "root")
+         .option("starrocks.password", "")
+         .option("starrocks.column.types", "a0 ARRAY<STRING>,a1 ARRAY<ARRAY<INT>>")
+         .mode("append")
+         .save()
+    ```
+
+3. Query data in the StarRocks table.
+
+   ```SQL
+   MySQL [test]> SELECT * FROM `array_tbl`;
+   +------+-----------------------+--------------------+
+   | id   | a0                    | a1                 |
+   +------+-----------------------+--------------------+
+   |    1 | ["hello","starrocks"] | [[1,2],[3,4]]      |
+   |    2 | ["hello","spark"]     | [[5,6,7],[8,9,10]] |
+   +------+-----------------------+--------------------+
+   2 rows in set (0.01 sec)
+   ```
+>>>>>>> 20ce8b8e70 ([Doc] fix file without .md (#33063))
