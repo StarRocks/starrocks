@@ -352,6 +352,9 @@ struct THdfsScanRange {
     16: optional i64 modification_time
 
     17: optional TDataCacheOptions datacache_options
+
+    // identity partition column slots
+    18: optional list<Types.TSlotId> identity_partition_slot_ids;
 }
 
 struct TBinlogScanRange {
