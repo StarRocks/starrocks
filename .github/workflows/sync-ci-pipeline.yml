@@ -228,7 +228,7 @@ jobs:
 
       - name: remove label
         uses: actions-ecosystem/action-remove-labels@v1
-        if: needs.build.result == 'failure'
+        if: needs.build.result != 'failure'
         with:
           github_token: ${{ secrets.PAT }}
           labels: ERROR
@@ -244,6 +244,7 @@ jobs:
     name: Auto Merge
     runs-on: [ self-hosted, sync-normal ]
     if: >
+      always() &&
       contains(github.event.pull_request.title, '(sync #') &&
       contains(needs.pr-label.outputs.labels, 'sync') &&
       !contains(needs.pr-label.outputs.labels, 'conflict') &&
