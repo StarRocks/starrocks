@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -56,6 +58,7 @@ public class Deployer {
     private final TFragmentInstanceFactory tFragmentInstanceFactory;
     private final TDescriptorTable emptyDescTable;
     private final long deliveryTimeoutMs;
+    private boolean enablePlanSerializeConcurrently;
 
     private final FailureHandler failureHandler;
 
@@ -78,6 +81,7 @@ public class Deployer {
         this.deliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
 
         this.failureHandler = failureHandler;
+        this.enablePlanSerializeConcurrently = context.getSessionVariable().getEnablePlanSerializeConcurrently();
     }
 
     public void deployFragments(List<ExecutionFragment> concurrentFragments, boolean needDeploy)
@@ -95,9 +99,28 @@ public class Deployer {
             return;
         }
 
+<<<<<<< HEAD
         for (List<FragmentInstanceExecState> executions : threeStageExecutionsToDeploy) {
             executions.forEach(FragmentInstanceExecState::deployAsync);
             waitForDeploymentCompletion(executions);
+=======
+        if (enablePlanSerializeConcurrently) {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeConcurrencyTime")) {
+                twoStageExecutionsToDeploy.stream().parallel().forEach(
+                        executions -> executions.stream().parallel()
+                                .forEach(FragmentInstanceExecState::serializeRequest));
+            }
+        }
+
+        for (List<FragmentInstanceExecState> executions : twoStageExecutionsToDeploy) {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
+                executions.forEach(FragmentInstanceExecState::deployAsync);
+            }
+
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
+                waitForDeploymentCompletion(executions);
+            }
+>>>>>>> 088e882e42 ([Enhancement] Opt ice const column and optimize deploy (#32592))
         }
     }
 

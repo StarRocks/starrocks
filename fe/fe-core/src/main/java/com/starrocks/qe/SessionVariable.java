@@ -406,6 +406,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1444,6 +1448,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2699,12 +2708,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return largeDecimalUnderlyingType;
     }
 
+<<<<<<< HEAD
     public long getCrossJoinCostPenalty() {
         return crossJoinCostPenalty;
     }
 
     public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
+=======
+    public boolean getEnableIcebergIdentityColumnOptimize() {
+        return enableIcebergIdentityColumnOptimize;
+    }
+
+    public boolean getEnablePlanSerializeConcurrently() {
+        return enablePlanSerializeConcurrently;
+>>>>>>> 088e882e42 ([Enhancement] Opt ice const column and optimize deploy (#32592))
     }
 
     // Serialize to thrift object

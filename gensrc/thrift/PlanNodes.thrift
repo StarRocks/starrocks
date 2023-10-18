@@ -346,6 +346,14 @@ struct THdfsScanRange {
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
+<<<<<<< HEAD
+=======
+
+    17: optional TDataCacheOptions datacache_options
+
+    // identity partition column slots
+    18: optional list<Types.TSlotId> identity_partition_slot_ids;
+>>>>>>> 088e882e42 ([Enhancement] Opt ice const column and optimize deploy (#32592))
 }
 
 struct TBinlogScanRange {

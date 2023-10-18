@@ -60,6 +60,7 @@ public:
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
         return _provider->_scan_node->get_lazy_column_coalesce_counter();
     }
+    int32_t scan_range_indicate_const_column_index(SlotId id) const;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -140,7 +141,11 @@ private:
     const HiveTableDescriptor* _hive_table = nullptr;
 
     bool _has_scan_range_indicate_const_column = false;
+<<<<<<< HEAD
     bool _use_partition_column_value_only = false;
+=======
+
+>>>>>>> 088e882e42 ([Enhancement] Opt ice const column and optimize deploy (#32592))
     // ======================================
     // The following are profile metrics
     HdfsScanProfile _profile;
