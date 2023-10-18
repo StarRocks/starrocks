@@ -102,7 +102,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 分区分桶
 
-`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/Data_distribution.md#动态分区管理)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
+`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/dynamic_partitioning.md)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
 
 `DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段作为分桶列。并且自 2.5.7 起 StarRocks 支持自动设置分桶数量，您无需手动设置分桶数量，详见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
 

@@ -131,7 +131,7 @@ connector jar包的命名格式如下
   | StringType      | STRING                                                       |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
-  | ArrayType       | ARRAY <br /> **说明:** <br /> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#load-data-into-columns-of-array-type). |
+  | ArrayType       | ARRAY <br /> **说明:** <br /> **自版本 1.1.1 开始支持。** 详细步骤, 请参见 [导入至 ARRAY 类型的列](#导入至-array-列). |
 
 - 您还可以自定义数据类型映射。
 
