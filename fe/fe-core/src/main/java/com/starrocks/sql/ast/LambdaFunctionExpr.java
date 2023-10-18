@@ -53,6 +53,7 @@ public class LambdaFunctionExpr extends Expr {
 
     public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
+        this.commonSubOperatorNum = rhs.commonSubOperatorNum;
     }
 
     @Override
