@@ -109,6 +109,7 @@ public class CreateReplicaTask extends AgentTask {
     private boolean isRecoverTask = false;
 
     private int primaryIndexCacheExpireSec = 0;
+    private boolean createSchemaFile = true;
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                              short shortKeyColumnCount, int schemaHash, long version,
@@ -155,10 +156,12 @@ public class CreateReplicaTask extends AgentTask {
                              boolean enablePersistentIndex,
                              int primaryIndexCacheExpireSec,
                              TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes,
-                             List<Integer> sortKeyUniqueIds) {
+                             List<Integer> sortKeyUniqueIds,
+                             boolean createSchemaFile) {
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, 0, version,
                 keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
                 enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds);
+        this.createSchemaFile = createSchemaFile;
     }
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
@@ -213,10 +216,12 @@ public class CreateReplicaTask extends AgentTask {
                              int primaryIndexCacheExpireSec,
                              TPersistentIndexType persistentIndexType,
                              TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes,
-                             List<Integer> sortKeyUniqueIds) {
+                             List<Integer> sortKeyUniqueIds,
+                             boolean createSchemaFile) {
         this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, version,
                 keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
-                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds);
+                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds,
+                createSchemaFile);
         this.persistentIndexType = persistentIndexType;
     }
 
@@ -337,8 +342,8 @@ public class CreateReplicaTask extends AgentTask {
         }
 
         createTabletReq.setCompression_type(compressionType);
-
         createTabletReq.setTablet_type(tabletType);
+        createTabletReq.setCreate_schema_file(createSchemaFile);
         return createTabletReq;
     }
 }
