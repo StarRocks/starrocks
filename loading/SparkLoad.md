@@ -126,7 +126,7 @@ PROPERTIES
 `spark0`、`spark1` 和 `spark2` 为 StarRocks 中配置的 Spark 资源的名字。
 
 PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
-> Spark 资源的全部参数和说明，请参见 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md/#spark-资源)。
+> Spark 资源的全部参数和说明，请参见 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE_RESOURCE.md#spark-资源)。
 
 * Spark 集群相关参数
   * `type`：必填，资源类型，取值为 `spark`。

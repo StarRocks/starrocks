@@ -2,7 +2,7 @@
 
 ## 功能
 
-创建资源。StarRocks 支持创建以下资源：Apache Spark™、Apache Hive™、Apache Iceberg、 Apache Hudi 和 JDBC。其中 Spark 资源用于 [Spark Load](/loading/SparkLoad.md)，负责管理数据导入的相关信息，比如 YARN 配置，中间数据存储的路径以及 Broker 配置等；Hive、Iceberg、Hudi 和 JDBC 资源用于在查询[外部表](/data_source/External_table.md)是管理数据源的访问信息。
+创建资源。StarRocks 支持创建以下资源：Apache Spark™、Apache Hive™、Apache Iceberg、 Apache Hudi 和 JDBC。其中 Spark 资源用于 [Spark Load](/loading/SparkLoad.md)，负责管理数据导入的相关信息，比如 YARN 配置，中间数据存储的路径以及 Broker 配置等；Hive、Iceberg、Hudi 和 JDBC 资源用于在查询[外部表](../../../data_source/External_table.md)是管理数据源的访问信息。
 
 > 说明：
 >
@@ -115,7 +115,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | **配置项**                          | **必选** | **说明**                                                     |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
 | type                                | 是       | 资源类型，取值为 `iceberg`。                                 |
-| starrocks.catalog-type              | 是       | Iceberg 的 catalog 类型。StarRocks 2.3 以下版本仅支持 Hive catalog；StarRocks 2.3 及以上版本支持 Hive catalog 和 custom catalog。 如要使用 Hive catalog， 设置该参数为 `HIVE`。 如要使用 custom catalog，设置该参数为 `CUSTOM`。详细信息参见[创建 Iceberg 资源](/data_source/External_table#步骤一创建--iceberg-资源)。 |
+| starrocks.catalog-type              | 是       | Iceberg 的 catalog 类型。StarRocks 2.3 以下版本仅支持 Hive catalog；StarRocks 2.3 及以上版本支持 Hive catalog 和 custom catalog。 如要使用 Hive catalog， 设置该参数为 `HIVE`。 如要使用 custom catalog，设置该参数为 `CUSTOM`。详细信息参见[创建 Iceberg 资源](/data_source/External_table#步骤一创建-iceberg-资源)。 |
 | iceberg.catalog.hive.metastore.uris | 是       | Hive metastore 的URI。                                       |
 
 #### Hudi 资源

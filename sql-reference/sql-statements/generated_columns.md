@@ -282,7 +282,7 @@ ALTER TABLE test_tbl3 DROP COLUMN newcol1;
 
 ### 部分列更新与生成列
 
-对主键表进行[部分列更新](../loading/Load_to_Primary_Key_tables.md#部分更新)时，您必须在 `columns` 中指定生成列引用的所有普通列。以下以 Stream Load 进行说明。
+对主键表进行[部分列更新](../../loading/Load_to_Primary_Key_tables.md#部分更新)时，您必须在 `columns` 中指定生成列引用的所有普通列。以下以 Stream Load 进行说明。
 
 1. 创建表 `test_tbl5`，包含五列，其中列 `newcol1` 和 `newcol2` 是生成列，分别是引用普通列 `data_array` 和 `data_json` 通过计算表达式后生成的列。建表成功后插入一行数据。
 
