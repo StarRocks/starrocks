@@ -8,3 +8,7 @@
 /fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocksLex.g4  @StarRocks/syntax-committer
 /fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4  @StarRocks/syntax-committer
 /gensrc/script/functions.py  @StarRocks/syntax-committer
+
+# /thirdparty/ /docker/dockerfiles/dev-env/dev-env.Dockerfile belong to thirdparty-maintainer
+/thirdparty/  @StarRocks/thirdparty-maintainer
+/docker/dockerfiles/dev-env/dev-env.Dockerfile   @StarRocks/thirdparty-maintainer
