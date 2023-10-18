@@ -125,7 +125,7 @@ public class AgentTaskTest {
                 version, KeysType.AGG_KEYS,
                 storageType, TStorageMedium.SSD,
                 columns, null, 0, latch, null,
-                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
+                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME, true);
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
