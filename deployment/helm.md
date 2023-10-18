@@ -4,7 +4,7 @@
 
 ## 环境准备
 
-- [创建 Kubernetes 集群](./sr_operator#创建-kubernetes-集群)。
+- [创建 Kubernetes 集群](./sr_operator.md#创建-kubernetes-集群)。
 - [安装 Helm](https://helm.sh/docs/intro/quickstart/)。
 
 ## 部署操作

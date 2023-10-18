@@ -2,7 +2,7 @@
 
 自 v3.0 起，StarRocks 支持表达式分区（原称自动创建分区），更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
 
-您仅需要在建表时设置分区表达式 （时间函数表达式或列表达式）。在数据导入时，StarRocks 会根据数据和分区表达式的定义规则自动创建分区，您无需在建表时预先手动/批量创建大量分区，或者配置动态分区属性。
+您仅需要在建表时设置分区表达式（时间函数表达式或列表达式）。在数据导入时，StarRocks 会根据数据和分区表达式的定义规则自动创建分区，您无需在建表时预先手动/批量创建大量分区，或者配置动态分区属性。
 
 ## 时间函数表达式分区
 
@@ -26,7 +26,7 @@ expression ::=
 
 | 参数                    | 是否必填 | 说明                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
-| `expression`            | 是       | 目前仅支持 [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc) 和 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice) 函数。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
+| `expression`            | 是       | 目前仅支持 [date_trunc](../sql-reference/sql-functions/date-time-functions/date_trunc.md) 和 [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) 函数。并且如果您使用 `time_slice` 函数，则可以不传入参数 `boundary`，因为在该场景中该参数默认且仅支持为 `floor`，不支持为 `ceil`。 |
 | `time_unit`             | 是       | 分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。 |
 | `partition_column`      | 是       | 分区列。  <br /> <ul><li>仅支持为日期类型（DATE 或 DATETIME），不支持为其它类型。如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。分区列的值支持为 `NULL`。</li><li> 如果分区列是 DATE 类型，则范围支持为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则范围支持为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。</li><li> 目前仅支持指定一个分区列，不支持指定多个分区列。</li></ul> |
 | `partition_live_number` | 否       | 保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，以**当前时间**为基准，然后从后往前数指定个数的分区进行保留，其余（更早的）分区会被删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。假设当前为 2023 年 4 月 4 日，`partition_live_number` 设置为 `2`，分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`，则分区 `p20230403`、`p20230404` 会保留，其他分区会删除。如果导入了脏数据，比如未来时间 4 月 5 日和 6 日的数据，导致分区包含 `p20230401`、`p20230402`、`p20230403`、`p20230404`、`p20230405`、`p20230406`，则分区 `p20230403`、`p20230404`、`p20230405`、`p20230406` 会保留，其他分区会删除。|

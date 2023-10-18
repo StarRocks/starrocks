@@ -73,7 +73,7 @@
 
 - 在报错信息 `xxx too many versions xxx` 中增加了如何处理的建议说明。[#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - 动态分区新增支持分区粒度为年。[#28386](https://github.com/StarRocks/starrocks/pull/28386)
-- [INSERT OVERWRITE 中使用表达式分区时](../table_design/expression_partitioning#%E5%AF%BC%E5%85%A5%E6%95%B0%E6%8D%AE%E8%87%B3%E5%88%86%E5%8C%BA)，分区字段大小写不敏感。[#28309](https://github.com/StarRocks/starrocks/pull/28309)
+- [INSERT OVERWRITE 中使用表达式分区时](../table_design/expression_partitioning.md#%E5%AF%BC%E5%85%A5%E6%95%B0%E6%8D%AE%E8%87%B3%E5%88%86%E5%8C%BA)，分区字段大小写不敏感。[#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
 ### 问题修复
 
