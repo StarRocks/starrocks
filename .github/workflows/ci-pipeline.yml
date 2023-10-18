@@ -26,7 +26,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
-      THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
     steps:
       - name: upload info
         env:
@@ -78,6 +77,7 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
+<<<<<<< HEAD
       - uses: dorny/paths-filter@v2
         id: thirdparty-checker
         if: always()
@@ -87,11 +87,13 @@ jobs:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
+=======
+>>>>>>> 9ca2c77505 ([Tool] Add codeowners for thirdparty (#33043))
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
     name: BE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+    if: needs.sync-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
