@@ -70,10 +70,7 @@ import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Index;
->>>>>>> d9a2787952 ([Enhancement] allow create mv sql with bitmap index (#32637))
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
