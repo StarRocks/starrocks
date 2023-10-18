@@ -140,7 +140,7 @@ SELECT COUNT(DISTINCT uv) FROM test;
 
 如果您的数据集基数在百万、千万量级，并拥有几十台机器，那么您可以直接使用 `count distinct` 方式。如果您的数据集基数在亿级以上，并且需要精确去重，那么您需要使用 [Bitmap 去重](/using_starrocks/Using_bitmap.md#基于-trie-树构建全局字典)。如果您选择近似去重，那么可以使用 HLL 类型去重。
 
-Bitmap 类型仅支持 TINYINT，SMALLINT，INT，BIGINT（注意不支持 LARGEINT）去重。对于其他类型数据集去重，您需要[构建词典](/using_starrocks/Bitmap_index.md#基于-trie-树构建全局字典)，将原类型映射到整数类型。HLL 去重方式则无需构建词典，仅要求对应的数据类型支持哈希函数。
+Bitmap 类型仅支持 TINYINT，SMALLINT，INT，BIGINT（注意不支持 LARGEINT）去重。对于其他类型数据集去重，您需要[构建词典](./Using_bitmap.md#基于-trie-树构建全局字典)，将原类型映射到整数类型。HLL 去重方式则无需构建词典，仅要求对应的数据类型支持哈希函数。
 
 对于普通列，您还可以使用 `NDV` 函数进行近似去重计算。`NDV` 函数返回值是 `COUNT(DISTINCT col)` 结果的近似值聚合函数，底层实现将数据存储类型转为 HLL 类型进行计算。但 `NDV` 函数在计算的时候消耗资源较大，不适合于并发高的场景。
 

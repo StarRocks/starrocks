@@ -4,7 +4,7 @@
 
 删除物化视图。
 
-此命令无法用于删除正在创建中的同步物化视图。如要删除创建中的同步物化视图，请参考 [同步物化视图 - 删除物化视图](../../../using_starrocks/Materialized_view-single_table.md#删除物化视图)。
+此命令无法用于删除正在创建中的同步物化视图。如要删除创建中的同步物化视图，请参考 [同步物化视图 - 删除物化视图](../../../using_starrocks/Materialized_view-single_table.md#删除同步物化视图)。
 
 > **注意**
 >
