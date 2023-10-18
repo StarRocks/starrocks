@@ -1617,6 +1617,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 if (table.isNativeTableOrMaterializedView()) {
                     tableNamePartitionNames.put(table, ((OlapTable) table).getVisiblePartitionNames());
                 } else if (table.isView()) {
+                    // do nothing
                 } else {
                     tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 }
