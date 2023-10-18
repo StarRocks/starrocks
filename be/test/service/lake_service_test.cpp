@@ -19,7 +19,6 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
@@ -36,9 +35,11 @@ namespace starrocks {
 
 class LakeServiceTest : public testing::Test {
 public:
-    LakeServiceTest() : _lake_service(ExecEnv::GetInstance()), _tablet_id(next_id()) {
-        _location_provider = new lake::FixedLocationProvider(kRootLocation);
-        _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    LakeServiceTest()
+            : _tablet_id(next_id()),
+              _location_provider(new lake::FixedLocationProvider(kRootLocation)),
+              _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
+              _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
@@ -97,11 +98,11 @@ public:
 
 protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
-    LakeServiceImpl _lake_service;
     int64_t _tablet_id;
-    lake::TabletManager* _tablet_mgr;
     lake::LocationProvider* _location_provider;
+    lake::TabletManager* _tablet_mgr;
     lake::LocationProvider* _backup_location_provider;
+    LakeServiceImpl _lake_service;
 };
 
 // NOLINTNEXTLINE
