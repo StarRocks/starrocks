@@ -700,6 +700,21 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     /**
+     * Get the min txn id of running compaction transactions.
+     *
+     * @return the min txn id of running compaction transactions.
+     * If there are no running compaction transactions, return the next transaction id that will be assigned.
+     */
+    public long getMinActiveCompactionTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveCompactionTxnId().orElse(Long.MAX_VALUE));
+        }
+        return minId;
+    }
+
+    /**
      * Get the smallest transaction ID of active transactions in a database.
      * If there are no active transactions in the database, return the transaction ID that will be assigned to the
      * next transaction.
