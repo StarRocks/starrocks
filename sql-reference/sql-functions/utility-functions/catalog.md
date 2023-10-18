@@ -22,7 +22,7 @@ catalog()
 
 ## 示例
 
-示例一：当前 Catalog 为 StarRocks 系统内 Internal Catalog。
+当前 Catalog 为 StarRocks 系统内 Internal Catalog。
 
 ```sql
 select catalog();
@@ -33,22 +33,3 @@ select catalog();
 +-----------------+
 1 row in set (0.01 sec)
 ```
-
-示例二：当前 Catalog 为 External Catalog `hudi_catalog`。
-
-```sql
--- 切换到目标 External Catalog。
-set catalog hudi_catalog;
-
--- 返回当前 Catalog 名称。
-select catalog();
-+--------------+
-| CATALOG()    |
-+--------------+
-| hudi_catalog |
-+--------------+
-```
-
-## 相关 SQL
-
-[SET CATALOG](../../sql-statements/data-definition/SET_CATALOG.md)：切换到指定 Catalog。

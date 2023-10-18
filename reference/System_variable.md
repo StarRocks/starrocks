@@ -108,12 +108,6 @@ SELECT /*+ SET_VAR
 
 本节以字母顺序对变量进行解释。带 `global` 标记的变量为全局变量，仅支持全局生效。其余变量既可以设置全局生效，也可设置会话级别生效。
 
-* auto_increment_increment
-
-默认值：false，表示不开启。
-
-如果要在当前会话中激活一个角色，可以使用 [SET ROLE](../sql-reference/sql-statements/account-management/SET_ROLE.md)。
-
 ### auto_increment_increment
 
 用于兼容 MySQL 客户端。无实际作用。默认值为 1。

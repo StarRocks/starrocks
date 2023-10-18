@@ -25,7 +25,7 @@
 
 > **说明**
 >
-> - 重置密码后请务必妥善保管。如果您忘记了密码，请参阅 [重置丢失的 root 密码](../administration/User_privilege.md#重置丢失的-root-密码) 了解详细说明。
+> - 重置密码后请务必妥善保管。如果您忘记了密码，请参阅 [重置丢失的 root 密码](../administration/User_privilege.md#修改-root-用户密码) 了解详细说明。
 > - 完成部署后设置后，您可以创建新用户和角色来管理团队内的权限。有关详细说明，请参阅 [管理用户权限](../administration/User_privilege.md)。
 
 ## 设置必要的系统变量

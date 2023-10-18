@@ -22,7 +22,7 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
 
 - `desired_concurrent_number`：Routine Load 导入作业时为单个导入作业设置较高的期望任务并行度，默认值为 3。
   - 如果还未创建导入作业，则需要在执行 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 创建导入作业时，设置该参数。
-  - 如果已经创建导入作业，则需要执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md)，修改该参数。
+  - 如果已经创建导入作业，则需要执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/alter-routine-load.md)，修改该参数。
 
 - `max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度的 ，默认值为 `5`。该参数为 FE 动态参数，更多说明和设置方式，请参见 [配置参数](../../administration/Configuration.md#导入和导出)。
 
@@ -70,7 +70,7 @@ I0325 20:27:50.410579 15259 data_consumer_group.cpp:131] consumer group done: 41
   - 如果是数据源的数据格式问题，则需要检查数据源数据格式，并进行修复。修复后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
 
   - 如果是数据源的数据格式无法被 StarRocks 解析，则需要调整错误行数阈值`max_error_number`。
-  您可以先执行 [SHOW ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看错误行数阈值 `max_error_number`，然后执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md)，适当提高错误行数阈值 `max_error_number`。修改阈值后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
+  您可以先执行 [SHOW ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md)，查看错误行数阈值 `max_error_number`，然后执行 [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/alter-routine-load.md)，适当提高错误行数阈值 `max_error_number`。修改阈值后您可以使用 [RESUME ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复 **PAUSED** 状态的导入作业。
 
 - **报错提示**：如果导入作业变成为 **CANCELLED** 状态。
 
