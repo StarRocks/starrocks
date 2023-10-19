@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.connectContext;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -410,8 +411,9 @@ class ParserTest {
     void testModOperator() {
         String sql = "select 100 MOD 2";
         List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        Analyzer.analyze(stmts.get(0), connectContext);
         String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
-        assertEquals("SELECT 100 % 2", newSql);
+        assertEquals("SELECT 100 % 2 AS `100 % 2`", newSql);
     }
 
     private static Stream<Arguments> keyWordSqls() {
