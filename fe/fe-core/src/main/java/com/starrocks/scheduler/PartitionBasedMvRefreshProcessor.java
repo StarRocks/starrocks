@@ -1045,7 +1045,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // if materialized view has set sort keys, materialized view's output columns
         // may be different from the defined query's output.
         // so set materialized view's defined outputs as target columns.
-        List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndexes();
+        List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndices();
         List<Column> baseSchema = materializedView.getBaseSchema();
         if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
             List<String> targetColumnNames = queryOutputIndexes.stream()

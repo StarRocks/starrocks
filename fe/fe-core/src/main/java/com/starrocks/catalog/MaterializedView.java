@@ -393,8 +393,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     //  desc mv             :  col2, col1, col3
     //  queryOutputIndexes  :  1, 0, 2
     // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
-    @SerializedName(value = "queryOutputIndexes")
-    protected List<Integer> queryOutputIndexes = Lists.newArrayList();
+    @SerializedName(value = "queryOutputIndices")
+    protected List<Integer> queryOutputIndices = Lists.newArrayList();
 
 
     // it is a property in momery, do not serialize it
@@ -552,12 +552,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.maxMVRewriteStaleness = maxMVRewriteStaleness;
     }
 
-    public List<Integer> getQueryOutputIndexes() {
-        return queryOutputIndexes;
+    public List<Integer> getQueryOutputIndices() {
+        return queryOutputIndices;
     }
 
-    public void setQueryOutputIndexes(List<Integer> queryOutputIndexes) {
-        this.queryOutputIndexes = queryOutputIndexes;
+    public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
+        this.queryOutputIndices = queryOutputIndices;
     }
 
     /**

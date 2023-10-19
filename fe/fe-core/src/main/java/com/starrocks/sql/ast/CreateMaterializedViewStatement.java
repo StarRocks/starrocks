@@ -78,7 +78,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     //  desc mv             :  col2, col1, col3
     //  queryOutputIndexes  :  1, 0, 2
     // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
-    private List<Integer> queryOutputIndexes = Lists.newArrayList();
+    private List<Integer> queryOutputIndices = Lists.newArrayList();
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
@@ -251,12 +251,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         return columnRefFactory;
     }
 
-    public List<Integer> getQueryOutputIndexes() {
-        return queryOutputIndexes;
+    public List<Integer> getQueryOutputIndices() {
+        return queryOutputIndices;
     }
 
-    public void setQueryOutputIndexes(List<Integer> queryOutputIndexes) {
-        this.queryOutputIndexes = queryOutputIndexes;
+    public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
+        this.queryOutputIndices = queryOutputIndices;
     }
 
     public void setMaintenancePlan(ExecPlan maintenancePlan, ColumnRefFactory columnRefFactory) {
