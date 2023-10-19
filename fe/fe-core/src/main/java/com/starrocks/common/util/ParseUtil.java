@@ -20,6 +20,7 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.AnalysisException;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -80,6 +81,13 @@ public class ParseUtil {
             throw new AnalysisException("Replica volumn must larger than 0");
         }
         return replicaNumber;
+    }
+
+    public static String backquote(String str) {
+        if (StringUtils.isEmpty(str)) {
+            return str;
+        }
+        return "`" + str + "`";
     }
 
 }
