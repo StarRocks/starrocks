@@ -10,13 +10,13 @@
 
 [DBT](https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector)
 
-[Apache Iceberg](https://docs.starrocks.io/en-us/main/data_source/catalog/iceberg_catalog.md)
+[Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
 
-[Apache Hive](https://docs.starrocks.io/en-us/main/data_source/catalog/hive_catalog.md)
+[Apache Hive](../data_source/catalog/hive_catalog.md)
 
-[Apache Hudi](https://docs.starrocks.io/en-us/main/data_source/catalog/hudi_catalog.md)
+[Apache Hudi](../data_source/catalog/hudi_catalog.md)
 
-[Delta Lake](https://docs.starrocks.io/en-us/main/data_source/catalog/deltalake_catalog.md)
+[Delta Lake](../data_source/catalog/deltalake_catalog.md)
 
 [Apache Flink Connector](https://github.com/StarRocks/starrocks-connector-for-apache-flink)
 
@@ -32,4 +32,4 @@
 
 ## 监控
 
-[DataDog](./datadog_support.md)
+[DataDog](./other_integrations/datadog_support.md)

@@ -4,7 +4,7 @@
 
 ## 连接 StarRocks
 
-在成功 [部署 StarRocks 集群](/quick_start/deploy_with_docker.md) 后，您可以通过 MySQL 客户端连接任意一个 FE 节点的 `query_port`（默认为 `9030`）以连接 StarRocks。StarRocks 内置 `root` 用户，密码默认为空。
+在成功 [部署 StarRocks 集群](../quick_start/deploy_with_docker.md) 后，您可以通过 MySQL 客户端连接任意一个 FE 节点的 `query_port`（默认为 `9030`）以连接 StarRocks。StarRocks 内置 `root` 用户，密码默认为空。
 
 ```shell
 mysql -h <fe_host> -P9030 -u root
@@ -16,7 +16,7 @@ mysql -h <fe_host> -P9030 -u root
 
 > **注意**
 >
-> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../sql-reference/sql-statements/keywords.md#保留关键字)。
 
 ```sql
 CREATE DATABASE example_db;

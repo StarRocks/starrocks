@@ -76,4 +76,3 @@ show tables from hudi_catalog.hudi_db;
 
 - [SHOW CATALOGS](SHOW_CATALOGS.md)：查看当前集群下所有的 Catalog。
 - [SHOW DATABASES](SHOW_DATABASES.md)：查看 Internal Catalog 或 External Catalog 下的所有数据库。
-- [SET CATALOG](../data-definition/SET_CATALOG.md)：切换 Catalog。

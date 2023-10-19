@@ -118,7 +118,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [null_or_empty](./string-functions/null_or_empty.md) | 如果字符串为空字符串或者 NULL 则返回 true，否则返回 false。 |
 | [parse_url](./string-functions/parse_url.md) |  从目标 URL 中提取一部分信息。 |
 | [repeat](./string-functions/repeat.md) | 将字符串重复 count 次输出，count 小于 1 时返回空字符串。  |
-| [replace](./string-functions/replace.md) | 将字符串中符合指定模式的字符全部替换成其他字符。  |
 | [reverse](./string-functions/reverse.md) | 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。  |
 | [right](./string-functions/right.md) | 从字符串右边部分返回指定长度的字符。  |
 | [rpad](./string-functions/rpad.md) |  根据指定的长度在字符串后面（右侧）追加字符。 |
@@ -326,7 +325,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  :-:                |                :-:       |
 |  [aes_decrypt](./crytographic-functions/aes_decrypt.md)| 使用 AES_128_ECB 算法将字符串解密并返回一个二进制字符串。 |
 |  [aes_encrypt](./crytographic-functions/aes_encrypt.md)| 使用 AES_128_ECB 算法对字符串进行加密并返回一个二进制字符串。 |
-|  [base64_decode_string](./crytographic-functions/base64_decode_string.md)| 用于解码某个 Base64 编码的字符串，是 to_base64() 函数的反向函数。 |
 |  [from_base64](./crytographic-functions/from_base64.md)| 将 Base64 编码过的字符串 str 进行解码。反向函数为 to_base64。 |
 |  [md5](./crytographic-functions/md5.md)| 使用 MD5 加密算法将给定字符串进行加密，输出一个 128-bit 的校验和 (checksum)，以 32 字符的十六进制字符串表示。 |
 |  [md5sum](./crytographic-functions/md5sum.md)| 计算多个输入参数的 MD5 128-bit 校验和 (checksum)，以 32 字符的十六进制字符串表示。 |
@@ -373,7 +371,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [catalog](./utility-functions/catalog.md)| 查询当前会话所在的 Catalog。 |
-|  [current_role](./utility-functions/current_role.md)| 获取当前用户激活的角色。  |
 |  [current_version](./utility-functions/current_version.md)| 获取当前 StarRocks 的版本 |
 | [database](./utility-functions/database.md)| 查询当前会话所在的数据库。 |
 |  [host_name](./utility-functions/host_name.md)| 获取计算所在节点的主机名。|
