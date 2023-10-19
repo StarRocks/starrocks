@@ -151,6 +151,7 @@ void CompactionScheduler::update_compact_task_queue_count(int32_t new_val) {
     if (new_val > old_val) {
         {
             std::lock_guard<std::mutex> lock(_task_queues_mutex);
+            // increase queue count
             _task_queues.resize(new_val);
         }
         _limiter.adapt_to_task_queue_count(new_val);
@@ -160,8 +161,21 @@ void CompactionScheduler::update_compact_task_queue_count(int32_t new_val) {
         }
     } else {
         _task_queue_count.store(new_val);
+
+        // wait and make sure tasks in _task_queues[idx] all have been re-scheduled,
+        // idx is in range [new_val, ola_val-1]
+        // todo can we ignore lock here? can we allow multiple threads to update the same config item at the same time?
+        // todo using something like Semaphore here might be better?
+        for (int i = new_val; i < old_val; i++) {
+            for (auto _task_queues[i].get_size() > 0) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                continue;
+            }
+        }
+
         {
             std::lock_guard<std::mutex> lock(_task_queues_mutex);
+            // shrink queues count
             _task_queues.resize(new_val);
         }
         _limiter.adapt_to_task_queue_count(new_val);
@@ -191,19 +205,30 @@ void CompactionScheduler::steal_task(int start_index, std::unique_ptr<Compaction
 
 void CompactionScheduler::thread_task(int id) {
     while (!_stopped.load(std::memory_order_acquire)) {
-        // if id is greater than _task_queue_count, it means _task_queue_count has decreased at runtime
-        // we should abort the thread that associated with this id
+        // When `_task_queue_count` is decreased at runtime, `id` might be greater than `_task_queue_count`.
+        // we should abort the thread that associated with this id.
+        // But before doing that, the remaining tasks in `_task_queues[id]` should re-schedule to new queue
         if (id >= _task_queue_count.load()) {
-            // use break to abort this task and thread
-            break;
+            CompactionContextPtr context;
+            auto ret = _task_queues[id].try_get(&context));
+            if (!ret) {
+                // no remaining tasks in `task_queues[id]`
+                return;
+            }
+            auto idx = choose_task_queue_by_txn_id(context->txn_id);
+            {
+                std::lock_guard<std::mutex> lock(_task_queues_mutex);
+                // re-schedule the compaction task
+                _task_queues[idx].put(std::move(context));
+            }
         }
+
         if (!_limiter.acquire()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
         CompactionContextPtr context;
-
         {
             std::lock_guard<std::mutex> lock(_task_queues_mutex);
             if (!_task_queues[id].try_get(&context)) {
