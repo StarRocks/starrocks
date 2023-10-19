@@ -342,8 +342,10 @@ private:
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
+#ifdef USE_STAROS
     // local pk index of SHARD_DATA gc function
     void* _local_pk_index_shard_data_gc_thread_callback(void* arg);
+#endif
 
     bool _check_and_run_manual_compaction_task();
 

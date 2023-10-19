@@ -404,6 +404,7 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
     return nullptr;
 }
 
+#ifdef USE_STAROS
 void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
     if (is_as_cn()) {
         return nullptr;
@@ -469,7 +470,7 @@ void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
                     if (i != 0) {
                         result.append(",");
                     }
-                    result += vector[i];
+                    result += std::to_string(vector[i]);
                 }
                 return result;
             };
@@ -485,6 +486,7 @@ void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
 
     return nullptr;
 }
+#endif
 
 void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER

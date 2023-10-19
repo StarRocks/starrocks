@@ -112,10 +112,6 @@ private:
         // We call `prepare_primary_index` only when first time we apply `write_log` or `compaction_log`, instead of
         // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
         if (_index_entry == nullptr) {
-            // get lock to avoid gc
-            _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
-            DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
-
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(*_metadata, &_tablet, &_builder,
                                                                                        _base_version, _new_version));
         }
