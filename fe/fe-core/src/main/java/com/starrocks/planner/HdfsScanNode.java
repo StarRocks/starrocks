@@ -192,6 +192,7 @@ public class HdfsScanNode extends ScanNode {
         ScanOptimzeOption option = scanNode.getScanOptimzeOption();
         tHdfsScanNode.setCan_use_any_column(option.getCanUseAnyColumn());
         tHdfsScanNode.setCan_use_min_max_count_opt(option.getCanUseMinMaxCountOpt());
+        tHdfsScanNode.setUse_partition_column_value_only(option.getUsePartitionColumnValueOnly());
     }
 
     public static void setCloudConfigurationToThrift(THdfsScanNode tHdfsScanNode, CloudConfiguration cc) {
