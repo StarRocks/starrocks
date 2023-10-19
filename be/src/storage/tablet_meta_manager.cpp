@@ -1463,7 +1463,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     stats->total_count += stats->update_tablet_count;
     stats->total_meta_bytes += stats->update_tablet_meta_bytes;
 
-    RowsetMetaManager::traverse_rowset_metas(
+    RETURN_IF_ERROR(RowsetMetaManager::traverse_rowset_metas(
             meta, [&](const TabletUid& tablet_uid, const RowsetId& rowset_id, std::string_view value) -> bool {
                 stats->rowset_count++;
                 stats->rowset_meta_bytes += value.size();
@@ -1494,7 +1494,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
                     }
                 }
                 return true;
-            });
+            }));
     stats->total_count += stats->rowset_count;
     stats->total_meta_bytes += stats->rowset_meta_bytes;
 

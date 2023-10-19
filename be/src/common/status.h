@@ -26,7 +26,7 @@ class StatusOr;
 #ifdef STARROCKS_STATUS_NODISCARD
 #define STATUS_ATTRIBUTE [[nodiscard]]
 #else
-#define STATUS_ATTRIBUTE
+#define STATUS_ATTRIBUTE [[nodiscard]]
 #endif
 
 class STATUS_ATTRIBUTE Status {

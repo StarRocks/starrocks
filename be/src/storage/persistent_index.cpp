@@ -2902,7 +2902,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
         // if has l1, idx range is [0, 1)
-        _reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false);
+        RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false));
     }
 
     return Status::OK();
@@ -3282,7 +3282,7 @@ bool PersistentIndex::_enable_minor_compaction() {
         } else {
             LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
-            _reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+            (void)_reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
         }
     }
     return false;
@@ -4714,7 +4714,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     RETURN_IF_ERROR(_delete_expired_index_file(
             _version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
-    _delete_major_compaction_tmp_index_file();
+    (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 
@@ -4766,7 +4766,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
                 _version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
-    _delete_major_compaction_tmp_index_file();
+    (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 

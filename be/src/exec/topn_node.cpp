@@ -188,7 +188,7 @@ Status TopNNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     {
         SCOPED_TIMER(_sort_timer);
-        _chunks_sorter->get_next(chunk, eos);
+        RETURN_IF_ERROR(_chunks_sorter->get_next(chunk, eos));
     }
     if (*eos) {
         _chunks_sorter = nullptr;

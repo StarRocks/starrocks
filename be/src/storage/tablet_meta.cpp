@@ -182,7 +182,7 @@ Status TabletMeta::save_meta(DataDir* data_dir) {
 void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
     _schema = tablet_schema;
-    _save_meta(data_dir);
+    (void)_save_meta(data_dir);
 }
 
 Status TabletMeta::_save_meta(DataDir* data_dir) {

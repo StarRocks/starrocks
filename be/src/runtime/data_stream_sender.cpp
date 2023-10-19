@@ -621,7 +621,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
         butil::IOBuf attachment;
         construct_brpc_attachment(&_chunk_request, &attachment);
         for (auto& _channel : _channels) {
-            _channel->send_chunk_request(&_chunk_request, attachment);
+            (void)_channel->send_chunk_request(&_chunk_request, attachment);
         }
     } else {
         for (auto& _channel : _channels) {

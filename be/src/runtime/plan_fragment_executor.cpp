@@ -141,7 +141,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        scan_node->set_scan_ranges(scan_ranges);
+        (void)scan_node->set_scan_ranges(scan_ranges);
         VLOG(1) << "scan_node_Id=" << scan_node->id() << " size=" << scan_ranges.size();
     }
 
@@ -283,7 +283,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
 
 void PlanFragmentExecutor::collect_query_statistics() {
     _query_statistics->clear();
-    _plan->collect_query_statistics(_query_statistics.get());
+    (void)_plan->collect_query_statistics(_query_statistics.get());
 }
 
 void PlanFragmentExecutor::send_report(bool done) {
@@ -474,9 +474,9 @@ void PlanFragmentExecutor::close() {
                     std::lock_guard<std::mutex> l(_status_lock);
                     status = _status;
                 }
-                _sink->close(runtime_state(), status);
+                (void)_sink->close(runtime_state(), status);
             } else {
-                _sink->close(runtime_state(), Status::InternalError("prepare failed"));
+                (void)_sink->close(runtime_state(), Status::InternalError("prepare failed"));
             }
         }
 

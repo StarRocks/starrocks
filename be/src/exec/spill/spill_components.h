@@ -93,7 +93,7 @@ public:
 
     virtual void cancel() = 0;
 
-    virtual Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) = 0;
+    virtual void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) = 0;
 
     template <class T>
     T as() {
@@ -173,7 +173,7 @@ public:
 
     void cancel() override {}
 
-    Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override { return Status::OK(); }
+    void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override {}
 
 private:
     BlockGroup _block_group;
@@ -234,7 +234,7 @@ public:
     template <class TaskExecutor, class MemGuard>
     Status flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
 
-    Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
+    void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
 
     void reset_partition(const std::vector<const SpillPartitionInfo*>& partitions);
 

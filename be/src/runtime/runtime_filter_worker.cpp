@@ -571,8 +571,8 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
     _queue.put(std::move(ev));
 }
 // receive total runtime filter in pipeline engine.
-static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
-                                                           const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
+static inline void receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
+                                                         const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
     auto& pb_query_id = params.query_id();
     TUniqueId query_id;
     query_id.hi = pb_query_id.hi();
@@ -590,11 +590,11 @@ static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilte
     // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
     query_ctx = ExecEnv::GetInstance()->query_context_mgr()->get(query_id);
     if (!query_ctx) {
-        return Status::OK();
+        return;
     }
     // the query is already finished, so it is needless to cache rf.
     if (query_ctx->has_no_active_instances() || query_ctx->is_query_expired()) {
-        return Status::OK();
+        return;
     }
 
     auto& probe_finst_ids = params.probe_finst_ids();
@@ -628,7 +628,6 @@ static inline Status receive_total_runtime_filter_pipeline(PTransmitRuntimeFilte
                                      fragment_ctx->runtime_filter_port()->listeners(params.filter_id()),
                                      print_id(finst_id))});
     }
-    return Status::OK();
 }
 
 void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterParams& request) {
