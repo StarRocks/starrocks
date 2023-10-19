@@ -14,8 +14,8 @@
 **Methods to obtain the JAR file:**
 
 - Directly download the Spark connector JAR file from the [Maven Central Repository](https://repo1.maven.org/maven2/com/starrocks).
-- Add the Spark connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](../loading/Spark-connector-starrocks#obtain-spark-connector).
-- Compile the source codes into Spark connector JAR file. For specific instructions, see [user guide](../loading/Spark-connector-starrocks#obtain-spark-connector).
+- Add the Spark connector as a dependency in your Maven project's `pom.xml` file and download it. For specific instructions, see [user guide](../loading/Spark-connector-starrocks.md#obtain-spark-connector).
+- Compile the source codes into Spark connector JAR file. For specific instructions, see [user guide](../loading/Spark-connector-starrocks.md#obtain-spark-connector).
 
 **Version requirements:**
 
