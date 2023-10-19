@@ -46,6 +46,9 @@ PipelineDriver::~PipelineDriver() noexcept {
 }
 
 void PipelineDriver::check_operator_close_states(std::string func_name) {
+    if (_driver_id == -1) { // in test cases
+        return;
+    }
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
         if (op_state != OperatorStage::CLOSED) {

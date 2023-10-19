@@ -198,7 +198,6 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, int32_t driver_id)
             : _operators(operators),
-
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _pipeline(pipeline),
