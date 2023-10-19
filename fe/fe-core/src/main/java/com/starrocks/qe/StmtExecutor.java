@@ -328,7 +328,7 @@ public class StmtExecutor {
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
-        Tracers.toRuntimeProfile(plannerProfile);;
+        Tracers.toRuntimeProfile(plannerProfile);
         return profile;
     }
 

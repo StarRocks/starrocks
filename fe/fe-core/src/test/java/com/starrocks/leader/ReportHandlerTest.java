@@ -309,7 +309,7 @@ public class ReportHandlerTest {
     public void testHandleMigration() throws TException {
         ReportHandler handler = new ReportHandler();
         List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         for (Long tabletId : tabletIds) {
             tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
         }
@@ -349,7 +349,50 @@ public class ReportHandlerTest {
             }
         }
         Config.primary_key_disk_schedule_time = 0;
+<<<<<<< HEAD
         handler.handleMigration(tabletMetaMigrationMap, 10001);
+=======
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+    }
+
+    @Test
+    public void testHandleMigrationTaskControl() {
+        long backendId = 10001L;
+        // mock the task execution on BE
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+
+            }
+        };
+
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("binlog_report_handler_test");
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
+        List<Long> allTablets = new ArrayList<>();
+        for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
+                allTablets.add(tablet.getId());
+            }
+        }
+
+        Assert.assertEquals(50, tabletMetaMigrationMap.size());
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
+
+        Assert.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+
+        // finish 30 tablets migration
+        for (int i = 0; i < 30; i++) {
+            AgentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(49 - i));
+        }
+        // limit the batch size to 30
+        Config.tablet_sched_max_migration_task_sent_once = 30;
+        ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
+        Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
     }
 
     @Test
