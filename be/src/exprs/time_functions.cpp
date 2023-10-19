@@ -525,8 +525,9 @@ DEFINE_UNARY_FN_WITH_IMPL(year_week_with_default_modeImpl, t) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
     date_value.to_date(&year, &month, &day);
-    int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0), 0);
-    return year * 100 + week;
+    uint to_year = 0;
+    int week = TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(0 | 2), &to_year);
+    return to_year * 100 + week;
 }
 DEFINE_TIME_UNARY_FN(year_week_with_default_mode, TYPE_DATETIME, TYPE_INT);
 
