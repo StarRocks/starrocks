@@ -498,7 +498,6 @@ public class PartitionUtil {
                 continue;
             }
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            // PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
             PartitionKey upperBound = entry.getValue();
             mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
             lastPartitionName = entry.getKey();
