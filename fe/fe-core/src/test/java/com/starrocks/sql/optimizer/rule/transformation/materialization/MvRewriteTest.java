@@ -83,4 +83,36 @@ public class MvRewriteTest extends MvRewriteTestBase {
             }
         }
     }
+
+    @Test
+    public void testMVAggregateTable() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t1_agg` (\n" +
+                "  `c_1_0` datetime NULL COMMENT \"\",\n" +
+                "  `c_1_1` decimal128(24, 8) NOT NULL COMMENT \"\",\n" +
+                "  `c_1_2` double SUM NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`c_1_0`, `c_1_1`)\n" +
+                "DISTRIBUTED BY HASH(`c_1_1`) BUCKETS 3");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_t1_v0 " +
+                "AS " +
+                "SELECT t1_17.c_1_0, t1_17.c_1_1, SUM(t1_17.c_1_2) " +
+                "FROM t1_agg AS t1_17 " +
+                "GROUP BY t1_17.c_1_0, t1_17.c_1_1 ORDER BY t1_17.c_1_0 DESC, t1_17.c_1_1 ASC");
+
+        {
+            String query = "select * from t1_agg";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "table: t1_agg, rollup: mv_t1_v0\n");
+        }
+        {
+
+            String query = "select c_1_0, c_1_1, sum(c_1_2) from t1_agg group by c_1_0, c_1_1";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);
+            PlanTestBase.assertContains(plan, "table: t1_agg, rollup: mv_t1_v0\n");
+        }
+
+        starRocksAssert.dropMaterializedView("mv_t1_v0");
+        starRocksAssert.dropTable("t1_agg");
+    }
 }
