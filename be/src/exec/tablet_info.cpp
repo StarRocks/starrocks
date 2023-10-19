@@ -228,8 +228,7 @@ Status OlapTablePartitionParam::init(RuntimeState* state) {
             }
         } else {
             _partitions_map.emplace(&part->end_key, part);
-            VLOG(1) << "add partition:" << part->id << " start " << part->start_key.debug_string() << " end "
-                    << part->end_key.debug_string();
+            LOG(INFO) << "add partition:" << part->debug_string();
         }
     }
 
@@ -401,8 +400,7 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
             }
         } else {
             _partitions_map.emplace(&part->end_key, part);
-            VLOG(1) << "add automatic partition:" << part->id << " start " << part->start_key.debug_string() << " end "
-                    << part->end_key.debug_string();
+            LOG(INFO) << "add automatic partition:" << part->debug_string();
         }
     }
 
