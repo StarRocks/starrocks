@@ -387,6 +387,15 @@ public class OlapScanNode extends ScanNode {
             if (!enableQueryTabletAffinity) {
                 Collections.shuffle(replicas);
             }
+<<<<<<< HEAD
+=======
+    
+            // TODO: Implement a more robust strategy for tablet affinity.
+            if (!enableQueryTabletAffinity) {
+                Collections.shuffle(replicas);
+            }
+    
+>>>>>>> 06cb6d0b31 ([Enhancement] Add session variable enable_query_tablet_affinity (#33049))
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
