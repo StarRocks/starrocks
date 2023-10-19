@@ -36,7 +36,8 @@ namespace lake {
 UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
-          _location_provider(location_provider) {
+          _location_provider(location_provider),
+          _pk_index_shards(config::pk_index_map_shard_size) {
     _update_mem_tracker = mem_tracker;
     _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
@@ -565,6 +566,10 @@ void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
         succ = true;
     }
     LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
+}
+
+bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
+    return _index_cache.try_remove_by_key(tablet_id);
 }
 
 Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version) {

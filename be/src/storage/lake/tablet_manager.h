@@ -104,6 +104,10 @@ public:
 
     [[nodiscard]] Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
+#ifdef USE_STAROS
+    bool is_tablet_in_worker(int64_t tablet_id);
+#endif // USE_STAROS
+
     void prune_metacache();
 
     // TODO: remove this method
