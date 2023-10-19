@@ -378,6 +378,10 @@ bool Analytor::is_chunk_buffer_empty() {
     return _buffer.empty();
 }
 
+bool Analytor::is_chunk_buffer_full() {
+    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
+}
+
 ChunkPtr Analytor::poll_chunk_buffer() {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     if (_buffer.empty()) {
