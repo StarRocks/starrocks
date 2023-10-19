@@ -468,7 +468,7 @@ public class PartitionUtil {
                                                                                    Expr partitionExpr)
             throws AnalysisException {
 
-        // 判断是否是str2date函数
+        // Determine if it is the str2date function
         boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
         List<PartitionKey> partitionKeys = new ArrayList<>();
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
@@ -486,9 +486,9 @@ public class PartitionUtil {
 
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
-            //为了适应mysql的range分区方式，partitionName采用upperBound的名称
+            // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
             partitionName = entry.getKey();
-            //mysql的rang分区 如果是int类型需要从0开始，如果是data类型需要从0000-01-01开始
+            // If the partition column type is int, it needs to start from 0, and if type is data, it needs to start from 0000-01-01
             if (index == 0) {
                 ++index;
                 lastPartitionKey = entry.getValue();

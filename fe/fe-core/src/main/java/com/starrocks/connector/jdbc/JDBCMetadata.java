@@ -174,7 +174,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                     if (partitionNames.contains(partitionName)) {
                         list.add(partition);
                     }
-                    // 当存在MAXVALUE时，需要判断是否存在最大时间或者最大INT类型，存在即可添加
+                    // Determine boundary value
                     if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
                         if (partitionNames.contains(minInt) || partitionNames.contains(minDate)) {
                             list.add(partition);
