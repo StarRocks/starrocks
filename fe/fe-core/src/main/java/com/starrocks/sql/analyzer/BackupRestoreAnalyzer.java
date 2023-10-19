@@ -122,7 +122,7 @@ public class BackupRestoreAnalyzer {
                 // reorder the tableRefs to ensure ref tables of materialized views are ahead of the materialized view
                 Map<String, TableRef> newTableRefs = reorderTableRefsWithMaterializedView(database, tblPartsMap, mvNameMVMap,
                         tableIdToTableRefMap);
-                tableRefs.clear();;
+                tableRefs.clear();
                 tableRefs.addAll(newTableRefs.values());
             } else {
                 tableRefs.clear();

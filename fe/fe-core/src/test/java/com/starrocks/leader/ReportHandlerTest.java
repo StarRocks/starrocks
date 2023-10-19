@@ -314,7 +314,7 @@ public class ReportHandlerTest {
     @Test
     public void testHandleMigration() throws TException {
         List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         for (Long tabletId : tabletIds) {
             tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
         }
@@ -370,7 +370,7 @@ public class ReportHandlerTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getDb("test").getTable("binlog_report_handler_test");
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {

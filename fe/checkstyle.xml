@@ -315,5 +315,15 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
         <module name="CommentsIndentation">
             <property name="tokens" value="SINGLE_LINE_COMMENT, BLOCK_COMMENT_BEGIN"/>
         </module>
+        <module name="UnnecessarySemicolonAfterOuterTypeDeclaration"/>
+        <module name="UnnecessarySemicolonAfterTypeMemberDeclaration"/>
+        <module name="UnnecessarySemicolonInEnumeration"/>
+        <module name="UnnecessarySemicolonInTryWithResources"/>
+        <module name="Regexp">
+            <property name="format" value=";{2,}[\r\n]+"/>
+            <property name="illegalPattern" value="true"/>
+            <property name="ignoreComments" value="true"/>
+            <property name="message" value="Two or more semicolons appear."/>
+        </module>
     </module>
 </module>
