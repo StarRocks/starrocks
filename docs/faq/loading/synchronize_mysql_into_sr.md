@@ -43,10 +43,9 @@ You can manually trigger a [savepoint](https://nightlies.apache.org/flink/flink-
     Parameter description:
 
     - `jobId`: You can view the Flink job ID from the Flink WebUI or by running `flink list -running` on the command line.
-    - `targetDirectory`: You can specify `state.savepoints.dir` as the default directory for storing savepoints in the Flink configuration file **flink-conf.yml**. When a savepoint is triggered, the savepoint is stored in this default directory and you do not need to specify a directory .
+    - `targetDirectory`: You can specify `state.savepoints.dir` as the default directory for storing savepoints in the Flink configuration file **flink-conf.yml**, for example, `state.savepoints.dir: hdfs:///flink/savepoints`. When a savepoint is triggered, the savepoint is stored in this default directory and you do not need to specify a directory .
 
     ```Bash
-    state.savepoints.dir: [file:// or hdfs://]/home/user/savepoints_dir
     ```
 
 2. Resubmit the Flink job with the preceding savepoint specified.
