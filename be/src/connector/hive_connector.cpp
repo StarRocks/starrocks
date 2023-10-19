@@ -19,6 +19,7 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
@@ -216,6 +217,34 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    }
+    if (hdfs_scan_node.__isset.use_partition_column_value_only) {
+        _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+    }
+
+    // The reason why we need double check here is for iceberg table.
+    // for some partitions, partition column maybe is not constant value.
+    // If partition column is not constant value, we can not use this optimization,
+    // And we can not use `can_use_any_column` either.
+    // So checks are:
+    // 1. can_use_any_column = true
+    // 2. only one materialized slot
+    // 3. besides that, all slots are partition slots.
+    auto check_opt_on_iceberg = [&]() {
+        if (!_can_use_any_column) {
+            return false;
+        }
+        if ((_partition_slots.size() + 1) != slots.size()) {
+            return false;
+        }
+        if (_materialize_slots.size() != 1) {
+            return false;
+        }
+        return true;
+    };
+    if (!check_opt_on_iceberg()) {
+        _use_partition_column_value_only = false;
+        _can_use_any_column = false;
     }
 }
 
@@ -548,7 +577,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
 
-    if (use_paimon_jni_reader) {
+    if (_use_partition_column_value_only) {
+        DCHECK(_can_use_any_column);
+        scanner = _pool.add(new HdfsPartitionScanner());
+    } else if (use_paimon_jni_reader) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();
