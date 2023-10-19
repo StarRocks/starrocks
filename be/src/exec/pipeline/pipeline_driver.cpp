@@ -38,15 +38,11 @@
 
 namespace starrocks::pipeline {
 
-#ifdef BE_TEST
-PipelineDriver::~PipelineDriver() {
-#else
 PipelineDriver::~PipelineDriver() noexcept {
-#endif
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
-    check_operator_close_states(" deleting pipeline drivers");
+    check_operator_close_states("deleting pipeline drivers");
 }
 
 void PipelineDriver::check_operator_close_states(std::string func_name) {
@@ -56,9 +52,7 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
             auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
                                    to_readable_string(), op->get_name(), func_name);
             LOG(ERROR) << msg;
-#ifdef BE_TEST
-            throw std::runtime_error(msg);
-#endif
+            DCHECK(false) << msg;
         }
     }
 }
@@ -551,7 +545,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
         WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
                       fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
     }
-    check_operator_close_states(" closing pipeline drivers");
+    check_operator_close_states("closing pipeline drivers");
 }
 
 void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,

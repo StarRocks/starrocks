@@ -215,11 +215,7 @@ public:
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
                              driver._driver_id) {}
 
-#if BE_TEST
-    virtual ~PipelineDriver();
-#else
     virtual ~PipelineDriver() noexcept;
-#endif
     void check_operator_close_states(std::string func_name);
 
     QueryContext* query_ctx() { return _query_ctx; }
