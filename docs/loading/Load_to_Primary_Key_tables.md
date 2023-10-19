@@ -463,6 +463,10 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 Since v2.2, StarRocks supports updating only the specified columns of a Primary Key table. This section uses CSV as an example to describe how to perform partial updates.
 
+> **NOTICE**
+>
+> When you perform a partial update, if the row to be updated does not exist, StarRocks inserts a new data, fill the data updates as values in the matching fields for the new row, and fills default values in the other fields that are empty because no data updates are inserted into them.
+
 ### Data examples
 
 1. Prepare a data file.
