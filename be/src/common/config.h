@@ -86,7 +86,7 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
 CONF_Int32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
-CONF_Int32(drop_tablet_worker_count, "3");
+CONF_mInt32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -121,7 +121,7 @@ CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
 CONF_Int32(download_worker_count, "1");
 // The count of thread to make snapshot.
-CONF_Int32(make_snapshot_worker_count, "5");
+CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
 CONF_Int32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
@@ -355,6 +355,8 @@ CONF_Int64(load_data_reserve_hours, "4");
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
+// when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
+CONF_mInt64(stale_memtable_flush_time_sec, "30");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -1088,6 +1090,6 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_max_batch_delete_size, "10000");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
 } // namespace starrocks::config

@@ -63,7 +63,7 @@ DISTRIBUTED BY HASH(city_code);
 > - The columns of the table exactly correspond to the fields of data that you will be loading into StarRocks in the tutorial on [loading and querying data](../quick_start/Import_and_query.md).
 > - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_distribution.md#design-partitioning-and-bucketing-rules) for more instructions.
 
-After the table is created, you can check the details of the table using the DESC statement, and view all the tables in the database by executing [SHOW TABLES](../sql-reference/sql-statements/data-manipulation/SHOW_TABLES.md). Tables in StarRocks support schema changes. You can see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE) for more information.
+After the table is created, you can check the details of the table using the DESC statement, and view all the tables in the database by executing [SHOW TABLES](../sql-reference/sql-statements/data-manipulation/SHOW_TABLES.md). Tables in StarRocks support schema changes. You can see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) for more information.
 
 ## What to do next
 
