@@ -429,6 +429,8 @@ public class OlapScanNode extends ScanNode {
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
                                       long localBeId) throws UserException {
+        boolean enableQueryTabletAffinity =
+                ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
@@ -483,7 +485,23 @@ public class OlapScanNode extends ScanNode {
                 replicas = allQueryableReplicas;
             }
 
+<<<<<<< HEAD
             Collections.shuffle(replicas);
+=======
+            if (!hintsReplicaIds.isEmpty()) {
+                replicas.removeIf(replica -> !hintsReplicaIds.contains(replica.getId()));
+                // direct return if no expected replica
+                if (replicas.isEmpty()) {
+                    continue;
+                }
+            }
+    
+            // TODO: Implement a more robust strategy for tablet affinity.
+            if (!enableQueryTabletAffinity) {
+                Collections.shuffle(replicas);
+            }
+    
+>>>>>>> 06cb6d0b31 ([Enhancement] Add session variable enable_query_tablet_affinity (#33049))
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
