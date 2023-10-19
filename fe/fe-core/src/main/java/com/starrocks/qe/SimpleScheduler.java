@@ -302,7 +302,7 @@ public class SimpleScheduler {
                                 Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
                                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
                                     iterator.remove();
-                                    LOG.warn("remove backendID {} from blacklist", backendId);;
+                                    LOG.warn("remove backendID {} from blacklist", backendId);
                                 }
                             } else {
                                 Integer retryTimes = entry.getValue();

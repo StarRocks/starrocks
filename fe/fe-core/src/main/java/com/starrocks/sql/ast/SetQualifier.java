@@ -3,5 +3,5 @@ package com.starrocks.sql.ast;
 
 public enum SetQualifier {
     ALL,
-    DISTINCT;
+    DISTINCT
 }

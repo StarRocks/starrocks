@@ -115,10 +115,89 @@ public class ReportHandlerTest {
             }
         };
 
+<<<<<<< HEAD
         new Expectations(queryQueueManager) {
             {
                 queryQueueManager.maybeNotifyAfterLock();
                 times = 1;
+=======
+        ReportHandler handler = new ReportHandler();
+        TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
+
+        {
+
+            TReportRequest req = new TReportRequest();
+            req.setResource_usage(resourceUsage);
+
+            TBackend tcn = new TBackend();
+            tcn.setHost(cn.getHost());
+            tcn.setBe_port(cn.getBePort());
+            req.setBackend(tcn);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+        }
+
+        {
+
+            TReportRequest req = new TReportRequest();
+            req.setResource_usage(resourceUsage);
+
+            TBackend tbe = new TBackend();
+            tbe.setHost(be.getHost());
+            tbe.setBe_port(be.getBePort());
+            req.setBackend(tbe);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+        }
+
+        {
+
+            TReportRequest req = new TReportRequest();
+
+            TBackend tcn = new TBackend();
+            tcn.setHost(cn.getHost() + "NotExist");
+            tcn.setBe_port(cn.getBePort());
+            req.setBackend(tcn);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testHandleMigration() throws TException {
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
+        for (Long tabletId : tabletIds) {
+            tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
+        }
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        Backend reportBackend = currentSystemInfo.getBackend(10001);
+        BackendStatus backendStatus = reportBackend.getBackendStatus();
+        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+        for (int i = 0; i < tabletMetaList.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            TabletMeta tabletMeta = tabletMetaList.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            if (db == null) {
+                continue;
+            }
+            OlapTable table = null;
+            db.readLock();
+            try {
+                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+            } finally {
+                db.readUnlock();
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
             }
         };
 
@@ -146,7 +225,7 @@ public class ReportHandlerTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getDb("test").getTable("binlog_report_handler_test");
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {

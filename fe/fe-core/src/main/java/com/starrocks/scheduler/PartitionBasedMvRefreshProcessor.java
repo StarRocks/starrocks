@@ -296,6 +296,32 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException(
                         "update meta failed. materialized view:" + materializedView.getName() + " not exist");
             }
+<<<<<<< HEAD
+=======
+
+            // check
+            if (mvRefreshedPartitions == null || refTableAndPartitionNames == null) {
+                return;
+            }
+
+            // NOTE: For each task run, ref-base table's incremental partition and all non-ref base tables' partitions
+            // are refreshed, so we need record it into materialized view.
+            // NOTE: We don't use the pruned partition infos from ExecPlan because the optimized partition infos are not
+            // exact to describe which partitions are refreshed.
+            Map<Table, Set<String>> baseTableAndPartitionNames = Maps.newHashMap();
+            for (Map.Entry<Table, Set<String>> e : refTableAndPartitionNames.entrySet()) {
+                Set<String> realPartitionNames =
+                        e.getValue().stream()
+                                .flatMap(name -> convertMVPartitionNameToRealPartitionName(e.getKey(), name).stream())
+                        .collect(Collectors.toSet());
+                baseTableAndPartitionNames.put(e.getKey(), realPartitionNames);
+            }
+            Map<Table, Set<String>> nonRefTableAndPartitionNames = getNonRefTableRefreshPartitions();
+            if (!nonRefTableAndPartitionNames.isEmpty()) {
+                baseTableAndPartitionNames.putAll(nonRefTableAndPartitionNames);
+            }
+
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
 

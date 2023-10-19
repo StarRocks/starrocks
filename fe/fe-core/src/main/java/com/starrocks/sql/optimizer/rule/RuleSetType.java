@@ -22,5 +22,10 @@ public enum RuleSetType {
     INTERSECT_REWRITE,
     SINGLE_TABLE_MV_REWRITE,
     MULTI_TABLE_MV_REWRITE,
+<<<<<<< HEAD
     NUM_RULE_SET;
+=======
+    PRUNE_EMPTY_OPERATOR,
+    NUM_RULE_SET
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
 }
