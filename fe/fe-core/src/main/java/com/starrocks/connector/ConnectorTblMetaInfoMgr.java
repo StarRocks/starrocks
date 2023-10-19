@@ -15,13 +15,14 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Ordering;
 import com.google.common.collect.Table;
+import com.google.common.collect.TreeBasedTable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConnectorTblMetaInfoMgr {
@@ -33,7 +34,7 @@ public class ConnectorTblMetaInfoMgr {
     private final ReentrantReadWriteLock lock;
 
     public ConnectorTblMetaInfoMgr() {
-        connectorTableMetaInfos = HashBasedTable.create();
+        connectorTableMetaInfos = TreeBasedTable.create(Ordering.natural(), String.CASE_INSENSITIVE_ORDER);
         lock = new ReentrantReadWriteLock();
     }
 
@@ -53,7 +54,7 @@ public class ConnectorTblMetaInfoMgr {
         try {
             Map<String, ConnectorTableInfo> tableInfoMap = connectorTableMetaInfos.get(catalog, db);
             if (tableInfoMap == null) {
-                tableInfoMap = Maps.newHashMap();
+                tableInfoMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             }
 
             ConnectorTableInfo tableInfo = tableInfoMap.get(tableIdentifier);
