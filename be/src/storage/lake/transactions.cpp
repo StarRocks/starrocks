@@ -25,9 +25,9 @@
 namespace starrocks::lake {
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, std::span<const int64_t> txn_ids,
+                                            int64_t new_version, const int64_t* txn_ids, size_t txn_ids_size,
                                             int64_t commit_time) {
-    if (txn_ids.size() != 1) {
+    if (txn_ids_size != 1) {
         return Status::NotSupported("does not support publish multiple txns yet");
     }
 
@@ -80,7 +80,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     // Apply txn logs
     int64_t alter_version = -1;
-    for (auto txn_id : txn_ids) {
+    for (size_t i = 0; i < txn_ids_size; i++) {
+        auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
@@ -113,7 +114,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // Should firstly apply schema change txn log, then apply txn version logs,
     // because the rowsets in txn log are older.
     if (alter_version != -1 && alter_version + 1 < new_version) {
-        DCHECK(base_version == 1 && txn_ids.size() == 1);
+        DCHECK(base_version == 1 && txn_ids_size == 1);
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto vlog_path = tablet_mgr->txn_vlog_location(tablet_id, v);
             auto txn_vlog = tablet_mgr->get_txn_vlog(vlog_path, false);
@@ -176,9 +177,10 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
     }
 }
 
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids) {
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, size_t txn_ids_size) {
     std::vector<std::string> files_to_delete;
-    for (auto txn_id : txn_ids) {
+    for (size_t i = 0; i < txn_ids_size; i++) {
+        auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
         if (!txn_log_or.ok()) {
