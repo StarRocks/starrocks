@@ -1099,6 +1099,8 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 10> : <string id 7>"));
         Assert.assertTrue(plan.contains(":AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(1: S_SUPPKEY IS NULL, NULL, 7))"));
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  group by: 1: S_SUPPKEY, 10: S_COMMENT");
 
         sql = "select count(distinct S_ADDRESS, S_COMMENT) from supplier";
         plan = getFragmentPlan(sql);
@@ -1107,6 +1109,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 11> : <string id 7>"));
         Assert.assertTrue(plan.contains(" 5:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(3 IS NULL, NULL, 7))"));
+        System.out.println("plan = " + plan);
         FeConstants.runningUnitTest = false;
     }
 
@@ -1119,7 +1122,6 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select max(S_NAME) as b from supplier group by S_ADDRESS order by b";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
-
         sql = "select S_ADDRESS from supplier order by S_ADDRESS";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  1:SORT\n" +
@@ -1152,7 +1154,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 12> : <string id 9>");
 
         // TODO add a case: Decode node before Sort Node
-
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
