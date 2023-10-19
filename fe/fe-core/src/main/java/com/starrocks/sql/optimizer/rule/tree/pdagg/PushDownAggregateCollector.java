@@ -286,12 +286,12 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         // check aggregations
         ColumnRefSet aggregationsRefs = new ColumnRefSet();
         context.aggregations.values().stream().map(CallOperator::getUsedColumns).forEach(aggregationsRefs::union);
-        if (!childOutput.containsAll(aggregationsRefs)) {
-            return AggregatePushDownContext.EMPTY;
-        }
 
         AggregatePushDownContext childContext = new AggregatePushDownContext();
-        childContext.aggregations.putAll(context.aggregations);
+        context.aggregations.entrySet().stream().
+                filter(x -> childOutput.containsAll(x.getValue().getUsedColumns())).
+                forEach(x -> childContext.aggregations.put(x.getKey(), x.getValue()));
+        // childContext.aggregations.putAll(context.aggregations);
 
         // check group by
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
