@@ -100,7 +100,10 @@ public class PortConnectivityCheckerTest {
             @Mock
             public List<Frontend> getFrontends(FrontendNodeType nodeType) {
                 List<Frontend> result = Lists.newArrayList();
-                result.add(new Frontend(FrontendNodeType.FOLLOWER, "F1", "127.0.0.1", editLogPort1));
+                Frontend frontend = new Frontend(FrontendNodeType.FOLLOWER,
+                        "F1", "127.0.0.1", editLogPort1);
+                frontend.setRpcPort(Config.rpc_port);
+                result.add(frontend);
                 return result;
             }
         };

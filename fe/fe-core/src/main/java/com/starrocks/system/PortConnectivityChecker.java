@@ -47,7 +47,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,14 +59,16 @@ import java.util.concurrent.Future;
  */
 public class PortConnectivityChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(PortConnectivityChecker.class);
-    private final List<Integer> portsToCheck = new ArrayList<>();
     private final ExecutorService executor;
-    private Map<Pair<String, Integer>, Boolean> currentPortStates = new HashMap<>();
+    private final Map<Pair<String, Integer>, Boolean> currentPortStates = new HashMap<>();
+
+    private enum PortType {
+        RPC_PORT,
+        EDIT_LOG_PORT
+    }
 
     public PortConnectivityChecker() {
         super("PortConnectivityChecker");
-        portsToCheck.add(Config.edit_log_port);
-        portsToCheck.add(Config.rpc_port);
         executor = ThreadPoolManager.newDaemonFixedThreadPool(4,
                 64, "port-connectivity-checker", true);
     }
@@ -80,15 +81,21 @@ public class PortConnectivityChecker extends LeaderDaemon {
         List<Frontend> allFrontends = nodeMgr.getFrontends(null);
         Map<Pair<String, Integer>, Future<Boolean>> frontendFutureMap = new HashMap<>();
         for (Frontend frontend : allFrontends) {
-            for (int port : portsToCheck) {
-                Frontend myself = nodeMgr.getMySelf();
-                if (Objects.equals(myself.getHost(), frontend.getHost())) {
-                    // ignore checking self
-                    continue;
+            Frontend myself = nodeMgr.getMySelf();
+            if (Objects.equals(myself.getHost(), frontend.getHost())) {
+                // ignore checking self
+                continue;
+            }
+            for (PortType portType : PortType.values()) {
+                int port = -1;
+                if (portType.equals(PortType.RPC_PORT)) {
+                    port = frontend.getRpcPort();
+                } else if (portType.equals(PortType.EDIT_LOG_PORT)) {
+                    port = frontend.getEditLogPort();
                 }
-
-                frontendFutureMap.put(new Pair<>(frontend.getHost(), port),
-                        executor.submit(() -> isPortConnectable(frontend.getHost(), port)));
+                final int finalPort = port;
+                frontendFutureMap.put(new Pair<>(frontend.getHost(), finalPort),
+                        executor.submit(() -> isPortConnectable(frontend.getHost(), finalPort)));
             }
         }
 
