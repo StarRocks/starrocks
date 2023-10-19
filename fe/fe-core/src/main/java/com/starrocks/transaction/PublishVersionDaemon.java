@@ -343,7 +343,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         } else {
             List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                CompletableFuture<Boolean> future = publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+                CompletableFuture<Boolean> future =
+                        publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
                 futureList.add(future);
             }
             return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0]))
@@ -351,7 +352,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
+    private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db,
+                                                                 @NotNull TableCommitInfo tableCommitInfo,
                                                                  @NotNull PartitionCommitInfo partitionCommitInfo,
                                                                  @NotNull TransactionState txnState) {
         long versionTime = partitionCommitInfo.getVersionTime();
@@ -379,6 +381,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
+        long commitTime = txnState.getCommitTime();
         String txnLabel = txnState.getLabel();
         long workerGroupId = txnState.getWorkerGroupId();
         List<Tablet> normalTablets = null;
@@ -425,7 +428,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores, workerGroupId);
+                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
+                        compactionScores, workerGroupId);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);

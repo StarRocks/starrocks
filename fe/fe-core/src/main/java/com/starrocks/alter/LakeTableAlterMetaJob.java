@@ -157,6 +157,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             }
 
             this.jobState = JobState.FINISHED_REWRITING;
+            this.finishedTimeMs = System.currentTimeMillis();
+
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
 
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
@@ -201,11 +203,13 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
                     Map<String, String> tempProperties = new HashMap<>();
                     tempProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, String.valueOf(metaValue));
-                    GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, table, tempProperties, metaType);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .modifyTableMeta(db, table, tempProperties, metaType);
                 }
 
             }
             this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
 
             // set visible version
@@ -256,7 +260,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = partitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion);
+                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
+                            finishedTimeMs / 1000);
                 }
             }
             return true;
@@ -458,7 +463,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             return;
         }
 
-        try  {
+        try {
             if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
@@ -482,10 +487,9 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     // for test
-    public  Map<Long, Long> getCommitVersionMap() {
+    public Map<Long, Long> getCommitVersionMap() {
         return commitVersionMap;
     }
-
 
     @Override
     public Optional<Long> getTransactionId() {

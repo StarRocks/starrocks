@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
@@ -101,18 +100,21 @@ public class Utils {
         return groupMap;
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
+    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                      long commitTimeInSecond)
             throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnId, baseVersion, newVersion, null, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        publishVersion(tablets, txnId, baseVersion, newVersion, commitTimeInSecond,
+                null, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
-                                      long workerGroupId) throws NoAliveBackendException, RpcException {
-        publishVersion(tablets, txnId, baseVersion, newVersion, null, workerGroupId);
+                                      long commitTimeInSecond, long workerGroupId)
+            throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnId, baseVersion, newVersion, commitTimeInSecond, null, workerGroupId);
     }
 
-    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion, Map<Long,
-            Double> compactionScores, long workerGroupId)
+    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                      long commitTimeInSecond, Map<Long, Double> compactionScores, long workerGroupId)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
@@ -139,6 +141,7 @@ public class Utils {
             request.newVersion = newVersion;
             request.tabletIds = entry.getValue();
             request.txnIds = txnIds;
+            request.commitTime = commitTimeInSecond;
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);

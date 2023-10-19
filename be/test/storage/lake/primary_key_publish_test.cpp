@@ -201,7 +201,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
 
     writer->close();
 
-    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), 1, 2, logs, 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(_tablet_metadata->id(), 1, 2, logs, 1, time(NULL)).status());
     EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(_tablet_metadata->id(), txn_id));
 
     // read at version 2
@@ -239,7 +239,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         version++;
     }
@@ -279,7 +279,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         version++;
     }
@@ -331,7 +331,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         version++;
     }
@@ -363,7 +363,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         version++;
         txns.push_back(txn_id);
@@ -372,11 +372,12 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     // duplicate publish
-    ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version - 1, version, &txns.back(), 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version - 1, version, &txns.back(), 1, time(NULL)).status());
     // publish using old version
-    ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version - 2, version - 1, &txns.back(), 1).status());
+    ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version - 2, version - 1, &txns.back(), 1, time(NULL)).status());
     // advince publish should fail, because version + 1 don't exist
-    ASSERT_ERROR(_tablet_mgr->publish_version(tablet_id, version + 1, version + 2, &txns.back(), 1).status());
+    ASSERT_ERROR(
+            _tablet_mgr->publish_version(tablet_id, version + 1, version + 2, &txns.back(), 1, time(NULL)).status());
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -404,8 +405,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
         // start to publish using multi thread
         std::vector<std::thread> workers;
         for (int j = 0; j < 5; j++) {
-            workers.emplace_back(
-                    [&]() { (void)_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1); });
+            workers.emplace_back([&]() {
+                (void)_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL));
+            });
         }
         for (auto& t : workers) {
             t.join();
@@ -439,7 +441,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
@@ -467,7 +469,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     }
     // publish in order
     for (int64_t txn_id : txn_ids) {
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         version++;
     }
@@ -511,7 +513,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
             ASSERT_OK(w->finish());
             w->close();
             // Publish version
-            ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+            ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
             EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         }
         version++;
@@ -548,7 +550,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
         version++;
     }

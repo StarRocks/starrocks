@@ -180,7 +180,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         partitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
     }
 
-    void addIndexSchema(long shadowIdxId, long originIdxId, @NotNull String shadowIndexName, short shadowIdxShortKeyCount,
+    void addIndexSchema(long shadowIdxId, long originIdxId, @NotNull String shadowIndexName,
+                        short shadowIdxShortKeyCount,
                         @NotNull List<Column> shadowIdxSchema) {
         indexIdMap.put(shadowIdxId, originIdxId);
         indexIdToName.put(shadowIdxId, shadowIndexName);
@@ -197,7 +198,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 shadowIndex.setVisibleTxnId(watershedTxnId);
-                Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW, shadowIndex.getState());
+                Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
+                        shadowIndex.getState());
                 partition.createRollupIndex(shadowIndex);
             }
         }
@@ -280,7 +282,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
-            numTablets = partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
+            numTablets =
+                    partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
             for (long partitionId : partitionIndexMap.rowKeySet()) {
@@ -357,14 +360,18 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         if (nodeId == null) {
                             throw new AlterCancelException("No alive backend or compute node in warehouse " + warehouseId);
                         }
-
                         countDownLatch.addMark(nodeId, shadowTabletId);
-                        CreateReplicaTask createReplicaTask = new CreateReplicaTask(nodeId, dbId, tableId, partitionId,
-                                shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
-                                originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
-                                countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), 
-                                copiedSortKeyIdxes, null);
+                        // No need to set base tablet id for CreateReplicaTask
+                        CreateReplicaTask createReplicaTask =
+                                new CreateReplicaTask(nodeId, dbId, tableId, partitionId,
+                                        shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0,
+                                        Partition.PARTITION_INIT_VERSION,
+                                        originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema,
+                                        bfColumns, bfFpp,
+                                        countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
+                                        table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE,
+                                        table.getCompressionType(),
+                                        copiedSortKeyIdxes, null);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
@@ -391,7 +398,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         writeEditLog(this);
 
-        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState, watershedTxnId);
+        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
+                watershedTxnId);
     }
 
     @Override
@@ -439,9 +447,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         }
 
                         long shadowTabletId = shadowTablet.getId();
-                        long originTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
-                        AlterReplicaTask alterTask = AlterReplicaTask.alterLakeTablet(nodeId, dbId, tableId, partitionId,
-                                shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId, watershedTxnId);
+                        long originTabletId =
+                                partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
+                        AlterReplicaTask alterTask =
+                                AlterReplicaTask.alterLakeTablet(nodeId, dbId, tableId, partitionId,
+                                        shadowIdxId, shadowTabletId, originTabletId, visibleVersion, jobId,
+                                        watershedTxnId);
                         getOrCreateSchemaChangeBatchTask().addTask(alterTask);
                     }
                 }
@@ -478,7 +489,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             List<AgentTask> tasks = getOrCreateSchemaChangeBatchTask().getUnfinishedTasks(2000);
             AgentTask task = tasks.stream().filter(t -> t.getFailedTimes() >= 3).findAny().orElse(null);
             if (task != null) {
-                throw new AlterCancelException("schema change task failed after try three times: " + task.getErrorMsg());
+                throw new AlterCancelException(
+                        "schema change task failed after try three times: " + task.getErrorMsg());
             } else {
                 return;
             }
@@ -496,6 +508,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 LOG.debug("commit version of partition {} is {}. jobId={}", partitionId, commitVersion, jobId);
             }
             this.jobState = JobState.FINISHED_REWRITING;
+            this.finishedTimeMs = System.currentTimeMillis();
 
             writeEditLog(this);
 
@@ -601,7 +614,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     Utils.publishVersion(shadowIndex.getTablets(), watershedTxnId, 1, commitVersion,
-                            currentWh.getAnyAvailableCluster().getWorkerGroupId());
+                            finishedTimeMs / 1000, currentWh.getAnyAvailableCluster().getWorkerGroupId());
                 }
             }
             return true;
@@ -813,7 +826,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             Preconditions.checkState(commitVersionMap.containsKey(partition.getId()));
             long commitVersion = commitVersionMap.get(partition.getId());
 
-            LOG.debug("update partition visible version. partition=" + partition.getId() + " commitVersion=" + commitVersion);
+            LOG.debug("update partition visible version. partition=" + partition.getId() + " commitVersion=" +
+                    commitVersion);
             // Update Partition's visible version
             Preconditions.checkState(commitVersion == partition.getVisibleVersion() + 1,
                     commitVersion + " vs " + partition.getVisibleVersion());
@@ -840,7 +854,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 Preconditions.checkNotNull(droppedIdx, originIdxId + " vs. " + shadowIdxId);
 
                 // Add Tablet to TabletInvertedIndex.
-                TabletMeta shadowTabletMeta = new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, 0, medium, true);
+                TabletMeta shadowTabletMeta =
+                        new TabletMeta(dbId, tableId, partition.getId(), shadowIdxId, 0, medium, true);
                 for (Tablet tablet : shadowIdx.getTablets()) {
                     invertedIndex.addTablet(tablet.getId(), shadowTabletMeta);
                 }
@@ -925,7 +940,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     AgentBatchTask getOrCreateSchemaChangeBatchTask() {
-        if (schemaChangeBatchTask == null) { // This would happen after FE restarted and this object was deserialized from Json.
+        if (schemaChangeBatchTask ==
+                null) { // This would happen after FE restarted and this object was deserialized from Json.
             schemaChangeBatchTask = new AgentBatchTask();
         }
         return schemaChangeBatchTask;
