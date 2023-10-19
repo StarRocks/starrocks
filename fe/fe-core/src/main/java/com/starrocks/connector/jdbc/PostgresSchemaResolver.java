@@ -74,6 +74,14 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
+    public Table getTable(long id, String name, List<Column> schema, List<Column> partitionColumns, String dbName,
+                          String catalogName, Map<String, String> properties) throws DdlException {
+        Map<String, String> newProp = new HashMap<>(properties);
+        newProp.putIfAbsent(JDBCTable.JDBC_TABLENAME, "\"" + dbName + "\"" + "." + "\"" + name + "\"");
+        return new JDBCTable(id, name, schema, partitionColumns, dbName, catalogName, newProp);
+    }
+
+    @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         switch (dataType) {
