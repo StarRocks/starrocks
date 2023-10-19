@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -585,6 +586,124 @@ public class SyncPartitionUtils {
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
+    private static void dropRefBaseTableFromVersionMap(
+            MaterializedView mv,
+            Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
+            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap,
+            String refBaseTable,
+            String mvPartitionName) {
+        Set<String> refBaseTableAssociatedPartitions =
+                mvPartitionNameRefBaseTablePartitionMap.get(mvPartitionName);
+        Preconditions.checkState(refBaseTableAssociatedPartitions != null);
+        LOG.info("Remove ref base table {} associated partitions {} from materialized view {}'s " +
+                        "version meta because materialized view's partition {} has been dropped",
+                refBaseTable, Joiner.on(",").join(refBaseTableAssociatedPartitions),
+                mv.getName(), mvPartitionName);
+        for (String refBaseTableAssociatedPartition : refBaseTableAssociatedPartitions) {
+            if (!baseTableVersionInfoMap.containsKey(refBaseTableAssociatedPartition)) {
+                LOG.warn("WARNING: mvPartitionNameRefBaseTablePartitionMap {} failed to tracked the materialized view {} " +
+                        "partition {}", Joiner.on(",").join(mvPartitionNameRefBaseTablePartitionMap.keySet()),
+                        mv.getName(), mvPartitionName);
+                continue;
+            }
+            baseTableVersionInfoMap.remove(refBaseTableAssociatedPartition);
+        }
+
+        // finally remove the dropped materialized view partition
+        mvPartitionNameRefBaseTablePartitionMap.remove(mvPartitionName);
+    }
+
+
+    private static boolean isMVPartitionNameRefBaseTablePartitionMapEnough(
+            Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap,
+            Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap) {
+        long refreshedRefBaseTablePartitionSize = baseTableVersionInfoMap.keySet()
+                .stream().filter(x -> !x.equals(ICEBERG_ALL_PARTITION)).count();
+        long refreshAssociatedRefTablePartitionSize = mvPartitionNameRefBaseTablePartitionMap.values()
+                .stream().map(x -> x.size()).reduce(0, Integer::sum);
+        return refreshedRefBaseTablePartitionSize == refreshAssociatedRefTablePartitionSize;
+    }
+
+    private static void dropRefBaseTableFromVersionMapForOlapTable(
+            MaterializedView mv,
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap,
+            Long tableId,
+            String mvPartitionName) {
+        if (!versionMap.containsKey(tableId)) {
+            // version map should always contain ref base table's version info.
+            LOG.warn("Base ref table {} is not found in the base table version info map when " +
+                            "materialized view {} drops partition:{}",
+                    tableId, mv.getName(), mvPartitionName);
+            return;
+        }
+
+        Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap = versionMap.get(tableId);
+        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        if (mvPartitionNameRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
+            dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap, mvPartitionNameRefBaseTablePartitionMap,
+                    tableId.toString(), mvPartitionName);
+        } else {
+            if (isMVPartitionNameRefBaseTablePartitionMapEnough(baseTableVersionInfoMap,
+                    mvPartitionNameRefBaseTablePartitionMap)) {
+                // It's safe here that only log warning rather than remove all the ref base table info from version map,
+                // because mvPartitionNameRefBaseTablePartitionMap should track all the changed materialized view
+                // partitions.
+                LOG.info("Skip to remove ref base table {} from materialized view {}'s version meta when " +
+                                "materialized view's partition {} has been dropped because this partition is not " +
+                                "in the version map",
+                        tableId, mv.getName(), mvPartitionName);
+            } else {
+                // NOTE: If the materialized view has created in old version, mvPartitionNameRefBaseTablePartitionMap
+                // may not contain enough info to track associated ref base change partitions.
+                LOG.warn("Remove ref base table {} from materialized view {}'s version meta because " +
+                                "materialized view's partition {} has been dropped",
+                        tableId, mv.getName(), mvPartitionName);
+                versionMap.remove(tableId);
+            }
+        }
+    }
+
+    private static void dropRefBaseTableFromVersionMapForExternalTable(
+            MaterializedView mv,
+            Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap,
+            BaseTableInfo baseTableInfo,
+            String mvPartitionName) {
+        if (!versionMap.containsKey(baseTableInfo)) {
+            // version map should always contain ref base table's version info.
+            LOG.warn("Base ref table {} is not found in the base table version info map when " +
+                    "materialized view {} drops partition:{}",
+                    baseTableInfo, mv.getName(), mvPartitionName);
+            return;
+        }
+
+        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        Map<String, MaterializedView.BasePartitionInfo> baseTableVersionInfoMap = versionMap.get(baseTableInfo);
+        if (mvPartitionNameRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
+            dropRefBaseTableFromVersionMap(mv, baseTableVersionInfoMap,
+                    mvPartitionNameRefBaseTablePartitionMap, baseTableInfo.getTableName(), mvPartitionName);
+        } else {
+            if (isMVPartitionNameRefBaseTablePartitionMapEnough(baseTableVersionInfoMap,
+                    mvPartitionNameRefBaseTablePartitionMap)) {
+                // It's safe here that only log warning rather than remove all the ref base table info from version map,
+                // because mvPartitionNameRefBaseTablePartitionMap should track all the changed materialized view
+                // partitions.
+                LOG.info("Skip to remove ref base table {} from materialized view {}'s version meta when " +
+                                "materialized view's partition {} has been dropped because this partition is not " +
+                                "in the version map",
+                        baseTableInfo, mv.getName(), mvPartitionName);
+            } else {
+                // NOTE: If the materialized view has created in old version, mvPartitionNameRefBaseTablePartitionMap
+                // may not contain enough info to track associated ref base change partitions.
+                LOG.warn("Remove ref base table {} from materialized view {}'s version meta because " +
+                                "materialized view's partition {} has been dropped",
+                        baseTableInfo, mv.getName(), mvPartitionName);
+                versionMap.remove(baseTableInfo);
+            }
+        }
+    }
+
     private static void dropBaseVersionMetaForOlapTable(MaterializedView mv, String mvPartitionName,
                                                         Range<PartitionKey> mvPartitionRange,
                                                         MaterializedView.AsyncRefreshContext refreshContext,
@@ -605,13 +724,8 @@ public class SyncPartitionUtils {
             return;
         }
         long tableId = baseTable.getId();
-        if (expr instanceof SlotRef) {
-            Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
-            // mv partition name same as base table.
-            if (mvTableVersionMap != null) {
-                mvTableVersionMap.remove(mvPartitionName);
-            }
-        } else if (expr instanceof FunctionCallExpr) {
+        if (expr instanceof FunctionCallExpr) {
+            // TODO: use `dropRefBaseTableFromVersionMapForOlapTable` either.
             Map<String, MaterializedView.BasePartitionInfo> mvTableVersionMap = versionMap.get(tableId);
             if (mvTableVersionMap != null && mvPartitionRange != null && baseTable instanceof OlapTable) {
                 // use range derive connect base partition
@@ -621,8 +735,7 @@ public class SyncPartitionUtils {
                 mvToBaseMapping.values().forEach(parts -> parts.forEach(mvTableVersionMap::remove));
             }
         } else {
-            // This is a bad case for refreshing, and this problem will be optimized later.
-            versionMap.remove(tableId);
+            dropRefBaseTableFromVersionMapForOlapTable(mv, versionMap, tableId, mvPartitionName);
         }
     }
 
@@ -642,6 +755,7 @@ public class SyncPartitionUtils {
             return;
         }
         if (expr instanceof SlotRef) {
+            // TODO: use `dropRefBaseTableFromVersionMapForExternalTable` later.
             Column partitionColumn = baseTable.getColumn(((SlotRef) expr).getColumnName());
             BaseTableInfo baseTableInfo = new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
                     baseTable.getName(), baseTable.getTableIdentifier());
@@ -664,9 +778,9 @@ public class SyncPartitionUtils {
                 });
             }
         } else {
-            // This is a bad case for refreshing, and this problem will be optimized later.
-            versionMap.remove(new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
-                    baseTable.getName(), baseTable.getTableIdentifier()));
+            BaseTableInfo baseTableInfo = new BaseTableInfo(tableName.getCatalog(), tableName.getDb(),
+                    baseTable.getName(), baseTable.getTableIdentifier());
+            dropRefBaseTableFromVersionMapForExternalTable(mv, versionMap, baseTableInfo, mvPartitionName);
         }
     }
 
