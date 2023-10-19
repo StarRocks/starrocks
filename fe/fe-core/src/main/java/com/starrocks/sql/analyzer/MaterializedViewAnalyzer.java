@@ -213,6 +213,16 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+    @VisibleForTesting
+    protected static List<Integer> getQueryOutputIndices(List<Pair<Column, Integer>> mvColumnPairs) {
+        return Streams
+                .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int) idx))
+                .sorted(Comparator.comparingInt(x -> x.first))
+                .map(x -> x.second)
+                .collect(Collectors.toList());
+    }
+
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -265,11 +275,7 @@ public class MaterializedViewAnalyzer {
             statement.setMvColumnItems(mvColumns);
 
             // record query output indices
-            List<Integer> queryOutputIndices = Streams
-                    .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int)idx))
-                    .sorted(Comparator.comparingInt(x -> x.first))
-                    .map(x -> x.second)
-                    .collect(Collectors.toList());
+            List<Integer> queryOutputIndices = getQueryOutputIndices(mvColumnPairs);
             statement.setQueryOutputIndices(queryOutputIndices);
 
             // set the Indexes into createMaterializedViewStatement
