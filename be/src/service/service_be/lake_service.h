@@ -19,11 +19,14 @@
 namespace starrocks {
 
 class ExecEnv;
-class ThreadPool;
+
+namespace lake {
+class TabletManager;
+}
 
 class LakeServiceImpl : public ::starrocks::lake::LakeService {
 public:
-    explicit LakeServiceImpl(ExecEnv* env);
+    explicit LakeServiceImpl(ExecEnv* env, lake::TabletManager* tablet_mgr);
 
     ~LakeServiceImpl() override;
 
@@ -90,6 +93,7 @@ public:
 
 private:
     ExecEnv* _env;
+    lake::TabletManager* _tablet_mgr;
 };
 
 } // namespace starrocks

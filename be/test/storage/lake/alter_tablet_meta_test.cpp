@@ -82,7 +82,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
     ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
 
-    auto new_tablet_meta = _tablet_mgr->publish_version(tablet_id, 1, 2, &txn_id, 1, time(NULL));
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
     ASSERT_OK(new_tablet_meta.status());
     ASSERT_EQ(true, new_tablet_meta.value()->enable_persistent_index());
 
@@ -98,7 +98,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     update_tablet_meta_req2.tabletMetaInfos.push_back(tablet_meta_info2);
     ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req2));
 
-    auto new_tablet_meta2 = _tablet_mgr->publish_version(tablet_id, 2, 3, &txn_id2, 1, time(NULL));
+    auto new_tablet_meta2 = publish_single_version(tablet_id, 3, txn_id2);
     ASSERT_OK(new_tablet_meta2.status());
     ASSERT_EQ(false, new_tablet_meta2.value()->enable_persistent_index());
 }
@@ -118,7 +118,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
     update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
     ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
 
-    auto new_tablet_meta = _tablet_mgr->publish_version(tablet_id, 1, 2, &txn_id, 1, time(NULL));
+    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
     ASSERT_OK(new_tablet_meta.status());
     ASSERT_EQ(true, new_tablet_meta.value()->enable_persistent_index());
 
@@ -135,7 +135,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
     update_tablet_meta_req2.tabletMetaInfos.push_back(tablet_meta_info2);
     ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req2));
 
-    auto new_tablet_meta2 = _tablet_mgr->publish_version(tablet_id, 2, 3, &txn_id2, 1, time(NULL));
+    auto new_tablet_meta2 = publish_single_version(tablet_id, 3, txn_id2);
     ASSERT_OK(new_tablet_meta2.status());
     ASSERT_EQ(true, new_tablet_meta2.value()->enable_persistent_index());
 }
