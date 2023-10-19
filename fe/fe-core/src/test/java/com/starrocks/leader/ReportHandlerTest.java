@@ -278,6 +278,55 @@ public class ReportHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testHandleMigration() throws TException {
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
+        for (Long tabletId : tabletIds) {
+            tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
+        }
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        Backend reportBackend = currentSystemInfo.getBackend(10001);
+        BackendStatus backendStatus = reportBackend.getBackendStatus();
+        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+        for (int i = 0; i < tabletMetaList.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            TabletMeta tabletMeta = tabletMetaList.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            if (db == null) {
+                continue;
+            }
+            OlapTable table = null;
+            db.readLock();
+            try {
+                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+            } finally {
+                db.readUnlock();
+            }
+
+            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
+
+
+            for (Replica replica : tablet.getImmutableReplicas()) {
+                replica.setMaxRowsetCreationTime(System.currentTimeMillis() / 1000);
+            }
+        }
+        Config.primary_key_disk_schedule_time = 0;
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+    }
+
+    @Test
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
     public void testHandleMigrationTaskControl() {
         long backendId = 10001L;
         // mock the task execution on BE
@@ -290,7 +339,7 @@ public class ReportHandlerTest {
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
                 .getDb("test").getTable("binlog_report_handler_test");
-        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();;
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {

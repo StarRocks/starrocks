@@ -46,8 +46,37 @@ public class HiveMetastoreOperations {
         return metastore.getAllTableNames(dbName);
     }
 
+<<<<<<< HEAD
     public List<String> getPartitionKeys(String dbName, String tableName) {
         return metastore.getPartitionKeys(dbName, tableName);
+=======
+    public void dropDb(String dbName, boolean force) throws MetaNotFoundException {
+        Database database;
+        try {
+            database = getDb(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to access database {}", dbName, e);
+            throw new MetaNotFoundException("Failed to access database " + dbName);
+        }
+
+        if (database == null) {
+            throw new MetaNotFoundException("Not found database " + dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        if (Strings.isNullOrEmpty(dbLocation)) {
+            throw new MetaNotFoundException("Database location is empty");
+        }
+        boolean deleteData = false;
+        try {
+            deleteData = !FileSystem.get(URI.create(dbLocation), hadoopConf)
+                    .listLocatedStatus(new Path(dbLocation)).hasNext();
+        } catch (Exception e) {
+            LOG.error("Failed to check database directory", e);
+        }
+
+        metastore.dropDb(dbName, deleteData);
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
     }
 
     public Database getDb(String dbName) {

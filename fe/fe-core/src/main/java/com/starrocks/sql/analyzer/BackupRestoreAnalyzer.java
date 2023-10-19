@@ -91,8 +91,34 @@ public class BackupRestoreAnalyzer {
                 }
             }
 
+<<<<<<< HEAD
             tableRefs.clear();
             tableRefs.addAll(tblPartsMap.values());
+=======
+            if (!mvNameMVMap.isEmpty()) {
+                // check base table existed in the same db.
+                for (Map.Entry<String, MaterializedView> e : mvNameMVMap.entrySet()) {
+                    MaterializedView mv = e.getValue();
+                    for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                        if (!tableIdToTableRefMap.containsKey(baseTableInfo.getTableId())) {
+                            LOG.warn(String.format("Backup/restore materialized view %s's" +
+                                    " base table %s is not in the same db with the mv", mv.getName(),
+                                    baseTableInfo.getTableId()));
+                        }
+                    }
+                }
+
+                // reorder the tableRefs to ensure ref tables of materialized views are ahead of the materialized view
+                Map<String, TableRef> newTableRefs = reorderTableRefsWithMaterializedView(database, tblPartsMap, mvNameMVMap,
+                        tableIdToTableRefMap);
+                tableRefs.clear();
+                tableRefs.addAll(newTableRefs.values());
+            } else {
+                tableRefs.clear();
+                tableRefs.addAll(tblPartsMap.values());
+            }
+
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
             Map<String, String> properties = backupStmt.getProperties();
             long timeoutMs = Config.backup_job_default_timeout_ms;
             Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();

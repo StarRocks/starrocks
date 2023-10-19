@@ -14,6 +14,7 @@
 
 #include "compute_service.h"
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.cpp
 namespace starrocks {
 
 ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
@@ -21,3 +22,8 @@ ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env)
 ComputeService::~ComputeService() = default;
 
 } // namespace starrocks
+=======
+public enum HiveAccessType {
+    NONE, CREATE, ALTER, DROP, INDEX, LOCK, SELECT, UPDATE, USE, READ, WRITE, ALL, SERVICEADMIN, TEMPUDFADMIN
+}
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130)):fe/fe-core/src/main/java/com/starrocks/privilege/ranger/hive/HiveAccessType.java

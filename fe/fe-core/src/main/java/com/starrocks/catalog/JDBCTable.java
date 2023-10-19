@@ -193,4 +193,34 @@ public class JDBCTable extends Table {
     public boolean isSupported() {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    public ProtocolType getProtocolType() {
+        String uri = properties.get(JDBCResource.URI);
+        if (StringUtils.isEmpty(uri)) {
+            return ProtocolType.UNKNOWN;
+        }
+        URI u = URI.create(uri);
+        String protocol = u.getSchemeSpecificPart();
+        List<String> slices = Splitter.on(":").splitToList(protocol);
+        if (CollectionUtils.isEmpty(slices) || slices.size() <= 1) {
+            throw new IllegalArgumentException("illegal jdbc uri: " + uri);
+        }
+        protocol = slices.get(0);
+
+        ProtocolType res = EnumUtils.getEnumIgnoreCase(ProtocolType.class, protocol);
+        if (res == null) {
+            return ProtocolType.UNKNOWN;
+        }
+        return res;
+    }
+
+    public enum ProtocolType {
+        UNKNOWN,
+        MYSQL,
+        POSTGRES,
+        ORACLE
+    }
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
 }

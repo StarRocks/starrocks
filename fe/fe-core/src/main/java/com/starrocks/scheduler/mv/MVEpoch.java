@@ -127,7 +127,7 @@ public class MVEpoch implements Writable {
                 state.equals(EpochState.COMMITTED) ||
                 state.equals(EpochState.FAILED));
         this.state = EpochState.INIT;
-        this.commitInfos.clear();;
+        this.commitInfos.clear();
         this.failedInfos.clear();
         numEpochFinished.set(0);
     }
