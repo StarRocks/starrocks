@@ -396,6 +396,293 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testNativeAnalyzeJob() {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), t0StatsTableId, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        Assert.assertEquals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, nativeAnalyzeJob.getCatalogName());
+
+        nativeAnalyzeJob.setWorkTime(LocalDateTime.of(2023, 1, 1, 12, 0, 0));
+        Assert.assertEquals("2023-01-01T12:00", nativeAnalyzeJob.getWorkTime().toString());
+
+        nativeAnalyzeJob.setReason("test");
+        Assert.assertEquals("test", nativeAnalyzeJob.getReason());
+
+        nativeAnalyzeJob.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        new MockUp<FullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {}
+        };
+
+        nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.PENDING, nativeAnalyzeJob.getStatus());
+
+        new MockUp<FullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                throw new RuntimeException("mock exception");
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("stats");
+        Table table = db.getTable("tprimary_stats");
+        nativeAnalyzeJob = new NativeAnalyzeJob(db.getId(), table.getId(), null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, nativeAnalyzeJob.getStatus());
+        Assert.assertEquals("mock exception", nativeAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void testExternalAnalyzeJob() {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", database.getFullName(),
+                table.getName(), null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        Assert.assertEquals("hive0", externalAnalyzeJob.getCatalogName());
+
+        externalAnalyzeJob.setWorkTime(LocalDateTime.of(2023, 1, 1, 12, 0, 0));
+        Assert.assertEquals("2023-01-01T12:00", externalAnalyzeJob.getWorkTime().toString());
+
+        externalAnalyzeJob.setReason("test");
+        Assert.assertEquals("test", externalAnalyzeJob.getReason());
+
+        externalAnalyzeJob.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, externalAnalyzeJob.getStatus());
+
+        Assert.assertEquals("ExternalAnalyzeJob{id=-1, dbName=partitioned_db, tableName=t1, columns=null, " +
+                "type=FULL, scheduleType=SCHEDULE, properties={}, status=FINISH, " +
+                "workTime=2023-01-01T12:00, reason='test'}", externalAnalyzeJob.toString());
+    }
+
+    @Test
+    public void testExternalAnalyzeJobCollect() {
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+
+        ExternalAnalyzeJob externalAnalyzeJob = new ExternalAnalyzeJob("hive0", database.getFullName(),
+                table.getName(), null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {}
+        };
+
+        externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.PENDING, externalAnalyzeJob.getStatus());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                throw new RuntimeException("mock exception");
+            }
+        };
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100));
+            }
+        };
+
+        externalAnalyzeJob.run(statsConnectCtx, statisticExecutor);
+        Assert.assertEquals(StatsConstants.ScheduleStatus.FAILED, externalAnalyzeJob.getStatus());
+        Assert.assertEquals("mock exception", externalAnalyzeJob.getReason());
+    }
+
+    @Test
+    public void testExternalAnalyzeAllDb() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                new ExternalAnalyzeJob("hive0", null, null, null,
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(27, jobs.size());
+    }
+
+    @Test
+    public void testExternalAnalyzeDb() {
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                return Maps.newHashMap();
+            }
+        };
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                new ExternalAnalyzeJob("hive0", "partitioned_db", null, null,
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(11, jobs.size());
+    }
+
+    @Test
+    public void testExternalAnalyzeTable() {
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                new ExternalAnalyzeJob("hive0", "partitioned_db", "t1", null,
+                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(1, jobs.size());
+        StatisticsCollectJob statisticsCollectJob = jobs.get(0);
+        Assert.assertTrue(statisticsCollectJob instanceof ExternalFullStatisticsCollectJob);
+        Assert.assertEquals("hive0", statisticsCollectJob.getCatalogName());
+        Assert.assertEquals("partitioned_db", statisticsCollectJob.getDb().getFullName());
+        Assert.assertEquals("t1", statisticsCollectJob.getTable().getName());
+        Assert.assertTrue("[c1, c2, c3, par_col]".contains(
+                statisticsCollectJob.getColumns().toString()));
+    }
+
+    @Test
+    public void testCreateExternalAnalyzeJob() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
+                "t1", null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        // do not have stats meta, need to collect
+        List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+
+        // test collect statistics time after table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                LocalDateTime.now().plusHours(2), Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+
+        // test collect statistics time before table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        // the default row count is Config.statistic_auto_collect_small_table_rows, do not need to collect statistics
+        // until table update time + time interval(12h by default) > now
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+
+        // test collect statistics time before table update time, and row count is 100, need to collect statistics
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100));
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+
+        // test set property STATISTIC_AUTO_COLLECT_INTERVAL to 300s
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("hive0", "partitioned_db", "t1"),
+                        new ExternalBasicStatsMeta("hive0", "partitioned_db", "t1", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                LocalDateTime.now().minusHours(2), Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        new MockUp<CachedStatisticStorage>() {
+            @Mock
+            public List<ConnectorTableColumnStats> getConnectorTableStatisticsSync(Table table, List<String> columns) {
+                return ImmutableList.of(new ConnectorTableColumnStats(new ColumnStatistic(1, 100, 0, 4, 100),
+                        100000000));
+            }
+        };
+
+        analyzeJob = new ExternalAnalyzeJob("hive0", "partitioned_db",
+                "t1", null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                ImmutableMap.of(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL, "300"),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+        Assert.assertEquals(3, ((ExternalFullStatisticsCollectJob) statsJobs.get(0)).getPartitionNames().size());
+    }
+
+    @Test
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
     public void testSplitColumns() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(

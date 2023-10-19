@@ -309,7 +309,11 @@ public class StmtExecutor {
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
+<<<<<<< HEAD
         context.getPlannerProfile().build(plannerProfile);
+=======
+        Tracers.toRuntimeProfile(plannerProfile);
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
         return profile;
     }
 

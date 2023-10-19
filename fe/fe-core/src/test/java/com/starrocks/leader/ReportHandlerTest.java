@@ -194,6 +194,162 @@ public class ReportHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testHandleReport() throws TException {
+        Backend be = new Backend(10001, "host1", 8000);
+        ComputeNode cn = new ComputeNode(10002, "host2", 8000);
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackendWithBePort(String host, int bePort) {
+                if (host.equals(be.getHost()) && bePort == be.getBePort()) {
+                    return be;
+                }
+                return null;
+            }
+
+            @Mock
+            public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
+                if (host.equals(cn.getHost()) && bePort == cn.getBePort()) {
+                    return cn;
+                }
+                return null;
+            }
+        };
+
+        ReportHandler handler = new ReportHandler();
+        TResourceUsage resourceUsage = genResourceUsage(1, 2L, 3L, 100);
+
+        {
+
+            TReportRequest req = new TReportRequest();
+            req.setResource_usage(resourceUsage);
+
+            TBackend tcn = new TBackend();
+            tcn.setHost(cn.getHost());
+            tcn.setBe_port(cn.getBePort());
+            req.setBackend(tcn);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+        }
+
+        {
+
+            TReportRequest req = new TReportRequest();
+            req.setResource_usage(resourceUsage);
+
+            TBackend tbe = new TBackend();
+            tbe.setHost(be.getHost());
+            tbe.setBe_port(be.getBePort());
+            req.setBackend(tbe);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.OK, res.getStatus().getStatus_code());
+        }
+
+        {
+
+            TReportRequest req = new TReportRequest();
+
+            TBackend tcn = new TBackend();
+            tcn.setHost(cn.getHost() + "NotExist");
+            tcn.setBe_port(cn.getBePort());
+            req.setBackend(tcn);
+
+            TMasterResult res = handler.handleReport(req);
+            Assert.assertEquals(TStatusCode.INTERNAL_ERROR, res.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testHandleMigration() throws TException {
+        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
+        for (Long tabletId : tabletIds) {
+            tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
+        }
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        Backend reportBackend = currentSystemInfo.getBackend(10001);
+        BackendStatus backendStatus = reportBackend.getBackendStatus();
+        backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+        for (int i = 0; i < tabletMetaList.size(); i++) {
+            long tabletId = tabletIds.get(i);
+            TabletMeta tabletMeta = tabletMetaList.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getDb("test");
+            if (db == null) {
+                continue;
+            }
+            OlapTable table = null;
+            db.readLock();
+            try {
+                table = (OlapTable) db.getTable(tabletMeta.getTableId());
+            } finally {
+                db.readUnlock();
+            }
+
+            Partition partition = table.getPartition(tabletMeta.getPartitionId());
+            MaterializedIndex idx = partition.getIndex(tabletMeta.getIndexId());
+            LocalTablet tablet = (LocalTablet) idx.getTablet(tabletId);
+
+
+            for (Replica replica : tablet.getImmutableReplicas()) {
+                replica.setMaxRowsetCreationTime(System.currentTimeMillis() / 1000);
+            }
+        }
+        Config.primary_key_disk_schedule_time = 0;
+        ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
+    }
+
+    @Test
+    public void testHandleMigrationTaskControl() {
+        long backendId = 10001L;
+        // mock the task execution on BE
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+
+            }
+        };
+
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getDb("test").getTable("binlog_report_handler_test");
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
+        List<Long> allTablets = new ArrayList<>();
+        for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
+                allTablets.add(tablet.getId());
+            }
+        }
+
+        Assert.assertEquals(50, tabletMetaMigrationMap.size());
+
+        ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
+
+        Assert.assertEquals(50, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+
+        // finish 30 tablets migration
+        for (int i = 0; i < 30; i++) {
+            AgentTaskQueue.removeTask(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, allTablets.get(49 - i));
+        }
+        // limit the batch size to 30
+        Config.tablet_sched_max_migration_task_sent_once = 30;
+        ReportHandler.handleMigration(tabletMetaMigrationMap, backendId);
+        Assert.assertEquals(30, AgentTaskQueue.getTaskNum(backendId, TTaskType.STORAGE_MEDIUM_MIGRATE, false));
+    }
+
+    @Test
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
     public void testTabletDropDelay() throws InterruptedException {
         long tabletId = 100001;
         long backendId = 100002;

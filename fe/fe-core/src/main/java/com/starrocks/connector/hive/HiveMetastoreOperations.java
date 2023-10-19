@@ -43,6 +43,71 @@ public class HiveMetastoreOperations {
         return metastore.getAllDatabaseNames();
     }
 
+<<<<<<< HEAD
+=======
+    public void createDb(String dbName, Map<String, String> properties) {
+        properties = properties == null ? new HashMap<>() : properties;
+        String dbLocation = null;
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                try {
+                    dbLocation = value;
+                    URI uri = new Path(value).toUri();
+                    FileSystem fileSystem = FileSystem.get(uri, hadoopConf);
+                    fileSystem.exists(new Path(value));
+                } catch (Exception e) {
+                    LOG.error("Invalid location URI: {}", value, e);
+                    throw new StarRocksConnectorException("Invalid location URI: %s. msg: %s", value, e.getMessage());
+                }
+            } else {
+                throw new IllegalArgumentException("Unrecognized property: " + key);
+            }
+        }
+
+        if (dbLocation == null && metastoreType == MetastoreType.GLUE) {
+            throw new StarRocksConnectorException("The database location must be set when using glue. " +
+                    "you could execute command like " +
+                    "'CREATE DATABASE <db_name> properties('location'='s3://<bucket>/<your_db_path>')'");
+        }
+
+        metastore.createDb(dbName, properties);
+    }
+
+    public void dropDb(String dbName, boolean force) throws MetaNotFoundException {
+        Database database;
+        try {
+            database = getDb(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to access database {}", dbName, e);
+            throw new MetaNotFoundException("Failed to access database " + dbName);
+        }
+
+        if (database == null) {
+            throw new MetaNotFoundException("Not found database " + dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        if (Strings.isNullOrEmpty(dbLocation)) {
+            throw new MetaNotFoundException("Database location is empty");
+        }
+        boolean deleteData = false;
+        try {
+            deleteData = !FileSystem.get(URI.create(dbLocation), hadoopConf)
+                    .listLocatedStatus(new Path(dbLocation)).hasNext();
+        } catch (Exception e) {
+            LOG.error("Failed to check database directory", e);
+        }
+
+        metastore.dropDb(dbName, deleteData);
+    }
+
+    public Database getDb(String dbName) {
+        return metastore.getDb(dbName);
+    }
+
+>>>>>>> fc74a4dd60 ([Enhancement] Fix the checkstyle of semicolons (#33130))
     public List<String> getAllTableNames(String dbName) {
         return metastore.getAllTableNames(dbName);
     }
