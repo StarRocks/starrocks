@@ -59,7 +59,6 @@ public:
     bool get_weeks_of_year_with_cache(int* weeks) const;
 
     int get_week_of_year() const;
-    int year_week() const;
     /**
      * Get day of week.
      * @return

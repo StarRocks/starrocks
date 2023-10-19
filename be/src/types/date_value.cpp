@@ -81,13 +81,6 @@ int DateValue::get_week_of_year() const {
     return date::get_week_of_year(_julian);
 }
 
-int DateValue::year_week() const {
-    int year, month, day;
-    to_date(&year, &month, &day);
-    int32_t week = date::get_week_of_year(_julian);
-    return year * 100 + week;
-}
-
 void DateValue::from_mysql_date(uint64_t date) {
     _julian = date::from_mysql_date(date);
 }
