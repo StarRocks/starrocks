@@ -1052,11 +1052,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         Pair<Table, Column> partitionInfo = materializedView.getBaseTableAndPartitionColumn();
+        /*
         boolean isConvertToDate =
                 PartitionUtil.isConvertToDate(materializedView.getFirstPartitionRefTableExpr(), partitionInfo.second);
         if (isConvertToDate) {
             outputPartitionSlot = new CastExpr(Type.DATE, outputPartitionSlot);
         }
+
+         */
 
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
