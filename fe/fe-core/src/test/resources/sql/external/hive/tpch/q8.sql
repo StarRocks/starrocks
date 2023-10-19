@@ -37,34 +37,7 @@ group by
 order by
     o_year ;
 [fragment statistics]
-PLAN FRAGMENT 0(F20)
-Output Exprs:61: year | 66: expr
-Input Partition: UNPARTITIONED
-RESULT SINK
-
-38:MERGING-EXCHANGE
-distribution type: GATHER
-cardinality: 2
-column statistics:
-* year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
-* expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
-
-PLAN FRAGMENT 1(F19)
-
-Input Partition: HASH_PARTITIONED: 61: year
-OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 38
-
-37:SORT
-|  order by: [61, SMALLINT, true] ASC
-|  offset: 0
-|  cardinality: 2
-|  column statistics:
-|  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATEPLAN FRAGMENT 0(F22)
+PLAN FRAGMENT 0(F22)
 Output Exprs:61: year | 66: expr
 Input Partition: UNPARTITIONED
 RESULT SINK
