@@ -360,8 +360,8 @@ public class PartitionUtil {
 
     private static String transformMaxValueForJDBCTable(Column partitionColumn, String partitionName) {
         if (partitionName.equalsIgnoreCase(MYSQL_PARTITION_MAXVALUE)) {
-            // 对于maxvalue的特殊处理，对于int类型取最大值，对于date取9999-12-31，
-            // 对varchar和char, 由于需要使用str2date转换成时间分区，所以也取9999-12-31
+            // For the special handling of maxvalue, take the maximum value for int type and 9999-12-31 for date,
+            // For varchar and char, due to the need to convert them to time partitions using str2date, they are also taken as 9999-12-31
             if (partitionColumn.getPrimitiveType().isIntegerType()) {
                 partitionName = IntLiteral.createMaxValue(partitionColumn.getType()).getStringValue();
             } else {
