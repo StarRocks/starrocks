@@ -182,13 +182,17 @@ After submitting the load job, you can execute the [SHOW ROUTINE LOAD](../sql-re
 
   When there are many Kafka topic partitions and enough BE nodes, you can accelerate the loading by increasing the task concurrency.
 
+<<<<<<< HEAD
   To increase the actual load task concurrency, you can increase the desired load task concurrency `desired_concurrent_number` when you [create a routine load job](./RoutineLoad#Create a Routine_Load_job). You can also set the dynamic configuration item of FE `max_routine_load_task_concurrent_num` ( default maximum load task currency ) to a larger value. For more information about `max_routine_load_task_concurrent_num`, please see [FE configuration items](../administration/Configuration#fe-configuration-items).
+=======
+  To increase the actual load task concurrency, you can increase the desired load task concurrency `desired_concurrent_number` when you create a routine load job. You can also set the dynamic configuration item of FE `max_routine_load_task_concurrent_num` ( default maximum load task currency ) to a larger value. For more information about `max_routine_load_task_concurrent_num`, please see [FE configuration items](../administration/Configuration.md#fe-configuration-items).
+>>>>>>> bd8a733d8a ([Doc] broken links (#33095))
 
   The actual task concurrency is defined by the minimum value among the number of BE nodes that are alive, the number of the pre-specified Kafka topic partitions, and the values of `desired_concurrent_number` and `max_routine_load_task_concurrent_num`.
 
   In the example, the number of BE nodes that are alive is `5`, the number of the pre-specified Kafka topic partitions is `5`, and the value of `max_routine_load_task_concurrent_num` is `5`. To increase the actual load task concurrency, you can increase the `desired_concurrent_number` from the default value `3` to `5`.
 
-  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq).
+  For more about the properties, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md). For detailed instructions on accelerating the loading, see [Routine Load FAQ](../faq/loading/Routine_load_faq.md).
 
 ### Load JSON-format data
 
@@ -546,4 +550,4 @@ STOP ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## FAQ
 
-Please see [Routine Load FAQ](../faq/loading/Routine_load_faq).
+Please see [Routine Load FAQ](../faq/loading/Routine_load_faq.md).
