@@ -130,25 +130,36 @@ public class MetricsAction extends RestBaseAction {
         sendResult(request, response);
     }
 
-    private RequestParams parseRequestParams(BaseRequest request) {
+    protected RequestParams parseRequestParams(BaseRequest request) {
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
         String withMaterializedViewsMetrics = request.getSingleParameter(WITH_MATERIALIZED_VIEW_METRICS_PARAM);
+        /*
+         * Collect tableMetrics and MVMetrics in minified way by default.
+         * Full metrics collection is only enabled when the following conditions are all satisfied
+         * - explicitly has `?with_table_metrics=all` or `?with_materialized_view_metrics=all`
+         * - the user must have sufficient privileges by checking the request auth info
+         */
+        boolean collectTableMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withTableMetrics);
+        boolean collectMVMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withMaterializedViewsMetrics);
+
         // check request authorization
-        if (Strings.isNullOrEmpty(withMaterializedViewsMetrics) || Strings.isNullOrEmpty(withTableMetrics)) {
+        if (collectTableMetrics || collectMVMetrics) {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
                 currentUser = checkPassword(authInfo);
                 checkUserOwnsAdminRole(currentUser);
             } catch (AccessDeniedException e) {
+                // disable Table related metrics collection due to AccessDenied
+                collectTableMetrics = false;
+                collectMVMetrics = false;
                 LOG.warn("Auth failure when getting table level metrics, current user: {}, error msg: {}",
-                        currentUser, e.getMessage(), e);
+                        currentUser, e.getMessage());
             }
         }
-        boolean collectTableMetrics = COLLECT_MODE_METRICS_MINIFIED.equalsIgnoreCase(withTableMetrics);
-        boolean minifyTableMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withTableMetrics);
-        boolean collectMVMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withMaterializedViewsMetrics);
-        boolean minifyMVMetrics = COLLECT_MODE_METRICS_MINIFIED.equalsIgnoreCase(withMaterializedViewsMetrics);
+
+        boolean minifyMVMetrics = !collectMVMetrics;
+        boolean minifyTableMetrics = !collectTableMetrics;
         return new RequestParams(collectTableMetrics, minifyTableMetrics, collectMVMetrics, minifyMVMetrics);
     }
 }
