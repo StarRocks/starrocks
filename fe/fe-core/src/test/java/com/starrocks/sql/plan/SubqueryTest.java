@@ -293,7 +293,7 @@ public class SubqueryTest extends PlanTestBase {
                 "FROM\n" +
                 "  t0 AS t0_2\n" +
                 "GROUP BY\n" +
-                "  ( CAST(t0_2.v1 AS INT) - NULL ) IN (SELECT subt0.v1  FROM  t1 " +
+                "  ( CAST(t0_2.v1 AS INT) - 1 ) IN (SELECT subt0.v1  FROM  t1 " +
                 "AS t1_3 RIGHT ANTI JOIN t0 subt0 ON t1_3.v5 = subt0.v1 ),\n" +
                 "  t0_2.v1";
         String plan = getFragmentPlan(sql);
