@@ -77,18 +77,6 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
-<<<<<<< HEAD
-      - uses: dorny/paths-filter@v2
-        id: thirdparty-checker
-        if: always()
-        with:
-          filters: |
-            thirdparty:
-            - 'thirdparty/**'
-            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
-
-=======
->>>>>>> 9ca2c77505 ([Tool] Add codeowners for thirdparty (#33043))
   be-checker:
     runs-on: ubuntu-latest
     needs: sync-checker
