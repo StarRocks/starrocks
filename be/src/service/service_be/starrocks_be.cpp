@@ -48,9 +48,15 @@ void start_be() {
     brpc::FLAGS_socket_max_unwritten_bytes = starrocks::config::brpc_socket_max_unwritten_bytes;
     brpc::Server brpc_server;
 
+<<<<<<< HEAD
     starrocks::BackendInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
     starrocks::BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
     starrocks::LakeServiceImpl lake_service(exec_env);
+=======
+    BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+    BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
+    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
+>>>>>>> 3662cc3c01 ([Refactor] Move transaction methods to another file and more tests (#33075))
 
     brpc_server.AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server.AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);

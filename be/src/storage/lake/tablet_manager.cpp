@@ -28,7 +28,6 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/delta_writer.h"
@@ -123,10 +122,6 @@ static size_t get_metacache_usage(void*) {
 static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 #endif
-
-static StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
-                                           int64_t new_version, const int64_t* txns, int txns_size,
-                                           int64_t commit_time);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
@@ -485,6 +480,11 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     return std::move(meta);
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_txn_vlog");
+    return get_txn_log(path, fill_cache);
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
     if (auto ptr = lookup_txn_log(path); ptr != nullptr) {
         TRACE("got cached txn log");
@@ -551,18 +551,6 @@ Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
     TRACE("end delete txn vlog");
-    return st.is_not_found() ? Status::OK() : st;
-}
-
-Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
-    erase_metacache(segment_name);
-    auto st = fs::delete_file(segment_location(tablet_id, segment_name));
-    return st.is_not_found() ? Status::OK() : st;
-}
-
-Status TabletManager::delete_del(int64_t tablet_id, std::string_view del_name) {
-    erase_metacache(del_name);
-    auto st = fs::delete_file(del_location(tablet_id, del_name));
     return st.is_not_found() ? Status::OK() : st;
 }
 
@@ -666,6 +654,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     return schema;
 }
 
+<<<<<<< HEAD
 StatusOr<TabletMetadataPtr> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
                                                            const int64_t* txns, int txns_size, int64_t commit_time) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
@@ -797,6 +786,29 @@ StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, i
     delete_files_async(std::move(files_to_delete));
 
     return new_metadata;
+=======
+StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id) {
+    auto global_cache_key = global_schema_cache_key(index_id);
+    auto schema = lookup_tablet_schema(global_cache_key);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.1", &schema);
+    if (schema != nullptr) {
+        return schema;
+    }
+    // else: Cache miss, read the schema file
+    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(index_id));
+    auto schema_or = load_and_parse_schema_file(schema_file_path);
+    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.2", &schema_or);
+    if (schema_or.ok()) {
+        VLOG(3) << "Got tablet schema of id " << index_id << " for tablet " << tablet_id;
+        schema = std::move(schema_or).value();
+        // Save the schema into the in-memory cache, use the schema id as the cache key
+        auto cache_value = std::make_unique<CacheValue>(schema);
+        fill_metacache(global_cache_key, cache_value.release(), 0);
+        return std::move(schema);
+    } else {
+        return schema_or.status();
+    }
+>>>>>>> 3662cc3c01 ([Refactor] Move transaction methods to another file and more tests (#33075))
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
@@ -813,72 +825,6 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
         return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr),
                                                           std::move(input_rowsets));
-    }
-}
-
-void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
-    std::vector<std::string> files_to_delete;
-    for (int i = 0; i < txns_size; i++) {
-        auto txn_id = txns[i];
-        auto log_path = txn_log_location(tablet_id, txn_id);
-        auto txn_log_or = get_txn_log(log_path, false);
-        if (!txn_log_or.ok()) {
-            LOG_IF(WARNING, !txn_log_or.status().is_not_found())
-                    << "Fail to get txn log " << log_path << ": " << txn_log_or.status();
-            continue;
-        }
-
-        TxnLogPtr txn_log = std::move(txn_log_or).value();
-        if (txn_log->has_op_write()) {
-            for (const auto& segment : txn_log->op_write().rowset().segments()) {
-                files_to_delete.emplace_back(segment_location(tablet_id, segment));
-            }
-            for (const auto& del_file : txn_log->op_write().dels()) {
-                files_to_delete.emplace_back(del_location(tablet_id, del_file));
-            }
-        }
-        if (txn_log->has_op_compaction()) {
-            for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
-                files_to_delete.emplace_back(segment_location(tablet_id, segment));
-            }
-        }
-        if (txn_log->has_op_schema_change() && !txn_log->op_schema_change().linked_segment()) {
-            for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
-                for (const auto& segment : rowset.segments()) {
-                    files_to_delete.emplace_back(segment_location(tablet_id, segment));
-                }
-            }
-        }
-
-        files_to_delete.emplace_back(log_path);
-
-        metacache()->erase(CacheKey(log_path));
-    }
-
-    delete_files_async(std::move(files_to_delete));
-}
-
-Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version) {
-    auto txn_log_path = txn_log_location(tablet_id, txn_id);
-    auto txn_vlog_path = txn_vlog_location(tablet_id, log_version);
-    // TODO: use rename() API if supported by the underlying filesystem.
-    auto st = fs::copy_file(txn_log_path, txn_vlog_path);
-    if (st.is_not_found()) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
-        auto check_st = fs->path_exists(txn_vlog_path);
-        if (check_st.ok()) {
-            return Status::OK();
-        } else {
-            LOG_IF(WARNING, !check_st.is_not_found())
-                    << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
-            return st;
-        }
-    } else if (!st.ok()) {
-        return st;
-    } else {
-        delete_files_async({txn_log_path});
-        metacache()->erase(CacheKey(txn_log_path));
-        return Status::OK();
     }
 }
 
