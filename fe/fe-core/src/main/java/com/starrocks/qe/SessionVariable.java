@@ -202,6 +202,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
     public static final String ENABLE_RESOURCE_GROUP_V2 = "enable_resource_group_v2";
 
+    public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -529,6 +531,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
     private boolean enableDeliverBatchFragments = true;
+
+    /**
+     * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
+     * fragments that access the same tablet to run on the same node to improve cache hit.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
+    private boolean enableQueryTabletAffinity = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1277,6 +1286,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
+    }
+
+    public boolean isEnableQueryTabletAffinity() {
+        return enableQueryTabletAffinity;
     }
 
     public int getStatisticCollectParallelism() {
