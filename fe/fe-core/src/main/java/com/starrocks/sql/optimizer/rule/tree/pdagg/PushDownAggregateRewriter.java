@@ -40,7 +40,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -209,23 +208,13 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 }
 
                 for (int i = 0; i < caseWhen.getWhenClauseSize(); i++) {
-                    if (caseWhen.getThenClause(i).isConstant()) {
-                        Preconditions.checkState(caseWhen.getThenClause(i).isConstantNull());
-                        caseWhen.setThenClause(i, ConstantOperator.createNull(key.getType()));
-                        continue;
-                    }
                     ColumnRefOperator ref = replaceByNewAggregation(aggFn, caseWhen.getThenClause(i), context);
                     caseWhen.setThenClause(i, ref);
                 }
 
                 if (caseWhen.hasElse()) {
-                    if (caseWhen.getElseClause().isConstant()) {
-                        Preconditions.checkState(caseWhen.getElseClause().isConstantNull());
-                        caseWhen.setElseClause(ConstantOperator.createNull(key.getType()));
-                    } else {
-                        ColumnRefOperator ref = replaceByNewAggregation(aggFn, caseWhen.getElseClause(), context);
-                        caseWhen.setElseClause(ref);
-                    }
+                    ColumnRefOperator ref = replaceByNewAggregation(aggFn, caseWhen.getElseClause(), context);
+                    caseWhen.setElseClause(ref);
                 }
 
                 context.aggregations.remove(key);
@@ -236,11 +225,6 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                         .forEach(v -> context.groupBys.put(v, v));
 
                 for (int i = 1; i < ifFn.getChildren().size(); i++) {
-                    if (ifFn.getChild(i).isConstant()) {
-                        Preconditions.checkState(ifFn.getChild(i).isConstantNull());
-                        ifFn.setChild(i, ConstantOperator.createNull(key.getType()));
-                        continue;
-                    }
                     ColumnRefOperator ref = replaceByNewAggregation(aggFn, ifFn.getChild(i), context);
                     ifFn.setChild(i, ref);
                 }
@@ -411,6 +395,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         AggregatePushDownContext childContext = new AggregatePushDownContext();
         childContext.aggregations.putAll(context.aggregations);
+        context.aggregations.clear();
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
