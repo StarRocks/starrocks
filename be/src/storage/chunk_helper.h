@@ -97,7 +97,7 @@ public:
     void finalize();
     bool empty() const;
     bool reach_limit() const;
-    Status push(ChunkPtr&& chunk);
+    [[nodiscard]] Status push(ChunkPtr&& chunk);
     ChunkPtr pull();
 
 private:

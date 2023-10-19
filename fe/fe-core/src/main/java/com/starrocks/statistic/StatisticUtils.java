@@ -22,6 +22,7 @@ import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -34,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
@@ -88,7 +90,7 @@ public class StatisticUtils {
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
         context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-        context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+        context.setQualifiedUser(UserIdentity.ROOT.getUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();
@@ -241,9 +243,27 @@ public class StatisticUtils {
     }
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
-        long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
-                .max(Long::compareTo).orElse(0L);
-        return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
+        if (table.isNativeTableOrMaterializedView()) {
+            long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
+                    .max(Long::compareTo).orElse(0L);
+            return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
+        } else if (table.isHiveTable()) {
+            HiveTable hiveTable = (HiveTable) table;
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
+            List<PartitionInfo> partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(hiveTable.getCatalogName(), hiveTable, partitionNames);
+            long lastModifiedTime = partitions.stream().map(PartitionInfo::getModifiedTime).max(Long::compareTo).
+                    orElse(0L);
+            if (lastModifiedTime != 0L) {
+                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime),
+                        Clock.systemDefaultZone().getZone());
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
     }
 
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {

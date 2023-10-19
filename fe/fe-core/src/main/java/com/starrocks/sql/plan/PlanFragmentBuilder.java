@@ -757,11 +757,29 @@ public class PlanFragmentBuilder {
             }
 
             // set slot
+            Map<String, Column> mvColumnMap = Maps.newHashMap();
+            boolean scanBaseTable = node.getSelectedIndexId() == referenceTable.getBaseIndexId();
+            if (!scanBaseTable) {
+                MaterializedIndexMeta indexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+                mvColumnMap = indexMeta.getSchema().stream()
+                        .filter(x -> CollectionUtils.isNotEmpty(x.getRefColumns()))
+                        .collect(Collectors.toMap(x -> x.getRefColumns().get(0).getColumnName().toLowerCase(), x -> x));
+            }
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                Column column = entry.getValue();
+                if (scanBaseTable || !mvColumnMap.containsKey(column.getName())) {
+                    slotDescriptor.setColumn(entry.getValue());
+                    slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                } else {
+                    // Replace the column to mv column for special case:
+                    // If the MV is for aggregate table, and the query doesn't contain aggregate function
+                    // The MV would be chosen but the columns would not be rewritten
+                    Column mvColumn = mvColumnMap.get(column.getName());
+                    slotDescriptor.setColumn(mvColumn);
+                    slotDescriptor.setIsNullable(mvColumn.isAllowNull());
+                }
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
@@ -1153,7 +1171,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
-                icebergScanNode.setupScanRangeLocations();
+                icebergScanNode.setupScanRangeLocations(context.getDescTbl());
                 // set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 

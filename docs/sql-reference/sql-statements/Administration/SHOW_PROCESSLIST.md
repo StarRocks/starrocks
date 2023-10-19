@@ -12,9 +12,9 @@ SHOW [FULL] PROCESSLIST
 
 ## Parameter
 
-| Parameter | Required | Description                                                  |
-| --------- | -------- | ------------------------------------------------------------ |
-| FULL      | No       | If you specify this parameter, all operations are listed. Otherwise, only the first 100 operations are listed. |
+| Parameter | Required | Description                                                                                                                      |
+| --------- | -------- |----------------------------------------------------------------------------------------------------------------------------------|
+| FULL      | No       | If you specify this parameter, the complete statement will be displayed. Otherwise, only display the first 100 characters of the statement |
 
 ## Return
 

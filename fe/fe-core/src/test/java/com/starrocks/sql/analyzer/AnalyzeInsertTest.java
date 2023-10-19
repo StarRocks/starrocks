@@ -248,7 +248,7 @@ public class AnalyzeInsertTest {
                         "select \"abc\" as k1",
                 "compression is a mandatory property. " +
                 "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                "(uncompressed, gzip, brotli, zstd, lz4, bz2).");
+                "(uncompressed, gzip, brotli, zstd, lz4).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -256,10 +256,10 @@ public class AnalyzeInsertTest {
                         "\t\"compression\" = \"unknown\" ) \n" +
                         "select \"abc\" as k1",
                 "compression type unknown is not supported. " +
-                        "Use any of (uncompressed, gzip, brotli, zstd, lz4, bz2).");
+                        "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
 
         analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"oss://starrocks-dla-data-zhangjiakou/jiangletian/unload/test_partby_varchar/\", \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"uncompressed\", \n" +
                         "\t\"partition_by\"=\"k1\",\n" +

@@ -54,15 +54,15 @@ public:
     DISALLOW_COPY_AND_MOVE(TabletWriterSink);
 
     Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr) override {
-        RETURN_IF_ERROR(_writer->write(chunk));
-        return _writer->flush();
+        RETURN_IF_ERROR(_writer->write(chunk, segment));
+        return _writer->flush(segment);
     }
 
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
                                     starrocks::SegmentPB* segment = nullptr) override {
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
-        RETURN_IF_ERROR(_writer->write(upserts));
-        return _writer->flush();
+        RETURN_IF_ERROR(_writer->write(upserts, segment));
+        return _writer->flush(segment);
     }
 
 private:
@@ -114,6 +114,8 @@ public:
 
     [[nodiscard]] Status flush_async();
 
+    int64_t queueing_memtable_num() const;
+
     std::vector<std::string> files() const;
 
     int64_t data_size() const;
@@ -123,6 +125,8 @@ public:
     bool is_immutable() const;
 
     Status check_immutable();
+
+    int64_t last_write_ts() const;
 
 private:
     Status reset_memtable();
@@ -183,6 +187,8 @@ private:
     // true if miss AUTO_INCREMENT column in partial update mode
     bool _miss_auto_increment_column;
     bool _partial_schema_with_sort_key = false;
+
+    int64_t _last_write_ts = 0;
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -196,11 +202,15 @@ Status DeltaWriterImpl::check_immutable() {
             _is_immutable.store(true, std::memory_order_relaxed);
         }
         VLOG(1) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
-                << " _immutable_tablet_size=" << _immutable_tablet_size
+                << ", immutable_tablet_size=" << _immutable_tablet_size
                 << ", data_size=" << tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id)
                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
     }
     return Status::OK();
+}
+
+int64_t DeltaWriterImpl::last_write_ts() const {
+    return _last_write_ts;
 }
 
 Status DeltaWriterImpl::build_schema_and_writer() {
@@ -246,19 +256,30 @@ inline Status DeltaWriterImpl::flush_async() {
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
-        st = _flush_token->submit(std::move(_mem_table));
-        _mem_table.reset(nullptr);
-        if (_immutable_tablet_size > 0) {
-            _tablet_manager->set_in_writing_data_size(_tablet_id, _txn_id, _tablet_writer->data_size());
-            ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
-            VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
-                    << " _immutable_tablet_size=" << _immutable_tablet_size
-                    << ", writer_data_size=" << _tablet_writer->data_size()
-                    << ", tablet_data_size=" << tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id);
-            if (tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
-                _is_immutable.store(true, std::memory_order_relaxed);
+        st = _flush_token->submit(std::move(_mem_table), false, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+            if (seg) {
+                _tablet_manager->add_in_writing_data_size(_tablet_id, _txn_id, seg->data_size());
             }
-        }
+            if (_immutable_tablet_size > 0) {
+                auto res = _tablet_manager->get_tablet(_tablet_id);
+                if (!res.ok()) {
+                    LOG(WARNING) << "get tablet failed, tablet=" << _tablet_id << ", txn=" << _txn_id
+                                 << ", status=" << res.status();
+                    return;
+                }
+                auto& tablet = res.value();
+                if (tablet.data_size() + _tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
+                    _is_immutable.store(true, std::memory_order_relaxed);
+                }
+                VLOG(1) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
+                        << " _immutable_tablet_size=" << _immutable_tablet_size << ", segment_size=" << seg->data_size()
+                        << ", tablet_data_size=" << tablet.data_size()
+                        << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
+                        << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
+            }
+        });
+        _mem_table.reset(nullptr);
+        _last_write_ts = 0;
     }
     return st;
 }
@@ -319,6 +340,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
         RETURN_IF_ERROR(reset_memtable());
     }
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
+    _last_write_ts = butil::gettimeofday_s();
     Status st;
     bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
     if (_mem_tracker->limit_exceeded()) {
@@ -576,6 +598,14 @@ int64_t DeltaWriterImpl::num_rows() const {
     return (_tablet_writer != nullptr) ? _tablet_writer->num_rows() : 0;
 }
 
+int64_t DeltaWriterImpl::queueing_memtable_num() const {
+    if (_flush_token != nullptr) {
+        return _flush_token->get_stats().queueing_memtable_num;
+    } else {
+        return 0;
+    }
+}
+
 //// DeltaWriter
 
 DeltaWriter::~DeltaWriter() {
@@ -631,6 +661,10 @@ std::vector<std::string> DeltaWriter::files() const {
     return _impl->files();
 }
 
+const int64_t DeltaWriter::queueing_memtable_num() const {
+    return _impl->queueing_memtable_num();
+}
+
 int64_t DeltaWriter::data_size() const {
     return _impl->data_size();
 }
@@ -645,6 +679,10 @@ bool DeltaWriter::is_immutable() const {
 
 Status DeltaWriter::check_immutable() {
     return _impl->check_immutable();
+}
+
+int64_t DeltaWriter::last_write_ts() const {
+    return _impl->last_write_ts();
 }
 
 ThreadPool* DeltaWriter::io_threads() {

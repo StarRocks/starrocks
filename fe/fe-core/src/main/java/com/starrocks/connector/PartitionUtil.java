@@ -57,11 +57,13 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
@@ -264,8 +266,8 @@ public class PartitionUtil {
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
         } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
+            Preconditions.checkState(false, "Not support getPartitionNames for table type %s",
+                    table.getType());
         }
         return partitionNames;
     }
@@ -510,7 +512,7 @@ public class PartitionUtil {
         PartitionKey lastPartitionKey = null;
         String lastPartitionName = null;
 
-        boolean isConvertToDate = isConvertToDate(partitionExpr);
+        boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
         Map<String, Range<PartitionKey>> mvPartitionRangeMap = new LinkedHashMap<>();
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             if (index == 0) {
@@ -541,9 +543,20 @@ public class PartitionUtil {
         return mvPartitionRangeMap;
     }
 
-    private static boolean isConvertToDate(Expr partitionExpr) {
-        return partitionExpr != null && partitionExpr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) partitionExpr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+    /**
+     * If base table column type is string but partition type is date, we need to convert the string to date
+     *
+     * @param partitionExpr   PARTITION BY expr
+     * @param partitionColumn PARTITION BY referenced column
+     * @return
+     */
+    public static boolean isConvertToDate(Expr partitionExpr, Column partitionColumn) {
+        if (!(partitionExpr instanceof FunctionCallExpr)) {
+            return false;
+        }
+        PrimitiveType columnType = partitionColumn.getPrimitiveType();
+        PrimitiveType partitionType = partitionExpr.getType().getPrimitiveType();
+        return partitionType.isDateType() && !columnType.isDateType();
     }
 
     private static PartitionKey  convertToDate(PartitionKey partitionKey) {
@@ -621,6 +634,24 @@ public class PartitionUtil {
         return sb.substring(0, sb.length() - 1);
     }
 
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+        PartitionData partitionData = (PartitionData) partition;
+        List<String> partitionValues = new ArrayList<>();
+        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (int i = 0; i < spec.fields().size(); i++) {
+            PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+                continue;
+            }
+
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
+    }
+
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
         return partition.get(position, (Class<T>) javaClass);
     }
@@ -663,15 +694,16 @@ public class PartitionUtil {
 
     public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
-                                                      Map<String, Range<PartitionKey>> mvPartitionMap) {
+                                                      Map<String, Range<PartitionKey>> mvPartitionMap,
+                                                      PartitionDiffer differ) {
         if (partitionExpr instanceof SlotRef) {
-            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap);
+            return SyncPartitionUtils.getRangePartitionDiffOfSlotRef(basePartitionMap, mvPartitionMap, differ);
         } else if (partitionExpr instanceof FunctionCallExpr) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
             if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
                     functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
                 return SyncPartitionUtils.getRangePartitionDiffOfExpr(basePartitionMap,
-                        mvPartitionMap, functionCallExpr, null);
+                        mvPartitionMap, functionCallExpr, differ);
             } else {
                 throw new SemanticException("Materialized view partition function " +
                         functionCallExpr.getFnName().getFunction() +

@@ -30,11 +30,11 @@ public:
 
     ~JniScanner() override { finalize(); }
 
-    Status do_open(RuntimeState* runtime_state) override;
+    [[nodiscard]] Status do_open(RuntimeState* runtime_state) override;
     void do_update_counter(HdfsScanProfile* profile) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
+    [[nodiscard]] Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     bool is_jni_scanner() override { return true; }
 
 private:
@@ -48,36 +48,36 @@ private:
         bool must_nullable;
     };
 
-    static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
+    [[nodiscard]] static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
 
-    Status _init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state);
+    [[nodiscard]] Status _init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state);
 
     void _init_profile(const HdfsScannerParams& scanner_params);
 
-    Status _init_jni_method(JNIEnv* _jni_env);
+    [[nodiscard]] Status _init_jni_method(JNIEnv* _jni_env);
 
-    Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
-
-    template <LogicalType type>
-    Status _append_primitive_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
     template <LogicalType type>
-    Status _append_decimal_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _append_primitive_data(const FillColumnArgs& args);
 
     template <LogicalType type>
-    Status _append_string_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _append_decimal_data(const FillColumnArgs& args);
 
-    Status _append_date_data(const FillColumnArgs& args);
-    Status _append_datetime_data(const FillColumnArgs& args);
-    Status _append_array_data(const FillColumnArgs& args);
-    Status _append_map_data(const FillColumnArgs& args);
-    Status _append_struct_data(const FillColumnArgs& args);
+    template <LogicalType type>
+    [[nodiscard]] Status _append_string_data(const FillColumnArgs& args);
 
-    Status _fill_column(FillColumnArgs* args);
+    [[nodiscard]] Status _append_date_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _append_datetime_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _append_array_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _append_map_data(const FillColumnArgs& args);
+    [[nodiscard]] Status _append_struct_data(const FillColumnArgs& args);
 
-    Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
+    [[nodiscard]] Status _fill_column(FillColumnArgs* args);
 
-    Status _release_off_heap_table(JNIEnv* _jni_env);
+    [[nodiscard]] Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
+
+    [[nodiscard]] Status _release_off_heap_table(JNIEnv* _jni_env);
 
     jclass _jni_scanner_cls = nullptr;
     jobject _jni_scanner_obj = nullptr;

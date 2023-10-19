@@ -31,3 +31,55 @@ select max(sl) from (select sum(c1) sl from t0 group by c0) tb;
 select avg(sl) from (select sum(c1) sl from t0 group by c0) tb;
 select count(sl) from (select sum(c1) sl from t0 group by c0) tb;
 select count(sl) from (select count(c1) sl from t0 group by c0) tb;
+
+set pipeline_dop = 1;
+create table t3 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+
+insert into t3 SELECT generate_series, 40960 - generate_series FROM TABLE(generate_series(1,  40960));
+insert into t3 values (null,null);
+insert into t3 select * from t3;
+insert into t3 select * from t3;
+
+select count(*) from t3;
+select distinct c0, c1 from t3 order by 1, 2 limit 2;
+select count(*), max(tb.c0), min(tb.c1) from (select distinct c0, c1 from t3) tb;
+select count(*) from (select distinct c0, c1 from t3 limit 100) tb;
+select count(*), max(c0), min(c1) from (select c0, c1 from t3 group by c0, c1) tb;
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100) tb;
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100 limit 10) tb;
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 limit 100) tb;
+select count(*) from (select array_agg(c0) from t3 group by c0) tb;
+with agged as ( select c0 as lk, c1 from t3 group by 1,2 ) select count(*),count(l.lk),count(l.c1),count(r.lk),count(r.c1) from agged l join agged r on l.lk = r.lk;
+-- short_circuit case
+create table tempty like t3;
+select count(*) from (select distinct c0, c1 from t3 l left semi join tempty r on l.c0 = r.c0) tb; 
+
+CREATE TABLE `t4` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`c0`)
+(
+PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("1024")),
+PARTITION p3 VALUES [("1024"), ("2048")),
+PARTITION p4 VALUES [("2048"), ("4096")),
+PARTITION p5 VALUES [("4096"), ("8192")),
+PARTITION p6 VALUES [("8192"), ("65536")),
+PARTITION p7 VALUES [("65536"), ("2100000000")))
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"colocate_with" = "spill_agg_colocate_1",
+"compression" = "LZ4"
+);
+insert into t2 select * from t1;
+
+select distinct c0, c1 from t4 order by 1, 2 limit 2;
+select count(*), max(tb.c0), min(tb.c1) from (select distinct c0, c1 from t4) tb;
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t4 group by c0 having c0 > 100) tb;

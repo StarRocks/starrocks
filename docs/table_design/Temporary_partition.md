@@ -8,7 +8,7 @@ You can use the temporary partition feature in the following scenarios:
 
 - Atomic overwrite operation
   
-  If you need to rewrite the data in a partition while ensuring that the data can be queried during the rewriting process, you can first create a temporary partition based on the original formal partition, and load the new data into the temporary partition. Then you can use the replace operation to atomically replace the original formal partition with the temporary partition. For atomic overwrite operations on non-partitioned tables, see [ALTER TABLE - SWAP](../sql-reference/sql-statements/data-definition/ALTER_TABLE#swap).
+  If you need to rewrite the data in a partition while ensuring that the data can be queried during the rewriting process, you can first create a temporary partition based on the original formal partition, and load the new data into the temporary partition. Then you can use the replace operation to atomically replace the original formal partition with the temporary partition. For atomic overwrite operations on non-partitioned tables, see [ALTER TABLE - SWAP](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#swap).
 
 - Adjust partition data query concurrency
 
@@ -90,7 +90,7 @@ ADD TEMPORARY PARTITIONS START ("2020-04-01") END ("2021-01-01") EVERY (INTERVAL
 
 ## Show temporary partitions
 
-You can view the temporary partitions by using the [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS) command.
+You can view the temporary partitions by using the [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) command.
 
 ```SQL
 SHOW TEMPORARY PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]

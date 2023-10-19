@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -52,17 +53,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
-import org.apache.iceberg.DataFile;
-import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.StructLike;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -311,41 +307,26 @@ public class OptExternalPartitionPruner {
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         } else if (table instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) table;
-            Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
-            if (!snapshot.isPresent()) {
+            if (!icebergTable.getSnapshot().isPresent()) {
                 return;
             }
 
-            long snapshotId = snapshot.get().snapshotId();
-            String catalogName = icebergTable.getCatalogName();
-            List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
-                    catalogName, icebergTable, null, snapshotId, operator.getPredicate(), null, operator.getLimit());
-            if (splits.isEmpty()) {
-                return;
-            }
-
-            Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
-            RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);
-            long partitionId = 0;
-            if (remoteFileDesc != null) {
-                Set<String> files = new HashSet<>();
-                for (FileScanTask fileScanTask : remoteFileDesc.getIcebergScanTasks()) {
-                    DataFile dataFile = fileScanTask.file();
-
-                    if (dataFile.recordCount() == 0) {
-                        continue;
-                    }
-                    if (files.contains(dataFile.path().toString())) {
-                        continue;
-                    }
-
-                    StructLike partition = fileScanTask.file().partition();
-                    partitionKeyToId.putIfAbsent(partition, partitionId++);
-
-                    files.add(dataFile.path().toString());
+            ImmutableMap.Builder<Long, PartitionKey> idToPartitionKey = ImmutableMap.builder();
+            if (table.isUnPartitioned()) {
+                idToPartitionKey.put(0L, new PartitionKey());
+            } else {
+                String catalogName = icebergTable.getCatalogName();
+                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
+                List<Long> ids = table.allocatePartitionIdByKey(partitionKeys);
+                for (int i = 0; i < partitionKeys.size(); i++) {
+                    idToPartitionKey.put(ids.get(i), partitionKeys.get(i));
                 }
-                scanOperatorPredicates.getSelectedPartitionIds().addAll(partitionKeyToId.values());
             }
+
+            Map<Long, PartitionKey> partitionKeyMap = idToPartitionKey.build();
+            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
+            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
         } else if (table instanceof PaimonTable) {
             PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()

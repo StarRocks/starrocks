@@ -68,7 +68,7 @@ public:
 
     // Returns the the newly created tablet metadata
     StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size);
+                                                const int64_t* txns, int txns_size, int64_t commit_time);
 
     void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
@@ -94,9 +94,13 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+    StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true) {
+        return get_txn_log(path, fill_cache);
+    }
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
@@ -150,11 +154,14 @@ public:
 
     void update_metacache_limit(size_t limit);
 
+    // The return value will never be null.
     Cache* metacache() { return _metacache.get(); }
+
+    StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
 
     void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
 

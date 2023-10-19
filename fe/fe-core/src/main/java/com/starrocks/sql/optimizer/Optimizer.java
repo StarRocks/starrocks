@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -170,15 +171,15 @@ public class Optimizer {
         Memo memo = context.getMemo();
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        // collect all olap scan operator
+        collectAllScanOperators(logicOperatorTree, rootTaskContext);
+
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(connectContext, logicOperatorTree, rootTaskContext);
         }
 
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
-
-        // collect all olap scan operator
-        collectAllScanOperators(memo, rootTaskContext);
 
         // Currently, we cache output columns in logic property.
         // We derive logic property Bottom Up firstly when new group added to memo,
@@ -396,6 +397,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -660,10 +662,9 @@ public class Optimizer {
         return expression;
     }
 
-    private void collectAllScanOperators(Memo memo, TaskContext rootTaskContext) {
-        OptExpression tree = memo.getRootGroup().extractLogicalTree();
+    private void collectAllScanOperators(OptExpression tree, TaskContext rootTaskContext) {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
-        Utils.extractOlapScanOperator(tree.getGroupExpression(), list);
+        Utils.extractOperator(tree, list, op -> op instanceof LogicalOlapScanOperator);
         rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
     }
 

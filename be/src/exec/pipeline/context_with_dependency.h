@@ -57,7 +57,7 @@ public:
     }
 
     // When the output operator is finished, the context can be finished regardless of other running operators.
-    Status set_finished() {
+    [[nodiscard]] Status set_finished() {
         _is_finished.store(true, std::memory_order_release);
         return Status::OK();
     }
