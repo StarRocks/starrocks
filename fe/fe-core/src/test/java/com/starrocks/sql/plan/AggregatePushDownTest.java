@@ -50,6 +50,16 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
+    public void test() throws Exception {
+        String sql = "select max(case when t1.v4 = 3 then 1\n" +
+                "                when t1.v5 = 5 then 2\n" +
+                "                else t0.v1 end), sum(v2 + 3)\n" +
+                "from t0 join t1 on t0.v1 = t1.v4 group by t0.v3 + t1.v6;";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testPushDownPreAgg() {
         connectContext.getSessionVariable().setCboPushDownAggregate("local");
         try {
