@@ -249,7 +249,7 @@ public class PaimonPredicateConverterTest {
     @Test
     public void testBinaryString() {
         ConstantOperator value = ConstantOperator.createVarchar("ttt");
-        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);;
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);
         Predicate result = CONVERTER.convert(op);
         Assert.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate = (LeafPredicate) result;
