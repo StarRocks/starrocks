@@ -20,7 +20,6 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/vacuum.h" // delete_files_async
-#include "testutil/sync_point.h"
 #include "util/lru_cache.h"
 
 namespace starrocks::lake {
