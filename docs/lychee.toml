@@ -80,6 +80,7 @@ headers = []
 # via a component that takes the path without the `.md`
 # extension, and lychee is looking for a valid path
 # including extension.
+
 exclude_path = ["docs/README.md", "docs/introduction/StarRocks_intro.md", "docs/assets/"]
 
 include = []
