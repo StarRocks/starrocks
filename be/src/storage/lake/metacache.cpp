@@ -1,0 +1,214 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/metacache.h"
+
+#include <bvar/bvar.h>
+
+#include "gen_cpp/lake_types.pb.h"
+#include "storage/del_vector.h"
+#include "storage/rowset/segment.h"
+#include "util/lru_cache.h"
+
+namespace starrocks::lake {
+
+static bvar::Adder<uint64_t> g_metadata_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_metadata_cache_hit_minute("lake", "metadata_cache_hit_minute",
+                                                                       &g_metadata_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_metadata_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_metadata_cache_miss_minute("lake", "metadata_cache_miss_minute",
+                                                                        &g_metadata_cache_miss, 60);
+
+static bvar::Adder<uint64_t> g_txnlog_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_hit_minute("lake", "txn_log_cache_hit_minute",
+                                                                     &g_txnlog_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_txnlog_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_txnlog_cache_miss_minute("lake", "txn_log_cache_miss_minute",
+                                                                      &g_txnlog_cache_miss, 60);
+
+static bvar::Adder<uint64_t> g_schema_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_schema_cache_hit_minute("lake", "schema_cache_hit_minute",
+                                                                     &g_schema_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_schema_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_schema_cache_miss_minute("lake", "schema_cache_miss_minute",
+                                                                      &g_schema_cache_miss, 60);
+
+static bvar::Adder<uint64_t> g_dv_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_dv_cache_hit_minute("lake", "delvec_cache_hit_minute", &g_dv_cache_hit,
+                                                                 60);
+
+static bvar::Adder<uint64_t> g_dv_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_dv_cache_miss_minute("lake", "delvec_cache_miss_minute", &g_dv_cache_miss,
+                                                                  60);
+
+static bvar::Adder<uint64_t> g_segment_cache_hit;
+static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_hit_minute("lake", "segment_cache_hit_minute",
+                                                                      &g_segment_cache_hit, 60);
+
+static bvar::Adder<uint64_t> g_segment_cache_miss;
+static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_miss_minute("lake", "segment_cache_miss_minute",
+                                                                       &g_segment_cache_miss, 60);
+
+static std::string tablet_latest_metadata_cache_key(int64_t tablet_id) {
+    return fmt::format("TL{}", tablet_id);
+}
+
+Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capacity)) {}
+
+Metacache::~Metacache() = default;
+
+void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
+    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
+    if (handle == nullptr) {
+        delete ptr;
+    } else {
+        _cache->release(handle);
+    }
+}
+
+std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_latest_metadata(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_metadata_cache_miss << 1;
+        return nullptr;
+    }
+    g_metadata_cache_hit << 1;
+    auto value = static_cast<CacheValue*>(_cache->value(handle));
+    auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
+    _cache->release(handle);
+    return metadata;
+}
+
+std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_metadata(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_metadata_cache_miss << 1;
+        return nullptr;
+    }
+    g_metadata_cache_hit << 1;
+    auto value = static_cast<CacheValue*>(_cache->value(handle));
+    auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
+    _cache->release(handle);
+    return metadata;
+}
+
+std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_txnlog_cache_miss << 1;
+        return nullptr;
+    }
+    g_txnlog_cache_hit << 1;
+    auto value = static_cast<CacheValue*>(_cache->value(handle));
+    auto log = std::get<std::shared_ptr<const TxnLogPB>>(*value);
+    _cache->release(handle);
+    return log;
+}
+
+std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_schema_cache_miss << 1;
+        return nullptr;
+    }
+    g_schema_cache_hit << 1;
+    auto value = static_cast<CacheValue*>(_cache->value(handle));
+    auto schema = std::get<std::shared_ptr<const TabletSchema>>(*value);
+    _cache->release(handle);
+    return schema;
+}
+
+std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_segment_cache_miss << 1;
+        return nullptr;
+    }
+    g_segment_cache_hit << 1;
+    auto value = static_cast<CacheValue*>(_cache->value(handle));
+    auto segment = std::get<std::shared_ptr<Segment>>(*value);
+    _cache->release(handle);
+    return segment;
+}
+
+std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) {
+    auto handle = _cache->lookup(CacheKey(key));
+    if (handle == nullptr) {
+        g_dv_cache_miss << 1;
+        return nullptr;
+    }
+    g_dv_cache_hit << 1;
+    auto value = static_cast<CacheValue*>(_cache->value(handle));
+    auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
+    _cache->release(handle);
+    return delvec;
+}
+
+void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
+    auto mem_cost = segment->mem_usage();
+    auto value = std::make_unique<CacheValue>(std::move(segment));
+    insert(key, value.release(), mem_cost);
+}
+
+void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec) {
+    auto mem_cost = delvec->memory_usage();
+    auto value = std::make_unique<CacheValue>(std::move(delvec));
+    insert(key, value.release(), mem_cost);
+}
+
+void Metacache::cache_tablet_latest_metadata(std::shared_ptr<const TabletMetadataPB> metadata) {
+    auto value_ptr = std::make_unique<CacheValue>(metadata);
+    insert(tablet_latest_metadata_cache_key(metadata->id()), value_ptr.release(), metadata->SpaceUsedLong());
+}
+
+void Metacache::cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata) {
+    auto value_ptr = std::make_unique<CacheValue>(metadata);
+    insert(key, value_ptr.release(), metadata->SpaceUsedLong());
+}
+
+void Metacache::cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log) {
+    auto value_ptr = std::make_unique<CacheValue>(log);
+    insert(key, value_ptr.release(), log->SpaceUsedLong());
+}
+
+void Metacache::cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size) {
+    auto cache_value = std::make_unique<CacheValue>(schema);
+    insert(key, cache_value.release(), size);
+}
+
+void Metacache::erase(std::string_view key) {
+    _cache->erase(CacheKey(key));
+}
+
+void Metacache::update_capacity(size_t new_capacity) {
+    size_t old_capacity = _cache->get_capacity();
+    int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
+    if (delta != 0) {
+        (void)_cache->adjust_capacity(delta);
+        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _cache->get_capacity();
+    }
+}
+
+void Metacache::prune() {
+    _cache->prune();
+}
+
+size_t Metacache::memory_usage() const {
+    return _cache->get_memory_usage();
+}
+
+} // namespace starrocks::lake

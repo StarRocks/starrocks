@@ -20,10 +20,8 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
-#include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/join_path.h"
-#include "storage/lake/location_provider.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -150,7 +148,7 @@ TEST_F(LakeMetadataCacheTest, test_segment_cache) {
     CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
 
     // no segment
-    auto sz0 = metacache->get_memory_usage();
+    auto sz0 = metacache->memory_usage();
 
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
     ASSERT_OK(reader->prepare());
@@ -158,7 +156,7 @@ TEST_F(LakeMetadataCacheTest, test_segment_cache) {
     ASSERT_OK(reader->open(params));
 
     // load segment without indexes
-    auto sz1 = metacache->get_memory_usage();
+    auto sz1 = metacache->memory_usage();
 
     auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
@@ -171,7 +169,7 @@ TEST_F(LakeMetadataCacheTest, test_segment_cache) {
     reader->close();
 
     // load segment with indexes, and remove index meta (index meta is larger than index)
-    auto sz2 = metacache->get_memory_usage();
+    auto sz2 = metacache->memory_usage();
     std::cout << "metadata cache memory usage: " << sz0 << "-" << sz1 << "-" << sz2;
     ASSERT_GT(sz1, sz0);
     ASSERT_LT(sz2, sz1);
