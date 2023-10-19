@@ -5,7 +5,7 @@
 verbose = "info"
 
 # Show progress
-progress = true
+progress = false
 
 # Path to summary output file.
 # output = "report.md"
@@ -73,10 +73,6 @@ headers = []
 # Exclude URLs from checking (supports regex)
 
  exclude = [
-   "hdfs://*",
-   "mysql:*",
-   "postgresql:*",
-   "jdbc:*",
    ]
 
 # Exclude these filesystem paths from getting checked.
@@ -88,7 +84,8 @@ exclude_path = ["./README.md", "./introduction/StarRocks_intro.md", "./assets/"]
 
 include = []
 
-include_verbatim = true
+# This prevents checking inside codeblocks
+include_verbatim = false
 
 # Exclude all private IPs from checking
 # Equivalent to setting `exclude_private`, `exclude_link_local`, and `exclude_loopback` to true
