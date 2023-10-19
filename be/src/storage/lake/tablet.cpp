@@ -220,16 +220,13 @@ StatusOr<bool> Tablet::has_delete_predicates(int64_t version) {
 }
 
 int64_t Tablet::data_size() {
-    int64_t size = 0;
-    if (_version_hint > 0) {
-        auto metadata = get_metadata(_version_hint);
-        if (metadata.ok()) {
-            for (const auto& rowset : metadata.value()->rowsets()) {
-                size += rowset.data_size();
-            }
-        }
+    auto size = _mgr->get_tablet_data_size(_id, &_version_hint);
+    if (size.ok()) {
+        return size.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet " << _id << " data size: " << size.status();
+        return 0;
     }
-    return size;
 }
 
 } // namespace starrocks::lake
