@@ -959,7 +959,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
     span->AddEvent("gen_delta_column_group");
     // 3. finalize and generate delta column group
-    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, new_del_vecs, index);
+    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, manager->mem_tracker(), new_del_vecs, index);
     if (!st.ok()) {
         failure_handler("finalize failed", st);
         return;
