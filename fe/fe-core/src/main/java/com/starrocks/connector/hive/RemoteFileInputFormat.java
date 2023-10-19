@@ -60,8 +60,7 @@ public enum RemoteFileInputFormat {
             case TEXT:
                 return THdfsFileFormat.TEXT;
             default:
-                break;
+                return THdfsFileFormat.UNKNOWN;
         }
-        return null;
     }
 }
