@@ -23,6 +23,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
+#include "testutil/sync_point.h"
 #include "util/dynamic_cache.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/trace.h"
@@ -190,6 +191,7 @@ public:
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
+        TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_write_log");
         if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
             auto rowset = _metadata->add_rowsets();
             rowset->CopyFrom(op_write.rowset());
@@ -290,6 +292,7 @@ private:
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
+        TEST_ERROR_POINT("NonPrimaryKeyTxnLogApplier::apply_schema_change_log");
         DCHECK_EQ(0, _metadata->rowsets_size());
         for (const auto& rowset : op_schema_change.rowsets()) {
             DCHECK(rowset.has_id());
