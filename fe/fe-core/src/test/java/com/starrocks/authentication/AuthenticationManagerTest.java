@@ -79,7 +79,7 @@ public class AuthenticationManagerTest {
 
         AuthenticationMgr masterManager = new AuthenticationMgr();
         Assert.assertNull(masterManager.checkPassword(
-                testUserWithIp.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed));
+                testUserWithIp.getUser(), testUserWithIp.getHost(), scramble, seed));
         Assert.assertFalse(masterManager.doesUserExist(testUser));
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -92,7 +92,7 @@ public class AuthenticationManagerTest {
         masterManager.createUser(stmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
         Assert.assertFalse(masterManager.doesUserExist(testUserWithIp));
-        UserIdentity user = masterManager.checkPassword(testUser.getQualifiedUser(),
+        UserIdentity user = masterManager.checkPassword(testUser.getUser(),
                 "10.1.1.1", new byte[0], new byte[0]);
         Assert.assertEquals(user, testUser);
 
@@ -105,7 +105,7 @@ public class AuthenticationManagerTest {
         masterManager.createUser(stmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
         Assert.assertTrue(masterManager.doesUserExist(testUserWithIp));
-        user = masterManager.checkPassword(testUser.getQualifiedUser(), testUserWithIp.getHost(), scramble, seed);
+        user = masterManager.checkPassword(testUser.getUser(), testUserWithIp.getHost(), scramble, seed);
         Assert.assertEquals(user, testUserWithIp);
 
         // make final snapshot
@@ -113,7 +113,7 @@ public class AuthenticationManagerTest {
         masterManager.save(finalImage.getDataOutputStream());
 
         // login from 10.1.1.2 with password will fail
-        user = masterManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
+        user = masterManager.checkPassword(testUser.getUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
 
         // start to replay
@@ -133,7 +133,7 @@ public class AuthenticationManagerTest {
                 info.getPluginVersion());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
         Assert.assertFalse(followerManager.doesUserExist(testUserWithIp));
-        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", new byte[0], new byte[0]);
+        user = followerManager.checkPassword(testUser.getUser(), "10.1.1.1", new byte[0], new byte[0]);
         Assert.assertEquals(user, testUser);
 
         // replay create test@10.1.1.1
@@ -147,20 +147,20 @@ public class AuthenticationManagerTest {
                 info.getPluginVersion());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
         Assert.assertTrue(followerManager.doesUserExist(testUserWithIp));
-        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
+        user = followerManager.checkPassword(testUser.getUser(), "10.1.1.1", scramble, seed);
         Assert.assertEquals(user, testUserWithIp);
 
         // login from 10.1.1.2 with password will fail
-        user = followerManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
+        user = followerManager.checkPassword(testUser.getUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
 
         // purely loaded from image
         AuthenticationMgr imageManager = AuthenticationMgr.load(finalImage.getDataInputStream());
         Assert.assertTrue(imageManager.doesUserExist(testUser));
         Assert.assertTrue(imageManager.doesUserExist(testUserWithIp));
-        user = imageManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.1", scramble, seed);
+        user = imageManager.checkPassword(testUser.getUser(), "10.1.1.1", scramble, seed);
         Assert.assertEquals(user, testUserWithIp);
-        user = imageManager.checkPassword(testUser.getQualifiedUser(), "10.1.1.2", scramble, seed);
+        user = imageManager.checkPassword(testUser.getUser(), "10.1.1.2", scramble, seed);
         Assert.assertNull(user);
     }
 
@@ -253,7 +253,7 @@ public class AuthenticationManagerTest {
 
         AuthenticationMgr manager = ctx.getGlobalStateMgr().getAuthenticationMgr();
         Assert.assertNull(manager.checkPassword(
-                testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+                testUser.getUser(), testUser.getHost(), scramble, seed));
         Assert.assertFalse(manager.doesUserExist(testUser));
         Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
@@ -265,20 +265,20 @@ public class AuthenticationManagerTest {
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertNull(manager.checkPassword(
-                testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+                testUser.getUser(), testUser.getHost(), scramble, seed));
         Assert.assertTrue(manager.doesUserExist(testUserWithIp));
 
         sql = "alter user test identified by 'abc'";
         stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(stmt, ctx);
         Assert.assertEquals(testUser,
-                manager.checkPassword(testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+                manager.checkPassword(testUser.getUser(), testUser.getHost(), scramble, seed));
         Assert.assertTrue(manager.doesUserExist(testUser));
 
         StatementBase dropStmt = UtFrameUtils.parseStmtWithNewParser("drop user test", ctx);
         DDLStmtExecutor.execute(dropStmt, ctx);
         Assert.assertNull(manager.checkPassword(
-                testUser.getQualifiedUser(), testUser.getHost(), scramble, seed));
+                testUser.getUser(), testUser.getHost(), scramble, seed));
         Assert.assertFalse(manager.doesUserExist(testUser));
 
         // can drop twice
@@ -321,14 +321,14 @@ public class AuthenticationManagerTest {
         masterManager.createUser(createStmt);
         Assert.assertTrue(masterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, masterManager.checkPassword(
-                testUser.getQualifiedUser(), "10.1.1.1", new byte[0], null));
+                testUser.getUser(), "10.1.1.1", new byte[0], null));
 
         // 3. alter user
         sql = "alter user test identified by 'abc'";
         AlterUserStmt alterUserStmt = (AlterUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.alterUser(alterUserStmt.getUserIdentity(), alterUserStmt.getAuthenticationInfo());
         Assert.assertEquals(testUser, masterManager.checkPassword(
-                testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+                testUser.getUser(), "10.1.1.1", scramble, seed));
 
         // 3.1 update user property
         sql = "set property for 'test' 'max_user_connections' = '555'";
@@ -361,13 +361,13 @@ public class AuthenticationManagerTest {
                 createInfo.getUserPrivilegeCollection(), createInfo.getPluginId(), createInfo.getPluginVersion());
         Assert.assertTrue(followerManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, followerManager.checkPassword(
-                testUser.getQualifiedUser(), "10.1.1.1", new byte[0], null));
+                testUser.getUser(), "10.1.1.1", new byte[0], null));
         // 7.2 replay alter user
         AlterUserInfo alterInfo = (AlterUserInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_USER_V2);
         followerManager.replayAlterUser(alterInfo.getUserIdentity(), alterInfo.getAuthenticationInfo());
         Assert.assertEquals(testUser, followerManager.checkPassword(
-                testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+                testUser.getUser(), "10.1.1.1", scramble, seed));
         // 7.2.1 replay update user property
         UserPropertyInfo userPropertyInfo = (UserPropertyInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PROP_V3);
@@ -384,7 +384,7 @@ public class AuthenticationManagerTest {
         AuthenticationMgr alterManager = AuthenticationMgr.load(alterImage.getDataInputStream());
         Assert.assertTrue(alterManager.doesUserExist(testUser));
         Assert.assertEquals(testUser, alterManager.checkPassword(
-                testUser.getQualifiedUser(), "10.1.1.1", scramble, seed));
+                testUser.getUser(), "10.1.1.1", scramble, seed));
         Assert.assertTrue(alterManager.doesUserExist(UserIdentity.ROOT));
 
         // 9. verify final image
@@ -473,7 +473,7 @@ public class AuthenticationManagerTest {
         while (it.hasNext()) {
             Map.Entry<UserIdentity, UserAuthenticationInfo> entry = it.next();
             UserIdentity userIdentity = entry.getKey();
-            if (userIdentity.getQualifiedUser().equals("sort_user")) {
+            if (userIdentity.getUser().equals("sort_user")) {
                 l.add(userIdentity.toString());
             }
         }

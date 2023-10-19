@@ -14,6 +14,7 @@
 
 package com.starrocks.jni.connector;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface ColumnValue {
@@ -40,4 +41,6 @@ public interface ColumnValue {
     void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values);
 
     byte getByte();
+
+    BigDecimal getDecimal();
 }

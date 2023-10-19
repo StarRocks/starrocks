@@ -21,6 +21,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/tablet_schema.h"
@@ -69,7 +70,7 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, const TabletMet
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet) {
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     std::unique_ptr<Rowset> rowset_ptr =
-            std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
+            std::make_unique<Rowset>(*tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()));
 
     RETURN_IF_ERROR(_do_load_upserts_deletes(op_write, tablet_schema, tablet, rowset_ptr.get()));
 
@@ -448,18 +449,18 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 }
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, std::vector<std::string>* orphan_files) {
-    // const_cast for paritial update to rewrite segment file in op_write
-    RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
+                                          Tablet* tablet, std::map<int, std::string>* replace_segments,
+                                          std::vector<std::string>* orphan_files) {
+    const RowsetMetadata& rowset_meta = op_write.rowset();
     auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     // get rowset schema
-    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->segments_size() == 0 ||
+    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta.num_rows() == 0 ||
         op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    CHECK(op_write.rewrite_segments_size() == rowset_meta->segments_size());
+    CHECK(op_write.rewrite_segments_size() == rowset_meta.segments_size());
     // currently assume it's a partial update
     const auto& txn_meta = op_write.txn_meta();
     // columns supplied in rowset
@@ -477,10 +478,11 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         }
     }
 
-    std::vector<bool> need_rename(rowset_meta->segments_size(), true);
-    for (int i = 0; i < rowset_meta->segments_size(); i++) {
-        auto src_path = rowset_meta->segments(i);
+    std::vector<bool> need_rename(rowset_meta.segments_size(), true);
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+        const auto& src_path = rowset_meta.segments(i);
         const auto& dest_path = op_write.rewrite_segments(i);
+        DCHECK(src_path != dest_path);
 
         int64_t t_rewrite_start = MonotonicMillis();
         if (op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
@@ -502,16 +504,16 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         int64_t t_rewrite_end = MonotonicMillis();
         LOG(INFO) << strings::Substitute(
                 "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6]",
-                tablet->id(), rowset_meta->id(), i, read_column_ids.size(), t_rewrite_end - t_rewrite_start, src_path,
+                tablet->id(), rowset_meta.id(), i, read_column_ids.size(), t_rewrite_end - t_rewrite_start, src_path,
                 dest_path);
     }
 
     // rename segment file
-    for (int i = 0; i < rowset_meta->segments_size(); i++) {
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
         if (need_rename[i]) {
             // after rename, add old segment to orphan files, for gc later.
-            orphan_files->push_back(rowset_meta->segments(i));
-            rowset_meta->set_segments(i, op_write.rewrite_segments(i));
+            orphan_files->push_back(rowset_meta.segments(i));
+            (*replace_segments)[i] = op_write.rewrite_segments(i);
         }
     }
     TRACE("end rewrite segment");

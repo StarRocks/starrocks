@@ -209,6 +209,24 @@ Status Rowset::reload_segment(int32_t segment_id) {
     return Status::OK();
 }
 
+Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema) {
+    DCHECK(_segments.size() > segment_id);
+    if (_segments.size() <= segment_id) {
+        LOG(WARNING) << "Error segment id: " << segment_id;
+        return Status::InternalError("Error segment id");
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    size_t footer_size_hint = 16 * 1024;
+    std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
+    auto res = Segment::open(fs, seg_path, segment_id, schema, &footer_size_hint);
+    if (!res.ok()) {
+        LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+        return res.status();
+    }
+    _segments[segment_id] = std::move(res).value();
+    return Status::OK();
+}
+
 int64_t Rowset::total_segment_data_size() {
     int64_t res = 0;
     for (auto& seg : _segments) {
@@ -643,9 +661,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     return Status::OK();
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema, KVStore* meta,
-                                                                       int64_t version, OlapReaderStatistics* stats,
-                                                                       KVStore* dcg_meta) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema,
+                                                                       const TabletSchemaCSPtr& tablet_schema,
+                                                                       KVStore* meta, int64_t version,
+                                                                       OlapReaderStatistics* stats, KVStore* dcg_meta) {
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
@@ -655,6 +674,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;
+    seg_options.tablet_schema = tablet_schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
 
@@ -711,6 +731,32 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
         seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
+}
+
+StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
+                                                            OlapReaderStatistics* stats) {
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    seg_options.stats = stats;
+    seg_options.tablet_id = rowset_meta()->tablet_id();
+    seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+
+    // open update file
+    DCHECK(update_file_id < num_update_files());
+    std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), update_file_id);
+    ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_path, update_file_id, _schema));
+    if (seg_ptr->num_rows() == 0) {
+        return new_empty_iterator(schema, config::vector_chunk_size);
+    }
+    // create iterator
+    auto res = seg_ptr->new_iterator(schema, seg_options);
+    if (res.status().is_end_of_file()) {
+        return new_empty_iterator(schema, config::vector_chunk_size);
+    }
+    if (!res.ok()) {
+        return res.status();
+    }
+    return std::move(res).value();
 }
 
 Status Rowset::get_segment_sk_index(std::vector<std::string>* sk_index_values) {
@@ -830,7 +876,7 @@ Status Rowset::verify() {
         }
     }
     if (!st.ok()) {
-        st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
+        (void)st.clone_and_append(strings::Substitute("rowset:$0 path:$1", rowset_id().to_string(), rowset_path()));
     }
     return st;
 }

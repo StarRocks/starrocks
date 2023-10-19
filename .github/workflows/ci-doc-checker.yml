@@ -78,7 +78,7 @@ jobs:
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - uses: articulate/actions-markdownlint@v1.1.0
         with:
@@ -86,6 +86,18 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+      - name: docusaurus-mdx-checker
+        if: always()
+        run: |
+          npx docusaurus-mdx-checker -c docs
+      - name: link check
+        if: always()
+        uses: lycheeverse/lychee-action@v1.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
 
   behavior-unchange:
     runs-on: ubuntu-latest

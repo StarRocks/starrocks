@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
@@ -118,6 +117,8 @@ public class OptimizerTaskTest {
         column4 = columnRefFactory.create("t4", ScalarType.INT, true);
         column5 = columnRefFactory.create("t5", ScalarType.INT, true);
         column6 = columnRefFactory.create("t6", ScalarType.INT, true);
+
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     @After
@@ -760,13 +761,13 @@ public class OptimizerTaskTest {
             tmp.setDumpInfo(new MockDumpInfo());
             OptExpression expression1 = optimizer.optimize(tmp, expression, new PhysicalPropertySet(), outputColumns,
                     columnRefFactory);
-            Map<ColumnRefOperator, CallOperator> aggs = ((PhysicalHashAggregateOperator) expression1.getOp()).getAggregations();
+            Map<ColumnRefOperator, CallOperator> aggs =
+                    ((PhysicalHashAggregateOperator) expression1.getOp()).getAggregations();
             assertEquals(Type.INT, column2.getType());
             assertEquals(Type.BIGINT, aggs.get(column2).getType());
         } catch (Exception e) {
             fail("sql should execute normally");
         }
-
 
     }
 
@@ -881,7 +882,6 @@ public class OptimizerTaskTest {
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
 
-
     }
 
     @Test
@@ -930,7 +930,6 @@ public class OptimizerTaskTest {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
-
 
     }
 
@@ -1166,8 +1165,6 @@ public class OptimizerTaskTest {
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
 
-
-
     }
 
     @Test
@@ -1231,7 +1228,6 @@ public class OptimizerTaskTest {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
-
 
     }
 
@@ -1579,7 +1575,10 @@ public class OptimizerTaskTest {
 
         ColumnRefOperator column7 = columnRefFactory.getColumnRef(7);
         assertTrue(projection.getCommonSubOperatorMap().containsKey(column7));
-        assertEquals(projection.getCommonSubOperatorMap().get(column7), add1);
+        assertTrue(projection.getCommonSubOperatorMap().get(column7) instanceof CallOperator);
+        CallOperator res = (CallOperator) projection.getCommonSubOperatorMap().get(column7);
+        add1.setFunction(res.getFunction());
+        assertEquals(res, add1);
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();

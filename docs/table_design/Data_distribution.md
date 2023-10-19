@@ -183,7 +183,7 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 > **NOTICE**
 >
-> Since v3.1,  StarRocks's [shared-data mode](../deployment/deploy_shared_data.md) supports the time function expression and does not support the column expression.
+> Since v3.1,  StarRocks's [shared-data mode](../deployment/shared_data/s3.md) supports the time function expression and does not support the column expression.
 
 Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy-to-use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or enum values.
 
@@ -546,7 +546,7 @@ Buckets reflect how data files are actually organized in StarRocks.
     DISTRIBUTED BY HASH(site_id,city_code); -- do not need to set the number of buckets
       ```
 
-    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md) to view the bucket number automatically set by StarRocks.
+    To enable this feature, make sure that the FE dynamic parameter `enable_auto_tablet_distribution` is set to `TRUE`. After a table is created, you can execute [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW.md) to view the bucket number automatically set by StarRocks.
 
     > **NOTICE**
     >

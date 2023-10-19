@@ -113,7 +113,7 @@ After the compatibility configuration and the availability test, you can downgra
    >
    > If you are downgrading StarRocks v3.0 to v2.5, you must follow these steps after the downgrade:
    >
-   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) to create a new image.
+   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
    > 2. Wait for the new image to be synchronized to all Follower FEs.
    >
    > If you do not run this command, some of the downgrade operations may fail. ALTER SYSTEM CREATE IMAGE is supported from v2.5.3 and later.

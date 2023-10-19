@@ -297,6 +297,10 @@ struct TIcebergDeleteFile {
     4: optional i64 length
 }
 
+struct TDataCacheOptions {
+    1: optional i32 priority
+}
+
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -346,6 +350,11 @@ struct THdfsScanRange {
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
+
+    17: optional TDataCacheOptions datacache_options
+
+    // identity partition column slots
+    18: optional list<Types.TSlotId> identity_partition_slot_ids;
 }
 
 struct TBinlogScanRange {
@@ -1020,6 +1029,8 @@ struct THdfsScanNode {
     14: optional bool can_use_any_column;
 
     15: optional bool can_use_min_max_count_opt;
+
+    16: optional bool use_partition_column_value_only;
 }
 
 struct TProjectNode {
@@ -1031,6 +1042,7 @@ struct TProjectNode {
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
+    2: optional list<Descriptors.TColumn> columns
 }
 
 struct TDecodeNode {

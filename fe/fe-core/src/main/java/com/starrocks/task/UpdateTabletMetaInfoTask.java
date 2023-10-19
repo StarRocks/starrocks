@@ -37,13 +37,14 @@ package com.starrocks.task;
 import com.google.common.collect.Lists;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import org.apache.commons.lang3.tuple.Triple;
@@ -68,6 +69,10 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
     private BinlogConfig binlogConfig;
 
     private TTabletMetaType metaType;
+
+    private TTabletType tabletType;
+
+    private long txnId;
 
     // <tablet id, tablet schema hash, tablet in memory> or
     // <tablet id, tablet schema hash, tablet enable persistent index>
@@ -99,6 +104,16 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
             this.enablePersistentIndex = metaValue;
         }
         this.latch = latch;
+    }
+
+    public UpdateTabletMetaInfoTask(long backendId,
+                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
+                                    boolean metaValue,
+                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
+                                    TTabletMetaType metaType, TTabletType tabletType, long txnId) {
+        this(backendId, tableIdWithSchemaHash, metaValue, latch, metaType);
+        this.tabletType = tabletType;
+        this.txnId = txnId;
     }
 
     public UpdateTabletMetaInfoTask(long backendId,
@@ -281,6 +296,12 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
 
         }
         updateTabletMetaInfoReq.setTabletMetaInfos(metaInfos);
+
+        if (tabletType != null) {
+            updateTabletMetaInfoReq.setTablet_type(tabletType);
+            updateTabletMetaInfoReq.setTxn_id(txnId);
+        }
+
         return updateTabletMetaInfoReq;
     }
 }

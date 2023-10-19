@@ -1047,11 +1047,11 @@ void Tablet::delete_all_files() {
     // removing hash_map item and iterating hash_map concurrently.
     std::shared_lock rdlock(_meta_lock);
     for (const auto& it : _rs_version_map) {
-        it.second->remove();
+        (void)it.second->remove();
     }
     _rs_version_map.clear();
     for (const auto& it : _inc_rs_version_map) {
-        it.second->remove();
+        (void)it.second->remove();
     }
     _inc_rs_version_map.clear();
     _stale_rs_version_map.clear();
@@ -1337,6 +1337,9 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
 void Tablet::do_tablet_meta_checkpoint() {
     std::unique_lock store_lock(_meta_store_lock);
+    if (_will_be_force_replaced) {
+        return;
+    }
     if (_newly_created_rowset_num == 0) {
         return;
     }
@@ -1719,12 +1722,17 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
-void Tablet::update_max_version_schema(const TabletSchemaSPtr& tablet_schema) {
+void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
     std::lock_guard wrlock(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
-        _max_version_schema = tablet_schema;
+        if (tablet_schema->id() == TabletSchema::invalid_id()) {
+            _max_version_schema = tablet_schema;
+        } else {
+            _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
+        }
     }
+    _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
 }
 
 const TabletSchema& Tablet::unsafe_tablet_schema_ref() const {

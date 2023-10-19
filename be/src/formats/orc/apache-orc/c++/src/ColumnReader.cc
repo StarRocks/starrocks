@@ -1296,6 +1296,8 @@ void ListColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 }
 
 void ListColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
+    ColumnReader::seekToRowGroup(positions);
+    rle->seek(positions->at(columnId));
     if (child) {
         child->lazyLoadSeekToRowGroup(positions);
     }
@@ -1485,6 +1487,8 @@ void MapColumnReader::seekToRowGroup(PositionProviderMap* positions) {
 
 void MapColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
     // TODO If struct/map want to support lazy load, here need to handle null carefully
+    ColumnReader::seekToRowGroup(positions);
+    rle->seek(positions->at(columnId));
     if (keyReader) {
         keyReader->lazyLoadSeekToRowGroup(positions);
     }

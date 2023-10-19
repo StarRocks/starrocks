@@ -100,6 +100,14 @@ public class PartitionUtilTest {
     }
 
     @Test
+    public void testPaimonPartitionKey() throws AnalysisException {
+        PartitionKey partitionKey = createPartitionKey(
+                Lists.newArrayList("1", "a", "3.0", "__DEFAULT_PARTITION__"), partColumns,
+                Table.TableType.PAIMON);
+        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
+    }
+
+    @Test
     public void testCreateDeltaLakePartitionKey() throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
                 Lists.newArrayList("1", "a", "3.0", DeltaLakeTable.PARTITION_NULL_VALUE), partColumns,
@@ -261,7 +269,7 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn);
+        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
         PartitionKey upperBound = new PartitionKey();

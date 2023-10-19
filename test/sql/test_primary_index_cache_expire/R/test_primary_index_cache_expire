@@ -32,6 +32,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "primary_index_cache_expire_sec" = "3600",
 "compression" = "LZ4"
 );
@@ -62,6 +63,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -84,6 +86,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "primary_index_cache_expire_sec" = "7200",
 "compression" = "LZ4"
 );

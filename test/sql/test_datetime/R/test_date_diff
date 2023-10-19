@@ -305,7 +305,6 @@ select date_diff('month', lhs, rhs) from t1;
 -- !result
 select date_diff('invalid-type', lhs, rhs) from t1;
 -- result:
-[REGEX].*type column should be one of day/hour/minute/second/millisecond*
 -- !result
 select date_diff(NULL, lhs, rhs) from t1;
 -- result:

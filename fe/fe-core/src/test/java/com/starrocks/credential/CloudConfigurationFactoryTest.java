@@ -116,7 +116,7 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
-    public void testAzurASLS1eCloudConfiguration() {
+    public void testAzureASLS1eCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>() {
             {
                 put(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT, "XX");
@@ -209,6 +209,29 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+    public void testTencentCloudConfiguration() {
+        Map<String, String> map = new HashMap<String, String>() {
+            {
+                put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "XX");
+                put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "YY");
+                put(CloudConfigurationConstants.TENCENT_COS_ENDPOINT, "ZZ");
+            }
+        };
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertNotNull(cc);
+        Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
+        TCloudConfiguration tc = new TCloudConfiguration();
+        cc.toThrift(tc);
+        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        cc.toFileStoreInfo();
+        Assert.assertEquals(cc.toConfString(),
+                "TencentCloudConfiguration{resources='', jars='', cred=TencentCloudCredential{accessKey='XX', secretKey='YY', " +
+                        "endpoint='ZZ'}}");
+    }
+
+    @Test
     public void testDefaultCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>();
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
@@ -228,6 +251,6 @@ public class CloudConfigurationFactoryTest {
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
         Assert.assertEquals(cred.toCredString(),
                 "AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, accessKey='', secretKey='', " +
-                        "sessionToken='', iamRoleArn='', externalId='', region='', endpoint=''}");
+                        "sessionToken='', iamRoleArn='', externalId='', region='us-east-1', endpoint=''}");
     }
 }

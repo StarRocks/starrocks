@@ -579,7 +579,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             // automatic bucket
             std::set<int64_t> immutable_partition_ids;
             if (_tablet_sink_sender->get_immutable_partition_ids(&immutable_partition_ids)) {
-                _update_immutable_partition(immutable_partition_ids);
+                RETURN_IF_ERROR(_update_immutable_partition(immutable_partition_ids));
             }
 
             // _enable_automatic_partition is true means destination table using automatic partition

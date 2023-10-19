@@ -12,7 +12,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Introduction](../introduction/what_is_starrocks)
 - [Architecture](../introduction/Architecture)
-- [Shared-data cluster](../deployment/deploy_shared_data)
+- [Shared-data cluster](../deployment/shared_data/s3)
 - [Features](../introduction/Features)
 
 </NavBoxPartItem>
@@ -119,7 +119,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="References​">
 <NavBoxPartItem>
 
-- [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER)
+- [SQL reference](../sql-reference/sql-statements/account-management/ALTER_USER)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz)
 - [Data type](../sql-reference/sql-statements/data-types/TINYINT)
 

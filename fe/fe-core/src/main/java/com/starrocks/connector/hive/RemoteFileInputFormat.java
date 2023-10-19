@@ -16,7 +16,6 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.THdfsFileFormat;
 
 import static com.starrocks.connector.hive.HiveClassNames.HUDI_PARQUET_INPUT_FORMAT;
@@ -25,10 +24,10 @@ import static com.starrocks.connector.hive.HiveClassNames.ORC_INPUT_FORMAT_CLASS
 import static com.starrocks.connector.hive.HiveClassNames.TEXT_INPUT_FORMAT_CLASS;
 
 public enum RemoteFileInputFormat {
-    UNKNOWN,
     PARQUET,
     ORC,
-    TEXT;
+    TEXT,
+    UNKNOWN;
 
     private static final ImmutableMap<String, RemoteFileInputFormat> VALID_INPUT_FORMATS =
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
@@ -45,11 +44,7 @@ public enum RemoteFileInputFormat {
                     .build();
 
     public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {
-        RemoteFileInputFormat fileInputFormat = VALID_INPUT_FORMATS.get(className);
-        if (fileInputFormat == null) {
-            throw new StarRocksConnectorException("Unsupported file format: %s", className);
-        }
-        return fileInputFormat;
+        return VALID_INPUT_FORMATS.getOrDefault(className, UNKNOWN);
     }
 
     public static boolean isSplittable(String className) {
@@ -65,8 +60,7 @@ public enum RemoteFileInputFormat {
             case TEXT:
                 return THdfsFileFormat.TEXT;
             default:
-                break;
+                return THdfsFileFormat.UNKNOWN;
         }
-        return null;
     }
 }

@@ -58,6 +58,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -227,11 +228,11 @@ INSERT INTO t VALUES (5);
 -- !result
 SELECT * FROM t ORDER BY id;
 -- result:
-1	1
-2	2
-3	3
-4	4
-5	5
+1
+2
+3
+4
+5
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -467,6 +468,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -537,6 +539,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -569,6 +572,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result

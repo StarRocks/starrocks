@@ -49,11 +49,14 @@ public class LogicalSlot {
      * Set when creating this slot. It is just used in {@code show running queries} and not accurate enough.
      */
     private final long startTimeMs;
+    private final int numFragments;
+    private int pipelineDop;
 
     private State state = State.CREATED;
 
     public LogicalSlot(TUniqueId slotId, String requestFeName, long groupId, int numPhysicalSlots,
-                       long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs) {
+                       long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
+                       int numFragments, int pipelineDop) {
         this.slotId = slotId;
         this.requestFeName = requestFeName;
         this.groupId = groupId;
@@ -62,6 +65,8 @@ public class LogicalSlot {
         this.expiredAllocatedTimeMs = expiredAllocatedTimeMs;
         this.feStartTimeMs = feStartTimeMs;
         this.startTimeMs = System.currentTimeMillis();
+        this.numFragments = numFragments;
+        this.pipelineDop = pipelineDop;
     }
 
     public State getState() {
@@ -96,14 +101,17 @@ public class LogicalSlot {
                 .setNum_slots(numPhysicalSlots)
                 .setExpired_pending_time_ms(expiredPendingTimeMs)
                 .setExpired_allocated_time_ms(expiredAllocatedTimeMs)
-                .setFe_start_time_ms(feStartTimeMs);
+                .setFe_start_time_ms(feStartTimeMs)
+                .setNum_fragments(numFragments)
+                .setPipeline_dop(pipelineDop);
 
         return tslot;
     }
 
     public static LogicalSlot fromThrift(TResourceLogicalSlot tslot) {
         return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getGroup_id(), tslot.getNum_slots(),
-                tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms(), tslot.getFe_start_time_ms());
+                tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms(), tslot.getFe_start_time_ms(),
+                tslot.getNum_fragments(), tslot.getPipeline_dop());
     }
 
     public TUniqueId getSlotId() {
@@ -144,6 +152,26 @@ public class LogicalSlot {
 
     public long getStartTimeMs() {
         return startTimeMs;
+    }
+
+    public int getNumDrivers() {
+        return numFragments * pipelineDop;
+    }
+
+    public int getNumFragments() {
+        return numFragments;
+    }
+
+    public boolean isAdaptiveDop() {
+        return pipelineDop == 0;
+    }
+
+    public int getPipelineDop() {
+        return pipelineDop;
+    }
+
+    public void setPipelineDop(int pipelineDop) {
+        this.pipelineDop = pipelineDop;
     }
 
     @Override

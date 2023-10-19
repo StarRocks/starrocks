@@ -71,10 +71,10 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -172,6 +172,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private long startTime;
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
+    @SerializedName(value = "sortKeyUniqueIds")
+    private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
     private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
@@ -227,6 +229,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
         this.sortKeyIdxes = sortKeyIdxes;
+    }
+    
+    public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
+        this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
 
     /**
@@ -294,6 +300,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
+                    int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
@@ -313,6 +320,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
 
                     List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
+                    List<Integer> copiedSortKeyUniqueIds = index.getSortKeyUniqueIds();
+                    // TODO
+                    // the following code appears to be deletable 
                     if (index.getSortKeyIdxes() != null) {
                         if (originSchema.size() > shadowSchema.size()) {
                             List<Column> differences = originSchema.stream().filter(element ->
@@ -345,6 +355,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
                         sortKeyIdxes = copiedSortKeyIdxes;
                     }
+                    // reorder, change sort key columns
+                    if (sortKeyUniqueIds != null) {
+                        copiedSortKeyUniqueIds = sortKeyUniqueIds;
+                    }
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         List<Replica> shadowReplicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
@@ -353,7 +367,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             countDownLatch.addMark(backendId, shadowTabletId);
                             CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
-                                    shadowShortKeyColumnCount, shadowSchemaHash,
+                                    shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
                                     Partition.PARTITION_INIT_VERSION,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
                                     copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
@@ -361,7 +375,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     tbl.enablePersistentIndex(),
                                     tbl.primaryIndexCacheExpireSec(),
                                     tbl.getPartitionInfo().getTabletType(partitionId),
-                                    tbl.getCompressionType(), copiedSortKeyIdxes);
+                                    tbl.getCompressionType(), copiedSortKeyIdxes,
+                                    sortKeyUniqueIds);
                             createReplicaTask.setBaseTablet(
                                     partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);
@@ -446,12 +461,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            long orgIndexId = indexIdMap.get(shadowIdxId);
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
+                    sortKeyUniqueIds);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         tbl.rebuildFullSchema();
@@ -784,7 +806,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 // modify column
                 for (Column col : shadowSchema) {
                     if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, col.getName()));
                     }
                 }
             } else if (shadowSchema.size() < originSchema.size()) {

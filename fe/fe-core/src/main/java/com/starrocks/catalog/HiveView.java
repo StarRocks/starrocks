@@ -79,4 +79,8 @@ public class HiveView extends Table {
     public String getInlineViewDef() {
         return inlineViewDef;
     }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
 }

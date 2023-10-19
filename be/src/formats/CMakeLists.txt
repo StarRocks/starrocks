@@ -43,6 +43,7 @@ add_library(Formats STATIC
         orc/orc_mapping.cpp
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
+        orc/orc_schema_builder.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc

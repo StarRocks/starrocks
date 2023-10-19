@@ -169,10 +169,10 @@ SIMDJSON_SOURCE=simdjson-2.2.0
 SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
 
 # curl
-CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
-CURL_NAME=curl-7.79.0.tar.gz
-CURL_SOURCE=curl-7.79.0
-CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
+CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"
+CURL_NAME=curl-8.4.0.tar.gz
+CURL_SOURCE=curl-8.4.0
+CURL_MD5SUM="533e8a3b1228d5945a6a512537bea4c7"
 
 # RE2
 RE2_DOWNLOAD="https://github.com/google/re2/archive/refs/tags/2022-12-01.tar.gz"
@@ -210,6 +210,12 @@ SASL_NAME=cyrus-sasl-2.1.28.tar.gz
 SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
+# kerberos MIT
+KRB5_DOWNLOAD="https://kerberos.org/dist/krb5/1.19/krb5-1.19.4.tar.gz"
+KRB5_NAME=krb5-1.19.4.tar.gz
+KRB5_SOURCE=krb5-1.19.4
+KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
+
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
 LIBRDKAFKA_NAME=librdkafka-2.0.2.tar.gz
@@ -217,10 +223,10 @@ LIBRDKAFKA_SOURCE=librdkafka-2.0.2
 LIBRDKAFKA_MD5SUM="c0120dc32acc129bfb4656fe17568da1"
 
 # pulsar
-PULSAR_DOWNLOAD="https://github.com/apache/pulsar/archive/refs/tags/v2.10.1.tar.gz"
-PULSAR_NAME=pulsar-2.10.1.tar.gz
-PULSAR_SOURCE=pulsar-2.10.1
-PULSAR_MD5SUM="3c387e7a8be4545a39e00611ed051918"
+PULSAR_DOWNLOAD="https://github.com/apache/pulsar-client-cpp/archive/refs/tags/v3.3.0.tar.gz"
+PULSAR_NAME=pulsar-client-3.3.0.tar.gz
+PULSAR_SOURCE=pulsar-client-cpp-3.3.0
+PULSAR_MD5SUM="348b7e5ec39e50547668520d13a417a1"
 
 # zstd
 ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.0.tar.gz"
@@ -355,12 +361,6 @@ STREAMVBYTE_NAME="streamvbyte-0.5.1.tar.gz"
 STREAMVBYTE_SOURCE="streamvbyte-0.5.1"
 STREAMVBYTE_MD5SUM="251d9200d27dda9120653b4928a23a86"
 
-# broker_thridparty_jars
-BROKER_THIRDPARTY_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz"
-BROKER_THIRDPARTY_JARS_NAME="broker_thirdparty_jars.tar.gz"
-BROKER_THIRDPARTY_JARS_SOURCE="broker_thirdparty_jars"
-BROKER_THIRDPARTY_JARS_MD5SUM="8e9a8c2ef3b19709dd0cc37e26a60c83"
-
 # jansson
 JANSSON_DOWNLOAD="https://github.com/akheron/jansson/releases/download/v2.14/jansson-2.14.tar.gz"
 JANSSON_NAME="jansson-2.14.tar.gz"
@@ -411,7 +411,7 @@ LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STARCACHE STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR \
-            LZO2 DATASKETCHES ASYNC_PROFILER FIU LIBDEFLATE LLVM"
+            BENCHMARK FAST_FLOAT CACHELIB STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
+            ASYNC_PROFILER FIU LIBDEFLATE LLVM"

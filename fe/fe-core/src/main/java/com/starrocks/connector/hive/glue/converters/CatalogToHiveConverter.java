@@ -16,10 +16,11 @@
 package com.starrocks.connector.hive.glue.converters;
 
 import com.amazonaws.services.glue.model.ErrorDetail;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.connector.hive.glue.util.HiveTableValidator;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -47,9 +48,13 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.unified.UnifiedMetadata.isDeltaLakeTable;
+import static com.starrocks.connector.unified.UnifiedMetadata.isIcebergTable;
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 
 public class CatalogToHiveConverter {
@@ -153,12 +158,22 @@ public class CatalogToHiveConverter {
         Date lastAccessedTime = catalogTable.getLastAccessTime();
         hiveTable.setLastAccessTime(lastAccessedTime == null ? 0 : (int) (lastAccessedTime.getTime() / 1000));
         hiveTable.setRetention(catalogTable.getRetention());
-        // for iceberg table, don't need to set StorageDescriptor
-        // just use metadata location in parameters that checked in HiveTableValidator
-        // TODO(zombee0), check hudi deltalake
-        if (!HiveTableValidator.isIcebergTable(catalogTable)) {
-            hiveTable.setSd(convertStorageDescriptor(catalogTable.getStorageDescriptor()));
+
+        Optional<StorageDescriptor> optionalStorageDescriptor = Optional.ofNullable(catalogTable.getStorageDescriptor())
+                .map(CatalogToHiveConverter::convertStorageDescriptor);
+        // Provide dummy storage descriptor for compatibility if not explicitly configured
+        if (!optionalStorageDescriptor.isPresent() && (isIcebergTable(catalogTable.getParameters()) ||
+                isDeltaLakeTable(catalogTable.getParameters()))) {
+            StorageDescriptor sd = new StorageDescriptor();
+            sd.setCols(ImmutableList.of());
+            sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
+            optionalStorageDescriptor = Optional.of(sd);
         }
+
+        if (!optionalStorageDescriptor.isPresent()) {
+            throw new StarRocksConnectorException("Table StorageDescriptor is null for table " + catalogTable.getName());
+        }
+        hiveTable.setSd(optionalStorageDescriptor.get());
         hiveTable.setPartitionKeys(convertFieldSchemaList(catalogTable.getPartitionKeys()));
         // Hive may throw a NPE during dropTable if the parameter map is null.
         Map<String, String> parameterMap = catalogTable.getParameters();

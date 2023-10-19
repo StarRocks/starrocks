@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <boost/algorithm/string.hpp>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -113,11 +114,11 @@ public:
 
     // propreties encapsulated in TabletSchema
     KeysType keys_type() const;
-    size_t num_columns() const;
-    size_t num_key_columns() const;
-    size_t num_rows_per_row_block() const;
+    size_t num_columns_with_max_version() const;
+    size_t num_key_columns_with_max_version() const;
+    size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
-    size_t field_index(const string& field_name) const;
+    size_t field_index_with_max_version(const string& field_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
@@ -275,6 +276,12 @@ public:
 
     bool enable_compaction();
 
+    std::string get_storage_type() const { return _tablet_meta->get_storage_type(); }
+
+    const bool is_column_with_row_store() const {
+        return boost::algorithm::to_lower_copy(get_storage_type()) == "column_with_row";
+    }
+
     [[nodiscard]] bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
@@ -299,7 +306,7 @@ public:
 
     const TabletSchemaCSPtr thread_safe_get_tablet_schema() const;
 
-    void update_max_version_schema(const TabletSchemaSPtr& tablet_schema);
+    void update_max_version_schema(const TabletSchemaCSPtr& tablet_schema);
 
     int64_t data_size();
 
@@ -313,6 +320,8 @@ public:
     [[nodiscard]] Status verify();
 
     void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
+
+    void set_will_be_force_replaced() { _will_be_force_replaced = true; }
 
 protected:
     void on_shutdown() override;
@@ -425,6 +434,11 @@ private:
     std::unique_ptr<BinlogManager> _binlog_manager;
 
     std::unordered_map<int64_t, int64_t> _in_writing_txn_size;
+
+    // this variable indicate tablet will be replaced in TabletManger by
+    // another tablet with the same tablet id
+    // currently, it will be used in Restore process
+    bool _will_be_force_replaced = false;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -455,15 +469,15 @@ inline KeysType Tablet::keys_type() const {
     return tablet_schema()->keys_type();
 }
 
-inline size_t Tablet::num_columns() const {
+inline size_t Tablet::num_columns_with_max_version() const {
     return tablet_schema()->num_columns();
 }
 
-inline size_t Tablet::num_key_columns() const {
+inline size_t Tablet::num_key_columns_with_max_version() const {
     return tablet_schema()->num_key_columns();
 }
 
-inline size_t Tablet::num_rows_per_row_block() const {
+inline size_t Tablet::num_rows_per_row_block_with_max_version() const {
     return tablet_schema()->num_rows_per_row_block();
 }
 
@@ -471,7 +485,7 @@ inline size_t Tablet::next_unique_id() const {
     return tablet_schema()->next_column_unique_id();
 }
 
-inline size_t Tablet::field_index(const string& field_name) const {
+inline size_t Tablet::field_index_with_max_version(const string& field_name) const {
     return tablet_schema()->field_index(field_name);
 }
 

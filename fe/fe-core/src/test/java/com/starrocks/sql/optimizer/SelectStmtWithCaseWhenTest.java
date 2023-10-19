@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -61,6 +62,7 @@ class SelectStmtWithCaseWhenTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable(createTblStmtStr);
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")

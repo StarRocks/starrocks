@@ -21,6 +21,7 @@ import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Expectations;
@@ -49,7 +50,7 @@ public class CachingHiveMetastoreTest {
     @Before
     public void setUp() throws Exception {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
-        metastore = new HiveMetastore(client, "hive_catalog");
+        metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         executor = Executors.newFixedThreadPool(5);
     }
 
@@ -159,6 +160,38 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testRefreshHiveView() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+        try {
+            cachingHiveMetastore.refreshView("db1", "hive_view");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "hive_view")));
+
+        new Expectations(metastore) {
+            {
+                metastore.getTable(anyString, "notExistView");
+                minTimes = 0;
+                Throwable targetException = new NoSuchObjectException("no such obj");
+                Throwable e = new InvocationTargetException(targetException);
+                result = new StarRocksConnectorException("table not exist", e);
+            }
+        };
+        try {
+            cachingHiveMetastore.refreshView("db1", "notExistView");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("invalidated cache"));
+        }
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
@@ -257,7 +290,7 @@ public class CachingHiveMetastoreTest {
     public void testPartitionExist() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
-        Assert.assertTrue(cachingHiveMetastore.partitionExists("db", "tbl", Lists.newArrayList()));
+        Assert.assertTrue(cachingHiveMetastore.partitionExists(metastore.getTable("db", "table"), Lists.newArrayList()));
     }
 
     @Test

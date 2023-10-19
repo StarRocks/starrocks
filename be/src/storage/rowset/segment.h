@@ -80,31 +80,31 @@ using ChunkIteratorPtr = std::shared_ptr<ChunkIterator>;
 // is changed, this segment can not be used any more. For example, after a schema
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
-    struct private_type {
-        explicit private_type(int) {}
-    };
-
 public:
     // Like above but share the ownership of |unsafe_tablet_schema_ref|.
     static StatusOr<std::shared_ptr<Segment>> open(std::shared_ptr<FileSystem> fs, const std::string& path,
                                                    uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
-                                                   bool skip_fill_local_cache = true);
+                                                   bool skip_fill_local_cache = true,
+                                                   lake::TabletManager* tablet_manager = nullptr);
 
     [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
                                                      size_t* footer_length_hint,
                                                      const FooterPointerPB* partial_rowset_footer);
 
-    Segment(const private_type&, std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
-            TabletSchemaCSPtr tablet_schema);
+    Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
+            lake::TabletManager* tablet_manager);
 
     ~Segment();
+
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx);
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                       const TabletSchemaCSPtr& read_tablet_schema);
 
     uint64_t id() const { return _segment_id; }
 
@@ -147,6 +147,8 @@ public:
         return _column_readers.at(_tablet_schema->column(i).unique_id()).get();
     }
 
+    const ColumnReader* column_with_uid(size_t uid) const { return _column_readers.at(uid).get(); }
+
     FileSystem* file_system() const { return _fs.get(); }
 
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
@@ -164,7 +166,7 @@ public:
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
-    int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
+    size_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage(); }
 
     bool is_valid_column(uint32_t column_unique_id) const;
 
@@ -178,6 +180,11 @@ public:
 
     // read short_key_index, for data check, just used in unit test now
     [[nodiscard]] Status get_short_key_index(std::vector<std::string>* sk_index_values);
+
+    // for cloud native tablet metadata cache.
+    // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
+    // so the segment size in the cache needs to be updated when indexes are loading.
+    void update_cache_size();
 
     DISALLOW_COPY_AND_MOVE(Segment);
 
@@ -213,15 +220,17 @@ private:
 
     void _reset();
 
-    int64_t _basic_info_mem_usage() { return static_cast<int64_t>(sizeof(Segment) + _fname.size()); }
+    size_t _basic_info_mem_usage() { return sizeof(Segment) + _fname.size(); }
 
-    int64_t _short_key_index_mem_usage() {
-        int64_t size = _sk_index_handle.mem_usage();
+    size_t _short_key_index_mem_usage() {
+        size_t size = _sk_index_handle.mem_usage();
         if (_sk_index_decoder != nullptr) {
             size += _sk_index_decoder->mem_usage();
         }
         return size;
     }
+
+    size_t _column_index_mem_usage();
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
@@ -258,6 +267,11 @@ private:
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
+
+    // for cloud native tablet
+    lake::TabletManager* _tablet_manager = nullptr;
+    // used to guarantee that segment will be opened at most once in a thread-safe way
+    OnceFlag _open_once;
 };
 
 } // namespace starrocks

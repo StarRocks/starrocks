@@ -33,12 +33,13 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 
-class AutoIncrementPartialUpdateTest : public TestBase {
+class LakeAutoIncrementPartialUpdateTest : public TestBase {
 public:
-    AutoIncrementPartialUpdateTest() : TestBase(kTestDirectory) {
+    LakeAutoIncrementPartialUpdateTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -49,6 +50,7 @@ public:
         //  +--------+------+-----+------+-----------------+
         //  |   c0   |  INT | YES |  NO  |      FALSE      |
         //  |   c1   |BIGINT| NO  |  NO  |      TRUE       |
+        //  |   c2   |  INT | NO  |  NO  |      FALSE      |
         auto schema = _tablet_metadata->mutable_schema();
         schema->set_id(next_id());
         schema->set_num_short_key_columns(1);
@@ -72,11 +74,6 @@ public:
             c1->set_is_auto_increment(true);
             c1->set_aggregation("REPLACE");
         }
-        _referenced_column_ids.push_back(0);
-        _referenced_column_ids.push_back(1);
-        _partial_tablet_schema = TabletSchema::create(*schema);
-        _partial_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_partial_tablet_schema));
-
         auto c2 = schema->add_column();
         {
             c2->set_unique_id(next_id());
@@ -86,6 +83,15 @@ public:
             c2->set_is_nullable(false);
             c2->set_aggregation("REPLACE");
         }
+
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
 
         _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
@@ -102,13 +108,17 @@ public:
         remove_test_dir_or_die();
     }
 
-    Chunk generate_data(std::vector<int64_t>& auto_increment_ids, bool partial) {
-        auto chunk_size = auto_increment_ids.size();
+    Chunk generate_data(int chunk_size, bool partial) {
         std::vector<int> v0(chunk_size);
         std::vector<int64_t> v1(chunk_size);
         std::vector<int> v2(chunk_size);
 
-        v1.assign(auto_increment_ids.begin(), auto_increment_ids.end());
+        if (partial) {
+            v1.assign(chunk_size, 0);
+        } else {
+            v1.resize(chunk_size);
+            std::iota(v1.begin(), v1.end(), 1);
+        }
 
         for (int i = 0; i < chunk_size; i++) {
             v0[i] = i;
@@ -125,9 +135,9 @@ public:
             }
             auto c2 = Int32Column::create();
             c2->append_numbers(v2.data(), v2.size() * sizeof(int));
-            return Chunk({c0, c1, c2}, _schema);
+            return Chunk({c0, c1, c2}, _slot_cid_map);
         } else {
-            return Chunk({c0, c1}, _partial_schema);
+            return Chunk({c0, c1}, _slot_cid_map);
         }
     }
 
@@ -147,8 +157,10 @@ public:
             ret += chunk->num_rows();
             auto cols = chunk->columns();
             for (int i = 0; i < chunk->num_rows(); i++) {
-                EXPECT_TRUE(check_fn(cols[0]->get(i).get_int32(), cols[1]->get(i).get_int64(),
-                                     cols[2]->get(i).get_int32()));
+                EXPECT_TRUE(
+                        check_fn(cols[0]->get(i).get_int32(), cols[1]->get(i).get_int64(), cols[2]->get(i).get_int32()))
+                        << "c0=" << cols[0]->get(i).get_int32() << "c1=" << cols[1]->get(i).get_int64()
+                        << "c2=" << cols[2]->get(i).get_int32();
             }
             chunk->reset();
         }
@@ -161,20 +173,16 @@ protected:
 
     std::unique_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<TabletSchema> _partial_tablet_schema;
     std::shared_ptr<Schema> _schema;
-    std::shared_ptr<Schema> _partial_schema;
-    std::vector<int32_t> _referenced_column_ids;
     int64_t _partition_id = 7561;
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _slot_cid_map;
 };
 
-TEST_F(AutoIncrementPartialUpdateTest, test_write) {
-    std::vector<int64_t> auto_increment_ids;
-    auto_increment_ids.resize(kChunkSize);
-    std::iota(auto_increment_ids.begin(), auto_increment_ids.end(), 1);
-
-    auto chunk0 = generate_data(auto_increment_ids, false);
-    auto chunk1 = generate_data(auto_increment_ids, true);
+TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
+    auto chunk0 = generate_data(kChunkSize, false);
+    auto chunk1 = generate_data(kChunkSize, true);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
         indexes[i] = i;
@@ -185,47 +193,66 @@ TEST_F(AutoIncrementPartialUpdateTest, test_write) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("StorageEngine::get_next_increment_id_interval.1", [](void* arg) {
+        auto& meta = *(std::shared_ptr<AutoIncrementMeta>*)(arg);
+        meta->min = 1;
+        meta->max = kChunkSize * 2;
+    });
+
     // partial update with normal column and auto increment column
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
-        delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_miss_auto_increment_column(true)
+                                                   .set_table_id(next_id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        delta_writer->TEST_set_miss_auto_increment_column();
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
-TEST_F(AutoIncrementPartialUpdateTest, test_resolve_conflict) {
-    std::vector<int64_t> auto_increment_ids;
-    auto_increment_ids.resize(kChunkSize);
-    std::iota(auto_increment_ids.begin(), auto_increment_ids.end(), 1);
-
-    auto chunk0 = generate_data(auto_increment_ids, false);
-    auto chunk1 = generate_data(auto_increment_ids, true);
+TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
+    auto chunk0 = generate_data(kChunkSize, false);
+    auto chunk1 = generate_data(kChunkSize, true);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
         indexes[i] = i;
@@ -236,42 +263,65 @@ TEST_F(AutoIncrementPartialUpdateTest, test_resolve_conflict) {
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("StorageEngine::get_next_increment_id_interval.1", [](void* arg) {
+        auto& meta = *(std::shared_ptr<AutoIncrementMeta>*)(arg);
+        meta->min = 1;
+        meta->max = kChunkSize * 2;
+    });
 
     // concurrent partial update
     std::vector<int64_t> txn_ids;
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         txn_ids.push_back(txn_id);
-        auto delta_writer = DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, 0,
-                                                _mem_tracker.get());
-        delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_miss_auto_increment_column(true)
+                                                   .set_table_id(next_id())
+                                                   .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
-        delta_writer->TEST_set_miss_auto_increment_column();
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
     }
     // publish in order
     for (auto txn_id : txn_ids) {
-        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(_tablet_mgr->publish_version(tablet_id, version, version + 1, &txn_id, 1, time(NULL)).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c1 - 1 == c0) && (c1 - 1 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake

@@ -304,8 +304,8 @@ public:
 
     std::string debug_string() const;
 
-    int64_t mem_usage() const {
-        int64_t mem_usage = sizeof(TabletSchema);
+    size_t mem_usage() const {
+        size_t mem_usage = sizeof(TabletSchema);
         for (const auto& col : _cols) {
             mem_usage += col.mem_usage();
         }
@@ -316,8 +316,8 @@ public:
 
     Schema* schema() const;
 
-    void build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
-                                     const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
+    Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+                                       const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
 
 private:
     friend class SegmentReaderWriterTest;
@@ -345,11 +345,12 @@ private:
     uint16_t _num_short_key_columns = 0;
     std::vector<ColumnId> _sort_key_idxes;
     std::unordered_set<ColumnId> _sort_key_idxes_set;
+    std::vector<ColumnUID> _sort_key_uids;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
 
-    std::unordered_map<int32_t, int32_t> _field_id_to_index;
+    std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 
     bool _has_bf_fpp = false;
 

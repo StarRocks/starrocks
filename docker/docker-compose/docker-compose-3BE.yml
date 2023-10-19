@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   starrocks-fe:
-    image: starrocks/fe-ubuntu:main
+    image: starrocks/fe-ubuntu:latest
     hostname: starrocks-fe
     container_name: starrocks-fe
     #user: root
@@ -15,7 +15,7 @@ services:
 #      - path/of/host/fe/meta:/opt/starrocks/fe/meta
 
   starrocks-be1:
-    image: starrocks/be-ubuntu:main
+    image: starrocks/be-ubuntu:latest
     #user: root
     command:
       - /bin/bash
@@ -32,7 +32,7 @@ services:
 #      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
 #      - path/of/host/starrocks-be1/storage:/opt/starrocks/be/storage
   starrocks-be2:
-    image: starrocks/be-ubuntu:main
+    image: starrocks/be-ubuntu:latest
     #user: root
     command:
       - /bin/bash
@@ -49,7 +49,7 @@ services:
 #      - path/of/host/be.conf:/opt/starrocks/be/conf/be.conf
 #      - path/of/host/starrocks-be2/storage:/opt/starrocks/be/storage
   starrocks-be3:
-    image: starrocks/be-ubuntu:main
+    image: starrocks/be-ubuntu:latest
     #user: root
     command:
       - /bin/bash

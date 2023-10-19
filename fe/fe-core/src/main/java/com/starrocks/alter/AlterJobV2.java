@@ -36,6 +36,7 @@ package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -78,7 +79,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public enum JobType {
         // DECOMMISSION_BACKEND is for compatible with older versions of metadata
-        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND, OPTIMIZE 
+        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND, OPTIMIZE
     }
 
     @SerializedName(value = "type")
@@ -314,4 +315,27 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public abstract Optional<Long> getTransactionId();
+
+
+    /**
+     * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)
+     * into it from original index meta. Otherwise, some necessary metas will be lost after fe restart.
+     *
+     * @param orgIndexMeta  : index meta before schema change.
+     * @param indexMeta     : new index meta after schema change.
+     */
+    protected void rebuildMaterializedIndexMeta(MaterializedIndexMeta orgIndexMeta,
+                                                MaterializedIndexMeta indexMeta) {
+        indexMeta.setViewDefineSql(orgIndexMeta.getViewDefineSql());
+        indexMeta.setColocateMVIndex(orgIndexMeta.isColocateMVIndex());
+        indexMeta.setDefineStmt(orgIndexMeta.getDefineStmt());
+        if (indexMeta.getDefineStmt() != null) {
+            try {
+                indexMeta.gsonPostProcess();
+            } catch (IOException e) {
+                LOG.warn("rebuild defined stmt of index meta {}(org)/{}(new) failed :",
+                        orgIndexMeta.getIndexId(), indexMeta.getIndexId(), e);
+            }
+        }
+    }
 }

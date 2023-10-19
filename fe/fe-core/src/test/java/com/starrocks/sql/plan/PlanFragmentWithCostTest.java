@@ -2253,16 +2253,18 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testPlanCost() throws Exception {
         String plan = getVerboseExplain("select t1a, v1 " +
                 "from t0 join [broadcast] test_all_type " +
-                "join [shuffle] (select 1 as v1_c1 where false) v1 on t1a=v1 and t1a=v1_c1");
-        assertContains(plan, "  9:HASH JOIN\n" +
+                "join [shuffle] (select 1 as v1_c1 where abs(1) = 2) v1 on t1a=v1 and t1a=v1_c1");
+        assertContains(plan, "  11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), false]\n" +
+                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR, false]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 1, build_expr = (16: cast), remote = true\n" +
                 "  |  output columns: 1, 4\n" +
                 "  |  cardinality: 9000\n" +
                 "  |  \n" +
-                "  |----8:EXCHANGE\n" +
+                "  |----10:EXCHANGE\n" +
                 "  |       distribution type: SHUFFLE\n" +
-                "  |       partition exprs: [16: cast, VARCHAR(1048576), false]\n" +
+                "  |       partition exprs: [16: cast, VARCHAR, false]\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  6:EXCHANGE\n" +

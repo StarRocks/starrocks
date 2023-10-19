@@ -102,7 +102,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             DeletePredicatePB del_pred;
             DeleteConditionHandler del_cond_handler;
             tablet_var.tablet->obtain_header_rdlock();
-            auto tablet_schema = TabletSchema::copy(tablet_var.tablet->thread_safe_get_tablet_schema());
+            auto tablet_schema = TabletSchema::copy(tablet_var.tablet->tablet_schema());
             if (request.__isset.columns_desc && !request.columns_desc.empty() &&
                 request.columns_desc[0].col_unique_id >= 0) {
                 tablet_schema->clear_columns();
@@ -234,7 +234,7 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
 
         // 3. New RowsetBuilder to write data into rowset
         VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
-                << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
+                << ", block_row_size=" << cur_tablet->num_rows_per_row_block_with_max_version();
         st = rowset_writer->flush();
         if (!st.ok()) {
             LOG(WARNING) << "Failed to finalize writer: " << st;

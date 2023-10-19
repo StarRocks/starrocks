@@ -505,7 +505,7 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
     LOG(WARNING) << err_msg << " " << ctx->brief();
     ctx->status = st;
     if (ctx->need_rollback) {
-        _exec_env->stream_load_executor()->rollback_txn(ctx);
+        (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
         ctx->need_rollback = false;
     }
     if (ctx->body_sink != nullptr) {

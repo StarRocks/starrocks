@@ -28,6 +28,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
@@ -38,7 +39,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -359,16 +359,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
                         + " must use hash distribution", distributionDesc.getPos());
             }
-            try {
-                if (olapTable.getDefaultDistributionInfo().getType()
-                        != distributionDesc.toDistributionInfo(olapTable.getColumns()).getType()) {
-                    throw new SemanticException("not support change default distribution type from " +
-                            olapTable.getDefaultDistributionInfo().getType() + " to " +
-                            distributionDesc.toDistributionInfo(olapTable.getColumns()).getType());
-                }
-            } catch (DdlException e) {
-                throw new SemanticException(e.getMessage());
-            }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
         }
@@ -410,6 +400,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in add column clause.");
         }
         try {
+            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                columnDef.setAggregateType(AggregateType.REPLACE);
+            }
             columnDef.analyze(true);
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
@@ -528,6 +521,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         boolean hasNormalColumn = false;
         for (ColumnDef colDef : columnDefs) {
             try {
+                if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                    colDef.setAggregateType(AggregateType.REPLACE);
+                }
                 colDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), colDef.getPos());
@@ -647,6 +643,9 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             throw new SemanticException("No column definition in modify column clause.");
         }
         try {
+            if (table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                columnDef.setAggregateType(AggregateType.REPLACE);
+            }
             columnDef.analyze(true);
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());

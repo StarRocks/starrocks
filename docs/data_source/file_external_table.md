@@ -6,7 +6,7 @@ This feature is supported from StarRocks v2.5.
 
 ## Limits
 
-- File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query catalogs created in the cluster.
+- File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query catalogs created in the cluster.
 - Only Parquet and ORC data files are supported.
 - You can only use file external tables to query data in the target data file. Data write operations such as INSERT, DELETE, and DROP are not supported.
 
@@ -16,7 +16,7 @@ Before you create a file external table, you must configure your StarRocks clust
 
 ## Create a database (Optional)
 
-After connecting to your StarRocks cluster, you can create a file external table in an existing database or create a new database to manage file external tables. To query existing databases in the cluster, run [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md). Then you can run `USE <db_name>` to switch to the target database.
+After connecting to your StarRocks cluster, you can create a file external table in an existing database or create a new database to manage file external tables. To query existing databases in the cluster, run [SHOW DATABASES](../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md). Then you can run `USE <db_name>` to switch to the target database.
 
 The syntax for creating a database is as follows.
 
@@ -112,7 +112,7 @@ If you need to access a data file stored in AWS S3, configure the following auth
 | Parameter name              | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method when you access AWS S3. Valid values: `true` and `false`. Default value: `false`. |
-| aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. <br>If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
+| aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. <br />If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: us-west-1. |
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.|
@@ -135,8 +135,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                       | Required | Description                                                  |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br>Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br />Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                 | Yes      | The endpoint used to connect to an S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key               | Yes      | The access key of your IAM user.                         |
 | aws.s3.secret_key               | Yes      | The secret key of your IAM user.                         |
@@ -149,7 +149,7 @@ The following table provides the mapping of column types between the target data
 | ----------- | ------------------------------------------------------------ |
 | INT/INTEGER | INT                                                          |
 | BIGINT      | BIGINT                                                       |
-| TIMESTAMP   | DATETIME. <br>Note that TIMESTAMP is converted to DATETIME without a time zone based on the time zone setting of the current session and loses some of its precision. |
+| TIMESTAMP   | DATETIME. <br />Note that TIMESTAMP is converted to DATETIME without a time zone based on the time zone setting of the current session and loses some of its precision. |
 | STRING      | STRING                                                       |
 | VARCHAR     | VARCHAR                                                      |
 | CHAR        | CHAR                                                         |
@@ -272,4 +272,4 @@ SELECT * FROM t0;
 
 ## Manage file external tables
 
-You can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP%20TABLE.md).
+You can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP_TABLE.md).

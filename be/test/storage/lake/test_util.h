@@ -15,6 +15,8 @@
 #pragma once
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -30,16 +32,16 @@ namespace starrocks::lake {
 
 class TestBase : public ::testing::Test {
 public:
-    virtual ~TestBase() override {
+    ~TestBase() override {
         // Wait for all vacuum tasks finished processing before destroying
         // _tablet_mgr.
-        ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         (void)fs::remove_all(_test_dir);
     }
 
 protected:
-    explicit TestBase(const std::string& test_dir, int64_t cache_limit = 1024 * 1024)
-            : _test_dir(test_dir),
+    explicit TestBase(std::string test_dir, int64_t cache_limit = 1024 * 1024)
+            : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(-1, "", _parent_tracker.get())),
               _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
@@ -59,7 +61,7 @@ protected:
 
     void check_local_persistent_index_meta(int64_t tablet_id, int64_t expected_version) {
         PersistentIndexMetaPB index_meta;
-        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
+        DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
         CHECK_OK(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
         ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }

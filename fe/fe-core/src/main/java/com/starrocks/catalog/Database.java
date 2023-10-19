@@ -53,8 +53,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -76,7 +76,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -121,9 +120,9 @@ public class Database extends MetaObject implements Writable {
     private long lastSlowLockLogTime = 0;
 
     // This param is used to make sure db not dropped when leader node writes wal,
-    // so this param dose not need to be persistent,
+    // so this param does not need to be persistent,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
-    // but that'ok to meet our needs.
+    // but that's ok to meet our needs.
     private volatile boolean exist = true;
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
@@ -657,6 +656,10 @@ public class Database extends MetaObject implements Writable {
         return Math.abs((int) adler32.getValue());
     }
 
+    public boolean isExist() {
+        return exist;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -914,9 +917,5 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
-    }
-
-    public List<Table> getHiveTables() {
-        return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
     }
 }

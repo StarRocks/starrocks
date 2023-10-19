@@ -39,3 +39,15 @@ select count(1) from test_pk_tbl1;
 ALTER TABLE test_pk_tbl1 ORDER BY (k3,v1,v3,k2);
 function: wait_alter_table_finish()
 select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 add COLUMN v5 bitmap after v4;
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 add COLUMN (v6 bitmap not null, v7 bitmap);
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;
+
+ALTER TABLE test_pk_tbl1 modify COLUMN v6 bitmap null;
+function: wait_alter_table_finish()
+select count(1) from test_pk_tbl1;

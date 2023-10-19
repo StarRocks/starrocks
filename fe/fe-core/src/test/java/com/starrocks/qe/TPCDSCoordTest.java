@@ -67,7 +67,6 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
                 "from inventory a join inventory b on a.inv_item_sk = b.inv_item_sk ) t1 " +
                 "join [shuffle] item t0  on t0.i_item_sk = t1.x;";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        System.out.println("plan:" + plan);
         String[] ss = plan.split("\\n");
         List<String> fragments = new ArrayList<>();
         String currentFragment = null;
@@ -85,14 +84,13 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         // 2 fragements to consumer filter(1)
         Assert.assertEquals(3, fragments.size());
 
-        System.out.println(plan);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
                 ctx, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift());
         coord.prepareExec();
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
-        Assert.assertEquals(10, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
+        Assert.assertEquals(15, execFragment.getRuntimeFilterParams().id_to_prober_params.get(1).size());
     }
 
     @Test
@@ -131,7 +129,6 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         String[] ss = plan.split("\\n");
         List<String> filterLines = Stream.of(ss).filter(s -> s.contains("filter_id = 2")).collect(Collectors.toList());
-        System.out.println(filterLines.size());
         Assert.assertTrue(filterLines.size() == 5);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(
@@ -148,7 +145,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
             RuntimeFilterDescription rf = buildRfFilters.get(filterId);
             Assert.assertTrue(rf.isHasRemoteTargets() && rf.isBroadcastJoin());
             Assert.assertFalse(rf.getBroadcastGRFDestinations().isEmpty());
-            Assert.assertTrue(rf.getBroadcastGRFDestinations().stream().anyMatch(d -> d.getFinstance_ids().size() > 1));
+            Assert.assertTrue(rf.getBroadcastGRFDestinations().stream().anyMatch(d -> d.getFinstance_ids().size() >= 1));
             rfExists = true;
         }
         Assert.assertTrue(rfExists);

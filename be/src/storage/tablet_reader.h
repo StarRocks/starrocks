@@ -40,7 +40,7 @@ public:
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
                  std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
-                 RowSourceMaskBuffer* mask_buffer);
+                 RowSourceMaskBuffer* mask_buffer, const TabletSchemaCSPtr& tablet_schema = nullptr);
     TabletReader(TabletSharedPtr tablet, const Version& version, const TabletSchemaSPtr& tablet_schema, Schema schema);
     ~TabletReader() override { close(); }
 

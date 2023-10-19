@@ -27,7 +27,7 @@ LocalFileWriter::LocalFileWriter(std::string path, int64_t start_offset)
         : _path(std::move(path)), _start_offset(start_offset), _fp(nullptr) {}
 
 LocalFileWriter::~LocalFileWriter() {
-    close();
+    (void)close();
 }
 
 Status LocalFileWriter::open() {

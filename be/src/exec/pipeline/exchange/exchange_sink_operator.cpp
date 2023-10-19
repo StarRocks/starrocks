@@ -72,8 +72,8 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
-                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+    [[nodiscard]] Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                                            const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -200,7 +200,11 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
         _chunks[driver_sequence]->set_num_rows(0);
     }
 
-    _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    {
+        SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
+        _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+        COUNTER_UPDATE(_parent->_shuffle_chunk_append_counter, 1);
+    }
     return Status::OK();
 }
 
@@ -445,6 +449,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
 
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
+    _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
+    _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
     _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
             "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
@@ -641,7 +647,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
+            RETURN_IF_ERROR(channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
         }
         _current_request_bytes = 0;
         _chunk_request.reset();

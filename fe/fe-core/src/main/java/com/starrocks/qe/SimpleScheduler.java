@@ -39,8 +39,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -49,6 +51,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -203,6 +206,19 @@ public class SimpleScheduler {
         }
     }
 
+    // The function is used for unit test
+    public static boolean removeFromBlacklist(Long backendID) {
+        if (backendID == null) {
+            return true;
+        }
+        lock.lock();
+        try {
+            return blacklistBackends.remove(backendID) != null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private static class UpdateBlacklistThread implements Runnable {
         private static final Logger LOG = LogManager.getLogger(UpdateBlacklistThread.class);
         private static Thread thread;
@@ -231,23 +247,30 @@ public class SimpleScheduler {
                             Map.Entry<Long, Integer> entry = iterator.next();
                             Long backendId = entry.getKey();
 
-                            // remove from blacklist if
-                            // 1. backend does not exist anymore
-                            // 2. backend is alive
-                            if (clusterInfoService.getBackend(backendId) == null
-                                    || clusterInfoService.checkBackendAvailable(backendId)) {
+                            // 1. If the backend is null, means that the backend has been removed.
+                            // 2. check the all ports of the backend
+                            // 3. retry three times
+                            // If both of the above conditions are met, the backend is removed from the blacklist
+                            Backend backend = clusterInfoService.getBackend(backendId);
+                            if (backend == null) {
                                 iterator.remove();
-                                LOG.debug("remove backendID {} which is alive", backendId);
+                                LOG.warn("remove backendID {} from blacklist", backendId);
+                            } else if (clusterInfoService.checkBackendAvailable(backendId)) {
+                                String host = backend.getHost();
+                                List<Integer> ports = new ArrayList<Integer>();
+                                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                                if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
+                                    iterator.remove();
+                                    LOG.warn("remove backendID {} from blacklist", backendId);
+                                }
                             } else {
-                                // 3. max try time is reach
                                 Integer retryTimes = entry.getValue();
                                 retryTimes = retryTimes - 1;
                                 if (retryTimes <= 0) {
                                     iterator.remove();
-                                    LOG.warn("remove backendID {}. reach max try time", backendId);
+                                    LOG.warn("remove backendID {} from blacklist", backendId);
                                 } else {
                                     entry.setValue(retryTimes);
-                                    LOG.debug("blacklistBackends backendID={} retryTimes={}", backendId, retryTimes);
                                 }
                             }
                         }

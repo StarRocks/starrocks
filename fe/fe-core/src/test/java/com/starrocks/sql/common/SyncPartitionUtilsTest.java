@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.common;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -31,6 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
@@ -41,6 +44,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -163,14 +167,14 @@ public class SyncPartitionUtilsTest {
         Map<String, Range<PartitionKey>> dstRange = Maps.newHashMap();
         dstRange.put("p20200101", createRange("2020-01-01", "2020-01-02"));
 
-        Map<String, Range<PartitionKey>> diff = SyncPartitionUtils.diffRange(srcRange, dstRange);
+        Map<String, Range<PartitionKey>> diff = PartitionDiffer.diffRange(srcRange, dstRange);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
         Assert.assertEquals("2020-01-03 00:00:00",
                 diff.get("p20200102").upperEndpoint().getKeys().get(0).getStringValue());
 
-        diff = SyncPartitionUtils.diffRange(dstRange, srcRange);
+        diff = PartitionDiffer.diffRange(dstRange, srcRange);
         Assert.assertEquals(0, diff.size());
 
         // two range
@@ -186,7 +190,7 @@ public class SyncPartitionUtilsTest {
         dstRange.put("p20200102", createRange("2020-01-02", "2020-01-06"));
         dstRange.put("p20200106", createRange("2020-01-06", "2020-01-07"));
 
-        diff = SyncPartitionUtils.diffRange(srcRange, dstRange);
+        diff = PartitionDiffer.diffRange(srcRange, dstRange);
         Assert.assertEquals(2, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -197,7 +201,7 @@ public class SyncPartitionUtilsTest {
         Assert.assertEquals("2020-01-06 00:00:00",
                 diff.get("p20200105").upperEndpoint().getKeys().get(0).getStringValue());
 
-        diff = SyncPartitionUtils.diffRange(dstRange, srcRange);
+        diff = PartitionDiffer.diffRange(dstRange, srcRange);
         Assert.assertEquals(1, diff.size());
         Assert.assertEquals("2020-01-02 00:00:00",
                 diff.get("p20200102").lowerEndpoint().getKeys().get(0).getStringValue());
@@ -645,6 +649,34 @@ public class SyncPartitionUtilsTest {
         SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
 
         Assert.assertNull(tableMap.get("p1"));
+    }
+
+    private PartitionRange buildPartitionRange(String name, String start, String end) throws AnalysisException {
+        return new PartitionRange(name,
+                Range.closedOpen(
+                        PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(start)),
+                        PartitionKey.ofDateTime(DateUtils.parseStrictDateTime(end))));
+    }
+
+    @Test
+    public void test_getIntersectedPartitions() throws AnalysisException {
+        List<PartitionRange> srcs = Arrays.asList(
+                buildPartitionRange("p20230801", "00000101", "20230801"),
+                buildPartitionRange("p20230802", "20230801", "20230802"),
+                buildPartitionRange("p20230803", "20230802", "20230803")
+        );
+        List<PartitionRange> dsts = Arrays.asList(
+                buildPartitionRange("p000101_202308", "0001-01-01", "2023-08-01"),
+                buildPartitionRange("p202308_202309", "2023-08-01", "2023-09-01")
+        );
+        Map<String, Set<String>> res = SyncPartitionUtils.getIntersectedPartitions(srcs, dsts);
+        Assert.assertEquals(
+                ImmutableMap.of(
+                        "p20230801", ImmutableSet.of("p000101_202308"),
+                        "p20230802", ImmutableSet.of("p202308_202309"),
+                        "p20230803", ImmutableSet.of("p202308_202309")
+                ),
+                res);
     }
 
 }

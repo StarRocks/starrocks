@@ -9,7 +9,7 @@ The window function is a special class of built-in functions. Similar to the agg
 Syntax of the window function:
 
 ```SQL
-function(args) OVER(partition_by_clause order_by_clause [window_clause])
+function(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
@@ -1032,12 +1032,12 @@ Returns the population variance of an expression. VAR_POP and VARIANCE_POP are a
 **Syntax:**
 
 ```SQL
-VARIANCE(expr) [OVER (partition_by_clause)]
+VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> VARIANCE() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1073,6 +1073,21 @@ mysql> select variance(k) over (partition by no) FROM agg;
 |                             54.6875 |
 |                             54.6875 |
 +-------------------------------------+
+
+mysql> select variance(k) over(
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++-------------------+
+| window_test       |
++-------------------+
+|                 0 |
+|                25 |
+| 38.88888888888889 |
+|           54.6875 |
+|           54.6875 |
++-------------------+
 ```
 
 ### VAR_SAMP, VARIANCE_SAMP
@@ -1082,12 +1097,12 @@ Returns the sample variance of an expression. These functions can be used as win
 **Syntax:**
 
 ```sql
-VAR_SAMP(expr) [OVER (partition_by_clause)]
+VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> VAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1123,6 +1138,21 @@ mysql> select VAR_SAMP(k) over (partition by no) FROM agg;
 |                   72.91666666666667 |
 |                   72.91666666666667 |
 +-------------------------------------+
+
+mysql> select VAR_SAMP(k) over(
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|                  0 |
+|                 50 |
+| 58.333333333333336 |
+|  72.91666666666667 |
+|  72.91666666666667 |
++--------------------+
 ```
 
 ### STD, STDDEV, STDDEV_POP
@@ -1132,12 +1162,12 @@ Returns the standard deviation of an expression. These functions can be used as 
 **Syntax:**
 
 ```sql
-STD(expr) [OVER (partition_by_clause)]
+STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> STD() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1173,6 +1203,21 @@ mysql> select STD(k) over (partition by no) FROM agg;
 |               7.39509972887452 |
 |               7.39509972887452 |
 +--------------------------------+
+
+mysql> select std(k) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++-------------------+
+| window_test       |
++-------------------+
+|                 0 |
+|                 5 |
+| 6.236095644623236 |
+|  7.39509972887452 |
+|  7.39509972887452 |
++-------------------+
 ```
 
 ### STDDEV_SAMP
@@ -1182,12 +1227,12 @@ Returns the sample standard deviation of an expression. This function can be use
 **Syntax:**
 
 ```sql
-STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> STDDEV_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1223,6 +1268,21 @@ mysql> select STDDEV_SAMP(k) over (partition by no) FROM agg;
 |                      8.539125638299666 |
 |                      8.539125638299666 |
 +----------------------------------------+
+
+mysql> select STDDEV_SAMP(k) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|                  0 |
+| 7.0710678118654755 |
+|  7.637626158259733 |
+|  8.539125638299666 |
+|  8.539125638299666 |
++--------------------+
 ```
 
 ### COVAR_SAMP
@@ -1232,12 +1292,12 @@ Returns the sample covariance of two expressions. This function is supported fro
 **Syntax:**
 
 ```sql
-COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
+COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> COVAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1273,6 +1333,21 @@ mysql> select COVAR_SAMP(k, v) over (partition by no) FROM agg;
 |                       119.99999999999999 |
 |                       119.99999999999999 |
 +------------------------------------------+
+
+mysql> select COVAR_SAMP(k,v) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|               NULL |
+|                 55 |
+|                 55 |
+| 119.99999999999999 |
+| 119.99999999999999 |
++--------------------+
 ```
 
 ### COVAR_POP
@@ -1282,12 +1357,12 @@ Returns the population covariance of two expressions. This function is supported
 **Syntax:**
 
 ```sql
-COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> COVAR_POP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1323,6 +1398,21 @@ mysql> select COVAR_POP(k, v) over (partition by no) FROM agg;
 |                       79.99999999999999 |
 |                       79.99999999999999 |
 +-----------------------------------------+
+
+mysql> select COVAR_POP(k,v) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++-------------------+
+| window_test       |
++-------------------+
+|              NULL |
+|              27.5 |
+|              27.5 |
+| 79.99999999999999 |
+| 79.99999999999999 |
++-------------------+
 ```
 
 ### CORR
@@ -1332,12 +1422,12 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 **Syntax:**
 
 ```sql
-CORR(expr1, expr2) [OVER (partition_by_clause)]
+CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
 ```
 
 > **NOTE**
 >
-> CORR() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
+> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1373,4 +1463,19 @@ mysql> select CORR(k, v) over (partition by no) FROM agg;
 |                 0.9988445981121532 |
 |                 0.9988445981121532 |
 +------------------------------------+
+
+mysql> select CORR(k,v) over (
+    partition by no
+    order by k
+    rows between unbounded preceding and 1 following) AS window_test
+FROM agg order by no,k;
++--------------------+
+| window_test        |
++--------------------+
+|               NULL |
+|                  1 |
+|                  1 |
+| 0.9988445981121532 |
+| 0.9988445981121532 |
++--------------------+
 ```

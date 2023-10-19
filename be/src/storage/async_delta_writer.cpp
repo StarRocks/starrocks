@@ -32,6 +32,7 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         return 0;
     }
     auto writer = static_cast<DeltaWriter*>(meta);
+    bool flush_after_write = false;
     for (; iter; ++iter) {
         Status st;
         if (iter->abort) {
@@ -40,6 +41,11 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         }
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
+        }
+
+        if (iter->flush_after_write) {
+            flush_after_write = true;
+            continue;
         }
         FailedRowsetInfo failed_info{.tablet_id = writer->tablet()->tablet_id(),
                                      .replicate_token = writer->replicate_token()};
@@ -69,6 +75,11 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
         LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id: " << writer->txn_id()
                                 << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
+    }
+    if (flush_after_write) {
+        auto st = writer->flush_memtable_async(false);
+        LOG_IF(WARNING, !st.ok()) << "Fail to flush. txn_id: " << writer->txn_id()
+                                  << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
     return 0;
 }
@@ -118,6 +129,18 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
         task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
+    }
+}
+
+void AsyncDeltaWriter::flush() {
+    Task task;
+    task.chunk = nullptr;
+    task.indexes = nullptr;
+    task.indexes_size = 0;
+    task.flush_after_write = true;
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute tablet_id: " << _writer->tablet()->tablet_id()
+                     << " ret: " << r;
     }
 }
 

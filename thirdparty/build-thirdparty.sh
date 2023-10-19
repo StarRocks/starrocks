@@ -566,11 +566,21 @@ build_rocksdb() {
     cp -r include/rocksdb $TP_INCLUDE_DIR
 }
 
+# kerberos
+build_kerberos() {
+    check_if_source_exist $KRB5_SOURCE
+    cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
+    CFLAGS="-fcommon" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
+    make -j$PARALLEL
+    make install
+}
+
 # sasl
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no --with-openssl=$TP_INSTALL_DIR
+    CFLAGS= LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
     make -j$PARALLEL
     make install
 }
@@ -593,7 +603,7 @@ build_librdkafka() {
 build_pulsar() {
     check_if_source_exist $PULSAR_SOURCE
 
-    cd $TP_SOURCE_DIR/$PULSAR_SOURCE/pulsar-client-cpp
+    cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
         -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
@@ -965,18 +975,6 @@ build_gcs_connector() {
     cp -r $TP_SOURCE_DIR/$GCS_CONNECTOR_SOURCE/*.jar $TP_INSTALL_DIR/gcs_connector
 }
 
-build_broker_thirdparty_jars() {
-    check_if_source_exist $BROKER_THIRDPARTY_JARS_SOURCE
-    mkdir -p $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
-    cp -r $TP_SOURCE_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/* $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE
-    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/hadoop-aliyun-2.7.2.jar
-    # cloudfs-hadoop-with-dependencies will include aws jars, but we already support aws by official sdk, so we don't need it anymore.
-    # And it will conflict with Iceberg's S3FileIO, make access S3 files failed.
-    rm $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/cloudfs-hadoop-with-dependencies-1.1.21.jar
-    # ensure read permission is granted for all users
-    chmod -R +r $TP_INSTALL_DIR/$BROKER_THIRDPARTY_JARS_SOURCE/
-}
-
 build_aws_cpp_sdk() {
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
@@ -1248,6 +1246,7 @@ build_thrift
 build_leveldb
 build_brpc
 build_rocksdb
+build_kerberos
 build_sasl
 build_librdkafka
 build_flatbuffers
@@ -1269,7 +1268,6 @@ build_hyperscan
 build_mariadb
 build_aliyun_jindosdk
 build_gcs_connector
-build_broker_thirdparty_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry

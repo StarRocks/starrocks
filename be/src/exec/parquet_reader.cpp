@@ -48,7 +48,7 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
-    _properties.set_buffer_size(8 * 1024 * 1024);
+    _properties.set_buffer_size(1 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 }
 
@@ -90,9 +90,10 @@ Status ParquetReaderWrap::_init_parquet_reader() {
                                                    parquet::ParquetFileReader::Open(_parquet, _properties),
                                                    arrow_reader_properties, &_reader);
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
-                         << ", filename: " << _filename;
-            return Status::InternalError(fmt::format("Failed to create file reader. filename: {}", _filename));
+            std::ostringstream oss;
+            oss << "Failed to create parquet file reader. error: " << st.ToString() << ", filename: " << _filename;
+            LOG(INFO) << oss.str();
+            return Status::InternalError(oss.str());
         }
 
         if (!_reader || !_reader->parquet_reader()) {

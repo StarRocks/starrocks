@@ -90,16 +90,17 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
         });
         _config_callback.emplace("max_compaction_concurrency", [&]() {
-            StorageEngine::instance()->compaction_manager()->update_max_threads(config::max_compaction_concurrency);
+            (void)StorageEngine::instance()->compaction_manager()->update_max_threads(
+                    config::max_compaction_concurrency);
         });
         _config_callback.emplace("flush_thread_num_per_store", [&]() {
             const size_t dir_cnt = StorageEngine::instance()->get_stores().size();
-            StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
+            (void)StorageEngine::instance()->memtable_flush_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
-            StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
+            (void)StorageEngine::instance()->segment_replicate_executor()->update_max_threads(
                     config::flush_thread_num_per_store * dir_cnt);
-            StorageEngine::instance()->segment_flush_executor()->update_max_threads(config::flush_thread_num_per_store *
-                                                                                    dir_cnt);
+            (void)StorageEngine::instance()->segment_flush_executor()->update_max_threads(
+                    config::flush_thread_num_per_store * dir_cnt);
         });
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(
@@ -113,7 +114,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() {
-            StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+            (void)StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST)
             _exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
@@ -149,6 +150,18 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             (void)StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(
                     max_thread_cnt);
+        });
+        _config_callback.emplace("drop_tablet_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::DROP);
+            (void)thread_pool->update_max_threads(config::drop_tablet_worker_count);
+        });
+        _config_callback.emplace("make_snapshot_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
+            (void)thread_pool->update_max_threads(config::make_snapshot_worker_count);
+        });
+        _config_callback.emplace("release_snapshot_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::RELEASE_SNAPSHOT);
+            (void)thread_pool->update_max_threads(config::release_snapshot_worker_count);
         });
     });
 

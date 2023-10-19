@@ -59,12 +59,13 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
     std::unique_ptr<RowsetWriter> output_rs_writer;
-    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
-            _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
+                                                                    _task_info.algorithm, _task_info.output_version,
+                                                                    &output_rs_writer, _tablet_schema));
 
-    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    Schema schema = ChunkHelper::convert_schema(_tablet_schema);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
-                        schema);
+                        schema, _tablet_schema);
     TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
     reader_params.reader_type =
@@ -150,8 +151,7 @@ StatusOr<size_t> HorizontalCompactionTask::_compact_data(int32_t chunk_size, Tab
             }
         }
 
-        auto tablet_schema_ptr = _tablet->tablet_schema();
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema_ptr, chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
 
         RETURN_IF_ERROR(output_rs_writer->add_chunk(*chunk));
         output_rows += chunk->num_rows();

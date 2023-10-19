@@ -82,11 +82,12 @@ Status FileReader::_parse_footer() {
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
-        _scanner_ctx->stats->request_bytes_read += footer_read_size;
-        _scanner_ctx->stats->request_bytes_read_uncompressed += footer_read_size;
     }
 
     ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    _scanner_ctx->stats->request_bytes_read += metadata_length + PARQUET_FOOTER_SIZE;
+    _scanner_ctx->stats->request_bytes_read_uncompressed += metadata_length + PARQUET_FOOTER_SIZE;
 
     if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
         // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
@@ -95,8 +96,6 @@ Status FileReader::_parse_footer() {
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
             RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
-            _scanner_ctx->stats->request_bytes_read += re_read_size;
-            _scanner_ctx->stats->request_bytes_read_uncompressed += re_read_size;
         }
     }
 
@@ -211,7 +210,9 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 return true;
             }
 
-            if (min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
+            // skip topn runtime filter, because it has taken effect on min/max filtering
+            // if row-group contains exactly one value(i.e. min_value = max_value), use bloom filter to test
+            if (!filter->always_true() && min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
                 ColumnPtr& chunk_part_column = min_chunk->columns()[0];
                 JoinRuntimeFilter::RunningContext ctx;
                 ctx.use_merged_selection = false;
@@ -299,12 +300,14 @@ int32_t FileReader::_get_partition_column_idx(const std::string& col_name) const
 Status FileReader::_decode_min_max_column(const ParquetField& field, const std::string& timezone,
                                           const TypeDescriptor& type, const tparquet::ColumnMetaData& column_meta,
                                           const tparquet::ColumnOrder* column_order, ColumnPtr* min_column,
-                                          ColumnPtr* max_column, bool* decode_ok) {
+                                          ColumnPtr* max_column, bool* decode_ok) const {
     DCHECK_EQ(field.physical_type, column_meta.type);
     *decode_ok = true;
+
     // We need to make sure min_max column append value succeed
     bool ret = true;
-    if (!_can_use_min_max_stats(column_meta, column_order)) {
+    auto sort_order = sort_order_of_logical_type(type.type);
+    if (!_has_correct_min_max_stats(column_meta, sort_order)) {
         *decode_ok = false;
         return Status::OK();
     }
@@ -403,50 +406,9 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
     return Status::OK();
 }
 
-bool FileReader::_can_use_min_max_stats(const tparquet::ColumnMetaData& column_meta,
-                                        const tparquet::ColumnOrder* column_order) {
-    // disregard column sort order if statistics max/min are equal
-    if (column_meta.statistics.__isset.min_value && column_meta.statistics.__isset.max_value &&
-        column_meta.statistics.min_value == column_meta.statistics.max_value) {
-        return true;
-    }
-    if (column_meta.statistics.__isset.min && column_meta.statistics.__isset.max &&
-        column_meta.statistics.min == column_meta.statistics.max) {
-        return true;
-    }
-
-    if (column_meta.statistics.__isset.min_value && _can_use_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    if (column_meta.statistics.__isset.min && _can_use_deprecated_stats(column_meta.type, column_order)) {
-        return true;
-    }
-    return false;
-}
-
-bool FileReader::_can_use_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order) {
-    // If column order is not set, only statistics for numeric types can be trusted.
-    if (column_order == nullptr) {
-        // is boolean | is interger | is floating
-        return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-    }
-    // Stats can be used if the column order is TypeDefinedOrder (see parquet.thrift).
-    return column_order->__isset.TYPE_ORDER;
-}
-
-bool FileReader::_can_use_deprecated_stats(const tparquet::Type::type& type,
-                                           const tparquet::ColumnOrder* column_order) {
-    // If column order is set to something other than TypeDefinedOrder, we shall not use the
-    // stats (see parquet.thrift).
-    if (column_order != nullptr && !column_order->__isset.TYPE_ORDER) {
-        return false;
-    }
-    return type == tparquet::Type::type::BOOLEAN || _is_integer_type(type) || type == tparquet::Type::type::DOUBLE;
-}
-
-bool FileReader::_is_integer_type(const tparquet::Type::type& type) {
-    return type == tparquet::Type::type::INT32 || type == tparquet::Type::type::INT64 ||
-           type == tparquet::Type::type::INT96;
+bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& column_meta,
+                                            const SortOrder& sort_order) const {
+    return _file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
 }
 
 void FileReader::_prepare_read_columns() {
@@ -503,7 +465,14 @@ Status FileReader::_init_group_readers() {
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
-            _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
+            int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
+            // for iceberg v2 pos delete
+            if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
+                auto start_iter = _need_skip_rowids->lower_bound(row_group_first_row);
+                auto end_iter = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+                num_rows -= std::distance(start_iter, end_iter);
+            }
+            _total_row_count += num_rows;
         } else {
             continue;
         }

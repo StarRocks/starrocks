@@ -335,11 +335,20 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::create(size_
     if (kv_refs.size() == 0) {
         return std::make_unique<ImmutableIndexShard>(0);
     }
-    for (size_t npage = npage_hint; npage < kPageMax; npage++) {
+    MonotonicStopWatch watch;
+    watch.start();
+    uint64_t retry_cnt = 0;
+    for (size_t npage = npage_hint; npage < kPageMax;) {
         auto rs_create = ImmutableIndexShard::try_create(key_size, npage, nbucket, kv_refs);
         // increase npage and retry
         if (!rs_create.ok()) {
+            // grows at 50%
+            npage = npage + npage / 2 + 1;
+            retry_cnt++;
             continue;
+        }
+        if (retry_cnt > 10) {
+            LOG(INFO) << "ImmutableIndexShard create cost(ms): " << watch.elapsed_time() / 1000000;
         }
         return std::move(rs_create.value());
     }
@@ -468,10 +477,11 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
 
 ImmutableIndexWriter::~ImmutableIndexWriter() {
     if (_idx_wb) {
-        FileSystem::Default()->delete_file(_idx_file_path_tmp);
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_idx_file_path_tmp),
+                      "Failed to delete file:" + _idx_file_path_tmp);
     }
     if (_bf_wb) {
-        FileSystem::Default()->delete_file(_bf_file_path);
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_bf_file_path), "Failed to delete file:" + _bf_file_path);
     }
 }
 
@@ -520,7 +530,7 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         // update memory usage is too high, flush bloom filter advance to avoid use too much memory
         if (!StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
             for (auto& bf : _bf_vec) {
-                _bf_wb->append(Slice(bf->data(), bf->size()));
+                RETURN_IF_ERROR(_bf_wb->append(Slice(bf->data(), bf->size())));
             }
             _bf_vec.clear();
             _bf_flushed = true;
@@ -594,7 +604,7 @@ Status ImmutableIndexWriter::write_bf() {
         }
     }
     for (auto& bf : _bf_vec) {
-        _idx_wb->append(Slice(bf->data(), bf->size()));
+        RETURN_IF_ERROR(_idx_wb->append(Slice(bf->data(), bf->size())));
     }
     _meta.mutable_shard_bf_off()->Add(pos_before);
     for (auto bf_len : _shard_bf_size) {
@@ -646,7 +656,7 @@ Status ImmutableIndexWriter::finish() {
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
     _idx_wb.reset();
     RETURN_IF_ERROR(_bf_wb->close());
-    FileSystem::Default()->delete_file(_bf_file_path);
+    (void)FileSystem::Default()->delete_file(_bf_file_path);
     _bf_wb.reset();
     return Status::OK();
 }
@@ -1782,7 +1792,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wblock_opts, file_name));
         DeferOp close_block([&wfile] {
             if (wfile) {
-                wfile->close();
+                WARN_IF_ERROR(wfile->close(), fmt::format("failed to close writable_file: {}", wfile->filename()));
             }
         });
         meta->clear_wals();
@@ -1802,7 +1812,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::string file_name = get_l0_index_file_name(_path, version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
-        FileSystem::Default()->delete_file(file_name);
+        (void)FileSystem::Default()->delete_file(file_name);
         std::set<uint32_t> dumped_shard_idxes;
         {
             // File is closed when archive object is destroyed and file size will be updated after file is
@@ -2765,8 +2775,41 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     const IndexSnapshotMetaPB& snapshot_meta = l0_meta.snapshot();
     EditVersion l0_version = snapshot_meta.version();
-    RETURN_IF_ERROR(_delete_expired_index_file(l0_version, _l1_version,
-                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
+    RETURN_IF_ERROR(_delete_expired_index_file(
+            l0_version, _l1_version,
+            _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    return Status::OK();
+}
+
+Status PersistentIndex::_reload_usage_and_size_by_key_length(size_t l1_idx_start, size_t l1_idx_end, bool contain_l2) {
+    _usage_and_size_by_key_length.clear();
+    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
+        size_t total_size = 0;
+        size_t total_usage = 0;
+        auto [l0_shard_offset, l0_shard_size] = shard_info;
+        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                      0UL, [](size_t s, const auto& e) { return s + e->size(); });
+        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                       0UL, [](size_t s, const auto& e) { return s + e->usage(); });
+        total_size += l0_kv_pairs_size;
+        total_usage += l0_kv_pairs_usage;
+        for (int i = l1_idx_start; i < l1_idx_end; i++) {
+            _get_stat_from_immutable_index(_l1_vec[i].get(), key_size, total_size, total_usage);
+        }
+        if (contain_l2) {
+            // update size and usage by l2
+            for (int i = 0; i < _l2_vec.size(); i++) {
+                _get_stat_from_immutable_index(_l2_vec[i].get(), key_size, total_size, total_usage);
+            }
+        }
+        if (auto [it, inserted] = _usage_and_size_by_key_length.insert({key_size, {total_usage, total_size}});
+            !inserted) {
+            LOG(WARNING) << "insert usage and size by key size failed, key_size: " << key_size;
+            return Status::InternalError("insert usage and size by key size falied");
+        }
+    }
     return Status::OK();
 }
 
@@ -2838,7 +2881,6 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     {
         std::unique_lock wrlock(_lock);
         _l2_versions.clear();
-        _l2_version_merged.clear();
         _l2_vec.clear();
     }
     if (index_meta.l2_versions_size() > 0) {
@@ -2850,42 +2892,16 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
             {
                 std::unique_lock wrlock(_lock);
-                _l2_versions.emplace_back(index_meta.l2_versions(i));
-                _l2_version_merged.push_back(index_meta.l2_version_merged(i));
+                _l2_versions.emplace_back(
+                        EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
                 _l2_vec.emplace_back(std::move(l2_index));
             }
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
-        _usage_and_size_by_key_length.clear();
-        for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
-            size_t total_size = 0;
-            size_t total_usage = 0;
-            auto [l0_shard_offset, l0_shard_size] = shard_info;
-            const auto l0_kv_pairs_size =
-                    std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                    std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size), 0UL,
-                                    [](size_t s, const auto& e) { return s + e->size(); });
-            const auto l0_kv_pairs_usage =
-                    std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                    std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size), 0UL,
-                                    [](size_t s, const auto& e) { return s + e->usage(); });
-            total_size += l0_kv_pairs_size;
-            total_usage += l0_kv_pairs_usage;
-            if (_has_l1) {
-                _get_stat_from_immutable_index(_l1_vec[0].get(), key_size, total_size, total_usage);
-            }
-            // update size and usage by l2
-            for (int i = 0; i < _l2_vec.size(); i++) {
-                _get_stat_from_immutable_index(_l2_vec[i].get(), key_size, total_size, total_usage);
-            }
-            if (auto [it, inserted] = _usage_and_size_by_key_length.insert({key_size, {total_usage, total_size}});
-                !inserted) {
-                LOG(WARNING) << "insert usage and size by key size failed, key_size: " << key_size;
-                return Status::InternalError("insert usage and size by key size falied");
-            }
-        }
+        // if has l1, idx range is [0, 1)
+        _reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false);
     }
 
     return Status::OK();
@@ -2925,8 +2941,9 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
         return status;
     }
 
-    RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
-                                               _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
+    RETURN_IF_ERROR(_delete_expired_index_file(
+            _version, _l1_version,
+            _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     _dump_snapshot = false;
     _flushed = false;
     return status;
@@ -2942,7 +2959,8 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : rowsets) {
         RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->data_dir()->get_meta(), apply_version, &stats);
+        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
+                                                  apply_version, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -3064,8 +3082,9 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                           << " version:" << version.to_string() << " size: " << _size
                           << " l0_size: " << (_l0 ? _l0->size() : 0) << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
                           << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-                          << " status: " << status.to_string() << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
                 return status;
             } else {
                 LOG(WARNING) << "load persistent index failed, tablet: " << tablet->tablet_id()
@@ -3098,7 +3117,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         }
     }
 
-    auto tablet_schema_ptr = tablet->thread_safe_get_tablet_schema();
+    auto tablet_schema_ptr = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
     for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
         pk_columns[i] = (ColumnId)i;
@@ -3152,7 +3171,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
         std::unique_lock wrlock(_lock);
         _l2_vec.clear();
         _l2_versions.clear();
-        _l2_version_merged.clear();
     }
 
     // Init PersistentIndexMetaPB
@@ -3163,7 +3181,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
     index_meta.clear_l2_versions();
-    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_3);
     lastest_applied_version.to_pb(index_meta.mutable_version());
@@ -3216,8 +3233,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
               << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
               << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " memory: " << memory_usage()
-              << " time: " << timer.elapsed_time() / 1000000 << "ms";
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 
@@ -3249,6 +3266,14 @@ uint64_t PersistentIndex::_l1_l2_file_size() const {
     return total_l1_l2_file_size;
 }
 
+uint64_t PersistentIndex::_l2_file_size() const {
+    uint64_t total_l2_file_size = 0;
+    for (int i = 0; i < _l2_vec.size(); i++) {
+        total_l2_file_size += _l2_vec[i]->file_size();
+    }
+    return total_l2_file_size;
+}
+
 bool PersistentIndex::_enable_minor_compaction() {
     if (config::enable_pindex_minor_compaction) {
         if (_l2_versions.size() < config::max_allow_pindex_l2_num) {
@@ -3256,6 +3281,7 @@ bool PersistentIndex::_enable_minor_compaction() {
         } else {
             LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
+            _reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
         }
     }
     return false;
@@ -3295,7 +3321,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
     } else {
         if (l1_l2_file_size != 0) {
             // and l0 memory usage is large enough,
-            if (_l0_is_full()) {
+            if (_l0_is_full(l1_l2_file_size)) {
                 // do l0 l1 merge compaction
                 _flushed = true;
                 if (_enable_minor_compaction()) {
@@ -3343,10 +3369,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
-        if (index_meta->l2_versions_size() < _l2_versions.size()) {
-            // major compaction happen, reload
-            RETURN_IF_ERROR(_reload(*index_meta));
-        }
     } else {
         index_meta->set_size(_size);
         index_meta->set_usage(_usage);
@@ -3354,10 +3376,6 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
-        if (index_meta->l2_versions_size() < _l2_versions.size()) {
-            // major compaction happen, reload
-            RETURN_IF_ERROR(_reload(*index_meta));
-        }
     }
     if (stat != nullptr) {
         stat->reload_meta_cost += watch.elapsed_time();
@@ -3370,8 +3388,9 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
 
 Status PersistentIndex::on_commited() {
     if (_flushed || _dump_snapshot) {
-        RETURN_IF_ERROR(_delete_expired_index_file(_version, _l1_version,
-                                                   _l2_versions.size() > 0 ? _l2_versions[0] : EditVersion()));
+        RETURN_IF_ERROR(_delete_expired_index_file(
+                _version, _l1_version,
+                _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
     RETURN_IF_ERROR(_delete_tmp_index_file());
     _dump_snapshot = false;
@@ -3436,8 +3455,9 @@ public:
               _index(index) {}
 
     void run() override {
-        _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
-                                             _found_keys_info);
+        WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
+                                                           _found_keys_info),
+                      "Failed to run GetFromImmutableIndexTask");
     }
 
 private:
@@ -3824,12 +3844,18 @@ bool PersistentIndex::_can_dump_directly() {
     return _dump_bound() <= config::l0_snapshot_size;
 }
 
-bool PersistentIndex::_l0_is_full() {
+bool PersistentIndex::_l0_is_full(int64_t l1_l2_size) {
     const auto l0_mem_size = _l0->memory_usage();
     auto manager = StorageEngine::instance()->update_manager();
-    return l0_mem_size >= config::l0_max_mem_usage ||
-           (manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
-            l0_mem_size >= config::l0_min_mem_usage);
+    // There are three condition that we regard l0 as full:
+    // 1. l0's memory exceed config::l0_max_mem_usage
+    // 2. l0's memory exceed l1 and l2 files size
+    // 3. memory usage of update module is exceed and l0's memory exceed config::l0_min_mem_usage
+    bool exceed_max_mem = l0_mem_size >= config::l0_max_mem_usage;
+    bool exceed_index_size = (l1_l2_size > 0) ? l0_mem_size >= l1_l2_size : false;
+    bool exceed_mem_limit = manager->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+                            l0_mem_size >= config::l0_min_mem_usage;
+    return exceed_max_mem || exceed_index_size || exceed_mem_limit;
 }
 
 bool PersistentIndex::_need_flush_advance() {
@@ -3853,16 +3879,17 @@ bool PersistentIndex::_need_merge_advance() {
     return merged_candidate_num >= config::max_tmp_l1_num;
 }
 
-static StatusOr<EditVersion> parse_l2_filename(const std::string& filename) {
+static StatusOr<EditVersionWithMerge> parse_l2_filename(const std::string& filename) {
     int64_t major, minor;
     if (sscanf(filename.c_str(), "index.l2.%" PRId64 ".%" PRId64, &major, &minor) != 2) {
         return Status::InvalidArgument(fmt::format("invalid l2 filename: {}", filename));
     }
-    return EditVersion(major, minor);
+    bool merged = StringPiece(filename).ends_with(".merged");
+    return EditVersionWithMerge(major, minor, merged);
 }
 
 Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
-                                                   const EditVersion& min_l2_version) {
+                                                   const EditVersionWithMerge& min_l2_version) {
     std::string l0_file_name =
             strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
     std::string l1_file_name =
@@ -3888,6 +3915,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
             if (!version_st.ok()) {
                 LOG(ERROR) << "Parse l2 file error: " << version_st.status();
             } else {
+                // if l2 not exists now, min_l2_version will be [INT64_MAX, INT64_MAX], to remove all l2 files
                 if ((*version_st) < min_l2_version) {
                     // delete expired l2 file
                     std::string path = dir + "/" + full;
@@ -3906,7 +3934,7 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
     return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
-static bool skip_major_compaction_tmp_index_file(const std::string& full) {
+static bool major_compaction_tmp_index_file(const std::string& full) {
     std::string suffix = ".merged.tmp";
     if (full.length() >= suffix.length() &&
         full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0) {
@@ -3916,6 +3944,24 @@ static bool skip_major_compaction_tmp_index_file(const std::string& full) {
     }
 }
 
+Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
+    std::string dir = _path;
+    auto cb = [&](std::string_view name) -> bool {
+        std::string full(name);
+        if (major_compaction_tmp_index_file(full)) {
+            std::string path = dir + "/" + full;
+            VLOG(1) << "delete tmp index file " << path;
+            Status st = FileSystem::Default()->delete_file(path);
+            if (!st.ok()) {
+                LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
+                return false;
+            }
+        }
+        return true;
+    };
+    return FileSystem::Default()->iterate_dir(_path, cb);
+}
+
 Status PersistentIndex::_delete_tmp_index_file() {
     std::string dir = _path;
     auto cb = [&](std::string_view name) -> bool {
@@ -3923,7 +3969,7 @@ Status PersistentIndex::_delete_tmp_index_file() {
         std::string full(name);
         if (full.length() >= suffix.length() &&
             full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
-            !skip_major_compaction_tmp_index_file(full)) {
+            !major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
             VLOG(1) << "delete tmp index file " << path;
             Status st = FileSystem::Default()->delete_file(path);
@@ -4342,6 +4388,7 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
         // followe this rules:
         // 1, remove delete key when l2 not exist
         // 2. skip merge l1, only merge tmp-l1 and l0
+        RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 1 : 0, _l1_vec.size(), false));
         RETURN_IF_ERROR(_merge_compaction_internal(writer.get(), _has_l1 ? 1 : 0, _l1_vec.size(),
                                                    _usage_and_size_by_key_length, !_l2_vec.empty()));
         RETURN_IF_ERROR(writer->finish());
@@ -4540,8 +4587,10 @@ StatusOr<EditVersion> PersistentIndex::_major_compaction_impl(
         size_t total_size = 0;
         auto iter = usage_and_size_stat.find(key_size);
         if (iter != usage_and_size_stat.end()) {
-            total_usage = iter->second.first;
-            total_size = iter->second.second;
+            // we use the average usage and size as total usage and size, to avoid disk waste
+            // They are may smaller than real size, but we can increase page count later, so it's ok
+            total_usage = iter->second.first / l2_versions.size();
+            total_size = iter->second.second / l2_versions.size();
         }
 
         const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_usage);
@@ -4658,6 +4707,12 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     // 2. merge l2 files to new l2 file
     ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
     modify_l2_versions(l2_versions, new_l2_version, index_meta);
+    // delete useless files
+    RETURN_IF_ERROR(_reload(index_meta));
+    RETURN_IF_ERROR(_delete_expired_index_file(
+            _version, _l1_version,
+            _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    _delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 
@@ -4693,13 +4748,23 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     }
     // 2. merge l2 files to new l2 file
     ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
-    // 3. modify PersistentIndexMetaPB and make this step atomic.
-    std::lock_guard<std::mutex> guard(_meta_lock);
-    PersistentIndexMetaPB index_meta;
-    RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
-    modify_l2_versions(l2_versions, new_l2_version, index_meta);
-    RETURN_IF_ERROR(
-            TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta));
+    // 3. modify PersistentIndexMetaPB and reload index, protected by index lock
+    {
+        std::lock_guard lg(*tablet->updates()->get_index_lock());
+        PersistentIndexMetaPB index_meta;
+        RETURN_IF_ERROR(
+                TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
+        modify_l2_versions(l2_versions, new_l2_version, index_meta);
+        RETURN_IF_ERROR(
+                TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta));
+        // reload new l2 versions
+        RETURN_IF_ERROR(_reload(index_meta));
+        // delete useless files
+        RETURN_IF_ERROR(_delete_expired_index_file(
+                _version, _l1_version,
+                _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+    }
+    _delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 
@@ -4741,15 +4806,17 @@ Status PersistentIndex::test_flush_varlen_to_immutable_index(const std::string& 
     return writer.finish();
 }
 
+double PersistentIndex::major_compaction_score(size_t l1_count, size_t l2_count) {
+    // return 0.0, so scheduler can skip this index, if l2 less than 2.
+    if (l2_count <= 1) return 0.0;
+    double l1_l2_count = (double)(l1_count + l2_count);
+    // write amplification
+    // = 1 + 1 + (l1 and l2 file count + config::l0_l1_merge_ratio) / (l1 and l2 file count) / 0.85
+    return 2.0 + (l1_l2_count + (double)config::l0_l1_merge_ratio) / l1_l2_count / 0.85;
+}
+
 void PersistentIndex::_calc_write_amp_score() {
-    if (_l2_versions.size() <= 1) {
-        _write_amp_score.store(0.0);
-    } else {
-        // write amplification
-        // = 1 + 1 + (l1 and l2 file count + config::l0_l1_merge_ratio) / (l1 and l2 file count) / 0.85
-        double l1_l2_count = (_has_l1 ? 1 : 0) + _l2_versions.size();
-        _write_amp_score.store(2.0 + (l1_l2_count + (double)config::l0_l1_merge_ratio) / l1_l2_count / 0.85);
-    }
+    _write_amp_score.store(major_compaction_score(_has_l1 ? 1 : 0, _l2_versions.size()));
 }
 
 double PersistentIndex::get_write_amp_score() const {

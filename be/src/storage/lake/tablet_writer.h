@@ -18,8 +18,10 @@
 #include <vector>
 
 #include "common/status.h"
+#include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class Chunk;
@@ -65,7 +67,7 @@ public:
     // arranged in ascending order.
     //
     // For horizontal writer.
-    virtual Status write(const Chunk& data) = 0;
+    virtual Status write(const Chunk& data, SegmentPB* segment = nullptr) = 0;
 
     // Writes partial columns data to this rowset.
     //
@@ -81,7 +83,7 @@ public:
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`
     // and the data written after it.
-    virtual Status flush() = 0;
+    virtual Status flush(SegmentPB* segment = nullptr) = 0;
 
     // Flushes partial columns data when current columns are written finished.
     //
@@ -89,7 +91,7 @@ public:
     virtual Status flush_columns() = 0;
 
     // This method is called at the end of data processing.
-    virtual Status finish() = 0;
+    virtual Status finish(SegmentPB* segment = nullptr) = 0;
 
     // This method is called at the very end of the operator's life, both in
     // the case of a successful completion of the operation, and in the case

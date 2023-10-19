@@ -182,7 +182,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public boolean addTableToGroup(Database db,
-                                OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
+                                   OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
             throws DdlException {
         if (Strings.isNullOrEmpty(colocateGroup)) {
             return false;
@@ -828,6 +828,7 @@ public class ColocateTableIndex implements Writable {
         this.group2BackendsPerBucketSeq = data.group2BackendsPerBucketSeq;
         this.unstableGroups = data.unstableGroups;
 
+        cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
         constructLakeGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
     }

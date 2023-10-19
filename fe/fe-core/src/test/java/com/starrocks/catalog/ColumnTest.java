@@ -54,6 +54,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.CURRENT_TIMESTAMP_VALUE;
 import static com.starrocks.sql.ast.ColumnDef.DefaultValueDef.NOT_SET;
@@ -337,10 +339,13 @@ public class ColumnTest {
         Index i0 = new Index("i0",
                 Collections.singletonList("f0"), IndexType.BITMAP, "");
 
+        Set<String> bfColumns = new HashSet<>();
+        bfColumns.add("f0");
         TColumn t0 = f0.toThrift();
-        f0.setIndexFlag(t0, Collections.singletonList(i0));
+        f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
         Assert.assertEquals(t0.has_bitmap_index, true);
+        Assert.assertEquals(t0.is_bloom_filter_column, true);
 
         Assert.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);

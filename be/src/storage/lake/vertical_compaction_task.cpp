@@ -37,7 +37,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
 
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet.get_schema());
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
@@ -46,12 +46,12 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
 
     const auto& store_paths = ExecEnv::GetInstance()->store_paths();
     DCHECK(!store_paths.empty());
-    auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet->id(), store_paths.begin()->path);
+    auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(_tablet.id(), store_paths.begin()->path);
     auto source_masks = std::make_unique<std::vector<RowSourceMask>>();
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kVertical, _txn_id, max_rows_per_segment));
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -60,7 +60,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
                                               config::vertical_compaction_max_columns_per_group, &column_groups);
     auto column_group_size = column_groups.size();
 
-    VLOG(3) << "Start vertical compaction. tablet: " << _tablet->id()
+    VLOG(3) << "Start vertical compaction. tablet: " << _tablet.id()
             << ", max rows per segment: " << max_rows_per_segment << ", column group size: " << column_group_size;
 
     for (size_t i = 0; i < column_group_size; ++i) {
@@ -86,7 +86,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
-    txn_log->set_tablet_id(_tablet->id());
+    txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
@@ -97,7 +97,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
-    RETURN_IF_ERROR(_tablet->put_txn_log(std::move(txn_log)));
+    RETURN_IF_ERROR(_tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }
 
@@ -137,7 +137,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
-    TabletReader reader(*_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
+    TabletReader reader(_tablet, _version, schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
@@ -150,7 +150,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
-    VLOG(3) << "Compact column group. tablet: " << _tablet->id() << ", column group: " << column_group_index
+    VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
     while (true) {
@@ -182,7 +182,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
 
         progress->update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
                          column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet->id() << ", compaction progress: " << progress->value();
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << progress->value();
     }
     RETURN_IF_ERROR(writer->flush_columns());
 

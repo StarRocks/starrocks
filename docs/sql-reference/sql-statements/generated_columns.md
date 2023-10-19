@@ -237,8 +237,9 @@ Drop column `newcol1` from the table `test_tbl3`
 ALTER TABLE test_tbl3 DROP COLUMN newcol1;
 ```
 
-**NOTICE**:<br>
-If a generated colum references a regular column in the expression, you cannot directly drop or modify that regular column. Instead, you need to first drop the generated column and then drop or modify the regular column.
+> **NOTICE**:
+>
+> If a generated colum references a regular column in the expression, you cannot directly drop or modify that regular column. Instead, you need to first drop the generated column and then drop or modify the regular column.
 
 ### Query rewrites
 
@@ -324,7 +325,7 @@ To perform partial updates on a Primary Key table, you must specify all the regu
     2|[3,4]|{"a": 3, "b": 4} 
     ```
 
-3. Use [Stream Load](../../) with the `my_data1.csv` file to update some columns of the `test_tbl5` table. You need to set `partial_update:true` and specify all the regular columns referenced by the generated columns in the `columns` parameter.
+3. Use [Stream Load](../../loading/StreamLoad.md) with the `my_data1.csv` file to update some columns of the `test_tbl5` table. You need to set `partial_update:true` and specify all the regular columns referenced by the generated columns in the `columns` parameter.
 
     ```Bash
     curl --location-trusted -u <username>:<password> -H "label:1" \
@@ -357,4 +358,4 @@ An error is returned by Stream Load if you perform partial updates without speci
       2|[3,4]
       ```
 
-2. When partial column updates are performed by using [Stream Load](../../) with the `my_data2.csv` file, if the values for the `data_json` column are not provided in `my_data2.csv` and the `columns` parameter in the Stream Load job does not include the `data_json` column, even if the `data_json` column allows null values, an error is returned by Stream Load because the column `data_json` is referenced by the generated column `newcol2`.
+2. When partial column updates are performed by using [Stream Load](../../loading/StreamLoad.md) with the `my_data2.csv` file, if the values for the `data_json` column are not provided in `my_data2.csv` and the `columns` parameter in the Stream Load job does not include the `data_json` column, even if the `data_json` column allows null values, an error is returned by Stream Load because the column `data_json` is referenced by the generated column `newcol2`.

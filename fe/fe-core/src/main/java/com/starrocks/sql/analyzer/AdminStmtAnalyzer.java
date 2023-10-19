@@ -259,6 +259,7 @@ public class AdminStmtAnalyzer {
                             ((StringLiteral) rightChild).getStringValue().toUpperCase())
                     .orNull();
 
+            adminShowReplicaStatusStmt.setStatusFilter(statusFilter);
             return statusFilter != null;
         }
     }

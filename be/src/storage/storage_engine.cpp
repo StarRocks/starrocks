@@ -69,6 +69,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
+#include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
 #include "util/scoped_cleanup.h"
@@ -277,14 +278,6 @@ Status StorageEngine::_init_store_map() {
     for (auto& store : tmp_stores) {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
-        if (!_lake_persistent_index_dir_inited) {
-            auto status = store.second->init_persistent_index_dir();
-            if (!status.ok()) {
-                return Status::InternalError(strings::Substitute("init persistIndex dir failed, error=$0", error_msg));
-            }
-            _lake_persistent_index_dir_inited = true;
-            _persistent_index_data_dir = store.second;
-        }
     }
 
     release_guard.cancel();
@@ -360,7 +353,7 @@ void StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, b
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& it : _store_map) {
             if (need_update) {
-                it.second->update_capacity();
+                WARN_IF_ERROR(it.second->update_capacity(), "update available capacity failed");
             }
             path_map.emplace(it.first, it.second->get_dir_info());
         }
@@ -443,7 +436,7 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
 
     // write cluster id into cluster_id_path if get effective cluster id success
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && _need_write_cluster_id) {
-        set_cluster_id(_effective_cluster_id);
+        RETURN_IF_ERROR(set_cluster_id(_effective_cluster_id));
     }
 
     return Status::OK();
@@ -532,13 +525,14 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
-bool StorageEngine::is_lake_persistent_index_dir_inited() {
-    return _lake_persistent_index_dir_inited;
-}
-
-// maybe nullptr if storage_root_path is not set
-DataDir* StorageEngine::get_persistent_index_store() {
-    return _persistent_index_data_dir;
+// maybe nullptr if as cn
+DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return nullptr;
+    } else {
+        return stores[tablet_id % stores.size()];
+    }
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
@@ -586,6 +580,8 @@ void StorageEngine::stop() {
             // store_pair.second will be delete later
             store_pair.second->stop_bg_worker();
         }
+        // notify the cv in case anyone is waiting for.
+        _report_cv.notify_all();
     }
 
     _bg_worker_stopped.store(true, std::memory_order_release);
@@ -1389,6 +1385,7 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
             _auto_increment_meta_map.insert({tableid, std::make_shared<AutoIncrementMeta>()});
         }
         meta = _auto_increment_meta_map[tableid];
+        TEST_SYNC_POINT_CALLBACK("StorageEngine::get_next_increment_id_interval.1", &meta);
     }
 
     // lock for different tableid

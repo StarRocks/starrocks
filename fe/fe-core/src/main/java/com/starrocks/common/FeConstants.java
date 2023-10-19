@@ -75,6 +75,8 @@ public class FeConstants {
     public static boolean showLocalShuffleColumnsInExplain = true;
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
+    // set false to resolve ut
+    public static boolean enablePruneEmptyOutputScan = true;
 
     // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
     // the raw data of one tablet equals to 10GB approximately
@@ -93,10 +95,4 @@ public class FeConstants {
     public static String getNodeNotFoundError(boolean chooseComputeNode) {
         return chooseComputeNode ? COMPUTE_NODE_NOT_FOUND_ERROR : BACKEND_NODE_NOT_FOUND_ERROR;
     }
-
-    // The following two parameters are mainly used to speed up MySQL queries by using STR2DATE as the partitioning function for materialized views
-    public static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
-    public static final String PARTITION_USE_STR2DATE_MINVALUE = "0000-01-01";
-    public static final String PARTITION_USE_STR2DATE_MAXVALUE = "9999-12-31";
-
 }

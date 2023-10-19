@@ -50,7 +50,7 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
     </tr>
     <tr>
       <td><b>Query performance</b></td>
-      <td colspan="3" style="text-align: center;">Data Cache &le; Materialized view = Native table</td>
+      <td colspan="3" style={{textAlign: 'center'}} >Data Cache &le; Materialized view = Native table</td>
     </tr>
     <tr>
       <td><b>Query statement</b></td>
@@ -61,7 +61,7 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
   </tbody>
 </table>
 
-<br>
+<br />
 
 Compared to directly querying lake data or loading data into native tables, materialized views offer several unique advantages:
 
@@ -69,7 +69,7 @@ Compared to directly querying lake data or loading data into native tables, mate
 - **Zero maintenance for loading tasks**: Materialized views update data transparently via automatic refresh tasks. There's no need to maintain loading tasks to perform scheduled data updates. Additionally, Hive catalog-based materialized views can detect data changes and perform incremental refreshes at the partition level.
 - **Intelligent  query  rewrite**: Queries can be transparently rewritten to use materialized views. You can benefit from acceleration instantly without the need to modify the query statements your application uses.
 
-<br>
+<br />
 
 Therefore, we recommend using materialized views in the following scenarios:
 
@@ -77,7 +77,7 @@ Therefore, we recommend using materialized views in the following scenarios:
 - Queries involve reusable components, such as fixed aggregation functions or join patterns.
 - Data is organized in partitions, while queries involve aggregation on a relatively high level (e.g., aggregating by day).
 
-<br>
+<br />
 
 In the following scenarios, we recommend prioritizing acceleration through Data Cache:
 
@@ -100,9 +100,9 @@ For Hive catalogs, you can enable the Hive metadata cache refresh feature to all
 
   > **NOTE**
   >
-  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
-To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md):
+To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
 
 | **Configuration item**                                       | **Default**                | **Description**                                              |
 | ------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------ |

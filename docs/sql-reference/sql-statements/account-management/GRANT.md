@@ -8,9 +8,9 @@ Grants roles to users or other roles.
 
 For more information about the privileges that can be granted, see [Privilege items](../../../administration/privilege_item.md).
 
-After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW%20GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
+After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 
-Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE%20USER.md) and [CREATE ROLE](./CREATE%20ROLE.md).
+Before a GRANT operation is performed, make sure that the related user or role has been created. For more information, see [CREATE USER](./CREATE_USER.md) and [CREATE ROLE](./CREATE_ROLE.md).
 
 > **NOTE**
 >
@@ -99,7 +99,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<table_name> to represent a table.
+* You can also use `<db_name>.<table_name>` to represent a table.
 
   ```SQL
   GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -117,7 +117,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<view_name> to represent a view.
+* You can also use `<db_name>.<view_name>` to represent a view.
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
@@ -135,7 +135,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<mv_name> to represent an mv.
+* You can also use `<db_name>.<mv_name>` to represent an mv.
 
   ```SQL
   GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
@@ -153,7 +153,7 @@ GRANT
 ```
 
 * You must first run SET CATALOG before you run this command.
-* You can also use <db_name>.<function_name> to represent a function.
+* You can also use `<db_name>.<function_name>` to represent a function.
 
   ```SQL
   GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}

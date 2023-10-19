@@ -71,4 +71,17 @@ public class AWSCloudConfigurationTest {
         awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
         Assert.assertNull(awsCloudCredential);
     }
+
+    @Test
+    public void testForAWSRegion() {
+        Map<String, String>  properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.endpoint", "endpoint");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        Assert.assertNotNull(cloudConfiguration);
+        Configuration configuration = new Configuration();
+        cloudConfiguration.applyToConfiguration(configuration);
+        Assert.assertEquals("us-east-1", configuration.get("fs.s3a.endpoint.region"));
+    }
 }

@@ -32,13 +32,13 @@ public:
     bool has_output() const override { return false; }
     bool need_input() const override;
     bool is_finished() const override;
-    Status set_finishing(RuntimeState* state) override;
+    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
-    Status prepare(RuntimeState* state) override;
+    [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     bool _is_finished = false;

@@ -225,8 +225,8 @@ public:
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
-    Status prepare(RuntimeState* runtime_state);
-    virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
+    [[nodiscard]] Status prepare(RuntimeState* runtime_state);
+    [[nodiscard]] virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
     void finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
@@ -298,7 +298,8 @@ public:
     // drivers in PRECONDITION_BLOCK state must be marked READY after its dependent runtime-filters or hash tables
     // are finished.
     void mark_precondition_ready(RuntimeState* runtime_state);
-    void start_schedule(int64_t start_count, int64_t start_time);
+    void start_timers();
+    void stop_timers();
     int64_t get_active_time() const { return _active_timer->value(); }
     void submit_operators();
     // Notify all the unfinished operators to be finished.
@@ -370,7 +371,7 @@ public:
         }
     }
 
-    bool is_not_blocked() {
+    StatusOr<bool> is_not_blocked() {
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
         if (sink_operator()->is_finished()) {
             return true;
@@ -389,7 +390,7 @@ public:
             //  This writing method is a bit tricky, and when there is a better way, replace it
             mark_precondition_ready(_runtime_state);
 
-            check_short_circuit();
+            RETURN_IF_ERROR(check_short_circuit());
             if (_state == DriverState::PENDING_FINISH) {
                 return false;
             }
@@ -413,7 +414,7 @@ public:
     }
 
     // Check whether an operator can be short-circuited, when is_precondition_block() becomes false from true.
-    void check_short_circuit();
+    [[nodiscard]] Status check_short_circuit();
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
@@ -465,10 +466,10 @@ protected:
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
-    Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
-    Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
-    Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    [[nodiscard]] Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
+    [[nodiscard]] Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
+    [[nodiscard]] Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
+    [[nodiscard]] Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
     void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
@@ -478,7 +479,7 @@ protected:
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_statistics(RuntimeState* state, size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
     void _update_scan_statistics(RuntimeState* state);
-    void _update_overhead_timer();
+    void _update_driver_level_timer();
 
     RuntimeState* _runtime_state = nullptr;
     Operators _operators;

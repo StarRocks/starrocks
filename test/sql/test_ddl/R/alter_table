@@ -24,6 +24,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
+"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -73,6 +74,39 @@ select count(1) from test_pk_tbl1;
 2
 -- !result
 ALTER TABLE test_pk_tbl1 ORDER BY (k3,v1,v3,k2);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(1) from test_pk_tbl1;
+-- result:
+2
+-- !result
+ALTER TABLE test_pk_tbl1 add COLUMN v5 bitmap after v4;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(1) from test_pk_tbl1;
+-- result:
+2
+-- !result
+ALTER TABLE test_pk_tbl1 add COLUMN (v6 bitmap not null, v7 bitmap);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(1) from test_pk_tbl1;
+-- result:
+2
+-- !result
+ALTER TABLE test_pk_tbl1 modify COLUMN v6 bitmap null;
 -- result:
 -- !result
 function: wait_alter_table_finish()

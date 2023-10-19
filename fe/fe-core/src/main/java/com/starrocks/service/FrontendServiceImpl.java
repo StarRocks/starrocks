@@ -2027,16 +2027,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
+            long mutablePartitionNum = 0;
             try {
                 db.readLock();
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
                     }
+                    if (mutablePartitionNum >= 8) {
+                        continue;
+                    }
+                    ++mutablePartitionNum;
 
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
-                    buildPartitions(physicalPartition, partitions, tPartition);
+                    buildPartitions(olapTable, physicalPartition, partitions, tPartition);
                     buildTablets(physicalPartition, tablets, olapTable);
                 }
             } finally {
@@ -2053,8 +2058,55 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
-    private static void buildPartitions(PhysicalPartition physicalPartition,
+    private static void buildPartitions(OlapTable olapTable, PhysicalPartition physicalPartition,
                                         List<TOlapTablePartition> partitions, TOlapTablePartition tPartition) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo.isRangePartition()) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            Range<PartitionKey> range = rangePartitionInfo.getRange(physicalPartition.getParentId());
+            int partColNum = rangePartitionInfo.getPartitionColumns().size();
+            // set start keys
+            if (range.hasLowerBound() && !range.lowerEndpoint().isMinValue()) {
+                for (int i = 0; i < partColNum; i++) {
+                    tPartition.addToStart_keys(
+                            range.lowerEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                }
+            }
+            // set end keys
+            if (range.hasUpperBound() && !range.upperEndpoint().isMaxValue()) {
+                for (int i = 0; i < partColNum; i++) {
+                    tPartition.addToEnd_keys(
+                            range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
+                }
+            }
+        } else if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) olapTable.getPartitionInfo();
+            List<List<TExprNode>> inKeysExprNodes = new ArrayList<>();
+
+            List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(
+                    physicalPartition.getParentId());
+            if (multiValues != null && !multiValues.isEmpty()) {
+                inKeysExprNodes = multiValues.stream()
+                        .map(values -> values.stream()
+                                .map(value -> value.treeToThrift().getNodes().get(0))
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+                tPartition.setIn_keys(inKeysExprNodes);
+            }
+
+            List<LiteralExpr> values = listPartitionInfo.getLiteralExprValues().get(physicalPartition.getParentId());
+            if (values != null && !values.isEmpty()) {
+                inKeysExprNodes = values.stream()
+                        .map(value -> Lists.newArrayList(value).stream()
+                                .map(value1 -> value1.treeToThrift().getNodes().get(0))
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+            }
+
+            if (!inKeysExprNodes.isEmpty()) {
+                tPartition.setIn_keys(inKeysExprNodes);
+            }
+        }
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
@@ -2581,9 +2633,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TFinishSlotRequirementResponse finishSlotRequirement(TFinishSlotRequirementRequest request) throws TException {
-
         Status status = GlobalStateMgr.getCurrentState().getSlotProvider()
-                .finishSlotRequirement(request.getSlot_id(), new Status(request.getStatus()));
+                .finishSlotRequirement(request.getSlot_id(), request.getPipeline_dop(), new Status(request.getStatus()));
 
         TFinishSlotRequirementResponse res = new TFinishSlotRequirementResponse();
         res.setStatus(status.toThrift());
@@ -2631,8 +2682,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             response.setPartition(
-                    OlapTableSink.createPartition(
-                            db.getId(), dictTable, dictTable.supportedAutomaticPartition(), allPartitions));
+                    OlapTableSink.createPartition(db.getId(), dictTable, dictTable.supportedAutomaticPartition(),
+                    dictTable.getAutomaticBucketSize(), allPartitions));
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));

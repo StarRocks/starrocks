@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   starrocks-fe:
-    image: starrocks/fe-ubuntu:main
+    image: starrocks/fe-ubuntu:latest
     hostname: starrocks-fe
     container_name: starrocks-fe
     command:
@@ -19,7 +19,7 @@ services:
       retries: 30
 
   starrocks-be:
-    image: starrocks/be-ubuntu:main
+    image: starrocks/be-ubuntu:latest
     command:
       - /bin/bash
       - -c

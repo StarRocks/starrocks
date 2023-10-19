@@ -18,6 +18,7 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -272,5 +273,24 @@ public class MetadataMgrTest {
         Assert.assertTrue(metadata.isPresent());
         Assert.assertFalse(queryIdSet.containsValue(metadata.get()));
         mgr.removeQueryMetadata();
+    }
+
+    @Test(expected = MetaNotFoundException.class)
+    public void testDropDbIfExists() throws DdlException, MetaNotFoundException {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("hive_catalog", "hive_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+        metadataMgr.dropDb("hive_catalog", "hive_db", false);
+    }
+
+    @Test(expected = StarRocksConnectorException.class)
+    public void testGetPrunedPartition() {
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1);
     }
 }

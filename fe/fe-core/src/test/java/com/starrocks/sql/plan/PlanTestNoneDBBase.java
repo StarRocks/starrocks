@@ -26,6 +26,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -87,12 +88,20 @@ public class PlanTestNoneDBBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     public static void assertContains(String text, String... pattern) {
         for (String s : pattern) {
             Assert.assertTrue(text, text.contains(s));
         }
+    }
+
+    public static void assertContainsCTEReuse(String sql) throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(100000);
+        String plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                getExplainString(TExplainLevel.NORMAL);
+        assertContains(plan, "  MultiCastDataSinks");
     }
 
     public static void assertContains(String text, List<String> patterns) {

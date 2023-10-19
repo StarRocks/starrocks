@@ -83,9 +83,7 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
         if (index.enable_persistent_index()) {
             // only take affect in local persistent index
             PersistentIndexMetaPB index_meta;
-            PersistentIndexMetaLockGuard index_meta_lock_guard;
-            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store();
-            index.get_persistent_index_meta_lock_guard(&index_meta_lock_guard);
+            DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(tablet->id());
             RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet->id(), &index_meta));
             RETURN_IF_ERROR(index.commit(&index_meta));
             RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet->id(), index_meta));
@@ -123,7 +121,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // 2. rewrite segment file if it is partial update
     std::vector<std::string> orphan_files;
-    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet, &orphan_files));
+    std::map<int, std::string> replace_segments;
+    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet, &replace_segments, &orphan_files));
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
         new_deletes[rowset_id + i] = {};
@@ -197,7 +196,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opwrite(op_write, orphan_files);
+    builder->apply_opwrite(op_write, replace_segments, orphan_files);
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
     TRACE_COUNTER_INCREMENT("#upserts", upserts.size());
@@ -493,9 +492,8 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
 }
 
 Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction,
-                                                 const TabletMetadata& metadata, Tablet* tablet,
-                                                 IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                 int64_t base_version) {
+                                                 const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+                                                 MetaFileBuilder* builder, int64_t base_version) {
     std::stringstream cost_str;
     MonotonicStopWatch watch;
     watch.start();
@@ -550,7 +548,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     VLOG(2) << strings::Substitute(
             "lake publish_primary_compaction: tablet_id:$0 input_rowset_size:$1 max_rowset_id:$2"
             " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
-            tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
+            tablet.id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
             metadata.version(), cost_str.str());
     _print_memory_stats();
 

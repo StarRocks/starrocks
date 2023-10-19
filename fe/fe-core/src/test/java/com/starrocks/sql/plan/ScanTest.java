@@ -325,12 +325,12 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testMergeTwoFilters() throws Exception {
-        String sql = "select v1 from t0 where v2 < null group by v1 HAVING NULL IS NULL;";
+        String sql = "select v1 from t0 where v2 < 3 group by v1 HAVING v1 IS NULL;";
         String planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "  1:AGGREGATE (update finalize)\n"
-                + "  |  group by: 1: v1");
+        assertContains(planFragment, "  2:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1");
 
-        Assert.assertTrue(planFragment.contains("  0:EMPTYSET\n"));
+        Assert.assertTrue(planFragment.contains("1: v1 IS NULL, 2: v2 < 3"));
     }
 
     @Test

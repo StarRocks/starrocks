@@ -193,7 +193,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Use Broker Load to load arrays from ORC or Parquet files
 
-  The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../data-manipulation/BROKER%20LOAD.md).
+  The array type in StarRocks corresponds to the list structure in ORC and Parquet files, which eliminates the need for you to specify different data types in StarRocks. For more information about data loading, see [Broker load](../data-manipulation/BROKER_LOAD.md).
 
 ### Use Stream Load or Routine Load to load CSV-formatted arrays
 

@@ -82,7 +82,7 @@ This section describes the parameters and session variables that are used to ena
 | **Variable**                | **Default value** | **Can be dynamically configured** | **Description**                                              |
 | --------------------------- | ----------------- | --------------------------------- | ------------------------------------------------------------ |
 | enable_query_cache          | false             | Yes                               | Specifies whether to enable the query cache. Valid values: `true` and `false`. `true` specifies to enable this feature, and `false` specifies to disable this feature. When the query cache is enabled, it works only for queries that meet the conditions specified in the "[Application scenarios](../using_starrocks/query_cache.md#application-scenarios)" section of this topic. |
-| query_cache_entry_max_bytes | 4194304           | Yes                               | Specifies the threshold for triggering the Passthrough mode. Valid values: `0` to `9223372036854775807`. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or  `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.<br>If the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter is set to `0`, the Passthrough mode is used even when no computation results are generated from the involved tablets. |
+| query_cache_entry_max_bytes | 4194304           | Yes                               | Specifies the threshold for triggering the Passthrough mode. Valid values: `0` to `9223372036854775807`. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or  `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.<br />If the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter is set to `0`, the Passthrough mode is used even when no computation results are generated from the involved tablets. |
 | query_cache_entry_max_rows  | 409600            | Yes                               | Same as above.                                                |
 
 ### BE parameters
@@ -91,7 +91,7 @@ You need to configure the following parameter in the BE configuration file **be.
 
 | **Parameter**        | **Required** | **Description**                                              |
 | -------------------- | ------------ | ------------------------------------------------------------ |
-| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB.<br>Each BE has its own local query cache in memory, and it populates and probes only its own query cache.<br>Note that the query cache size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
+| query_cache_capacity | No           | Specifies the size of the query cache. Unit: bytes. The default size is 512 MB.<br />Each BE has its own local query cache in memory, and it populates and probes only its own query cache.<br />Note that the query cache size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
 
 ## Engineered for maximum cache hit rate in all scenarios
 
@@ -412,7 +412,7 @@ The support for reuse of partial computation results varies depending on the par
 | **Partitioning policy**   | **Support for reuse of partial computation results**         |
 | ------------------------- | ------------------------------------------------------------ |
 | Unpartitioned             | Not supported                                                |
-| Multi-Column Partitioned  | Not supported<br>**NOTE**<br>This feature may be supported in the future. |
+| Multi-Column Partitioned  | Not supported<br />**NOTE**<br />This feature may be supported in the future. |
 | Single-Column Partitioned | Supported                                                    |
 
 ### Queries against data with append-only data changes

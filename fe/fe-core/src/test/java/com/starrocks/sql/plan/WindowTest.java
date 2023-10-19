@@ -38,7 +38,6 @@ public class WindowTest extends PlanTestBase {
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
                 "has_var_args:false";
-        System.out.println(expectSlice);
         Assert.assertTrue(plan, plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
@@ -1192,12 +1191,30 @@ public class WindowTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(IllegalStateException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 10000, 10000) over(order by L_LINESTATUS) from lineitem";
+                String sql =
+                        "select approx_top_k(L_LINENUMBER, 10000, 10000) over(order by L_LINESTATUS) from lineitem";
                 getFragmentPlan(sql);
             });
             String expectedMessage = "Unexpected order by clause for approx_top_k()";
             String actualMessage = exception.getMessage();
             Assert.assertEquals(expectedMessage, actualMessage);
         }
+    }
+
+    @Test
+    public void testWindowColumnReuse() throws Exception {
+        String sql = "select *, row_number() over(partition by concat(v1, '_', v2) " +
+                "order by cast(v3 as bigint)) from t0";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  3 <-> [3: v3, BIGINT, true]\n" +
+                "  |  4 <-> [1: v1, BIGINT, true]\n" +
+                "  |  5 <-> [2: v2, BIGINT, true]\n" +
+                "  |  6 <-> clone([3: v3, BIGINT, true])\n" +
+                "  |  7 <-> concat[(cast([1: v1, BIGINT, true] as VARCHAR), '_', " +
+                "cast([2: v2, BIGINT, true] as VARCHAR)); args: VARCHAR; result: VARCHAR; " +
+                "args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1");
     }
 }

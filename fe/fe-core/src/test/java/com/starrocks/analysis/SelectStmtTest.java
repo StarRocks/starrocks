@@ -105,6 +105,7 @@ public class SelectStmtTest {
                 .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr)
                 .withTable(createTable1);
+        FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     @Test

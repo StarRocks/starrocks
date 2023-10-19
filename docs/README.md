@@ -10,7 +10,7 @@ Before contributing, please read this article carefully to quickly understand th
 2. Index: When you add a topic, you also need to add an entry for the topic in the table of contents(TOC) file, for example, `[introduction](/introduction/StarRocks_intro.md)`. **The path to your topic must be a relative path from the `docs` directory.** This TOC file will eventually be rendered as the side navigation bar for documentation on our official website.
 3. Images: Images must first be put into the **assets** folder. When inserting images into the documentation, please use the relative path, such as `![test image](../../assets/test.png)`.
 4. Links: For internal links (links to documentation on our official website), please use the relative path of the document, such as `[test md](../../sql-reference.md)`. For external links,  the format must be `[link text](link URL)`.
-5. Code blocks: You must add a language identifier for code blocks, for example, ```sql.
+5. Code blocks: You must add a language identifier for code blocks, for example, `sql`.
 6. Currently, special symbols are not  supported.
 
 ## Writing Process
@@ -69,6 +69,6 @@ Before contributing, please read this article carefully to quickly understand th
 
 ## Documentation template
 
-- [Functions](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)
-- [SQL command template](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-statements/SQL%20command%20template.md)
+- [Functions](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)
+- [SQL command template](https://github.com/StarRocks/docs/blob/main/sql-reference/sql-statements/SQL_command_template.md)
 - [Loading data template](https://github.com/StarRocks/starrocks/blob/main/docs/loading/Loading_data_template.md)

@@ -1075,9 +1075,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_udf = false;
 
-    @ConfField
-    public static boolean enable_remote_script = false;
-
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
 
@@ -1346,6 +1343,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long tablet_sched_consecutive_full_clone_delay_sec = 180; // 3min
+
+    @ConfField(mutable = true, comment = "How much time we should wait before dropping the tablet from BE on tablet report")
+    public static long tablet_report_drop_tablet_delay_sec = 120;
 
     /**
      * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
@@ -1711,6 +1711,9 @@ public class Config extends ConfigBase {
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
+
+    @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
     @ConfField(mutable = true)
@@ -1802,7 +1805,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -1899,7 +1902,7 @@ public class Config extends ConfigBase {
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long hive_max_split_size = 512L * 1024L * 1024L;
+    public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
@@ -2509,12 +2512,15 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = false;
+    public static boolean allow_default_light_schema_change = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
     public static int pipe_scheduler_interval_millis = 1000;
+
+    @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
@@ -2547,4 +2553,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
+
+    @ConfField(mutable = true)
+    public static boolean replan_on_insert = false;
 }

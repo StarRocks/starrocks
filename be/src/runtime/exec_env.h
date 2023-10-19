@@ -252,6 +252,7 @@ public:
     ClientCache<T>* get_client_cache();
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
+    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
 
@@ -308,7 +309,7 @@ public:
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
-    ThreadPool* vacuum_thread_pool();
+    ThreadPool* delete_file_thread_pool();
 
 private:
     void _wait_for_fragments_finish();
@@ -325,6 +326,7 @@ private:
     ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
 
     PriorityThreadPool* _thread_pool = nullptr;
+    ThreadPool* _streaming_load_thread_pool = nullptr;
 
     workgroup::ScanExecutor* _scan_executor = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor = nullptr;

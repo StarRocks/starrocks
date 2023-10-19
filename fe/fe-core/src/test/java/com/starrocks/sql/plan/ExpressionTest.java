@@ -389,7 +389,7 @@ public class ExpressionTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains("if(CAST(3 AS BOOLEAN), 4, 5)");
 
         sql = "select ifnull(date('2021-01-12'), 123);";
-        starRocksAssert.query(sql).explainContains("ifnull(CAST('2021-01-12' AS INT), 123)");
+        starRocksAssert.query(sql).explainContains("20210112");
 
         sql = "select ifnull(date('2021-01-12'), 'kks');";
         starRocksAssert.query(sql).explainContains("'2021-01-12'");
@@ -611,6 +611,11 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS BIGINT)}{<slot 9> " +
                 "<-> <slot 8> * 2}{<slot 10> <-> <slot 9> + 6: abs}"));
+
+        sql = "SELECT max(g) FROM(SELECT array_sum(array_map(x -> ((x * x) + (x * b)), a)) AS g FROM " +
+                "(SELECT [1,2] a, 1 AS b) AS A) AS B";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS SMALLINT)}"));
     }
 
     @Test

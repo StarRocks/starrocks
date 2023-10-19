@@ -129,7 +129,7 @@ PLAN FRAGMENT 1
   5:Project
   |  <slot 22> : 22: p_type
   |  <slot 28> : 33: multiply
-  |  <slot 33> : 33: multiply
+  |  <slot 33> : clone(33: multiply)
   |  common expressions:
   |  <slot 32> : 1.0 - 7: L_DISCOUNT
   |  <slot 33> : 6: L_EXTENDEDPRICE * 32: subtract

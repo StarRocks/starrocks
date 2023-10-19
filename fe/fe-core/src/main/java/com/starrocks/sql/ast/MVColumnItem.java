@@ -123,11 +123,16 @@ public class MVColumnItem {
     public Column toMVColumn(OlapTable olapTable) throws DdlException {
         Column baseColumn = olapTable.getBaseColumn(name);
         Column result;
+        boolean useLightSchemaChange = olapTable.getUseLightSchemaChange();
         if (baseColumn == null) {
             result = new Column(name, type, isKey, aggregationType, isAllowNull,
                     null, "");
             if (defineExpr != null) {
                 result.setDefineExpr(defineExpr);
+            }
+            if (useLightSchemaChange) {
+                int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
+                result.setUniqueId(nextUniqueId);
             }
         } else {
             result = new Column(baseColumn);

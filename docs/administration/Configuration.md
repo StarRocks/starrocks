@@ -10,7 +10,7 @@ FE parameters are classified into dynamic parameters and static parameters.
 
 - Static parameters can only be configured and adjusted in the FE configuration file **fe.conf**. **After you modify this file, you must restart your FE for the changes to take effect.**
 
-Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md). `TRUE` indicates a dynamic parameter.
+Whether a parameter is a dynamic parameter is indicated by the `IsMutable` column in the output of [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md). `TRUE` indicates a dynamic parameter.
 
 Note that both dynamic and static FE parameters can be configured in the **fe.conf** file.
 
@@ -22,7 +22,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
  ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
  ```
 
- For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md).
+ For detailed description of the returned fields, see [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md).
 
 > **NOTE**
 >
@@ -30,7 +30,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -409,13 +409,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 15
-- **Description**: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- **Description**: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 
 ##### routine_load_task_timeout_second
 
 - **Unit**: s
 - **Default**: 60
-- **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+- **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 
 ##### max_tolerable_backend_down_num
 
@@ -1746,19 +1746,19 @@ BE static parameters are as follows.
 
 #### sys_log_dir
 
-- **Default**: ${STARROCKS_HOME}/log
+- **Default**: `${STARROCKS_HOME}/log`
 - **Unit**: N/A
 - **Description**: The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL).
 
 #### user_function_dir
 
-- **Default**: ${STARROCKS_HOME}/lib/udf
+- **Default**: `${STARROCKS_HOME}/lib/udf`
 - **Unit**: N/A
 - **Description**: The directory used to store User-defined Functions (UDFs).
 
 #### small_file_dir
 
-- **Default**: ${STARROCKS_HOME}/lib/small_file
+- **Default**: `${STARROCKS_HOME}/lib/small_file`
 - **Unit**: N/A
 - **Description**: The directory used to store the files downloaded by the file manager.
 

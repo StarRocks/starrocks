@@ -67,10 +67,10 @@ public class SetTest extends PlanTestBase {
     @Test
     public void testUnionEmpty() throws Exception {
         String sql =
-                "SELECT DISTINCT RPAD('kZcD', 1300605171, '') FROM t0 WHERE false UNION ALL SELECT DISTINCT RPAD"
-                        + "('kZcD', 1300605171, '') FROM t0 WHERE false IS NULL;";
+                "SELECT DISTINCT RPAD('kZcD', 1300605171, '') FROM t0 UNION ALL SELECT DISTINCT RPAD"
+                        + "('kZcD', 1300605171, '') FROM t0 WHERE false IS NOT NULL;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("0:UNION"));
+        Assert.assertTrue(plan, plan.contains("0:UNION"));
     }
 
     @Test
@@ -506,22 +506,12 @@ public class SetTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "7:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: [9: day, TINYINT, true]\n" +
-                "  |  cardinality: 1\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [9, TINYINT, true]\n" +
-                "  |  child exprs:\n" +
-                "  |      [4: day, TINYINT, true]\n" +
-                "  |      [8: day, TINYINT, true]\n" +
-                "  |  pass-through-operands: all");
+        assertNotContains(plan, "UNION");
     }
 
     @Test
     public void testUnionWithOrderBy() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownTopNLimit(0);
         String sql =
                 "select * from t0 union all select * from t0 union all select * from t0 where v1 > 1 order by v3 limit 2";
         String plan = getFragmentPlan(sql);

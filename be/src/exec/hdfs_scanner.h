@@ -93,16 +93,20 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
 
-    RuntimeProfile::Counter* block_cache_read_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_read_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_read_timer = nullptr;
-    RuntimeProfile::Counter* block_cache_write_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_write_timer = nullptr;
-    RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_read_block_buffer_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_read_block_buffer_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_timer = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_bytes = nullptr;
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
@@ -180,8 +184,8 @@ struct HdfsScannerParams {
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
-    bool use_block_cache = false;
-    bool enable_populate_block_cache = false;
+    bool use_datacache = false;
+    bool enable_populate_datacache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -284,11 +288,11 @@ public:
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
     void finalize();
 
-    int64_t num_bytes_read() const { return _stats.bytes_read; }
-    int64_t raw_rows_read() const { return _stats.raw_rows_read; }
-    int64_t num_rows_read() const { return _stats.num_rows_read; }
-    int64_t cpu_time_spent() const { return _total_running_time - _stats.io_ns; }
-    int64_t io_time_spent() const { return _stats.io_ns; }
+    int64_t num_bytes_read() const { return _app_stats.bytes_read; }
+    int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
+    int64_t num_rows_read() const { return _app_stats.num_rows_read; }
+    int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
+    int64_t io_time_spent() const { return _app_stats.io_ns; }
     int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
@@ -344,7 +348,7 @@ protected:
     HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;
-    HdfsScanStats _stats;
+    HdfsScanStats _app_stats;
     HdfsScanStats _fs_stats;
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.

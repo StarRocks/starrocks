@@ -39,6 +39,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
@@ -240,7 +241,12 @@ public class MvRewritePreprocessor {
             return;
         }
 
-        Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv(true);
+        Set<String> partitionNamesToRefresh = Sets.newHashSet();
+        if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
+            logMVPrepare(connectContext, mv, "[SYNC={}] MV {} cannot be used for rewrite, " +
+                    "stale partitions {}", isSyncMV, mv.getName(), partitionNamesToRefresh);
+            return;
+        }
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             if (!partitionNamesToRefresh.isEmpty()) {
@@ -291,10 +297,21 @@ public class MvRewritePreprocessor {
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+
+        // Only record `refTableUpdatedPartitionNames` when `mvPartialPartitionPredicates` is not null and it needs
+        // to be compensated by using it.
+        Set<String> refTableUpdatedPartitionNames = null;
+        if (mvPartialPartitionPredicates != null) {
+            Table refBaseTable = partitionTableAndColumns.first;
+            refTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(refBaseTable, true);
+        }
+
         MaterializationContext materializationContext =
                 new MaterializationContext(context, mv, mvPlan, queryColumnRefFactory,
                         mvPlanContext.getRefFactory(), partitionNamesToRefresh,
-                        baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
+                        baseTables, originQueryColumns, intersectingTables,
+                        mvPartialPartitionPredicates, refTableUpdatedPartitionNames);
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);

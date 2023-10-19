@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
@@ -101,6 +100,10 @@ public class RewriteTreeTask extends OptimizerTask {
             return false;
         }
 
+        if (pattern.children().size() > 0 && pattern.children().size() != root.getInputs().size() &&
+                pattern.children().stream().noneMatch(Pattern::isPatternMultiLeaf)) {
+            return false;
+        }
         int patternIndex = 0;
         int childIndex = 0;
 

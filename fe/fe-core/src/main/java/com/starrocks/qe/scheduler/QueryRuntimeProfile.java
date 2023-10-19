@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.Counter;
@@ -27,6 +26,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -85,7 +85,7 @@ public class QueryRuntimeProfile {
     private MarkedCountDownLatch<TUniqueId, Long> profileDoneSignal = null;
 
     private Supplier<RuntimeProfile> topProfileSupplier;
-    private Supplier<ExecPlan> execPlanSupplier;
+    private ExecPlan execPlan;
     private final AtomicLong lastRuntimeProfileUpdateTime = new AtomicLong(System.currentTimeMillis());
 
     // ------------------------------------------------------------------------------------
@@ -163,8 +163,8 @@ public class QueryRuntimeProfile {
         this.topProfileSupplier = topProfileSupplier;
     }
 
-    public void setExecPlanSupplier(Supplier<ExecPlan> execPlanSupplier) {
-        this.execPlanSupplier = execPlanSupplier;
+    public void setExecPlan(ExecPlan execPlan) {
+        this.execPlan = execPlan;
     }
 
     public void clearExportStatus() {
@@ -242,7 +242,7 @@ public class QueryRuntimeProfile {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
-        if (topProfileSupplier != null && execPlanSupplier != null && connectContext != null &&
+        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
                 connectContext.getSessionVariable().isEnableProfile() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
@@ -250,7 +250,7 @@ public class QueryRuntimeProfile {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlanSupplier.get();
+            ExecPlan plan = execPlan;
             profile.addChild(buildMergedQueryProfile());
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
@@ -434,13 +434,18 @@ public class QueryRuntimeProfile {
                     }
 
                     if (commonMetrics.containsInfoString("IsFinalSink")) {
-                        Counter outputFullTime = pipelineProfile.getCounter("OutputFullTime");
+                        long resultDeliverTime = 0;
+                        Counter outputFullTime = pipelineProfile.getMaxCounter("OutputFullTime");
                         if (outputFullTime != null) {
-                            long resultDeliverTime = outputFullTime.getValue();
-                            Counter resultDeliverTimer =
-                                    newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
-                            resultDeliverTimer.setValue(resultDeliverTime);
+                            resultDeliverTime += outputFullTime.getValue();
                         }
+                        Counter pendingFinishTime = pipelineProfile.getMaxCounter("PendingFinishTime");
+                        if (pendingFinishTime != null) {
+                            resultDeliverTime += pendingFinishTime.getValue();
+                        }
+                        Counter resultDeliverTimer =
+                                newQueryProfile.addCounter("ResultDeliverTime", TUnit.TIME_NS, null);
+                        resultDeliverTimer.setValue(resultDeliverTime);
                     }
 
                     Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
@@ -489,8 +494,8 @@ public class QueryRuntimeProfile {
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
         querySpillBytes.setValue(maxQuerySpillBytes);
 
-        if (execPlanSupplier != null) {
-            newQueryProfile.addInfoString("Topology", execPlanSupplier.get().getProfilingPlan().toTopologyJson());
+        if (execPlan != null) {
+            newQueryProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());
         }
         Counter processTimer =
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);

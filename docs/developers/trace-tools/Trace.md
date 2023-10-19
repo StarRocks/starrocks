@@ -15,9 +15,8 @@
 
 Steps to enable tracing in SR:
 
-1.  Install Jaeger
-    <https://www.jaegertracing.io/docs/1.31/getting-started/>
-    The guide above uses docker. For simplicity, you can also just download binary package and run locally, <https://github.com/jaegertracing/jaeger/releases>
+1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started)
+    The guide above uses docker. For simplicity, you can also just download binary package and run locally, `https://github.com/jaegertracing/jaeger/releases`
 
 ```
     decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ll
@@ -50,15 +49,14 @@ Steps to enable tracing in SR:
     # jaeger_endpoint = localhost:6831
 ```
 
-3.  Open jaeger web UI, usually in <http://localhost:16686/search>
-4.  Do some data ingestion (streamload/insert into) and search TXN traces on web UI
+3.  Open jaeger web UI, usually in `http://localhost:16686/search`
+4.  Do some data ingestion (streamload\/insert into) and search TXN traces on web UI
 
 ![trace_pic2.png](../../assets/trace_pic2.png)(trace_pic2.png) 
 ![trace_pic3.png](../../assets/trace_pic3.png)(trace_pic3.png) 
 
 ### Adding traces
 
-*   To add trace, first get familiar with basic concepts like tracer, span, trace propagation
-    <https://opentelemetry.io/docs/concepts/observability-primer/>
-*   Read utility class and it's usages in SR: TraceManager.java(java) common/tracer.h/cpp (cpp), it's current usage(like write txn(load/insert/update/delete) trace, and its propagation to BE).
+*   To add trace, first get familiar with basic concepts like tracer, span, trace propagation read the [observability primer](https://opentelemetry.io/docs/concepts/observability-primer).
+*   Read utility class and it's usages in SR: TraceManager.java(java) `common/tracer.h/cpp (cpp)`, it's current usage(like write txn(load\/insert\/update\/delete) trace, and its propagation to BE).
 *   Add your own trace

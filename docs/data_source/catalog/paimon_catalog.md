@@ -165,8 +165,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                       | Required | Description                                                  |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br>Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br> Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br />Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br /> Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                 | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key               | Yes      | The access key of your IAM user.                             |
 | aws.s3.secret_key               | Yes      | The secret key of your IAM user.                             |
@@ -598,13 +598,13 @@ PROPERTIES
 
 ## View Paimon catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Paimon catalog named `paimon_catalog_fs`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Paimon catalog named `paimon_catalog_fs`:
 
 ```SQL
 SHOW CREATE CATALOG paimon_catalog_fs;
@@ -612,7 +612,7 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ## Drop a Paimon catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Paimon catalog named `paimon_catalog_fs`:
 
@@ -638,13 +638,13 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
 
 ## Query a Paimon table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your Paimon cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Paimon cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
    ```SQL
    SET CATALOG <catalog_name>;

@@ -26,29 +26,43 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TCompressedPartitionMap;
+import com.starrocks.thrift.THdfsPartition;
 import com.starrocks.thrift.TIcebergTable;
+import com.starrocks.thrift.TPartitionMap;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
+import org.apache.thrift.TSerializer;
+import org.apache.thrift.protocol.TBinaryProtocol;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -59,6 +73,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
+    private Optional<Snapshot> snapshot = Optional.empty();
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -77,6 +92,10 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
+    // used for recording the last snapshot time when refresh mv based on mv.
+    private long refreshSnapshotTime = -1L;
+
+    private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -110,6 +129,15 @@ public class IcebergTable extends Table {
         return remoteTableName;
     }
 
+    public Optional<Snapshot> getSnapshot() {
+        if (snapshot.isPresent()) {
+            return snapshot;
+        } else {
+            snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
+            return snapshot;
+        }
+    }
+
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
@@ -129,6 +157,24 @@ public class IcebergTable extends Table {
         }
 
         return partitionColumns;
+    }
+    public List<Column> getPartitionColumnsIncludeTransformed() {
+        List<Column> allPartitionColumns = new ArrayList<>();
+        PartitionSpec currentSpec = getNativeTable().spec();
+        boolean existPartitionEvolution = currentSpec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity() && existPartitionEvolution) {
+                continue;
+            }
+            String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
+            Column partitionCol = getColumn(baseColumnName);
+            allPartitionColumns.add(partitionCol);
+        }
+        return allPartitionColumns;
+    }
+
+    public long nextPartitionId() {
+        return partitionIdGen.getAndIncrement();
     }
 
     public List<Integer> partitionColumnIndexes() {
@@ -152,6 +198,10 @@ public class IcebergTable extends Table {
         }
 
         return indexes;
+    }
+
+    public void resetSnapshot() {
+        snapshot = Optional.empty();
     }
 
     public boolean isV2Format() {
@@ -194,11 +244,20 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
+    public long getRefreshSnapshotTime() {
+        return refreshSnapshotTime;
+    }
+
+    public void setRefreshSnapshotTime(long refreshSnapshotTime) {
+        this.refreshSnapshotTime = refreshSnapshotTime;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
 
         TIcebergTable tIcebergTable = new TIcebergTable();
+        tIcebergTable.setLocation(nativeTable.location());
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {
@@ -208,6 +267,34 @@ public class IcebergTable extends Table {
 
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
+
+        if (!partitions.isEmpty()) {
+            TPartitionMap tPartitionMap = new TPartitionMap();
+            for (int i = 0; i < partitions.size(); i++) {
+                DescriptorTable.ReferencedPartitionInfo info = partitions.get(i);
+                PartitionKey key = info.getKey();
+                long partitionId = info.getId();
+                THdfsPartition tPartition = new THdfsPartition();
+                List<LiteralExpr> keys = key.getKeys();
+                tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+                tPartitionMap.putToPartitions(partitionId, tPartition);
+            }
+
+            // partition info may be very big, and it is the same in plan fragment send to every be.
+            // extract and serialize it as a string, will get better performance(about 3x in test).
+            try {
+                TSerializer serializer = new TSerializer(TBinaryProtocol::new);
+                byte[] bytes = serializer.serialize(tPartitionMap);
+                byte[] compressedBytes = Util.compress(bytes);
+                TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();
+                tCompressedPartitionMap.setOriginal_len(bytes.length);
+                tCompressedPartitionMap.setCompressed_len(compressedBytes.length);
+                tCompressedPartitionMap.setCompressed_serialized_partitions(Base64.getEncoder().encodeToString(compressedBytes));
+                tIcebergTable.setCompressed_partitions(tCompressedPartitionMap);
+            } catch (TException | IOException ignore) {
+                tIcebergTable.setPartitions(tPartitionMap.getPartitions());
+            }
+        }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
                 fullSchema.size(), 0, remoteTableName, remoteDbName);

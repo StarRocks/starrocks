@@ -81,7 +81,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
-    auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
+    auto res = rowset->get_segment_iterators2(pkey_schema, schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }

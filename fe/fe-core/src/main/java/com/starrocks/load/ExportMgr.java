@@ -179,6 +179,23 @@ public class ExportMgr {
         return result;
     }
 
+    public ExportJob getExportByQueryId(UUID queryId) {
+        if (queryId == null) {
+            return null;
+        }
+        readLock();
+        try {
+            for (ExportJob job : idToJob.values()) {
+                if (queryId.equals(job.getQueryId())) {
+                    return job;
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return null;
+    }
+
     // NOTE: jobid and states may both specified, or only one of them, or neither
     public List<List<String>> getExportJobInfosByIdOrState(
             long dbId, long jobId, Set<ExportJob.JobState> states, UUID queryId,

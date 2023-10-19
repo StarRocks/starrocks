@@ -101,10 +101,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitShowClusterStatement(ShowClustersStmt statement, C context) {
-        return visitShowStatement(statement, context);
-    }
-
     // ---------------------------------------- Database Statement -----------------------------------------------------
 
     public R visitUseDbStatement(UseDbStmt statement, C context) {
@@ -734,6 +730,23 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------- DataCache Management Statement -------------------------------------------------
+    public R visitCreateDataCacheRuleStatement(CreateDataCacheRuleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowDataCacheRulesStatement(ShowDataCacheRulesStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropDataCacheRuleStatement(DropDataCacheRuleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitClearDataCacheRulesStatement(ClearDataCacheRulesStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

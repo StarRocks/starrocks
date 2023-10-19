@@ -71,9 +71,14 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -90,7 +95,9 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -1174,11 +1181,16 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_related_mv(ConstantOperator name) {
         TableName tableName = TableName.fromString(name.getVarchar());
-        Pair<Database, Table> dbTable = inspectTable(tableName);
-        Table table = dbTable.getRight();
+        Optional<Database> mayDb;
+        Table table = inspectExternalTable(tableName);
+        if (table.isNativeTableOrMaterializedView()) {
+            mayDb = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb());
+        } else {
+            mayDb = Optional.empty();
+        }
 
         try {
-            dbTable.getLeft().readLock();
+            mayDb.ifPresent(Database::readLock);
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
@@ -1196,8 +1208,27 @@ public class ScalarOperatorFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            dbTable.getLeft().readUnlock();
+            mayDb.ifPresent(Database::readUnlock);
         }
+    }
+
+    /**
+     * Return the content in ConnectorTblMetaInfoMgr, which contains mapping information from base table to mv
+     */
+    @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMvRelationships() {
+        ConnectContext context = ConnectContext.get();
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.FUNCTION.name(), "inspect_mv_relationships");
+        }
+
+        String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
+        return ConstantOperator.createVarchar(json);
     }
 
     /**
@@ -1278,4 +1309,22 @@ public class ScalarOperatorFunctions {
         }
         return values[values.length - 1];
     }
+
+    @ConstantFunction(name = "url_extract_parameter", argTypes = {VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator urlExtractParameter(ConstantOperator url, ConstantOperator parameter) {
+        List<NameValuePair> parametersAndValues = null;
+        try {
+            parametersAndValues = URLEncodedUtils.parse(new URI(url.getVarchar()), Charset.forName("UTF-8"));
+            String parameterName = parameter.getVarchar();
+            for (NameValuePair nv : parametersAndValues) {
+                if (nv.getName().equals(parameterName)) {
+                    return ConstantOperator.createVarchar(nv.getValue());
+                }
+            }
+        } catch (URISyntaxException e) {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+        return ConstantOperator.createNull(Type.VARCHAR);
+    }
 }
+

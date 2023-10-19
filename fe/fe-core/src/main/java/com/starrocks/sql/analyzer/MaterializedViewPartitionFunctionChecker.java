@@ -69,38 +69,43 @@ public class MaterializedViewPartitionFunctionChecker {
         } else if (child1 instanceof FunctionCallExpr) {
             // date_trunc('hour', time_slice(dt, 'minute'))
             FunctionCallExpr funcExpr = (FunctionCallExpr) child1;
-            if (funcExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
-                if (funcExpr.getParams().exprs().size() != 4) {
-                    return false;
-                }
-
-                // TODO: support more functions which do not affect the mv's final partition.
-                Expr child0 = funcExpr.getChild(0);
-                if (!(child0 instanceof SlotRef)) {
-                    throw new SemanticException("1th child of the function time_slice used by the materialized view " +
-                            "only supports slot ref", expr.getPos());
-                }
-                // Check time_slice's input type valid
-                SlotRef slotRef = (SlotRef)  child0;
-                PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
-                if (primitiveType != PrimitiveType.DATETIME && primitiveType != PrimitiveType.DATE) {
-                    return false;
-                }
-                // Check time_slice's input
-                String timeSliceFloor = ((StringLiteral) funcExpr.getChild(3)).getValue();
-                if (!timeSliceFloor.equalsIgnoreCase("floor")) {
-                    return false;
-                }
-                // NOTE: Ensure time_slice's time unit is less than partition's time unit which
-                // will not affect the mv's final partition.
-                String timeSliceFmt = ((StringLiteral) funcExpr.getChild(2)).getValue();
-                if (TIME_MAP.containsKey(timeSliceFmt) && TIME_MAP.containsKey(fmt) &&
-                        TIME_MAP.get(timeSliceFmt) < TIME_MAP.get(fmt)) {
-                    return true;
-                }
+            String name = funcExpr.getFnName().getFunction();
+            if (name.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
+                return checkTimeSlice(funcExpr, fmt);
+            } else if (name.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                return checkStr2date(funcExpr);
             }
         }
         return false;
+    }
+
+    private static boolean checkTimeSlice(FunctionCallExpr funcExpr, String fmt) {
+        if (funcExpr.getParams().exprs().size() != 4) {
+            return false;
+        }
+
+        // TODO: support more functions which do not affect the mv's final partition.
+        Expr child0 = funcExpr.getChild(0);
+        if (!(child0 instanceof SlotRef)) {
+            throw new SemanticException("1th child of the function time_slice used by the materialized view " +
+                    "only supports slot ref", funcExpr.getPos());
+        }
+        // Check time_slice's input type valid
+        SlotRef slotRef = (SlotRef) child0;
+        PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
+        if (primitiveType != PrimitiveType.DATETIME && primitiveType != PrimitiveType.DATE) {
+            return false;
+        }
+        // Check time_slice's input
+        String timeSliceFloor = ((StringLiteral) funcExpr.getChild(3)).getValue();
+        if (!timeSliceFloor.equalsIgnoreCase("floor")) {
+            return false;
+        }
+        // NOTE: Ensure time_slice's time unit is less than partition's time unit which
+        // will not affect the mv's final partition.
+        String timeSliceFmt = ((StringLiteral) funcExpr.getChild(2)).getValue();
+        return TIME_MAP.containsKey(timeSliceFmt) && TIME_MAP.containsKey(fmt) &&
+                TIME_MAP.get(timeSliceFmt) < TIME_MAP.get(fmt);
     }
 
     public static boolean checkStr2date(Expr expr) {

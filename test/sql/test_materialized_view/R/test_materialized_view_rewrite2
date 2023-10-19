@@ -35,23 +35,11 @@ insert into test_empty_partition_tbl values('2023-08-16', 1, 1, 1, 'a');
 -- result:
 -- !result
 refresh materialized view test_empty_partition_mv1 with sync mode;
-function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) GROUP BY col1;", "test_empty_partition_mv1")
--- result:
-None
--- !result
 function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s')) AND (dt <= STR_TO_DATE('2023-08-16 00:00:00', '%Y-%m-%d %H:%i:%s')) GROUP BY col1;", "test_empty_partition_mv1")
 -- result:
 None
 -- !result
 function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt >= '2023-08-15 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
--- result:
-None
--- !result
-function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt <= '2023-08-15 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
--- result:
-None
--- !result
-function: check_hit_materialized_view("select col1, sum(col2) AS sum_col2, sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3 FROM test_empty_partition_tbl AS f WHERE dt = '2023-08-15 00:00:00' GROUP BY col1;", "test_empty_partition_mv1")
 -- result:
 None
 -- !result

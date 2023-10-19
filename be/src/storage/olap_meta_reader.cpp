@@ -58,12 +58,13 @@ Status OlapMetaReader::init(const OlapMetaReaderParams& read_params) {
 
 Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_params) {
     _collect_context.seg_collecter_params.max_cid = 0;
+    auto tablet_schema = read_params.tablet_schema;
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
 
-        int32_t index = _tablet->field_index(col_name);
+        int32_t index = tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid column name: " << it.second;
@@ -72,7 +73,7 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         }
 
         // get column type
-        LogicalType type = _tablet->tablet_schema()->column(index).type();
+        LogicalType type = tablet_schema->column(index).type();
         _collect_context.seg_collecter_params.field_type.emplace_back(type);
 
         // get collect field
@@ -94,7 +95,7 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         }
         _has_count_agg |= (collect_field == "count");
     }
-    _collect_context.seg_collecter_params.tablet_schema = read_params.tablet->tablet_schema();
+    _collect_context.seg_collecter_params.tablet_schema = read_params.tablet_schema;
     return Status::OK();
 }
 

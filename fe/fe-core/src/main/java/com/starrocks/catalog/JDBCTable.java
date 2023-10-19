@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Splitter;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
@@ -25,6 +26,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
@@ -32,6 +36,8 @@ import org.apache.parquet.Strings;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.net.URI;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -99,6 +105,14 @@ public class JDBCTable extends Table {
 
     public List<Column> getPartitionColumns() {
         return partitionColumns;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        if (properties == null) {
+            this.properties = new HashMap<>();
+        }
+        return properties;
     }
 
     @Override
@@ -221,5 +235,32 @@ public class JDBCTable extends Table {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public ProtocolType getProtocolType() {
+        String uri = properties.get(JDBCResource.URI);
+        if (StringUtils.isEmpty(uri)) {
+            return ProtocolType.UNKNOWN;
+        }
+        URI u = URI.create(uri);
+        String protocol = u.getSchemeSpecificPart();
+        List<String> slices = Splitter.on(":").splitToList(protocol);
+        if (CollectionUtils.isEmpty(slices) || slices.size() <= 1) {
+            throw new IllegalArgumentException("illegal jdbc uri: " + uri);
+        }
+        protocol = slices.get(0);
+
+        ProtocolType res = EnumUtils.getEnumIgnoreCase(ProtocolType.class, protocol);
+        if (res == null) {
+            return ProtocolType.UNKNOWN;
+        }
+        return res;
+    }
+
+    public enum ProtocolType {
+        UNKNOWN,
+        MYSQL,
+        POSTGRES,
+        ORACLE
     }
 }

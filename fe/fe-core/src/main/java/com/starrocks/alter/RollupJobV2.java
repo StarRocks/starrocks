@@ -65,9 +65,9 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -266,7 +266,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tbl.isInMemory(),
                                 tbl.enablePersistentIndex(),
                                 tbl.primaryIndexCacheExpireSec(),
-                                tabletType, tbl.getCompressionType(), index.getSortKeyIdxes());
+                                tabletType, tbl.getCompressionType(), index.getSortKeyIdxes(),
+                                index.getSortKeyUniqueIds(), true);
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
                         batchTask.addTask(createReplicaTask);
                     } // end for rollupReplicas

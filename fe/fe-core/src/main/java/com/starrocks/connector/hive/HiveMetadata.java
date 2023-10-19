@@ -304,7 +304,7 @@ public class HiveMetadata implements ConnectorMetadata {
                 Preconditions.checkState(partitionColNames.size() == partitionValues.size(),
                         "Partition columns names size doesn't equal partition values size. %s vs %s",
                         partitionColNames.size(), partitionValues.size());
-                if (hmsOps.partitionExists(dbName, tableName, partitionValues)) {
+                if (hmsOps.partitionExists(table, partitionValues)) {
                     mode = isOverwrite ? UpdateMode.OVERWRITE : UpdateMode.APPEND;
                 } else {
                     mode = PartitionUpdate.UpdateMode.NEW;

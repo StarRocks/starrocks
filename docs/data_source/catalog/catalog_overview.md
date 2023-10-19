@@ -2,7 +2,7 @@
 
 This topic describes what a catalog is, and how to manage and query internal data and external data by using a catalog.
 
-StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to manage internal and external data in one system, and offer a flexible way for you to easily query and analyze data that is stored in various external systems.
+StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to manage internal and external data in one system and offer a flexible way for you to easily query and analyze data that is stored in various external systems.
 
 ## Basic concepts
 
@@ -26,13 +26,13 @@ Currently, StarRocks provides two types of catalogs: internal catalog and extern
 
   StarRocks interacts with the following two components of external data sources when you query external data:
 
-  - **Metadata service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
+  - **Metastore service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
   - **Data storage system**: used to store external data. Both distributed file systems and object
-  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations and then return the query result.
+  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
 
 ## Access catalog
 
-You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
+You can use the [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) statement to switch to a specified catalog in the current session. Then, you can query data by using that catalog.
 
 ## Query data
 

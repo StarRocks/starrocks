@@ -86,6 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -133,15 +134,13 @@ public class DatabaseTransactionMgr {
     private int runningRoutineLoadTxnNums = 0;
     private GlobalStateMgr globalStateMgr;
     private EditLog editLog;
-    private TransactionIdGenerator idGenerator;
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
     private long maxCommitTs = 0;
 
-    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr, TransactionIdGenerator idGenerator) {
+    public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
         this.dbId = dbId;
         this.globalStateMgr = globalStateMgr;
-        this.idGenerator = idGenerator;
         this.editLog = globalStateMgr.getEditLog();
     }
 
@@ -232,11 +231,19 @@ public class DatabaseTransactionMgr {
     public Optional<Long> getMinActiveTxnId() {
         readLock();
         try {
-            if (idToRunningTransactionState.isEmpty()) {
-                return Optional.empty();
-            }
-            long minId = idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue)).get();
-            return Optional.of(minId);
+            return idToRunningTransactionState.keySet().stream().min(Comparator.comparing(Long::longValue));
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public Optional<Long> getMinActiveCompactionTxnId() {
+        readLock();
+        try {
+            OptionalLong minId = idToRunningTransactionState.values().stream()
+                    .filter(state -> state.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION)
+                    .mapToLong(TransactionState::getTransactionId).min();
+            return minId.isPresent() ? Optional.of(minId.getAsLong()) : Optional.empty();
         } finally {
             readUnlock();
         }
@@ -303,7 +310,7 @@ public class DatabaseTransactionMgr {
 
             checkRunningTxnExceedLimit(sourceType);
 
-            long tid = idGenerator.getNextTransactionId();
+            long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
@@ -1424,6 +1431,10 @@ public class DatabaseTransactionMgr {
                 // 1. the number of running routine load tasks is limited by Config.max_routine_load_task_num_per_be
                 // 2. if we add routine load txn to runningTxnNums, runningTxnNums will always be occupied by routine load,
                 //    and other txn may not be able to submitted.
+                break;
+            case LAKE_COMPACTION:
+                // no need to check limit for cloud native table compaction.
+                // high frequency and small batch loads may cause compaction execute rarely.
                 break;
             default:
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
