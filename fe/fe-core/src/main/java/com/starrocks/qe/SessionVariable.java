@@ -511,6 +511,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
+    public static final String ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION =
+            "enable_partition_column_value_only_optimization";
+
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -954,7 +957,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if transmission_encode_level & 4, binary columns are compressed by lz4
     // if transmission_encode_level & 1, enable adaptive encoding.
     // e.g.
-    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(< 0.9);
+    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding
+    // ratio(< 0.9);
     // if transmission_encode_level = 6, SR will force encoding numbers and string columns.
     // in short,
     // for transmission_encode_level,
@@ -1313,6 +1317,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
+
+    @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionColumnValueOnlyOptimization = true;
 
     // This variable is introduced to solve compatibility issues/
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
@@ -2562,6 +2569,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableCountStarOptimization(boolean v) {
         enableCountStarOptimization = v;
+    }
+
+    public boolean isEnablePartitionColumnValueOnlyOptimization() {
+        return enablePartitionColumnValueOnlyOptimization;
+    }
+
+    public void setEnablePartitionColumnValueOnlyOptimization(boolean v) {
+        enablePartitionColumnValueOnlyOptimization = v;
     }
 
     public boolean isEnableExprPrunePartition() {
