@@ -1029,6 +1029,8 @@ struct THdfsScanNode {
     14: optional bool can_use_any_column;
 
     15: optional bool can_use_min_max_count_opt;
+
+    16: optional bool use_partition_column_value_only;
 }
 
 struct TProjectNode {
