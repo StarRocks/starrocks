@@ -33,9 +33,7 @@ Returns a value of the INT type. Value range: 0~53. The specific range is determ
 
 ## Examples
 
-Calculate the yearweek number for `2007-01-01`. `2007-01-01` is Monday on the calendar.
-
-- `Mode` is set to `0` and `0` is returned. The week starts on Sunday. `2007-01-01` is Monday and cannot be week 1. Therefore, `0` is returned.
+Returns year and week for a date.The value of the mode argument defaults to 0.
 
 ```Plaintext
 mysql> SELECT YEARWEEK('2007-01-01', 0);
