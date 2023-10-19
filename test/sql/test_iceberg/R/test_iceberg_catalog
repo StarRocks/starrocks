@@ -1,0 +1,16 @@
+-- name: testIcebergCatalog
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.test_trans_part;
+-- result:
+2	2020-02-01
+3	2020-03-01
+1	2020-01-01
+5	2020-05-01
+4	2020-04-01
+6	2020-06-01
+-- !result
+drop catalog iceberg_sql_test_${uuid0}
+-- result:
+-- !result
