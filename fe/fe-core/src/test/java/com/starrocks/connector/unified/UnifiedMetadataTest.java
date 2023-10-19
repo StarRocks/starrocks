@@ -36,6 +36,7 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.sql.ast.CreateTableStmt;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -237,14 +238,11 @@ public class UnifiedMetadataTest {
                 result = true;
                 times = 1;
             }
-            /*
             {
                 icebergMetadata.getPrunedPartitions(icebergTable, null, -1);
                 result = ImmutableList.of();
                 times = 1;
             }
-
-             */
         };
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
@@ -262,7 +260,7 @@ public class UnifiedMetadataTest {
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of());
         createTableStmt.setEngineName("iceberg");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
-        //Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1).isEmpty());
+        Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1).isEmpty());
     }
 
     @Test
