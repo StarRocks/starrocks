@@ -360,6 +360,24 @@ public class PartitionBasedMvRefreshProcessorTest {
         }
     }
 
+    private void refreshMVRange(String mvName, boolean force) throws Exception {
+        refreshMVRange(mvName, null, null, force);
+    }
+
+    private void refreshMVRange(String mvName, String start, String end, boolean force) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        sb.append("refresh materialized view " + mvName);
+        if (start != null && end != null) {
+            sb.append(String.format(" partition start('%s') end('%s')", start, end));
+        }
+        if (force) {
+            sb.append(" force");
+        }
+        sb.append(" with sync mode");
+        String sql = sb.toString();
+        starRocksAssert.getCtx().executeSql(sql);
+    }
+
     @Test
     public void testUnionAllMvWithPartition() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
