@@ -323,7 +323,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <property name="format" value=";{2,}[\r\n]+"/>
             <property name="illegalPattern" value="true"/>
             <property name="ignoreComments" value="true"/>
-            <property name="message" value="Two or more semicolons appear."/>
+            <property name="message" value="Two or more semicolons appear, which is a duplicate."/>
         </module>
     </module>
 </module>
