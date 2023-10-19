@@ -133,12 +133,8 @@ private:
     bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
-<<<<<<< HEAD
-=======
     bool _has_scan_range_indicate_const_column = false;
     bool _use_partition_column_value_only = false;
-
->>>>>>> 531d89e1c6 ([Feature] optimize query when only partition columns are involved (#31403))
     // ======================================
     // The following are profile metrics
     HdfsScanProfile _profile;
