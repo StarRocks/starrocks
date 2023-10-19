@@ -386,6 +386,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
+
+    // Materialized view's output columns may be different from defined query's output columns.
+    // Record the indexes based on materialized view's column output.
+    // eg: create materialized view mv as select col1, col2, col3 from tbl
+    //  desc mv             :  col2, col1, col3
+    //  queryOutputIndexes  :  1, 0, 2
+    // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
+    @SerializedName(value = "queryOutputIndexes")
+    protected List<Integer> queryOutputIndexes = Lists.newArrayList();
+
+
     // it is a property in momery, do not serialize it
     private PlanMode planMode = PlanMode.UNKNOWN;
 
@@ -539,6 +550,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setMaxMVRewriteStaleness(int maxMVRewriteStaleness) {
         this.maxMVRewriteStaleness = maxMVRewriteStaleness;
+    }
+
+    public List<Integer> getQueryOutputIndexes() {
+        return queryOutputIndexes;
+    }
+
+    public void setQueryOutputIndexes(List<Integer> queryOutputIndexes) {
+        this.queryOutputIndexes = queryOutputIndexes;
     }
 
     /**

@@ -3076,6 +3076,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);
+        // set query output indexes
+        materializedView.setQueryOutputIndexes(stmt.getQueryOutputIndexes());
         // set base index meta
         int schemaVersion = 0;
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);

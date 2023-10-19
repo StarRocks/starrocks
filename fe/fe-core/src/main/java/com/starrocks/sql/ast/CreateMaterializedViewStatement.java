@@ -72,6 +72,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
 
+    // Materialized view's output columns may be different from defined query's output columns.
+    // Record the indexes based on materialized view's column output.
+    // eg: create materialized view mv as select col1, col2, col3 from tbl
+    //  desc mv             :  col2, col1, col3
+    //  queryOutputIndexes  :  1, 0, 2
+    // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
+    private List<Integer> queryOutputIndexes = Lists.newArrayList();
+
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
@@ -241,6 +249,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public ColumnRefFactory getColumnRefFactory() {
         return columnRefFactory;
+    }
+
+    public List<Integer> getQueryOutputIndexes() {
+        return queryOutputIndexes;
+    }
+
+    public void setQueryOutputIndexes(List<Integer> queryOutputIndexes) {
+        this.queryOutputIndexes = queryOutputIndexes;
     }
 
     public void setMaintenancePlan(ExecPlan maintenancePlan, ColumnRefFactory columnRefFactory) {
