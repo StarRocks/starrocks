@@ -200,7 +200,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
     BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
-    LakeServiceImpl lake_service(exec_env);
+    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
