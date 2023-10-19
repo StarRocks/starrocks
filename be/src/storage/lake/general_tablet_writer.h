@@ -37,7 +37,7 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::Chunk& data) override;
+    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override;
 
     Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) override {
         return Status::NotSupported("HorizontalGeneralTabletWriter write_columns not support");
@@ -47,13 +47,13 @@ public:
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_del_file not support");
     }
 
-    Status flush() override;
+    Status flush(SegmentPB* segment = nullptr) override;
 
     Status flush_columns() override {
         return Status::NotSupported("HorizontalGeneralTabletWriter flush_columns not support");
     }
 
-    Status finish() override;
+    Status finish(SegmentPB* segment = nullptr) override;
 
     void close() override;
 
@@ -61,7 +61,7 @@ public:
 
 protected:
     Status reset_segment_writer();
-    virtual Status flush_segment_writer();
+    virtual Status flush_segment_writer(SegmentPB* segment = nullptr);
 
     std::unique_ptr<SegmentWriter> _seg_writer;
 };
@@ -77,7 +77,7 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::Chunk& data) override {
+    Status write(const starrocks::Chunk& data, SegmentPB* segment = nullptr) override {
         return Status::NotSupported("VerticalGeneralTabletWriter write not support");
     }
 
@@ -87,12 +87,12 @@ public:
         return Status::NotSupported("VerticalGeneralTabletWriter flush_del_file not support");
     }
 
-    Status flush() override;
+    Status flush(SegmentPB* segment = nullptr) override;
 
     Status flush_columns() override;
 
     // Finalize all segments footer.
-    Status finish() override;
+    Status finish(SegmentPB* segment = nullptr) override;
 
     void close() override;
 

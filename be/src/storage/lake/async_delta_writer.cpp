@@ -49,6 +49,8 @@ public:
 
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
+    void flush(Callback cb);
+
     void finish(Callback cb);
 
     void close();
@@ -65,6 +67,8 @@ public:
 
     [[nodiscard]] Status check_immutable() { return _writer->check_immutable(); }
 
+    [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
+
 private:
     struct Task {
         Callback cb;
@@ -73,6 +77,7 @@ private:
         const uint32_t* indexes = nullptr;
         uint32_t indexes_size = 0;
         bool finish_after_write = false;
+        bool flush_after_write = false;
     };
 
     static int execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter);
@@ -108,6 +113,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         return 0;
     }
     auto st = Status{};
+    bool flush_after_write = false;
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
@@ -120,12 +126,21 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
             LOG_IF(ERROR, !st.ok()) << "Fail to write. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
+        if (st.ok() && iter->flush_after_write) {
+            flush_after_write = true;
+            continue;
+        }
         if (st.ok() && iter->finish_after_write) {
             st = delta_writer->finish();
             LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
                                     << " txn_id: " << delta_writer->txn_id() << ": " << st;
         }
         iter->cb(st);
+    }
+    if (flush_after_write) {
+        st = delta_writer->flush_async();
+        LOG_IF(ERROR, !st.ok()) << "Fail to flush. tablet_id: " << delta_writer->tablet_id()
+                                << " txn_id: " << delta_writer->txn_id() << ": " << st;
     }
     return 0;
 }
@@ -168,6 +183,19 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+    }
+}
+
+inline void AsyncDeltaWriterImpl::flush(Callback cb) {
+    Task task;
+    task.chunk = nullptr;
+    task.indexes = nullptr;
+    task.indexes_size = 0;
+    task.flush_after_write = true;
+    task.cb = std::move(cb); // Do NOT touch |cb| since here
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
     }
 }
@@ -232,6 +260,10 @@ void AsyncDeltaWriter::write(const Chunk* chunk, const uint32_t* indexes, uint32
     _impl->write(chunk, indexes, indexes_size, std::move(cb));
 }
 
+void AsyncDeltaWriter::flush(Callback cb) {
+    _impl->flush(std::move(cb));
+}
+
 void AsyncDeltaWriter::finish(Callback cb) {
     _impl->finish(std::move(cb));
 }
@@ -262,6 +294,10 @@ bool AsyncDeltaWriter::is_immutable() const {
 
 Status AsyncDeltaWriter::check_immutable() {
     return _impl->check_immutable();
+}
+
+int64_t AsyncDeltaWriter::last_write_ts() const {
+    return _impl->last_write_ts();
 }
 
 StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::build() {

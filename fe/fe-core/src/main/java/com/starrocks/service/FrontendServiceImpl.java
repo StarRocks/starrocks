@@ -2051,12 +2051,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
+            long mutablePartitionNum = 0;
             try {
                 db.readLock();
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
                     }
+                    if (mutablePartitionNum >= 8) {
+                        continue;
+                    }
+                    ++mutablePartitionNum;
 
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
@@ -2701,8 +2706,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             response.setPartition(
-                    OlapTableSink.createPartition(
-                            db.getId(), dictTable, dictTable.supportedAutomaticPartition(), allPartitions));
+                    OlapTableSink.createPartition(db.getId(), dictTable, dictTable.supportedAutomaticPartition(),
+                    dictTable.getAutomaticBucketSize(), allPartitions));
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
