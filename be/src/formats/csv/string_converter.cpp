@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/csv/binary_converter.h"
+#include "formats/csv/string_converter.h"
 
 #include "column/binary_column.h"
 #include "gutil/strings/substitute.h"
@@ -21,7 +21,7 @@
 
 namespace starrocks::csv {
 
-Status BinaryConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
     auto& bytes = binary->get_bytes();
@@ -32,7 +32,7 @@ Status BinaryConverter::write_string(OutputStream* os, const Column& column, siz
     return os->write(s);
 }
 
-Status BinaryConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status StringConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
                                             const Options& options) const {
     auto* binary = down_cast<const BinaryColumn*>(&column);
     auto& bytes = binary->get_bytes();
@@ -53,7 +53,7 @@ Status BinaryConverter::write_quoted_string(OutputStream* os, const Column& colu
     return os->write('"');
 }
 
-bool BinaryConverter::read_string(Column* column, const Slice& s, const Options& options) const {
+bool StringConverter::read_string(Column* column, const Slice& s, const Options& options) const {
     int max_size = 0;
     if (options.type_desc != nullptr) {
         max_size = options.type_desc->len;
@@ -68,7 +68,7 @@ bool BinaryConverter::read_string(Column* column, const Slice& s, const Options&
     return true;
 }
 
-bool BinaryConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
+bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, const Options& options) const {
     Slice s = tmp_s;
     if (!remove_enclosing_quotes<'"'>(&s)) {
         return false;

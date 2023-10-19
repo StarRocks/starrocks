@@ -346,6 +346,7 @@
       + Others
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
+        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
   + Function Reference
     + [Function list](./sql-reference/sql-functions/function-list.md)
