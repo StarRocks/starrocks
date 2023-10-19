@@ -465,7 +465,7 @@ Since v2.2, StarRocks supports updating only the specified columns of a Primary 
 
 > **NOTICE**
 >
-> When you perform a partial update, if the row to be updated does not exist, StarRocks inserts a new row, and fills default values in the other fields that are empty because no data updates are inserted into them.
+> When you perform a partial update, if the row to be updated does not exist, StarRocks inserts a new row, and fills default values in fields that are empty because no data updates are inserted into them.
 
 ### Data examples
 
