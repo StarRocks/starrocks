@@ -690,7 +690,7 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ASSERT_EQ("missing version", cntl.ErrorText());
     }
     for (auto inject_error : {Status::InternalError("injected"), Status::NotFound("injected")}) {
-        std::cerr << "Injected error: " << inject_error <<'\n';
+        std::cerr << "Injected error: " << inject_error << '\n';
         TEST_ENABLE_ERROR_POINT("fs::copy_file", inject_error);
         SyncPoint::GetInstance()->EnableProcessing();
         DeferOp defer([]() {
