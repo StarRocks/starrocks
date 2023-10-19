@@ -701,4 +701,3 @@ The following example explains how to load data into columns of the [`ARRAY`](..
    +------+-----------------------+--------------------+
    2 rows in set (0.01 sec)
    ```
->>>>>>> 20ce8b8e70 ([Doc] fix file without .md (#33063))
