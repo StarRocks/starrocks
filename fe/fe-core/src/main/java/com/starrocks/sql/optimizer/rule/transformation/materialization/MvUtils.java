@@ -30,6 +30,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -42,9 +43,11 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
@@ -92,6 +95,8 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -1002,9 +1007,10 @@ public class MvUtils {
     // then this function will return predicate:
     // k1 >= "2022-01-01" and k1 < "2022-01-02"
     // NOTE: This method can be only used in query rewrite and cannot be used in insert routine.
-    public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
-                                                                 OptExpression mvPlan,
-                                                                 Set<String> mvPartitionNamesToRefresh) {
+    public static ScalarOperator getMvPartialPartitionPredicates(
+            MaterializedView mv,
+            OptExpression mvPlan,
+            Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
         Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
@@ -1037,6 +1043,31 @@ public class MvUtils {
         return null;
     }
 
+    // convert varchar date to date type
+    public static Range<PartitionKey> convertToDateRange(Range<PartitionKey> from) throws AnalysisException {
+        if (from.hasLowerBound() && from.hasUpperBound()) {
+            StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
+            PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
+
+            StringLiteral upperString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            LocalDateTime upperDateTime = DateUtils.parseDatTimeString(upperString.getStringValue());
+            PartitionKey upperPartitionKey = PartitionKey.ofDate(upperDateTime.toLocalDate());
+            return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
+        } else if (from.hasUpperBound()) {
+            StringLiteral upperString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            LocalDateTime upperDateTime = DateUtils.parseDatTimeString(upperString.getStringValue());
+            PartitionKey upperPartitionKey = PartitionKey.ofDate(upperDateTime.toLocalDate());
+            return Range.upTo(upperPartitionKey, from.upperBoundType());
+        } else if (from.hasLowerBound()) {
+            StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
+            PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
+            return Range.downTo(lowerPartitionKey, from.lowerBoundType());
+        }
+        return Range.all();
+    }
+
     /**
      * Return the updated partition key ranges of the specific table.
      *
@@ -1047,19 +1078,41 @@ public class MvUtils {
      * @param mvPartitionNamesToRefresh : the updated partition names  of the materialized view
      * @return
      */
-    private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
-                                                                             Column partitionColumn,
-                                                                             MaterializedView mv,
-                                                                             Set<String> mvPartitionNamesToRefresh) {
+    private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(
+            Table partitionByTable,
+            Column partitionColumn,
+            MaterializedView mv,
+            Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames, MaterializedView.getPartitionExpr(mv));
+        // date to varchar range
+        Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getFirstPartitionRefTableExpr(), partitionColumn);
+        if (isConvertToDate) {
+            baseRangeMapping = Maps.newHashMap();
+            // convert varchar range to date range
+            List<Range<PartitionKey>> baseTableDateRanges = Lists.newArrayList();
+            for (Range<PartitionKey> range : baseTableRanges) {
+                Range<PartitionKey> datePartitionRange = convertToDateRange(range);
+                baseTableDateRanges.add(datePartitionRange);
+                baseRangeMapping.put(datePartitionRange, range);
+            }
+            baseTableRanges = baseTableDateRanges;
+        }
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
                 latestBaseTableRanges.add(range);
             }
+        }
+        if (isConvertToDate) {
+            List<Range<PartitionKey>> tmpRangeList = Lists.newArrayList();
+            for (Range<PartitionKey> range : latestBaseTableRanges) {
+                tmpRangeList.add(baseRangeMapping.get(range));
+            }
+            latestBaseTableRanges = tmpRangeList;
         }
         latestBaseTableRanges = MvUtils.mergeRanges(latestBaseTableRanges);
         return latestBaseTableRanges;
