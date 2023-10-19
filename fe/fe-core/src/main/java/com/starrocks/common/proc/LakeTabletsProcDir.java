@@ -160,5 +160,5 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             result.addRow(row);
             return result;
         }
-    };
+    }
 }

@@ -28,7 +28,7 @@ public class JDBCConnectorTest {
     @Test
     public void testProperties() {
         FeConstants.runningUnitTest = true;
-        Map<String, String> properties = new HashMap<>();;
+        Map<String, String> properties = new HashMap<>();
         properties.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
         properties.put(JDBCResource.USER, "root");

@@ -98,7 +98,7 @@ public class ChangeCatalogDBTest {
                 result = true;
 
                 catalogMgr.catalogExists("hive_catalog");
-                result = true;;
+                result = true;
             }
             {
                 metadataMgr.getDb("default_catalog", "db");

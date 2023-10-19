@@ -544,7 +544,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 return Maps.newHashMap();
-            };
+            }
         };
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                 new ExternalAnalyzeJob("hive0", null, null, null,
@@ -561,7 +561,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 return Maps.newHashMap();
-            };
+            }
         };
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                 new ExternalAnalyzeJob("hive0", "partitioned_db", null, null,

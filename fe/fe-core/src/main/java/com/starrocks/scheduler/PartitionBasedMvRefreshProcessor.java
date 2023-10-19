@@ -470,7 +470,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 Set<String> realPartitionNames =
                         e.getValue().stream()
                                 .flatMap(name -> convertMVPartitionNameToRealPartitionName(e.getKey(), name).stream())
-                        .collect(Collectors.toSet());;
+                        .collect(Collectors.toSet());
                 baseTableAndPartitionNames.put(e.getKey(), realPartitionNames);
             }
             Map<Table, Set<String>> nonRefTableAndPartitionNames = getNonRefTableRefreshPartitions();

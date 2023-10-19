@@ -69,6 +69,6 @@ public abstract class FileListRepo {
         LOADING,
         FINISHED,
         SKIPPED,
-        ERROR;
+        ERROR
     }
 }
