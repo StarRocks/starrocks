@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <span>
-
 #include "common/statusor.h"
 #include "storage/lake/tablet_metadata.h"
 
@@ -44,7 +42,8 @@ class TabletManager;
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                            int64_t new_version, std::span<const int64_t> txn_ids, int64_t commit_time);
+                                            int64_t new_version, const int64_t* txn_ids, size_t txn_ids_size,
+                                            int64_t commit_time);
 
 // Publish a new version of a transaction log.
 //
@@ -73,8 +72,8 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id The ID of the tablet where the transaction will be aborted.
-// - txn_ids A `std::span` of `int64_t` containing the transaction IDs to be aborted.
+// - txn_ids transaction IDs to be aborted.
 //
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids);
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, size_t txn_ids_size);
 
 } // namespace starrocks::lake

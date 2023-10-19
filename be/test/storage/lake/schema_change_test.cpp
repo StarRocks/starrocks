@@ -93,9 +93,7 @@ protected:
     }
 
     Status publish_version_for_schema_change(int64_t tablet_id, int64_t new_version, int64_t txn_id) {
-        return publish_version(_tablet_manager.get(), tablet_id, 1, new_version, std::span<const int64_t>(&txn_id, 1),
-                               time(nullptr))
-                .status();
+        return publish_version(_tablet_manager.get(), tablet_id, 1, new_version, &txn_id, 1, time(nullptr)).status();
     }
 
     std::unique_ptr<MemTracker> _mem_tracker;

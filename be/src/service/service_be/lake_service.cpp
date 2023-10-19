@@ -178,11 +178,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto run_ts = butil::gettimeofday_us();
             auto base_version = request->base_version();
             auto new_version = request->new_version();
-            auto txns = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
+            auto txns = request->txn_ids().data();
+            auto txns_size = request->txn_ids_size();
             auto commit_time = request->commit_time();
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
-            auto res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, commit_time);
+            auto res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
+                                             commit_time);
             if (res.ok()) {
                 auto metadata = std::move(res).value();
                 auto score = compaction_score(*metadata);
@@ -285,8 +287,9 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
-            auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids);
+            auto txn_ids = request->txn_ids().data();
+            auto txn_ids_size = request->txn_ids_size();
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_ids_size);
         };
         auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
