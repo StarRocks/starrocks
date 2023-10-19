@@ -34,14 +34,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TFinishTaskRequest;
-import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.thrift.TCompressionType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -349,9 +349,10 @@ public class TabletSchedulerTest {
         long indexId = 10005L;
         long tabletId = 10006L;
         long replicaId = 10007L;
-        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1L, TStorageMedium.HDD);
-        CreateReplicaTask createReplicaTask = new CreateReplicaTask(beId, dbId, tblId, partitionId, indexId, tabletId, 1,
-                -1L, -1L, 1,
+        short count = 1;
+        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1, TStorageMedium.HDD);
+        CreateReplicaTask createReplicaTask = new CreateReplicaTask(beId, dbId, tblId, partitionId, indexId, tabletId, count,
+                -1, -1L,
                 DUP_KEYS,
                 TStorageType.COLUMN,
                 TStorageMedium.HDD, null, null, 0.0, null,
@@ -367,7 +368,8 @@ public class TabletSchedulerTest {
         tabletInvertedIndex.addTablet(tabletId, tabletMeta);
         tabletInvertedIndex.addReplica(tabletId, replica);
 
-        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId, System.currentTimeMillis());
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
+                dbId, tblId, partitionId, indexId, tabletId, System.currentTimeMillis());
         LocalTablet tablet = new LocalTablet(tabletId);
         tablet.addReplica(replica);
         ctx.setTablet(tablet);
@@ -380,7 +382,7 @@ public class TabletSchedulerTest {
         TFinishTaskRequest request = new TFinishTaskRequest();
         TStatus status = new TStatus();
         status.setStatus_code(TStatusCode.OK);
-        request.setTask_satus(status);
+        request.setTask_status(status);
 
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
 
