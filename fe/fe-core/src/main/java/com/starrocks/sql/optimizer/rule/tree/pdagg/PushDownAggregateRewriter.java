@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -44,9 +45,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -138,15 +143,32 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
         Map<ColumnRefOperator, ScalarOperator> originProjectMap = Maps.newHashMap(project.getColumnRefMap());
 
-        if (!originProjectMap.values().stream().allMatch(ScalarOperator::isColumnRef)) {
-            rewriteProject(context, originProjectMap);
+        if (!checkPushDownAggregateOverProject(context, originProjectMap)) {
+            LogicalAggregationOperator aggregate;
+            List<ColumnRefOperator> groupBys = Lists.newArrayList(context.groupBys.keySet());
+            aggregate = new LogicalAggregationOperator(AggType.GLOBAL, groupBys, context.aggregations);
+            return OptExpression.create(aggregate, optExpression);
         }
+
+        rewriteProject(context, originProjectMap);
 
         context.aggregations.keySet().forEach(k -> originProjectMap.put(k, k));
         OptExpression newOpt = OptExpression.create(
                 LogicalProjectOperator.builder().withOperator(project).setColumnRefMap(originProjectMap).build(),
                 optExpression.getInputs());
         return processChild(newOpt, context);
+    }
+
+    private boolean checkPushDownAggregateOverProject(AggregatePushDownContext context,
+                                                   Map<ColumnRefOperator, ScalarOperator> originProjectMap) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originProjectMap.entrySet()) {
+            if (!entry.getValue().isColumnRef()) {
+                if (context.groupBys.containsKey(entry.getKey())) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     // rewrite groupBys/aggregation by project expression, maybe needs push down
@@ -254,38 +276,96 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         }
 
         List<AggregatePushDownContext> allRewrite = allRewriteContext.get(aggregate);
-        // rewrite
-        AggregatePushDownContext childContext = new AggregatePushDownContext();
-        childContext.origAggregator = aggregate;
-
-        Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap(aggregate.getAggregations());
 
         // flat aggregate
-        List<ColumnRefOperator> allAggregateRefs = allRewrite.stream()
+        List<ColumnRefOperator> aggOutput = allRewrite.stream()
                 .map(a -> a.aggregations.keySet())
                 .flatMap(Collection::stream)
                 .distinct().collect(Collectors.toList());
 
-        // rewrite origin aggregation
-        for (ColumnRefOperator ref : allAggregateRefs) {
-            CallOperator call = aggregate.getAggregations().get(ref);
-            ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), call.isNullable());
-            childContext.aggregations.put(newRef, call);
-
-            CallOperator newCall = genAggregation(call, newRef);
-            newAggregations.put(ref, newCall);
+        List<ColumnRefSet> aggInput = new ArrayList<>();
+        for (ColumnRefOperator output : aggOutput) {
+            aggInput.add(aggregate.getAggregations().get(output).getUsedColumns());
         }
-
-        // group by
-        allRewrite.stream()
-                .map(a -> a.groupBys.keySet())
+        List<ColumnRefSet> aggGroupBys = new ArrayList<>();
+        allRewrite.stream().map(a -> a.groupBys.keySet())
                 .flatMap(Collection::stream)
                 .filter(c -> aggregate.getGroupingKeys().contains(c))
-                .distinct().forEach(c -> childContext.groupBys.put(c, c));
+                .distinct().forEach(x -> aggGroupBys.add(x.getUsedColumns()));
+        List<ColumnRefSet> aggUsedCols = new ArrayList<>(aggInput);
+        aggUsedCols.addAll(aggGroupBys);
+        CheckAggOverJoinContext checkAggOverJoinContext = new CheckAggOverJoinContext(aggUsedCols, factory);
+        CheckAggOverJoin checker = new CheckAggOverJoin();
+        checker.visit(optExpression, checkAggOverJoinContext);
+        List<ChildSide> aggInputFroms = new ArrayList<>();
+        for (int i = 0; i < aggInput.size(); i++) {
+            aggInputFroms.add(checkAggOverJoinContext.from.get(i));
+        }
+        if (aggInputFroms.contains(ChildSide.UNKNOWN)) {
+            return visit(optExpression, context);
+        }
 
-        LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder().withOperator(aggregate)
-                .setAggregations(newAggregations).build();
-        optExpression = OptExpression.create(newAgg, optExpression.getInputs());
+        List<ChildSide> aggGroupByFroms = new ArrayList<>();
+        for (int i = aggInput.size(); i < aggUsedCols.size(); i++) {
+            aggGroupByFroms.add(checkAggOverJoinContext.from.get(i));
+        }
+
+        // rewrite
+        AggregatePushDownContext childContext = new AggregatePushDownContext();
+        childContext.origAggregator = aggregate;
+
+        if (checkAggOverJoinContext.from.stream().allMatch(x -> x == checkAggOverJoinContext.from.get(0))) {
+            Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap(aggregate.getAggregations());
+            // rewrite origin aggregation
+            for (ColumnRefOperator ref : aggOutput) {
+                CallOperator call = aggregate.getAggregations().get(ref);
+                ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), call.isNullable());
+                childContext.aggregations.put(newRef, call);
+
+                CallOperator newCall = genAggregation(call, newRef);
+                newAggregations.put(ref, newCall);
+                allRewrite.stream()
+                        .map(a -> a.groupBys.keySet())
+                        .flatMap(Collection::stream)
+                        .filter(c -> aggregate.getGroupingKeys().contains(c))
+                        .distinct().forEach(c -> childContext.groupBys.put(c, c));
+            }
+            LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder().withOperator(aggregate)
+                    .setAggregations(newAggregations).build();
+            optExpression = OptExpression.create(newAgg, optExpression.getInputs());
+        } else {
+            if (sessionVariable.getPushDownAggToWhichSide().equalsIgnoreCase("none")) {
+                return visit(optExpression, context);
+            }
+            ChildSide side = sessionVariable.getPushDownAggToWhichSide().equalsIgnoreCase("right")
+                    ? ChildSide.RIGHT : ChildSide.LEFT;
+
+            Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap(aggregate.getAggregations());
+            for (int i = 0; i < aggOutput.size(); i++) {
+                ColumnRefOperator ref = aggOutput.get(i);
+                CallOperator call = aggregate.getAggregations().get(ref);
+                if (aggInputFroms.get(i) == side) {
+                    ColumnRefOperator newRef = factory.create(call.getFnName(), call.getType(), call.isNullable());
+                    childContext.aggregations.put(newRef, call);
+                    CallOperator newCall = genAggregation(call, newRef);
+                    newAggregations.put(ref, newCall);
+                } else {
+                    newAggregations.put(ref, call);
+                }
+            }
+
+            Set<ColumnRefOperator> groupBys = new HashSet<>();
+            for (int i = 0; i < aggGroupByFroms.size(); i++) {
+                if (aggGroupByFroms.get(i) == side) {
+                    groupBys.addAll(aggGroupBys.get(i).getColumnRefOperators(factory));
+                }
+            }
+            groupBys.forEach(c -> childContext.groupBys.put(c, c));
+            LogicalAggregationOperator newAgg = LogicalAggregationOperator.builder().withOperator(aggregate)
+                    .setAggregations(newAggregations).build();
+            optExpression = OptExpression.create(newAgg, optExpression.getInputs());
+        }
+
         return processChild(optExpression, childContext);
     }
 
@@ -470,4 +550,82 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     private boolean isInvalid(OptExpression optExpression, AggregatePushDownContext context) {
         return context.isEmpty() || optExpression.getOp().hasLimit();
     }
+
+    enum ChildSide {
+        UNKNOWN,
+        LEFT,
+        RIGHT,
+        ONESIDE
+    }
+    
+    private static class CheckAggOverJoinContext {
+        public ColumnRefFactory factory;
+        public List<ColumnRefSet> usedColumns;
+        public List<ChildSide> from;
+        public boolean[] needCheck;
+        public JoinOperator joinType;
+
+        CheckAggOverJoinContext(List<ColumnRefSet> usedColumns, ColumnRefFactory factory) {
+            this.factory = factory;
+            this.usedColumns = usedColumns;
+            this.from = new ArrayList<>();
+            this.needCheck = new boolean[usedColumns.size()];
+            Arrays.fill(needCheck, Boolean.TRUE);
+            for (int i = 0; i < usedColumns.size(); i++) {
+                this.from.add(ChildSide.UNKNOWN);
+            }
+        }
+    }
+
+    private static class CheckAggOverJoin extends OptExpressionVisitor<Void, CheckAggOverJoinContext> {
+        @Override
+        public Void visit(OptExpression optExpression, CheckAggOverJoinContext context) {
+            if (optExpression.getInputs().size() == 0) {
+                context.from.replaceAll(ignore -> ChildSide.ONESIDE);
+            }
+            for (OptExpression input : optExpression.getInputs()) {
+                input.getOp().accept(this, input, context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalProject(OptExpression optExpression, CheckAggOverJoinContext context) {
+            LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
+            Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap(project.getColumnRefMap());
+
+            for (int i = 0; i < context.needCheck.length; i++) {
+                if (context.needCheck[i]) {
+                    ColumnRefSet col = context.usedColumns.get(i);
+                    List<ColumnRefOperator> columnRefOperators = col.getColumnRefOperators(context.factory);
+                    ColumnRefSet newColSet = new ColumnRefSet();
+                    for (ColumnRefOperator columnRefOperator : columnRefOperators) {
+                        newColSet.union(projectMap.get(columnRefOperator).getUsedColumns());
+                    }
+                    context.usedColumns.set(i, newColSet);
+                }
+            }
+
+            return visit(optExpression, context);
+        }
+
+        @Override
+        public Void visitLogicalJoin(OptExpression optExpression, CheckAggOverJoinContext context) {
+            ColumnRefSet leftChildOutput = optExpression.getChildOutputColumns(0);
+            ColumnRefSet rightChildOutput = optExpression.getChildOutputColumns(1);
+            for (int i = 0; i < context.needCheck.length; i++) {
+                if (context.needCheck[i]) {
+                    ColumnRefSet col = context.usedColumns.get(i);
+                    if (leftChildOutput.containsAll(col)) {
+                        context.from.set(i, ChildSide.LEFT);
+                    } else if (rightChildOutput.containsAll(col)) {
+                        context.from.set(i, ChildSide.RIGHT);
+                    }
+                }
+            }
+            context.joinType = ((LogicalJoinOperator) optExpression.getOp()).getJoinType();
+            return null;
+        }
+    }
+
 }

@@ -410,6 +410,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    public static final String PUSH_DOWN_AGG_TO_WHICH_SIDE = "push_down_agg_to_which_side";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1349,6 +1351,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                         StringUtils.upperCase(chooseExecuteInstancesMode))
                 .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
     }
+
+    @VarAttr(name = PUSH_DOWN_AGG_TO_WHICH_SIDE)
+    private String pushDownAggToWhichSide = SessionVariableConstants.NONE;
 
     public void setChooseExecuteInstancesMode(String mode) {
         SessionVariableConstants.ChooseInstancesMode result =
@@ -2596,6 +2601,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
     }
+
+    public void setPushDownAggToWhichSide(String side) {
+        if (side.equalsIgnoreCase(SessionVariableConstants.NONE) ||
+                side.equalsIgnoreCase(SessionVariableConstants.LEFT) ||
+                side.equalsIgnoreCase(SessionVariableConstants.RIGHT)) {
+            pushDownAggToWhichSide = side.toLowerCase();
+        } else {
+            throw new IllegalArgumentException(
+                    "Legal values of push_down_agg_to_which_side are none|left|right");
+        }
+    }
+
+    public String getPushDownAggToWhichSide() {
+        return pushDownAggToWhichSide;
+    }
+
 
     // Serialize to thrift object
     // used for rest api
