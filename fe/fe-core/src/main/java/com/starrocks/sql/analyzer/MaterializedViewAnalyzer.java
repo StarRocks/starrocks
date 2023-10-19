@@ -222,7 +222,6 @@ public class MaterializedViewAnalyzer {
                 .collect(Collectors.toList());
     }
 
-
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -288,8 +287,7 @@ public class MaterializedViewAnalyzer {
             // columns' order may be changed for sort keys' reorder, need to
             // change `queryStatement.getQueryRelation`'s outputs at the same time.
             List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
-            for (int i = 0; i < mvColumnPairs.size(); i++) {
-                Pair<Column, Integer> pair = mvColumnPairs.get(i);
+            for (Pair<Column, Integer> pair : mvColumnPairs) {
                 Preconditions.checkState(pair.second < outputExpressions.size());
                 columnExprMap.put(pair.first, outputExpressions.get(pair.second));
             }
