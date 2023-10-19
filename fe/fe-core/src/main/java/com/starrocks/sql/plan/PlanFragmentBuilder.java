@@ -611,6 +611,7 @@ public class PlanFragmentBuilder {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
+            Map<SlotRef, SlotRef> slotRefMap = Maps.newHashMap();
             for (TupleId tupleId : inputFragment.getPlanRoot().getTupleIds()) {
                 TupleDescriptor childTuple = context.getDescTbl().getTupleDesc(tupleId);
                 ArrayList<SlotDescriptor> slots = childTuple.getSlots();
@@ -632,6 +633,9 @@ public class PlanFragmentBuilder {
                         // Note: must change the parent tuple id
                         SlotDescriptor slotDescriptor = new SlotDescriptor(slot.getId(), tupleDescriptor, slot);
                         tupleDescriptor.addSlot(slotDescriptor);
+                        SlotRef inputSlotRef = new SlotRef(slot);
+                        SlotRef outputSlotRef = new SlotRef(slotDescriptor);
+                        slotRefMap.put(outputSlotRef, inputSlotRef);
                     }
                 }
             }
@@ -651,7 +655,7 @@ public class PlanFragmentBuilder {
             DecodeNode decodeNode = new DecodeNode(context.getNextNodeId(),
                     tupleDescriptor,
                     inputFragment.getPlanRoot(),
-                    node.getDictToStrings(), projectMap);
+                    node.getDictToStrings(), projectMap, slotRefMap);
             decodeNode.computeStatistics(optExpression.getStatistics());
             decodeNode.setLimit(node.getLimit());
 
