@@ -92,10 +92,12 @@ import java.util.List;
  *                 * __10023_seg2.dat.DNW231dnklawd
  *                 * __10023.hdr.dnmwDDWI92dDko
  */
-public class Repository implements Writable, GsonPostProcessable {
+public class Repository implements Writable {
     private static final Logger LOG = LogManager.getLogger(Repository.class);
+    public static final String STARROCKS_REPOSITORY = "__starrocks_repository_";
+    public static final String PALO_REPOSITORY = "__palo_repository_";
 
-    public String prefixRepo = "__starrocks_repository_";
+    public String prefixRepo;
     public static final String PREFIX_SNAPSHOT_DIR = "__ss_";
     public static final String PREFIX_DB = "__db_";
     public static final String PREFIX_TBL = "__tbl_";
@@ -177,11 +179,11 @@ public class Repository implements Writable, GsonPostProcessable {
 
     // create repository dir and repo info file
     public Status initRepository() {
-        Status st = initRepositoryInternal("__palo_repository_");
+        Status st = initRepositoryInternal(PALO_REPOSITORY);
         if (st.ok()) {
             return Status.OK;
         }
-        return initRepositoryInternal("__starrocks_repository_");
+        return initRepositoryInternal(STARROCKS_REPOSITORY);
     }
 
     public Status initRepositoryInternal(String path) {
@@ -231,7 +233,7 @@ public class Repository implements Writable, GsonPostProcessable {
             return new Status(ErrCode.COMMON_ERROR,
                     "Invalid repository dir. expected one repo info file. get more: " + remoteFiles);
         } else {
-            if (path == "__palo_repository_") {
+            if (path.equals(PALO_REPOSITORY)) {
                 return new Status(ErrCode.COMMON_ERROR, "Use new repository prefix");
             }
             // repo is not exist, get repo info
@@ -246,20 +248,20 @@ public class Repository implements Writable, GsonPostProcessable {
     // eg: location/__starrocks_repository_repo_name/__repo_info
     public String assembleRepoInfoFilePath() {
         return Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(prefixRepo, name),
+                joinPrefix(getPrefixRepo(), name),
                 FILE_REPO_INFO);
     }
 
     // eg: location/__starrocks_repository_repo_name/__my_sp1/__meta
     public String assembleMetaInfoFilePath(String label) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(getPrefixRepo(), name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 FILE_META_INFO);
     }
 
     // eg: location/__starrocks_repository_repo_name/__my_sp1/__info_2018-01-01-08-00-00
     public String assembleJobInfoFilePath(String label, long createTime) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(getPrefixRepo(), name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 jobInfoFileNameWithTimestamp(createTime));
     }
@@ -267,7 +269,7 @@ public class Repository implements Writable, GsonPostProcessable {
     // eg:
     // __starrocks_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10020/__10022/
     public String getRepoTabletPathBySnapshotInfo(String label, SnapshotInfo info) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(getPrefixRepo(), name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 DIR_SNAPSHOT_CONTENT,
                 joinPrefix(PREFIX_DB, info.getDbId()),
@@ -278,7 +280,7 @@ public class Repository implements Writable, GsonPostProcessable {
     }
 
     public String getRepoPath(String label, String childPath) {
-        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name),
+        return Joiner.on(PATH_DELIMITER).join(location, joinPrefix(getPrefixRepo(), name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 DIR_SNAPSHOT_CONTENT,
                 childPath);
@@ -288,7 +290,7 @@ public class Repository implements Writable, GsonPostProcessable {
     // If failed to connect this repo, set errMsg and return false.
     public boolean ping() {
         String checkPath = Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(prefixRepo, name));
+                joinPrefix(getPrefixRepo(), name));
         Status st = storage.checkPathExist(checkPath);
         if (!st.ok()) {
             errMsg = TimeUtils.longToTimeString(System.currentTimeMillis()) + ": " + st.getErrMsg();
@@ -305,7 +307,7 @@ public class Repository implements Writable, GsonPostProcessable {
     public Status listSnapshots(List<String> snapshotNames) {
         // list with prefix:
         // eg. __starrocks_repository_repo_name/__ss_*
-        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix(prefixRepo, name), PREFIX_SNAPSHOT_DIR)
+        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix(getPrefixRepo(), name), PREFIX_SNAPSHOT_DIR)
                 + "*";
         List<RemoteFile> result = Lists.newArrayList();
         Status st = storage.list(listPath, result);
@@ -334,7 +336,7 @@ public class Repository implements Writable, GsonPostProcessable {
     // /location/__starrocks_repository_repo_name/__ss_my_ss1/__ss_content/__db_10001/__tbl_10020/__part_10031/__idx_10032/__10023/__3481721
     public String assembleRemoteSnapshotPath(String label, SnapshotInfo info) {
         String path = Joiner.on(PATH_DELIMITER).join(location,
-                joinPrefix(prefixRepo, name),
+                joinPrefix(getPrefixRepo(), name),
                 joinPrefix(PREFIX_SNAPSHOT_DIR, label),
                 DIR_SNAPSHOT_CONTENT,
                 joinPrefix(PREFIX_DB, info.getDbId()),
@@ -708,35 +710,29 @@ public class Repository implements Writable, GsonPostProcessable {
         location = Text.readString(in);
         storage = BlobStorage.read(in);
         createTime = in.readLong();
-
-        if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
-        }
     }
 
-    @Override
-    public void gsonPostProcess() throws IOException {
-        if (!GlobalStateMgr.isCheckpointThread()) {
-            genPrefixRepo();
+    private synchronized String getPrefixRepo() {
+        if (!Strings.isNullOrEmpty(prefixRepo)) {
+            return prefixRepo;
         }
-    }
 
-    private void genPrefixRepo() {
         // check __palo_repository_ first, if success, prefixRepo = __palo_repository_
-        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix("__palo_repository_", name));
+        String listPath = Joiner.on(PATH_DELIMITER).join(location, joinPrefix(PALO_REPOSITORY, name));
         Status st;
         try {
             st = storage.checkPathExist(listPath);
         } catch (Exception e) {
             LOG.warn("check path exist fail");
-            prefixRepo = "__starrocks_repository_";
-            return;
+            prefixRepo = STARROCKS_REPOSITORY;
+            return prefixRepo;
         }
 
         if (st.ok()) {
-            prefixRepo = "__palo_repository_";
+            prefixRepo = PALO_REPOSITORY;
         } else {
-            prefixRepo = "__starrocks_repository_";
+            prefixRepo = STARROCKS_REPOSITORY;
         }
+        return prefixRepo;
     }
 }

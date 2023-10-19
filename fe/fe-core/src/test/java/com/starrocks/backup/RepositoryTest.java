@@ -151,6 +151,8 @@ public class RepositoryTest {
         Timestamp ts = Timestamp.valueOf(createTime);
         long creastTs = ts.getTime();
 
+        repo.prefixRepo = Repository.STARROCKS_REPOSITORY;
+
         // "location/__starrocks_repository_repo_name/__ss_my_sp1/__info_2018-01-01-08-00-00"
         String expected = location + "/" + repo.prefixRepo + name + "/" + Repository.PREFIX_SNAPSHOT_DIR
                 + label + "/" + Repository.PREFIX_JOB_INFO + createTime2;
