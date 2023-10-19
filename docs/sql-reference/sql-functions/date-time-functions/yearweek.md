@@ -42,30 +42,25 @@ mysql> SELECT YEARWEEK('2007-01-01', 0);
 +---------------------------+
 | yearweek('2007-01-01', 0) |
 +---------------------------+
-|                    200700 |
+|                    200653 |
 +---------------------------+
 ```
 
-- `Mode` is set to `1` and `1` is returned. The week starts on Monday and `2007-01-01` is Monday.
-
 ```Plaintext
-mysql> SELECT WEEK('2007-01-01', 1);
-+-----------------------+
-| week('2007-01-01', 1) |
-+-----------------------+
-|                     1 |
-+-----------------------+
-1 row in set (0.02 sec)
+mysql> SELECT YEARWEEK('2007-01-01', 1);
++---------------------------+
+| yearweek('2007-01-01', 1) |
++---------------------------+
+|                    200701 |
++---------------------------+
 ```
 
-- `Mode` is set to `2` and `53` is returned. The week starts on Sunday. However, `2007-01-01` is Monday and the value range is 1~53. Therefore, `53` is returned, indicating that this is the last week of the previous year.
-
 ```Plaintext
-mysql> SELECT WEEK('2007-01-01', 2);
-+-----------------------+
-| week('2007-01-01', 2) |
-+-----------------------+
-|                    53 |
-+-----------------------+
+mysql> SELECT YEARWEEK('2007-01-01', 2);
++---------------------------+
+| yearweek('2007-01-01', 2) |
++---------------------------+
+|                    200653 |
++---------------------------+
 1 row in set (0.01 sec)
 ```
