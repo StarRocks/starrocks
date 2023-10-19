@@ -65,6 +65,8 @@ struct SchemaScannerParam {
     const std::string* log_level{nullptr};
     const std::string* log_pattern{nullptr};
     int64_t log_limit{-1};
+    const std::string* origin_db{nullptr};
+    const std::string* origin_table{nullptr};
 
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;

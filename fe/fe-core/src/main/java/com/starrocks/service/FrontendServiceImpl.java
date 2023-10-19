@@ -88,6 +88,10 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.connector.iceberg.FilesTable;
+import com.starrocks.connector.iceberg.IcebergTableType;
+import com.starrocks.connector.iceberg.ManifestsTable;
+import com.starrocks.connector.iceberg.SnapshotsTable;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
@@ -184,6 +188,12 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
+import com.starrocks.thrift.TGetIcebergFilesRequest;
+import com.starrocks.thrift.TGetIcebergFilesResponse;
+import com.starrocks.thrift.TGetIcebergManifestsRequest;
+import com.starrocks.thrift.TGetIcebergManifestsResponse;
+import com.starrocks.thrift.TGetIcebergSnapshotRequest;
+import com.starrocks.thrift.TGetIcebergSnapshotsResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
@@ -2688,5 +2698,39 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw semanticException;
         }
         return response;
+    }
+
+    @Override
+    public TGetIcebergSnapshotsResponse getIcebergSnapshots(TGetIcebergSnapshotRequest request) {
+        String catalogName = request.getCatalog_name();
+        String dbName = request.getDb_name();
+        String tableName = request.getTable_name();
+        String icebergTypeString = IcebergTableType.SNAPSHOTS.toString();
+        SnapshotsTable snapshotsTable = (SnapshotsTable) GlobalStateMgr.getCurrentState().getMetadataMgr().getSystemTable(
+                catalogName, dbName, tableName, icebergTypeString);
+        return snapshotsTable.getSnapshots();
+    }
+
+    @Override
+    public TGetIcebergManifestsResponse getIcebergManifests(TGetIcebergManifestsRequest request) {
+        String catalogName = request.getCatalog_name();
+        String dbName = request.getDb_name();
+        String tableName = request.getTable_name();
+        String icebergTypeString = IcebergTableType.MANIFESTS.toString();
+        ManifestsTable manifestsTable = (ManifestsTable) GlobalStateMgr.getCurrentState().getMetadataMgr().getSystemTable(
+                catalogName, dbName, tableName, icebergTypeString);
+        return manifestsTable.getManifests();
+    }
+
+    @Override
+    public TGetIcebergFilesResponse getIcebergFiles(TGetIcebergFilesRequest request) {
+        String catalogName = request.getCatalog_name();
+        String dbName = request.getDb_name();
+        String tableName = request.getTable_name();
+        String icebergTypeString = IcebergTableType.FILES.toString();
+        long limit = request.getLimit() > 0 ? request.getLimit() : 100;
+        FilesTable filesTable = (FilesTable) GlobalStateMgr.getCurrentState().getMetadataMgr().getSystemTable(
+                catalogName, dbName, tableName, icebergTypeString);
+        return filesTable.getFiles(limit);
     }
 }

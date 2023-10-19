@@ -112,6 +112,10 @@ public interface ConnectorMetadata {
         return null;
     }
 
+    default Table getSystemTable(String dbName, String tblName, String tableTypeString) {
+        return null;
+    }
+
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *

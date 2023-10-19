@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.ExternalMetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -1309,6 +1310,12 @@ public class PlanFragmentBuilder {
 
             if (scanNode.isBeSchemaTable()) {
                 scanNode.computeBeScanRanges();
+            }
+
+            if (table instanceof ExternalMetadataTable) {
+                ExternalMetadataTable externalMetadataTable = (ExternalMetadataTable) table;
+                scanNode.setOriginDbName(externalMetadataTable.getOriginDbName());
+                scanNode.setOriginTableName(externalMetadataTable.getOriginTableName());
             }
 
             // set a per node log scan limit to prevent BE/CN OOM

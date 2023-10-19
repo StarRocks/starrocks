@@ -112,6 +112,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table getSystemTable(String dbName, String tblName, String tableTypeString) {
+        ConnectorMetadata metadata = metadataOfDb(dbName);
+        return metadata.getSystemTable(dbName, tblName, tableTypeString);
+    }
+
+    @Override
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
         return normal.getMaterializedViewIndex(dbName, tblName);
     }

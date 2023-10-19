@@ -464,6 +464,8 @@ struct TSchemaScanNode {
   25: optional i64 log_limit;
 
   101: optional string catalog_name;
+  102: optional string origin_db_name;
+  103: optional string origin_table_name;
 }
 
 enum TAccessPathType {

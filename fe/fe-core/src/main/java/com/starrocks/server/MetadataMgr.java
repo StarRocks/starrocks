@@ -296,6 +296,11 @@ public class MetadataMgr {
         return connectorTable;
     }
 
+    public Table getSystemTable(String catalogName, String dbName, String tblName, String tableTypeString) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(metadata -> metadata.getSystemTable(dbName, tblName, tableTypeString)).orElse(null);
+    }
+
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);

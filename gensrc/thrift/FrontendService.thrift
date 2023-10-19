@@ -1564,6 +1564,77 @@ struct TGetDictQueryParamResponse {
   4: required Descriptors.TNodesInfo nodes_info
 }
 
+struct TGetIcebergSnapshotRequest {
+    1: optional string catalog_name
+    2: optional string db_name
+    3: optional string table_name
+}
+
+struct TIcebergSnapshot {
+    1: optional string committed_at
+    2: optional i64 snapshot_id
+    3: optional i64 parent_id
+    4: optional string operation
+    5: optional string manifest_list
+    6: optional string summary
+}
+
+struct TGetIcebergSnapshotsResponse {
+    1: optional list<TIcebergSnapshot> iceberg_snapshots
+}
+
+struct TGetIcebergManifestsRequest {
+    1: optional string catalog_name
+    2: optional string db_name
+    3: optional string table_name
+}
+
+struct TIcebergManifest {
+    1: optional string path
+    2: optional i64 length
+    3: optional i32 partition_spec_id
+    4: optional i64 added_snapshot_id
+    5: optional i32 added_data_files_count
+    6: optional i64 added_rows_count
+    7: optional i32 existing_data_files_count
+    8: optional i64 existing_rows_count
+    9: optional i32 deleted_data_files_count
+    10: optional i64 deleted_rows_count
+    11: optional string partition_summaries
+}
+
+struct TGetIcebergManifestsResponse {
+    1: optional list<TIcebergManifest> iceberg_manifests
+}
+
+struct TGetIcebergFilesRequest {
+    1: optional string catalog_name
+    2: optional string db_name
+    3: optional string table_name
+    4: optional i64 limit
+}
+
+struct TIcebergFile {
+    1: optional i32 content
+    2: optional string file_path
+    3: optional string file_format
+    4: optional i32 spec_id
+    5: optional i64 record_count
+    6: optional i64 file_size_in_bytes
+    7: optional string column_sizes
+    8: optional string value_counts
+    9: optional string null_value_counts
+    10: optional string nan_value_counts
+    11: optional string lower_bounds
+    12: optional string upper_bounds
+    13: optional string split_offsets
+    14: optional string equality_ids
+}
+
+struct TGetIcebergFilesResponse {
+    1: list<TIcebergFile> iceberg_files
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1653,5 +1724,11 @@ service FrontendService {
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
 
     TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
+
+    TGetIcebergSnapshotsResponse getIcebergSnapshots(1: TGetIcebergSnapshotRequest request)
+
+    TGetIcebergManifestsResponse getIcebergManifests(1: TGetIcebergManifestsRequest request)
+
+    TGetIcebergFilesResponse getIcebergFiles(1: TGetIcebergFilesRequest request)
 }
 

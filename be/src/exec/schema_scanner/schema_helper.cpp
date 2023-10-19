@@ -213,6 +213,31 @@ Status SchemaHelper::get_grants_to(const std::string& ip, const int32_t port,
             timeout_ms);
 }
 
+Status SchemaHelper::get_iceberg_snapshots(const std::string& ip, const int32_t port,
+                                           const TGetIcebergSnapshotRequest& request,
+                                           TGetIcebergSnapshotsResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&request, &response](FrontendServiceConnection& client) {
+                                                           client->getIcebergSnapshots(*response, request);
+                                                       });
+}
+
+Status SchemaHelper::get_iceberg_manifests(const std::string& ip, const int32_t port,
+                                           const TGetIcebergManifestsRequest& request,
+                                           TGetIcebergManifestsResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
+                                                       [&request, &response](FrontendServiceConnection& client) {
+                                                           client->getIcebergManifests(*response, request);
+                                                       });
+}
+
+Status SchemaHelper::get_iceberg_files(const std::string& ip, const int32_t port,
+                                       const TGetIcebergFilesRequest& request, TGetIcebergFilesResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&request, &response](FrontendServiceConnection& client) { client->getIcebergFiles(*response, request); });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);

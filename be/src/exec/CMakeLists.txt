@@ -143,6 +143,9 @@ set(EXEC_FILES
     schema_scanner/schema_helper.cpp
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
+    schema_scanner/schema_iceberg_snapshots_scanner.cpp
+    schema_scanner/schema_iceberg_manifests_scanner.cpp
+    schema_scanner/schema_iceberg_files_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
