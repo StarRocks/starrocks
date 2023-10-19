@@ -20,19 +20,28 @@ import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TDisk;
+import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TTabletType;
+import com.starrocks.thrift.TCompressionType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
@@ -51,6 +60,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.starrocks.catalog.KeysType.DUP_KEYS;
+
 public class TabletSchedulerTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
@@ -58,11 +69,13 @@ public class TabletSchedulerTest {
     SystemInfoService systemInfoService;
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
+    FakeEditLog fakeEditLog;
     @Before
     public void setup() throws Exception {
         systemInfoService = new SystemInfoService();
         tabletInvertedIndex = new TabletInvertedIndex();
         tabletSchedulerStat = new TabletSchedulerStat();
+        fakeEditLog = new FakeEditLog();
 
         new Expectations() {
             {
@@ -325,5 +338,52 @@ public class TabletSchedulerTest {
         Assert.assertEquals(LocalTablet.TabletStatus.FORCE_REDUNDANT, result.first);
 
         Config.recover_with_empty_tablet = false;
+    }
+
+    @Test
+    public void testFinishCreateReplicaTask() {
+        long beId = 10001L;
+        long dbId = 10002L;
+        long tblId = 10003L;
+        long partitionId = 10004L;
+        long indexId = 10005L;
+        long tabletId = 10006L;
+        long replicaId = 10007L;
+        TabletMeta tabletMeta = new TabletMeta(dbId, tblId, partitionId, indexId, -1L, TStorageMedium.HDD);
+        CreateReplicaTask createReplicaTask = new CreateReplicaTask(beId, dbId, tblId, partitionId, indexId, tabletId, 1,
+                -1L, -1L, 1,
+                DUP_KEYS,
+                TStorageType.COLUMN,
+                TStorageMedium.HDD, null, null, 0.0, null,
+                null,
+                false,
+                false,
+                1,
+                TTabletType.TABLET_TYPE_DISK,
+                TCompressionType.LZ4_FRAME);
+
+        Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
+
+        tabletInvertedIndex.addTablet(tabletId, tabletMeta);
+        tabletInvertedIndex.addReplica(tabletId, replica);
+
+        TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, dbId, tblId, partitionId, indexId, tabletId, System.currentTimeMillis());
+        LocalTablet tablet = new LocalTablet(tabletId);
+        tablet.addReplica(replica);
+        ctx.setTablet(tablet);
+
+        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+
+        tabletScheduler.addToRunningTablets(ctx);
+
+
+        TFinishTaskRequest request = new TFinishTaskRequest();
+        TStatus status = new TStatus();
+        status.setStatus_code(TStatusCode.OK);
+        request.setTask_satus(status);
+
+        tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
+
+        Assert.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
     }
 }

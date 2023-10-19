@@ -645,7 +645,7 @@ public class TabletScheduler extends FrontendDaemon {
         stat.counterTabletScheduleCostMs.addAndGet(cost);
     }
 
-    private synchronized void addToRunningTablets(TabletSchedCtx tabletCtx) {
+    protected synchronized void addToRunningTablets(TabletSchedCtx tabletCtx) {
         runningTablets.put(tabletCtx.getTabletId(), tabletCtx);
     }
 
