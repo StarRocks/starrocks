@@ -15,12 +15,15 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.Comparator;
@@ -45,9 +48,46 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
             for (OptExpression expression : expressions) {
                 calculateStatistics(expression, context);
             }
-            // sort expressions based on statistics output row count
-            expressions.sort(Comparator.comparingDouble(expression -> expression.getStatistics().getOutputRowCount()));
-            return expressions.subList(0, 1);
+            List<CandidateContext> contexts = Lists.newArrayList();
+            for (int i = 0; i < expressions.size(); i++) {
+                Statistics mvStatistics = collectMVStatistics(expressions.get(i));
+                Preconditions.checkState(mvStatistics != null);
+                contexts.add(new CandidateContext(mvStatistics, i));
+            }
+            // sort expressions based on statistics output row count and compute size
+            contexts.sort(new CandidateContextComparator());
+            return Lists.newArrayList(expressions.get(contexts.get(0).getIndex()));
+        }
+    }
+
+    private static class CandidateContext {
+        private Statistics mvStatistics;
+        private int index;
+
+        public CandidateContext(Statistics mvStatistics, int index) {
+            this.mvStatistics = mvStatistics;
+            this.index = index;
+        }
+
+        public Statistics getMvStatistics() {
+            return mvStatistics;
+        }
+
+        public int getIndex() {
+            return index;
+        }
+    }
+
+    private static class CandidateContextComparator implements Comparator<CandidateContext> {
+        @Override
+        public int compare(CandidateContext context1, CandidateContext context2) {
+            int ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
+                    context2.getMvStatistics().getOutputRowCount());
+            if (ret != 0) {
+                return ret;
+            }
+            ret = Double.compare(context1.getMvStatistics().getComputeSize(), context2.getMvStatistics().getComputeSize());
+            return ret != 0 ? ret : Integer.compare(context1.getIndex(), context2.getIndex());
         }
     }
 
@@ -66,5 +106,21 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                 expressionContext, context.getColumnRefFactory(), context);
         statisticsCalculator.estimatorStats();
         expr.setStatistics(expressionContext.getStatistics());
+    }
+
+    private Statistics collectMVStatistics(OptExpression expression) {
+        if (expression.getOp() instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scanOperator = expression.getOp().cast();
+            if (scanOperator.getTable().isMaterializedView()) {
+                return expression.getStatistics();
+            }
+        }
+        for (OptExpression child : expression.getInputs()) {
+            Statistics statistics = collectMVStatistics(child);
+            if (statistics != null) {
+                return statistics;
+            }
+        }
+        return null;
     }
 }
