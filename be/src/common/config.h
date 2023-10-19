@@ -1018,7 +1018,7 @@ CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc interval
-CONF_mInt64(pindex_shard_data_gc_interval_seconds, "5 * 3600");
+CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
