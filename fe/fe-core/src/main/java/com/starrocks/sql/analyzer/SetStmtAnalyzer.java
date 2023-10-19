@@ -193,9 +193,7 @@ public class SetStmtAnalyzer {
         // materialized_view_rewrite_mode
         if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
             String rewriteModeName = resolvedExpression.getStringValue();
-            SessionVariable.MaterializedViewRewriteMode materializedViewRewriteMode =
-                    EnumUtils.getEnum(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName);
-            if (materializedViewRewriteMode == null) {
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName)) {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
