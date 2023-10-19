@@ -1,9 +1,5 @@
 # Continuously load data from Apache Flink®
 
-<<<<<<< HEAD
-StarRocks provides a self-developed connector named Flink connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD).
-The Flink connector supports DataStream API, Table API & SQL, and Python API. The Flink connector also has a higher performance than [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
-=======
 StarRocks provides a self-developed connector named Flink connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 The Flink connector supports DataStream API, Table API & SQL, and Python API. It has a higher and more stable performance than [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
@@ -11,7 +7,6 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 > **NOTICE**
 >
 > Loading data into StarRocks tables with Flink connector needs SELECT and INSERT privileges. If you do not have these privileges, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant these privileges to the user that you use to connect to your StarRocks cluster.
->>>>>>> e3a775da67 ([Doc] broken links (#33095))
 
 ## Version requirements
 
