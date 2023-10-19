@@ -29,11 +29,8 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
-<<<<<<< HEAD
-=======
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
->>>>>>> 3662cc3c01 ([Refactor] Move transaction methods to another file and more tests (#33075))
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 

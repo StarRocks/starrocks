@@ -21,12 +21,9 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
-<<<<<<< HEAD
-=======
 #include "storage/lake/update_manager.h"
 #include "testutil/sync_point.h"
 #include "util/dynamic_cache.h"
->>>>>>> 3662cc3c01 ([Refactor] Move transaction methods to another file and more tests (#33075))
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/trace.h"
 
