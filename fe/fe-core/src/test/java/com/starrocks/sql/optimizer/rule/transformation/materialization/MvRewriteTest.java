@@ -1446,14 +1446,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
-                    "     partitions=4/6");
+            PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'");
+            PlanTestBase.assertContains(plan, "partitions=4/4");
         }
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
-            PlanTestBase.assertContains(plan, "partitions=4/6\n" +
+            PlanTestBase.assertContains(plan, "partitions=4/4\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
     }

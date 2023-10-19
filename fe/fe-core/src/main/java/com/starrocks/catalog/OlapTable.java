@@ -807,6 +807,10 @@ public class OlapTable extends Table {
         return new ArrayList<Column>();
     }
 
+    /**
+     * NOTE: The result key columns are not in the creating order because `nameToColumn`
+     * uses unordered hashmap to keeps name to column's mapping.
+     */
     public List<Column> getKeyColumns() {
         return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
     }
@@ -1838,8 +1842,8 @@ public class OlapTable extends Table {
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
-        OlapTable copied = new OlapTable();
-        if (!DeepCopy.copy(this, copied, OlapTable.class)) {
+        OlapTable copied = DeepCopy.copyWithGson(this, OlapTable.class);
+        if (copied == null) {
             LOG.warn("failed to copy olap table: " + getName());
             return null;
         }

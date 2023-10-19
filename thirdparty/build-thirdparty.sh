@@ -566,11 +566,21 @@ build_rocksdb() {
     cp -r include/rocksdb $TP_INCLUDE_DIR
 }
 
+# kerberos
+build_kerberos() {
+    check_if_source_exist $KRB5_SOURCE
+    cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
+    CFLAGS="-fcommon" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
+    make -j$PARALLEL
+    make install
+}
+
 # sasl
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no --with-openssl=$TP_INSTALL_DIR
+    CFLAGS= LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
     make -j$PARALLEL
     make install
 }
@@ -1081,6 +1091,11 @@ build_cachelib() {
     rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
 }
 
+build_starcache() {
+    check_if_source_exist $STARCACHE_SOURCE
+    rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
+}
+
 # streamvbyte
 build_streamvbyte() {
     check_if_source_exist $STREAMVBYTE_SOURCE
@@ -1243,6 +1258,7 @@ build_thrift
 build_leveldb
 build_brpc
 build_rocksdb
+build_kerberos
 build_sasl
 build_librdkafka
 build_flatbuffers
@@ -1271,6 +1287,7 @@ build_opentelemetry
 build_benchmark
 build_fast_float
 build_cachelib
+build_starcache
 build_streamvbyte
 build_jansson
 build_avro_c

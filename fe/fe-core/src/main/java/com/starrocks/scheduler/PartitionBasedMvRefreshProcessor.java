@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
@@ -80,7 +81,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -133,6 +134,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessor.class);
 
     public static final String MV_ID = "mvId";
+    public static final String ICEBERG_ALL_PARTITION = "ALL";
 
     // session.enable_spill
     public static final String MV_SESSION_ENABLE_SPILL =
@@ -577,8 +579,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // remove partition info of not-exist partition for snapshot table from version map
             Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
+            // iceberg table use ALL as partition name, so we don't need to remove partition info
             currentTablePartitionInfo.keySet().removeIf(partitionName ->
-                    !partitionNames.contains(partitionName));
+                    (!partitionNames.contains(partitionName) && !partitionName.equals(ICEBERG_ALL_PARTITION)));
+
         }
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
@@ -607,6 +611,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     mvId, context.ctx.getDatabase()));
         }
         materializedView = (MaterializedView) table;
+
+        // try to activate the mv before refresh
+        if (!materializedView.isActive()) {
+            MVActiveChecker.tryToActivate(materializedView);
+            LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
+        }
         if (!materializedView.isActive()) {
             String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
                     "skip sync partition and data with base tables", materializedView.getName(), mvId);
@@ -662,10 +672,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private void syncPartitionsForExpr(TaskRunContext context) {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
-        Table refBaseTable = mvContext.getRefBaseTable();
-        Column refBaseTablePartitionColumn = mvContext.getRefBaseTablePartitionColumn();
+        Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
+        Table refBaseTable = partitionTableAndColumn.first;
+        Preconditions.checkNotNull(refBaseTable);
+        Column refBaseTablePartitionColumn = partitionTableAndColumn.second;
+        Preconditions.checkNotNull(refBaseTablePartitionColumn);
 
-        RangePartitionDiff rangePartitionDiff = new RangePartitionDiff();
+        RangePartitionDiff rangePartitionDiff = null;
 
         database.readLock();
         Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
@@ -673,7 +686,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, Set<String>> refBaseTableMVPartitionMap = Maps.newHashMap();
         try {
             // Collect the ref base table's partition range map.
-            refBaseTablePartitionMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBaseTablePartitionColumn);
+            refBaseTablePartitionMap = PartitionUtil.getPartitionKeyRange(
+                    refBaseTable, refBaseTablePartitionColumn, partitionExpr);
 
             // To solve multi partition columns' problem of external table, record the mv partition name to all the same
             // partition names map here.
@@ -682,30 +696,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
             }
 
-            // Calculate the range diff between ref base table's partition range map and materialized view's.
-            if (partitionExpr instanceof SlotRef) {
-                rangePartitionDiff = SyncPartitionUtils
-                        .getRangePartitionDiffOfSlotRef(refBaseTablePartitionMap, mvRangePartitionMap);
-            } else if (partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC) ||
-                        functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    Range<PartitionKey> rangeToInclude = null;
-                    Column partitionColumn =
-                            ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
-                    String start = context.getProperties().get(TaskRun.PARTITION_START);
-                    String end = context.getProperties().get(TaskRun.PARTITION_END);
-                    if (start != null || end != null) {
-                        rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
-                    }
-                    rangePartitionDiff = SyncPartitionUtils.getRangePartitionDiffOfExpr(refBaseTablePartitionMap,
-                            mvRangePartitionMap, functionCallExpr, rangeToInclude);
-                } else {
-                    throw new SemanticException("Materialized view partition function " +
-                            functionCallExpr.getFnName().getFunction() +
-                            " is not supported yet.", functionCallExpr.getPos());
-                }
-            }
+            Column partitionColumn =
+                    ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
+            PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(
+                    partitionExpr, partitionColumn, refBaseTablePartitionMap, mvRangePartitionMap, differ);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
@@ -803,7 +798,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      */
     private boolean unSupportRefreshByPartition(Table table) {
         return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
-                && !table.isJDBCTable() && !table.isCloudNativeTable();
+                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable();
     }
 
     /**
@@ -1130,9 +1125,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 break;
             } else if (outputExpressions.get(i) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) outputExpressions.get(i);
-                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)) {
-                    outputPartitionSlot = outputExpressions.get(i).getChild(0);
-                    break;
+                if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE)
+                        && functionCallExpr.getChild(0) instanceof SlotRef) {
+                    SlotRef slot = functionCallExpr.getChild(0).cast();
+                    if (slot.getColumnName().equalsIgnoreCase(partitionSlot.getColumnName())) {
+                        outputPartitionSlot = slot;
+                        break;
+                    }
                 }
             } else {
                 // alias name.
@@ -1148,6 +1147,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("Generate partition predicate failed: " +
                     "cannot find partition slot ref {} from query relation", partitionSlot);
             return null;
+        }
+
+        Pair<Table, Column> partitionInfo = materializedView.getBaseTableAndPartitionColumn();
+        boolean isConvertToDate =
+                PartitionUtil.isConvertToDate(materializedView.getFirstPartitionRefTableExpr(), partitionInfo.second);
+        if (isConvertToDate) {
+            outputPartitionSlot = new CastExpr(Type.DATE, outputPartitionSlot);
         }
 
         if (mvPartitionInfo.isRangePartition()) {
@@ -1219,13 +1225,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                 snapShotOlapTable.getListPartitionMap();
                         Map<String, List<List<String>>> currentPartitionMap =
                                 ((OlapTable) table).getListPartitionMap();
-                        return SyncPartitionUtils.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                        if (SyncPartitionUtils.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                            return true;
+                        }
                     } else {
                         Map<String, Range<PartitionKey>> snapshotPartitionMap =
                                 snapShotOlapTable.getRangePartitionMap();
                         Map<String, Range<PartitionKey>> currentPartitionMap =
                                 ((OlapTable) table).getRangePartitionMap();
-                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                            return true;
+                        }
                     }
                 } else if (snapshotTable.isHiveTable() || snapshotTable.isHudiTable()) {
                     HiveMetaStoreTable snapShotHMSTable = (HiveMetaStoreTable) snapshotTable;
@@ -1249,11 +1259,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             continue;
                         }
 
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(snapshotTable, partitionColumn);
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(table, partitionColumn);
-                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
+                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
+                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
+                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                            return true;
+                        }
                     }
                 } else if (snapshotTable.isIcebergTable()) {
                     IcebergTable snapShotIcebergTable = (IcebergTable) snapshotTable;
@@ -1277,11 +1289,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             continue;
                         }
 
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(snapshotTable, partitionColumn);
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(table, partitionColumn);
-                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
+                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
+                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
+                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                            return true;
+                        }
                     }
                 } else if (snapshotTable.isJDBCTable()) {
                     JDBCTable snapShotJDBCTable = (JDBCTable) snapshotTable;
@@ -1305,11 +1319,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             continue;
                         }
 
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(snapshotTable, partitionColumn);
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(table, partitionColumn);
-                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
+                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
+                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
+                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
+                            return true;
+                        }
                     }
                 }
             } catch (UserException e) {
@@ -1370,8 +1386,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             db.readLock();
             try {
                 if (table.isOlapTable()) {
-                    Table copied = new OlapTable();
-                    if (!DeepCopy.copy(table, copied, OlapTable.class)) {
+                    Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
+                    if (copied == null) {
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
@@ -1643,8 +1659,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         getSelectedPartitionInfos(jdbcTable, Lists.newArrayList(entry.getValue()),
                                 baseTableInfo);
                 changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
+            } else if (entry.getKey().isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) entry.getKey();
+                Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(icebergTable.getTableIdentifier())).
+                        findAny();
+                if (!baseTableInfoOptional.isPresent()) {
+                    continue;
+                }
+                BaseTableInfo baseTableInfo = baseTableInfoOptional.get();
+                // first record the changed partition infos, it needs to use this these partition infos to check if
+                // the partition has been deal with. the task has PARTITION_START/PARTITION_END properties, could
+                // refresh partial partitions.
+                Map<String, MaterializedView.BasePartitionInfo> partitionInfos = entry.getValue().stream().collect(
+                        Collectors.toMap(partitionName -> partitionName,
+                                partitionName -> new MaterializedView.BasePartitionInfo(-1,
+                                icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime())));
+                // add ALL partition info, use this partition info to check if the partition has been updated.
+                partitionInfos.put(ICEBERG_ALL_PARTITION, new MaterializedView.BasePartitionInfo(-1,
+                                icebergTable.getRefreshSnapshotTime(), icebergTable.getRefreshSnapshotTime()));
+                changedOlapTablePartitionInfos.put(baseTableInfo, partitionInfos);
             }
-            // TODO: support iceberg
         }
         return changedOlapTablePartitionInfos;
     }

@@ -45,6 +45,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -74,6 +75,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -85,11 +87,14 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 
 /**
  * meta structure for materialized view
@@ -525,7 +530,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return
      */
     public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean isQueryRewrite) {
-        return getUpdatedPartitionNamesOfTable(base, false, isQueryRewrite);
+        return getUpdatedPartitionNamesOfTable(base, false, isQueryRewrite, MaterializedView.getPartitionExpr(this));
     }
 
     public int getMaxMVRewriteStaleness() {
@@ -552,7 +557,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public Expr getFirstPartitionRefTableExpr() {
+        if (partitionRefTableExprs == null) {
+            return null;
+        }
+        if (partitionRefTableExprs.get(0).getType() == Type.INVALID) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            partitionRefTableExprs.get(0).setType(expressionRangePartitionInfo.getPartitionExprs().get(0).getType());
+        }
         return partitionRefTableExprs.get(0);
+    }
+
+    public static Expr getPartitionExpr(MaterializedView materializedView) {
+        if (!(materializedView.getPartitionInfo() instanceof ExpressionRangePartitionInfo)) {
+            return null;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                ((ExpressionRangePartitionInfo) materializedView.getPartitionInfo());
+        // currently, mv only supports one expression
+        Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+        return materializedView.getFirstPartitionRefTableExpr();
     }
 
     /**
@@ -713,10 +736,50 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .stream().map(BasePartitionInfo::fromExternalTable).collect(Collectors.toList());
     }
 
+    private Set<String> getUpdatedPartitionNameOfIcebergTable(IcebergTable baseTable) {
+        Set<String> result = Sets.newHashSet();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
+                continue;
+            }
+            List<String> partitionNames = PartitionUtil.getPartitionNames(baseTable);
+            Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
+            long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
+
+            Map<String, BasePartitionInfo> baseTableInfoVisibleVersionMap = getBaseTableRefreshInfo(baseTableInfo);
+            BasePartitionInfo basePartitionInfo = baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
+            if (basePartitionInfo == null) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+                return new HashSet<>(partitionNames);
+            }
+            // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
+            for (String partitionName : partitionNames) {
+                if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                    result.add(partitionName);
+                }
+            }
+
+            if (!result.isEmpty()) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+            }
+
+            long basePartitionVersion = basePartitionInfo.version;
+            if (basePartitionVersion < currentVersion) {
+                baseTable.setRefreshSnapshotTime(currentVersion);
+                result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
+                        basePartitionVersion));
+            }
+        }
+        return result;
+    }
+
     private Set<String> getUpdatedPartitionNamesOfExternalTable(Table baseTable, boolean isQueryRewrite) {
-        if (!baseTable.isHiveTable() && !baseTable.isJDBCTable()) {
+        if (!baseTable.isHiveTable() && !baseTable.isJDBCTable() && !baseTable.isIcebergTable()) {
             // Only support hive table and jdbc table now
             return null;
+        }
+        if (baseTable.isIcebergTable()) {
+            return getUpdatedPartitionNameOfIcebergTable((IcebergTable) baseTable);
         }
 
         Set<String> result = Sets.newHashSet();
@@ -767,7 +830,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @param withMv    : whether to check the base table recursively when it is also a mv.
      * @return
      */
-    public Set<String> getUpdatedPartitionNamesOfTable(Table baseTable, boolean withMv, boolean isQueryRewrite) {
+    public Set<String> getUpdatedPartitionNamesOfTable(
+            Table baseTable, boolean withMv, boolean isQueryRewrite, Expr partitionExpr) {
         if (baseTable.isView()) {
             return Sets.newHashSet();
         } else if (baseTable.isNativeTableOrMaterializedView()) {
@@ -792,7 +856,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             try {
                 boolean isListPartition = partitionInfo instanceof ListPartitionInfo;
                 return PartitionUtil.getMVPartitionName(baseTable, partitionTableAndColumn.second,
-                        Lists.newArrayList(updatePartitionNames), isListPartition);
+                        Lists.newArrayList(updatePartitionNames), isListPartition, partitionExpr);
             } catch (AnalysisException e) {
                 LOG.warn("Mv {}'s base table {} get partition name fail", name, baseTable.name, e);
                 return null;
@@ -842,6 +906,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Try to fix relationship between base table and mv.
+     * It will set the state to inactive if it finds any issues
+     * <p>
+     * NOTE: caller need to hold the db lock
+     */
+    public void fixRelationship() {
+        onReloadImpl();
     }
 
     /**
@@ -1264,7 +1338,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
-            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table, true, isQueryRewrite);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(
+                    table, true, isQueryRewrite, MaterializedView.getPartitionExpr(this));
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getVisiblePartitionNames();
             }
@@ -1294,7 +1369,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private Set<String> getPartitionedMVRefreshPartitions(boolean isQueryRewrite) {
         Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);
         // If non-partition-by table has changed, should refresh all mv partitions
-        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        Expr partitionExpr = getFirstPartitionRefTableExpr();
         Pair<Table, Column> partitionInfo = getBaseTableAndPartitionColumn();
         if (partitionInfo == null) {
             setInactiveAndReason("partition configuration changed");
@@ -1321,7 +1396,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 continue;
             }
             // If the non ref table has already changed, need refresh all materialized views' partitions.
-            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(baseTable, true, isQueryRewrite, partitionExpr);
             if (CollectionUtils.isNotEmpty(partitionNames)) {
                 return getVisiblePartitionNames();
             }
@@ -1333,18 +1408,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         Map<String, Range<PartitionKey>> basePartitionNameToRangeMap;
         try {
-            basePartitionNameToRangeMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBasePartitionCol);
+            basePartitionNameToRangeMap = PartitionUtil.getPartitionKeyRange(refBaseTable, refBasePartitionCol, partitionExpr);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return getVisiblePartitionNames();
         }
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
-        // step1.1: collect ref base table's partition range diff.
-        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, refBasePartitionCol,
-                basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
-
-        // refresh ref base table's deleted partitions
+        // TODO: prune the partitions based on ttl
+        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionInfo.second,
+                basePartitionNameToRangeMap, mvPartitionNameToRangeMap, null);
         needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
         // remove ref base table's deleted partitions from `mvPartitionMap`
         for (String deleted : rangePartitionDiff.getDeletes().keySet()) {
@@ -1361,7 +1434,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 .getIntersectedPartitions(mvPartitionNameToRangeMap, basePartitionNameToRangeMap);
 
         // step2: check ref base table's updated partition names by checking its ref tables recursively.
-        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(refBaseTable, true, isQueryRewrite);
+        Set<String> baseChangedPartitionNames =
+                getUpdatedPartitionNamesOfTable(refBaseTable, true, isQueryRewrite, partitionExpr);
         if (baseChangedPartitionNames == null) {
             return mvToBaseNameRef.keySet();
         }

@@ -603,7 +603,7 @@ dropTaskStatement
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
-    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
     withRowAccessPolicy*
     comment?
     materializedViewDesc*
@@ -758,7 +758,7 @@ resumeWarehouseStatement
 
 createStorageVolumeStatement
     : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc locationsDesc
-          comment? properties
+          comment? properties?
     ;
 
 typeDesc
