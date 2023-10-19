@@ -131,7 +131,7 @@ public class HiveMetastoreOperations {
         boolean deleteData = false;
         try {
             deleteData = !FileSystem.get(URI.create(dbLocation), hadoopConf)
-                    .listLocatedStatus(new Path(dbLocation)).hasNext();;
+                    .listLocatedStatus(new Path(dbLocation)).hasNext();
         } catch (Exception e) {
             LOG.error("Failed to check database directory", e);
         }

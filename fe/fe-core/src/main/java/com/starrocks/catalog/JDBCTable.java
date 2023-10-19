@@ -261,6 +261,6 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
-        ORACLE;
+        ORACLE
     }
 }
