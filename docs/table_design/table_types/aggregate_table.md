@@ -14,7 +14,7 @@ The Aggregate table is well suited to data statistics and analytics scenarios. A
 
 The data querying and ingestion in the preceding scenarios have the following characteristics:
 
-- Most queries are aggregate queries, such as SUM, COUNT, and MAX.
+- Most queries are aggregate queries, such as SUM, MAX, and MIN.
 - Raw detailed data does not need to be retrieved.
 - Historical data is not frequently updated. Only new data is appended.
 
