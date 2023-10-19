@@ -102,6 +102,8 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
 Status SpillableAggregateBlockingSourceOperator::reset_state(RuntimeState* state,
                                                              const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    _has_last_chunk = true;
     _accumulator.reset_state();
     return Status::OK();
 }
