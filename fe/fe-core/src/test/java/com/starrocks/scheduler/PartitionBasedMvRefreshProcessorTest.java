@@ -51,6 +51,7 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -72,6 +73,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -2828,5 +2830,110 @@ public class PartitionBasedMvRefreshProcessorTest {
         List<String> partitions = materializedView.getPartitions().stream()
                 .map(Partition::getName).collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+    }
+
+    @Test
+    public void testDropBaseVersionMetaOfOlapTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_drop_partition_mv1\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh async \n" +
+                "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Table tbl1 = testDb.getTable("tbl1");
+        MaterializedView mv = ((MaterializedView) testDb.getTable("test_drop_partition_mv1"));
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        Map<String, MaterializedView.BasePartitionInfo> tableMap = Maps.newHashMap();
+        // case1: version map cannot decide whether it's safe to drop p1, drop the table from version map.
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(tbl1.getId(), tableMap);
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertFalse(versionMap.containsKey(tbl1.getId()));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(tbl1.getId(), tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertTrue(versionMap.containsKey(tbl1.getId()));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(tbl1.getId(), tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p3", null);
+            Assert.assertTrue(versionMap.containsKey(tbl1.getId()));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        starRocksAssert.dropMaterializedView("test_drop_partition_mv1");
+    }
+
+    @Test
+    public void testDropBaseVersionMetaOfExternalTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_drop_partition_mv1\n" +
+                "PARTITION BY date_trunc('day', l_shipdate) \n" +
+                "distributed by hash(l_orderkey) buckets 3\n" +
+                "refresh async every (interval 1 day)\n" +
+                "as SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView mv = ((MaterializedView) testDb.getTable("test_drop_partition_mv1"));
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
+        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        Map<String, MaterializedView.BasePartitionInfo> tableMap = Maps.newHashMap();
+        // TODO: how to get hive table meta from catalog.
+        BaseTableInfo baseTableInfo = new BaseTableInfo("hive0", "partitioned_db", "lineitem_par", "lineitem_par:0");
+        // case1: version map cannot decide whether it's safe to drop p1, drop the table from version map.
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(baseTableInfo, tableMap);
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertFalse(versionMap.containsKey(baseTableInfo));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(baseTableInfo, tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertTrue(versionMap.containsKey(baseTableInfo));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(baseTableInfo, tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p3", null);
+            Assert.assertTrue(versionMap.containsKey(baseTableInfo));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        starRocksAssert.dropMaterializedView("test_drop_partition_mv1");
     }
 }
