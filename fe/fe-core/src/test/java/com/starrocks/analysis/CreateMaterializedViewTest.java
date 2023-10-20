@@ -3916,4 +3916,11 @@ public class CreateMaterializedViewTest {
                     AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
         }
     }
+
+    @Test
+    public void createDeltaLakeMV() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
+                " refresh manual" +
+                " as select * from deltalake_catalog.deltalake_db.tbl");
+    }
 }
