@@ -105,6 +105,7 @@ set enable_profile='true';
 show variables like 'enable_profile';
 set pipeline_dop='1';
 show variables like 'pipeline_dop';
+set runtime_filter_scan_wait_time = 10000;
 INSERT INTO result_table
   (result)
   select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(dt,0))+murmur_hash3_32(ifnull(c1,0)))) as fingerprint from (select t1.c0,t1.dt,t1.c1 from t1 join[shuffle] t0 on t0.c1 = t1.c1) as t;
