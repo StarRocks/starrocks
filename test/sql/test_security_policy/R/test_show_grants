@@ -38,7 +38,7 @@ grant all on all masking policies in database test_show_grants to user_test_show
 -- !result
 show grants for user_test_show_grants;
 -- result:
-'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL MASKING POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
 -- !result
 revoke all on all masking policies in database test_show_grants from user_test_show_grants;
 -- result:
@@ -67,7 +67,7 @@ grant all on all row access policies in database test_show_grants to user_test_s
 -- !result
 show grants for user_test_show_grants;
 -- result:
-'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
+'user_test_show_grants'@'%'	default_catalog	GRANT APPLY, DROP, ALTER ON ALL ROW ACCESS POLICIES IN ALL DATABASES TO USER 'user_test_show_grants'@'%'
 -- !result
 revoke all on all row access policies in database test_show_grants from user_test_show_grants;
 -- result:

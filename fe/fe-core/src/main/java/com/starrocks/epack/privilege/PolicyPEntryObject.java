@@ -31,9 +31,10 @@ public class PolicyPEntryObject implements PEntryObject {
     @SerializedName(value = "i")
     protected long policyId;
 
-    protected PolicyPEntryObject(long catalogId, String databaseUUID, long policyId) {
+    protected PolicyPEntryObject(long catalogId, String databaseUUID, PolicyType policyType, long policyId) {
         this.catalogId = catalogId;
         this.databaseUUID = databaseUUID;
+        this.policyType = policyType;
         this.policyId = policyId;
     }
 
@@ -58,7 +59,9 @@ public class PolicyPEntryObject implements PEntryObject {
             // This is true only when we are initializing built-in roles like root and db_admin
             if (tokens.get(0).equals("*")) {
                 return new PolicyPEntryObject(PrivilegeBuiltinConstants.ALL_CATALOGS_ID,
-                        PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID);
+                        PrivilegeBuiltinConstants.ALL_DATABASES_UUID,
+                        policyType,
+                        PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID);
             }
             catalogName = tokens.get(0);
 
@@ -114,7 +117,7 @@ public class PolicyPEntryObject implements PEntryObject {
             }
         }
 
-        return new PolicyPEntryObject(catalogId, dbUUID, policyId);
+        return new PolicyPEntryObject(catalogId, dbUUID, policyType, policyId);
     }
 
     /**
@@ -130,6 +133,11 @@ public class PolicyPEntryObject implements PEntryObject {
             return false;
         }
         PolicyPEntryObject other = (PolicyPEntryObject) obj;
+
+        if (!other.policyType.equals(this.policyType)) {
+            return false;
+        }
+
         if (other.catalogId == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
             return true;
         }
@@ -213,7 +221,7 @@ public class PolicyPEntryObject implements PEntryObject {
 
     @Override
     public PEntryObject clone() {
-        return new PolicyPEntryObject(catalogId, databaseUUID, policyId);
+        return new PolicyPEntryObject(catalogId, databaseUUID, policyType, policyId);
     }
 
     @Override
@@ -221,7 +229,13 @@ public class PolicyPEntryObject implements PEntryObject {
         StringBuilder sb = new StringBuilder();
 
         if (Objects.equals(databaseUUID, PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-            sb.append("ALL POLICIES IN ALL DATABASES");
+            sb.append("ALL ");
+            if (policyType.equals(PolicyType.MASKING)) {
+                sb.append(ObjectTypeEPack.MASKING_POLICY.plural());
+            } else {
+                sb.append(ObjectTypeEPack.ROW_ACCESS_POLICY.plural());
+            }
+            sb.append(" IN ALL DATABASES");
         } else {
             String dbName;
             Database database;
@@ -236,7 +250,13 @@ public class PolicyPEntryObject implements PEntryObject {
             }
 
             if (Objects.equals(policyId, PrivilegeBuiltinConstantsEPack.ALL_POLICY_ID)) {
-                sb.append("ALL POLICIES IN DATABASE ").append(dbName);
+                sb.append("ALL ");
+                if (policyType.equals(PolicyType.MASKING)) {
+                    sb.append(ObjectTypeEPack.MASKING_POLICY.plural());
+                } else {
+                    sb.append(ObjectTypeEPack.ROW_ACCESS_POLICY.plural());
+                }
+                sb.append(" IN DATABASE ").append(dbName);
             } else {
                 Policy policy = GlobalStateMgr.getCurrentState().getSecurityPolicyManager().getPolicyById(policyId);
                 sb.append(dbName).append(".").append(policy.getName());

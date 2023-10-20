@@ -178,6 +178,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE,
                     ObjectType.RESOURCE_GROUP,
                     ObjectTypeEPack.WAREHOUSE,
+                    ObjectTypeEPack.MASKING_POLICY,
+                    ObjectTypeEPack.ROW_ACCESS_POLICY,
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME)) {

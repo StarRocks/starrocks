@@ -1,0 +1,37 @@
+-- name: test_builtin_role
+show grants for role db_admin;
+
+create database test_builtin_role;
+use test_builtin_role;
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+
+drop user if exists u1;
+create user u1;
+grant alter on table test_builtin_role.t0 to u1;
+GRANT APPLY, DROP, ALTER ON ALL ROW ACCESS POLICIES IN ALL DATABASES TO u1;
+
+grant impersonate on user root to u1;
+execute as u1 with no revert;
+
+alter table t0 modify column v1 set masking policy mp;
+
+execute as root with no revert;
+GRANT APPLY, DROP, ALTER ON ALL MASKING POLICIES IN ALL DATABASES TO u1;
+execute as u1 with no revert;
+alter table t0 modify column v1 set masking policy mp;
+
+execute as root with no revert;

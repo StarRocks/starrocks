@@ -1,0 +1,80 @@
+-- name: test_builtin_role
+show grants for role db_admin;
+-- result:
+db_admin	default_catalog	GRANT APPLY, DROP, ALTER ON ALL MASKING POLICIES IN ALL DATABASES TO ROLE 'db_admin'
+db_admin	None	GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT APPLY, DROP, ALTER ON ALL ROW ACCESS POLICIES IN ALL DATABASES TO ROLE 'db_admin'
+db_admin	None	GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, CREATE MATERIALIZED VIEW, CREATE MASKING POLICY, CREATE ROW ACCESS POLICY ON ALL DATABASES TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT USAGE, ALTER, DROP ON ALL WAREHOUSES TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT CREATE RESOURCE, PLUGIN, FILE, BLACKLIST, OPERATE, CREATE EXTERNAL CATALOG, REPOSITORY, CREATE RESOURCE GROUP, CREATE GLOBAL FUNCTION, CREATE STORAGE VOLUME, CREATE WAREHOUSE, SECURITY ON SYSTEM TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT USAGE, ALTER, DROP ON ALL RESOURCES TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT SELECT, ALTER, DROP ON ALL VIEWS IN ALL DATABASES TO ROLE 'db_admin'
+db_admin	None	GRANT USAGE, CREATE DATABASE, DROP, ALTER ON ALL CATALOGS TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT ALTER, REFRESH, DROP, SELECT ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT USAGE, DROP ON ALL FUNCTIONS IN ALL DATABASES TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT ALTER, DROP ON ALL RESOURCE GROUPS TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT USAGE, DROP ON ALL GLOBAL FUNCTIONS TO ROLE 'db_admin'
+db_admin	default_catalog	GRANT DROP, ALTER, USAGE ON ALL STORAGE VOLUMES TO ROLE 'db_admin'
+-- !result
+create database test_builtin_role;
+-- result:
+-- !result
+use test_builtin_role;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`, `v2`, `v3`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+create masking policy mp as ( v1 bigint) returns bigint -> v1 + 1;
+-- result:
+-- !result
+drop user if exists u1;
+-- result:
+-- !result
+create user u1;
+-- result:
+-- !result
+grant alter on table test_builtin_role.t0 to u1;
+-- result:
+-- !result
+GRANT APPLY, DROP, ALTER ON ALL ROW ACCESS POLICIES IN ALL DATABASES TO u1;
+-- result:
+-- !result
+grant impersonate on user root to u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+E: (1252, 'Access denied; you need (at least one of) the APPLY privilege(s) on MASKING POLICY mp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+GRANT APPLY, DROP, ALTER ON ALL MASKING POLICIES IN ALL DATABASES TO u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+alter table t0 modify column v1 set masking policy mp;
+-- result:
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
