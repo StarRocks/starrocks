@@ -39,6 +39,8 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.AlterClause;
@@ -48,11 +50,14 @@ import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshRoleMappingStatement;
+import com.starrocks.sql.ast.SelectRelation;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     public AuthorizerStmtVisitorEPack() {
@@ -462,6 +467,38 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement,
                                                            ConnectContext context) {
         // TODO
+        return null;
+    }
+
+    // --------------------------------- Query Statement -------------------------------------
+
+    @Override
+    public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
+        super.visitQueryStatement(statement, context);
+
+        Map<String, String> optHints = null;
+        if (statement.getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        }
+
+        if (optHints != null) {
+            if (optHints.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+                // check warehouse privilege
+                String warehouseName = optHints.get(SessionVariable.WAREHOUSE_NAME);
+                if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                    try {
+                        AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                                context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
+                    }
+                }
+            }
+        }
+
         return null;
     }
 }

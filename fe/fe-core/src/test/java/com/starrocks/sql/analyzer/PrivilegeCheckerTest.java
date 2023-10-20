@@ -3127,6 +3127,57 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testSetWarehouseVar() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        new MockUp<LocalWarehouse>() {
+            @Mock
+            public void initCluster() throws DdlException {
+
+            }
+        };
+
+        grantRevokeSqlAsRoot("grant SELECT on db1.tbl1 TO test");
+
+        String createWarehouseStmtStr1 = "create warehouse aaa";
+        starRocksAssert.withWarehouse(createWarehouseStmtStr1);
+
+        verifyGrantRevoke(
+                "select /*+ set_var(warehouse='aaa') */ * from db1.tbl1",
+                "grant USAGE on warehouse aaa to test",
+                "revoke USAGE on warehouse aaa from test",
+                "Access denied; you need (at least one of) the USAGE privilege(s) on WAREHOUSE aaa for this operation");
+
+
+        // test set_var in "create materialized view" sql
+        Config.enable_experimental_mv = true;
+        grantRevokeSqlAsRoot("grant create materialized view on DATABASE db1 to test");
+
+        String createSql = "create materialized view db1.mv1 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select /*+ set_var(warehouse='bbb') */ k1, db1.tbl1.k2 from db1.tbl1;";
+
+        String createWarehouseStmtStr2 = "create warehouse bbb";
+        starRocksAssert.withWarehouse(createWarehouseStmtStr2);
+
+        verifyGrantRevoke(
+                createSql,
+                "grant USAGE on warehouse bbb to test",
+                "revoke USAGE on warehouse bbb from test",
+                "Access denied; you need (at least one of) the USAGE privilege(s) on WAREHOUSE bbb for this operation");
+
+    }
+
+    @Test
     public void testStorageVolumeStatement() throws Exception {
         String createSql = "create storage volume local type = s3 " +
                 "locations = ('s3://starrocks-cloud-data-zhangjiakou/luzijie/') comment 'comment' properties " +
