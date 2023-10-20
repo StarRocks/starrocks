@@ -15,11 +15,19 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
+>>>>>>> 6990b274a7 ([BugFix] Fix bugs when materialized view with sort keys (#33125))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowStmt;
@@ -27,6 +35,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -164,5 +174,18 @@ public class MaterializedViewAnalyzerTest {
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
                     " should contain the partition column k1 of materialized view");
         }
+    }
+
+    @Test
+    public void testGetQueryOutputIndices() {
+        List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
+        mvColumnPairs.add(Pair.create(new Column(), 1));
+        mvColumnPairs.add(Pair.create(new Column(), 2));
+        mvColumnPairs.add(Pair.create(new Column(), 0));
+        mvColumnPairs.add(Pair.create(new Column(), 3));
+
+        List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
+        Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
+        Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), "2,0,1,3");
     }
 }
