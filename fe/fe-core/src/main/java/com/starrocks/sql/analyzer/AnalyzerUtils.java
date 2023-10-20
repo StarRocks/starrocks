@@ -970,12 +970,13 @@ public class AnalyzerUtils {
                 if (partitionName.length() > 50) {
                     partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
                 }
-                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                        partitionName, Collections.singletonList(partitionValue), partitionProperties);
-
-                multiItemListPartitionDesc.setSystem(true);
-                partitionDescs.add(multiItemListPartitionDesc);
-                partitionColNames.add(partitionName);
+                if (!partitionColNames.contains(partitionName)) {
+                    MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                            partitionName, Collections.singletonList(partitionValue), partitionProperties);
+                    multiItemListPartitionDesc.setSystem(true);
+                    partitionDescs.add(multiItemListPartitionDesc);
+                    partitionColNames.add(partitionName);
+                }
             }
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
             listPartitionDesc.setSystem(true);
@@ -1067,11 +1068,13 @@ public class AnalyzerUtils {
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
-                SingleRangePartitionDesc singleRangePartitionDesc =
-                        new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-                singleRangePartitionDesc.setSystem(true);
-                partitionDescs.add(singleRangePartitionDesc);
-                partitionColNames.add(partitionName);
+                if (!partitionColNames.contains(partitionName)) {
+                    SingleRangePartitionDesc singleRangePartitionDesc =
+                            new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
+                    singleRangePartitionDesc.setSystem(true);
+                    partitionDescs.add(singleRangePartitionDesc);
+                    partitionColNames.add(partitionName);
+                }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
