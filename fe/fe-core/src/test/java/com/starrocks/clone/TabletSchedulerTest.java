@@ -45,6 +45,7 @@ import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
+import org.assertj.core.util.Lists;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -376,16 +377,26 @@ public class TabletSchedulerTest {
 
         TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
 
-        tabletScheduler.addToRunningTablets(ctx);
-
-
         TFinishTaskRequest request = new TFinishTaskRequest();
         TStatus status = new TStatus();
         status.setStatus_code(TStatusCode.OK);
         request.setTask_status(status);
 
+        // failure test: running tablet ctx is not exist
         tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
+        Assert.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
 
+        // failure test: request not ok
+        tabletScheduler.addToRunningTablets(ctx);
+        status.setStatus_code(TStatusCode.CANCELLED);
+        status.setError_msgs(Lists.newArrayList("canceled"));
+        tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
+        Assert.assertEquals(Replica.ReplicaState.RECOVER, replica.getState());
+
+        // success
+        tabletScheduler.addToRunningTablets(ctx);
+        status.setStatus_code(TStatusCode.OK);
+        tabletScheduler.finishCreateReplicaTask(createReplicaTask, request);
         Assert.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
     }
 }
