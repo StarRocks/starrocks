@@ -23,10 +23,6 @@ The execution of the spark load task is divided into the following main phases.
 5. The BE reads the data through the Broker and converts it into StarRocks storage format.
 6. The FE schedules the effective version and completes the import job.
 
-The following diagram illustrates the main flow of spark load.
-
-![Spark load](../assets/4.3.2-1.png)
-
 ---
 
 ## Global Dictionary
