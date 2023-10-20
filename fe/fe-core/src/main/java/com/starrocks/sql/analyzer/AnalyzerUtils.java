@@ -73,10 +73,13 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -788,14 +791,13 @@ public class AnalyzerUtils {
         return new PartitionMeasure(interval, granularity);
     }
 
-    public static Map<String, AddPartitionClause> getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+    public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                                            List<List<String>> partitionValues)
             throws AnalysisException {
-        Map<String, AddPartitionClause> result = Maps.newHashMap();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             PartitionMeasure measure = checkAndGetPartitionMeasure((ExpressionRangePartitionInfo) partitionInfo);
-            getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure, result,
+            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure,
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
@@ -803,6 +805,8 @@ public class AnalyzerUtils {
             Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
             String partitionPrefix = "p";
 
+            List<String> partitionColNames = Lists.newArrayList();
+            List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
                 List<String> formattedPartitionValue = Lists.newArrayList();
                 for (String value : partitionValue) {
@@ -813,19 +817,21 @@ public class AnalyzerUtils {
                 if (partitionName.length() > 50) {
                     partitionName = partitionName.substring(0, 50) + "_" + System.currentTimeMillis();
                 }
-                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                        partitionName, Collections.singletonList(partitionValue), partitionProperties);
+                if (!partitionColNames.contains(partitionName)) {
+                    MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                            partitionName, Collections.singletonList(partitionValue), partitionProperties);
 
-                multiItemListPartitionDesc.setSystem(true);
-                AddPartitionClause addPartitionClause =
-                        new AddPartitionClause(multiItemListPartitionDesc, distributionDesc,
-                                partitionProperties, false);
-                result.put(partitionName, addPartitionClause);
+                    multiItemListPartitionDesc.setSystem(true);
+                    partitionDescs.add(multiItemListPartitionDesc);
+                    partitionColNames.add(partitionName);
+                }
             }
+            ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
+            listPartitionDesc.setSystem(true);
+            return new AddPartitionClause(listPartitionDesc, distributionDesc, partitionProperties, false);
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
-        return result;
     }
 
     @VisibleForTesting
@@ -850,9 +856,9 @@ public class AnalyzerUtils {
         return sb.toString();
     }
 
-    private static void getAddPartitionClauseForRangePartition(OlapTable olapTable, List<List<String>> partitionValues,
+    private static AddPartitionClause getAddPartitionClauseForRangePartition(OlapTable olapTable,
+                                                               List<List<String>> partitionValues,
                                                                PartitionMeasure measure,
-                                                               Map<String, AddPartitionClause> result,
                                                                ExpressionRangePartitionInfo expressionRangePartitionInfo)
             throws AnalysisException {
         String granularity = measure.getGranularity();
@@ -863,6 +869,8 @@ public class AnalyzerUtils {
         DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo().toDistributionDesc();
         Map<String, String> partitionProperties = ImmutableMap.of("replication_num", String.valueOf(replicationNum));
 
+        List<String> partitionColNames = Lists.newArrayList();
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
         for (List<String> partitionValue : partitionValues) {
             if (partitionValue.size() != 1) {
                 throw new AnalysisException("automatic partition only support single column for range partition.");
@@ -906,17 +914,20 @@ public class AnalyzerUtils {
                 }
                 PartitionKeyDesc partitionKeyDesc = createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
-                SingleRangePartitionDesc singleRangePartitionDesc =
-                        new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-                singleRangePartitionDesc.setSystem(true);
-                AddPartitionClause addPartitionClause =
-                        new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
-                                partitionProperties, false);
-                result.put(partitionName, addPartitionClause);
+                if (!partitionColNames.contains(partitionName)) {
+                    SingleRangePartitionDesc singleRangePartitionDesc =
+                            new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
+                    singleRangePartitionDesc.setSystem(true);
+                    partitionDescs.add(singleRangePartitionDesc);
+                    partitionColNames.add(partitionName);
+                }
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
+        RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(partitionColNames, partitionDescs);
+        rangePartitionDesc.setSystem(true);
+        return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, false);
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
