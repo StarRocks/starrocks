@@ -193,6 +193,10 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.IntervalLiteral;
+>>>>>>> 18a1cf0edb ([Enhancement] Automatically create partitions to optimize the use of batch interfaces (#33231))
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -890,6 +894,11 @@ public class LocalMetastore implements ConnectorMetadata {
             addPartitions(db, tableName,
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
+            addPartitions(db, tableName,
+                    Lists.newArrayList(((ListPartitionDesc) partitionDesc).getPartitionDescs()),
+                    addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
 
             if (!(partitionInfo instanceof RangePartitionInfo)) {
@@ -1284,18 +1293,35 @@ public class LocalMetastore implements ConnectorMetadata {
                                      AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
                                      List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
-        if (partitionList == null || partitionList.size() > 1) {
-            throw new DdlException("Only support add one partition when add list partition now");
+        if (partitionList == null) {
+            throw new DdlException("partitionList should not null");
         } else if (partitionList.size() == 0) {
             return;
         }
 
-        boolean isTempPartition = addPartitionClause.isTempPartition();
-        Partition partition = partitionList.get(0);
-        if (existPartitionNameSet.contains(partition.getName())) {
-            LOG.info("add partition[{}] which already exists", partition.getName());
-            return;
+        // TODO: add only 1 log for multi list partition
+        int i = 0;
+        for (Partition partition : partitionList) {
+            boolean isTempPartition = addPartitionClause.isTempPartition();
+            if (existPartitionNameSet.contains(partition.getName())) {
+                LOG.info("add partition[{}] which already exists", partition.getName());
+                return;
+            }
+            long partitionId = partition.getId();
+            PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                    partitionDescs.get(i).getPartitionDataProperty(),
+                    partitionInfo.getReplicationNum(partitionId),
+                    partitionInfo.getIsInMemory(partitionId),
+                    isTempPartition,
+                    ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
+                    ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId),
+                    partitionDescs.get(i).getDataCacheInfo());
+            GlobalStateMgr.getCurrentState().getEditLog().logAddPartition(info);
+            LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
+                    partition.getName(), isTempPartition);
+            i++;
         }
+<<<<<<< HEAD
         long partitionId = partition.getId();
         PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
                 partitionDescs.get(0).getPartitionDataProperty(),
@@ -1308,6 +1334,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
                 partition.getName(), isTempPartition);
+=======
+>>>>>>> 18a1cf0edb ([Enhancement] Automatically create partitions to optimize the use of batch interfaces (#33231))
     }
 
     private void addPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,

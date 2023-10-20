@@ -66,6 +66,24 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public List<PartitionDesc> getPartitionDescs() {
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+        if (singleListPartitionDescs != null) {
+            partitionDescs.addAll(singleListPartitionDescs);
+        }
+        if (multiListPartitionDescs != null) {
+            partitionDescs.addAll(multiListPartitionDescs);
+        }
+        return partitionDescs;
+    }
+
+    public List<String> getPartitionColNames() {
+        return partitionColNames;
+    }
+
+>>>>>>> 18a1cf0edb ([Enhancement] Automatically create partitions to optimize the use of batch interfaces (#33231))
     public List<String> findAllPartitionNames() {
         List<String> partitionNames = new ArrayList<>();
         this.singleListPartitionDescs.forEach(desc -> partitionNames.add(desc.getPartitionName()));
@@ -245,6 +263,8 @@ public class ListPartitionDesc extends PartitionDesc {
         }
         return partitionColumns;
     }
+
+
 
     public boolean isAutoPartitionTable() {
         return isAutoPartitionTable;
