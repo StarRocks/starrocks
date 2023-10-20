@@ -2,9 +2,9 @@
 
 ## 描述
 
-MAP 是一种复杂数据类型，用于存储无序的键值对（key-value pair)，例如 `{a:1, b:2, c:3}`。Map 中的 Key 不能重复。一个 Map 最多支持 14 层嵌套。
+MAP 是一种复杂数据类型，用于存储无序的键值对 (key-value pair)，例如 `{a:1, b:2, c:3}`。Map 中的 Key 不能重复。一个 Map 最多支持 14 层嵌套。
 
-StarRocks 从 3.1 版本开始支持 MAP 数据类型。您可以在建表时定义 MAP 列，向表中导入 MAP 数据，查询 MAP 数据。
+StarRocks 从 3.1 版本开始支持存储和导入 MAP 类型的数据。您可以在建表时定义 MAP 列，向表中导入 MAP 数据，查询 MAP 数据。
 
 StarRocks 从 2.5 版本开始支持查询数据湖中的复杂数据类型 MAP 和 STRUCT。您可以通过 StarRocks 提供的 External Catalog 方式来查询 Apache Hive™，Apache Hudi，Apache Iceberg 中的 MAP 和 STRUCT 数据。仅支持查询 ORC 和 Parquet 类型文件。
 
