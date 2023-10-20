@@ -270,6 +270,7 @@ You can find a function based on the following categories:
 - [json_keys](../sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
 - [json_query](../sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
 - [json_string](../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
+- [to_json](../sql-functions/json-functions/json-query-and-processing-functions/to_json.md)
 
 ## String functions
 
