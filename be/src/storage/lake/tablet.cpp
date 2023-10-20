@@ -34,8 +34,8 @@ Status Tablet::put_metadata(const TabletMetadata& metadata) {
     return _mgr->put_tablet_metadata(metadata);
 }
 
-Status Tablet::put_metadata(TabletMetadataPtr metadata) {
-    return _mgr->put_tablet_metadata(std::move(metadata));
+Status Tablet::put_metadata(const TabletMetadataPtr& metadata) {
+    return _mgr->put_tablet_metadata(metadata);
 }
 
 StatusOr<TabletMetadataPtr> Tablet::get_metadata(int64_t version) {
@@ -70,8 +70,8 @@ Status Tablet::put_txn_log(const TxnLog& log) {
     return _mgr->put_txn_log(log);
 }
 
-Status Tablet::put_txn_log(TxnLogPtr log) {
-    return _mgr->put_txn_log(std::move(log));
+Status Tablet::put_txn_log(const TxnLogPtr& log) {
+    return _mgr->put_txn_log(log);
 }
 
 StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {

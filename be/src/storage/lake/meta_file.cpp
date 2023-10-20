@@ -17,7 +17,6 @@
 #include <memory>
 
 #include "fs/fs_util.h"
-#include "gutil/strings/escaping.h"
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
