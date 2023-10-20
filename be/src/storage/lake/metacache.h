@@ -76,6 +76,8 @@ public:
 
     size_t memory_usage() const;
 
+    size_t capacity() const;
+
 private:
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 

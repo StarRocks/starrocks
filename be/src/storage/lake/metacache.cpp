@@ -18,6 +18,7 @@
 
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/del_vector.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/rowset/segment.h"
 #include "util/lru_cache.h"
 
@@ -229,6 +230,10 @@ void Metacache::prune() {
 
 size_t Metacache::memory_usage() const {
     return _cache->get_memory_usage();
+}
+
+size_t Metacache::capacity() const {
+    return _cache->get_capacity();
 }
 
 } // namespace starrocks::lake
