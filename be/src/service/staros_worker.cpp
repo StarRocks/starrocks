@@ -25,6 +25,7 @@
 #include "file_store.pb.h"
 #include "fmt/format.h"
 #include "fslib/star_cache_configuration.h"
+#include "fslib/star_cache_handler.h"
 #include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
 #include "util/await.h"
@@ -449,6 +450,14 @@ void shutdown_staros_worker() {
     g_starlet->stop();
     g_starlet.reset();
     g_worker = nullptr;
+}
+
+// must keep each config the same
+void update_staros_starcache() {
+    if (fslib::FLAGS_use_star_cache != config::starlet_use_star_cache) {
+        fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
+        (void)fslib::star_cache_init(fslib::FLAGS_use_star_cache);
+    }
 }
 
 } // namespace starrocks
