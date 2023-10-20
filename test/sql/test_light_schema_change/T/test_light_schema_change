@@ -93,3 +93,70 @@ select * from tab1;
 drop table t1;
 drop table tab1;
 drop database test_light_schema_change;
+
+
+-- name: test_meta_scan
+create database meta_scan;
+use meta_scan;
+CREATE TABLE `reproducex4` (
+    `id_int` int(11) NULL COMMENT "",
+    `v1` varchar(255) NULL COMMENT ""
+)
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "light_schema_change" = "true"
+);
+
+insert into reproducex4 values (1,2),(3,4),(5,6);
+alter table reproducex4 add column v2 varchar(256) default "-1000" after v1;
+function: wait_alter_table_finish()
+
+show create table reproducex4;
+
+insert into reproducex4 values (7,8,9);
+function: manual_compact("meta_scan", "reproducex4")
+
+select dict_merge(v2) from reproducex4 [_META_];
+analyze full table reproducex4;
+
+function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
+
+
+drop table reproducex4;
+CREATE TABLE `reproducex4` (
+    `id_int` int(11) NULL COMMENT "",
+    `v1` varchar(255) NULL COMMENT ""
+)
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "light_schema_change" = "false"
+);
+
+insert into reproducex4 values (1,2),(3,4),(5,6);
+alter table reproducex4 add column v2 varchar(256) default "-1000" after v1;
+function: wait_alter_table_finish()
+
+show create table reproducex4;
+
+insert into reproducex4 values (7,8,9);
+function: manual_compact("meta_scan", "reproducex4")
+
+select dict_merge(v2) from reproducex4 [_META_];
+analyze full table reproducex4;
+
+function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
+
+
+drop database meta_scan;
