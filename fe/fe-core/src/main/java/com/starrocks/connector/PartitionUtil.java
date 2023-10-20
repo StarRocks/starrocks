@@ -87,10 +87,13 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
     public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
+<<<<<<< HEAD
 
     private static final String PARTITION_USE_STR2DATE_MINVALUE = "0001-01-01";
     private static final String PARTITION_USE_STR2DATE_MAXVALUE = "9999-12-31";
     private static final String MYSQL_PARTITION_MAXVALUE = "MAXVALUE";
+=======
+>>>>>>> 76f3831108 ([Enhancement] Support list partitions of iceberg table of non-identity transform and partition evolution (#33015))
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
@@ -619,6 +622,15 @@ public class PartitionUtil {
             sb.append(value);
             sb.append("/");
         }
+<<<<<<< HEAD
+=======
+
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return ICEBERG_DEFAULT_PARTITION;
+    }
+>>>>>>> 76f3831108 ([Enhancement] Support list partitions of iceberg table of non-identity transform and partition evolution (#33015))
 
         if (sb.length() > 0) {
             return sb.substring(0, sb.length() - 1);

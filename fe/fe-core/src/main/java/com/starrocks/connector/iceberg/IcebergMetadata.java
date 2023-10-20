@@ -261,7 +261,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             return partitionNames;
         }
 
+<<<<<<< HEAD
         TableScan tableScan = icebergTable.newScan().useSnapshot(latestTable.getCachedSnapshotId());
+=======
+        TableScan tableScan = icebergTable.newScan();
+>>>>>>> 76f3831108 ([Enhancement] Support list partitions of iceberg table of non-identity transform and partition evolution (#33015))
         List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
 
         for (FileScanTask fileScanTask : tasks) {
