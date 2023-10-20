@@ -85,14 +85,9 @@ public:
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
     bool is_chunk_buffer_empty();
-<<<<<<< HEAD:be/src/exec/vectorized/analytor.h
+    bool is_chunk_buffer_full();
     vectorized::ChunkPtr poll_chunk_buffer();
     void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
-=======
-    bool is_chunk_buffer_full();
-    ChunkPtr poll_chunk_buffer();
-    void offer_chunk_to_buffer(const ChunkPtr& chunk);
->>>>>>> ed0f8c5c71 ([BugFix] Fix 'remove_unused_buffer_values' of window function (#33032)):be/src/exec/analytor.h
 
     bool reached_limit() const { return _limit != -1 && _num_rows_returned >= _limit; }
     int64_t first_total_position_of_current_chunk() const {
