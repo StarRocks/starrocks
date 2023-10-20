@@ -22,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Streams;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -101,6 +102,7 @@ import org.apache.logging.log4j.util.Strings;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -211,6 +213,15 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+    @VisibleForTesting
+    protected static List<Integer> getQueryOutputIndices(List<Pair<Column, Integer>> mvColumnPairs) {
+        return Streams
+                .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int) idx))
+                .sorted(Comparator.comparingInt(x -> x.first))
+                .map(x -> x.second)
+                .collect(Collectors.toList());
+    }
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -261,6 +272,10 @@ public class MaterializedViewAnalyzer {
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
+
+            // record query output indices
+            List<Integer> queryOutputIndices = getQueryOutputIndices(mvColumnPairs);
+            statement.setQueryOutputIndices(queryOutputIndices);
 
             // set the Indexes into createMaterializedViewStatement
             List<Index> mvIndexes = genMaterializedViewIndexes(statement);
@@ -431,8 +446,8 @@ public class MaterializedViewAnalyzer {
                 keyCols.add(column.getName());
             }
             if (theBeginIndexOfValue == skip) {
-                throw new SemanticException("Data type of first column cannot be " +
-                        mvColumns.get(theBeginIndexOfValue).getType());
+                throw new SemanticException("Data type of {}th column cannot be " +
+                        mvColumns.get(theBeginIndexOfValue).getType(), theBeginIndexOfValue);
             }
             return keyCols;
         }
