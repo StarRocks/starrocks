@@ -22,9 +22,13 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -40,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -173,6 +178,15 @@ class ParserTest {
                 exprs[0] instanceof CompoundPredicate);
         Assert.assertTrue(exprs[1].toSql() + "should be a concat function call",
                 exprs[1] instanceof FunctionCallExpr);
+    }
+
+    @Test
+    void testModOperator() {
+        String sql = "select 100 MOD 2";
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        Analyzer.analyze(stmts.get(0), UtFrameUtils.createDefaultCtx());
+        String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        assertEquals("SELECT 100 % 2 AS `100 % 2`", newSql);
     }
 
     private static Stream<Arguments> multipleStatements() {

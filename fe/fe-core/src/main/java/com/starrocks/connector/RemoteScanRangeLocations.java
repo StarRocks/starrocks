@@ -16,6 +16,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -93,7 +94,9 @@ public class RemoteScanRangeLocations {
         hdfsScanRange.setFile_length(fileDesc.getLength());
         hdfsScanRange.setModification_time(fileDesc.getModificationTime());
         hdfsScanRange.setFile_format(partition.getFormat().toThrift());
-        hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+        if (isTextFormat(hdfsScanRange.getFile_format())) {
+            hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+        }
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
@@ -113,6 +116,10 @@ public class RemoteScanRangeLocations {
         result.add(scanRangeLocations);
     }
 
+    private boolean isTextFormat(THdfsFileFormat format) {
+        return format == THdfsFileFormat.TEXT || format == THdfsFileFormat.LZO_TEXT;
+    }
+
     private void createHudiScanRangeLocations(long partitionId,
                                               RemoteFileInfo partition,
                                               RemoteFileDesc fileDesc,
@@ -126,7 +133,9 @@ public class RemoteScanRangeLocations {
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(fileDesc.getLength());
         hdfsScanRange.setFile_format(partition.getFormat().toThrift());
-        hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+        if (isTextFormat(hdfsScanRange.getFile_format())) {
+            hdfsScanRange.setText_file_desc(fileDesc.getTextFileFormatDesc().toThrift());
+        }
         for (String log : fileDesc.getHudiDeltaLogs()) {
             hdfsScanRange.addToHudi_logs(log);
         }

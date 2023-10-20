@@ -4512,6 +4512,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             case StarRocksLexer.SLASH_SYMBOL:
                 return ArithmeticExpr.Operator.DIVIDE;
             case StarRocksLexer.PERCENT_SYMBOL:
+            case StarRocksLexer.MOD:
                 return ArithmeticExpr.Operator.MOD;
             case StarRocksLexer.INT_DIV:
                 return ArithmeticExpr.Operator.INT_DIVIDE;
@@ -4527,9 +4528,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT;
             case StarRocksLexer.BIT_SHIFT_RIGHT_LOGICAL:
                 return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL;
+            default:
+                throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
         }
-
-        throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());
     }
 
     @Override
