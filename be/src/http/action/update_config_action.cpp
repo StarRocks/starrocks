@@ -63,6 +63,10 @@
 #include "storage/update_manager.h"
 #include "util/priority_thread_pool.hpp"
 
+#ifdef USE_STAROS
+#include "service/staros_worker.h"
+#endif // USE_STAROS
+
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
@@ -136,6 +140,9 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         });
+#ifdef USE_STAROS
+        _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
+#endif
         _config_callback.emplace("transaction_apply_worker_count", [&]() {
             int max_thread_cnt = CpuInfo::num_cores();
             if (config::transaction_apply_worker_count > 0) {
