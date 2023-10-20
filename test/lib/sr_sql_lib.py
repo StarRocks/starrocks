@@ -981,6 +981,24 @@ class StarrocksSQLApiLib(object):
             sleep_time += 0.5
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+    def wait_alter_table_not_pending(self, alter_type="COLUMN"):
+        """
+        wait until the status of the latest alter table job becomes from PNEDING to others
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                return None
+
+            status = res["result"][0][9]
+            if status != "PENDING":
+                break
+            time.sleep(0.5)
+
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
         """
         wait alter table job finish and return status
