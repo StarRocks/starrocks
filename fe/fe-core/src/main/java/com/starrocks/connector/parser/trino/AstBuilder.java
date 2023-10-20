@@ -39,6 +39,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LargeIntLiteral;
@@ -54,6 +55,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.VarBinaryLiteral;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -99,6 +101,7 @@ import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
 import io.trino.sql.tree.Cube;
 import io.trino.sql.tree.CurrentTime;
+import io.trino.sql.tree.CurrentUser;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
@@ -682,7 +685,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             callExpr = convertedFunctionCall;
         } else if (DISTINCT_FUNCTION.contains(node.getName().toString())) {
             callExpr = visitDistinctFunctionCall(node, context);
-        }  else {
+        }  else if (FunctionSet.INFORMATION_FUNCTIONS.contains(node.getName().toString())) {
+            callExpr = new InformationFunction(node.getName().toString().toUpperCase());
+        } else {
             callExpr = new FunctionCallExpr(node.getName().toString(), arguments);
         }
         if (node.getWindow().isPresent()) {
@@ -1079,6 +1084,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitCurrentUser(CurrentUser node, ParseTreeContext context) {
+        return new InformationFunction(FunctionSet.CURRENT_USER.toUpperCase());
+    }
+
+                                         @Override
     protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
         return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
     }
