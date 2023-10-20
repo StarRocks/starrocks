@@ -338,6 +338,24 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
+        if (call.getFunction() == null) {
+            return call;
+        }
+        // return Null directly iff:
+        // 1. Not UDF
+        // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
+        // 3. Has null parameter
+        // 4. Not assert_true
+        Function fn = call.getFunction();
+        if (!FunctionSet.isNotAlwaysNullResultWithNullParamFunctions(call.getFnName())
+                && !fn.isUdf() && fn instanceof ScalarFunction) {
+            for (ScalarOperator op : call.getChildren()) {
+                if (op.isConstantNull()) {
+                    return ConstantOperator.createNull(call.getType());
+                }
+            }
+        }
+
         if (FunctionSet.IF.equalsIgnoreCase(call.getFnName())) {
             return ifCall(call);
         } else if (FunctionSet.IFNULL.equalsIgnoreCase(call.getFnName())) {

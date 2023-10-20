@@ -1326,7 +1326,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         // Currently, we disable cast operator
         Assert.assertFalse(plan.contains("Decode"));
-        Assert.assertTrue(plan.contains("reverse(conv(CAST(3: S_ADDRESS AS BIGINT), NULL, NULL))"));
+        Assert.assertTrue(plan.contains("<slot 9> : NULL"));
     }
 
     @Test
