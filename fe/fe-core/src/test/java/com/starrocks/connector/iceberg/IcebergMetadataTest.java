@@ -20,7 +20,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
@@ -32,10 +34,16 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
@@ -48,6 +56,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
@@ -67,13 +76,14 @@ import java.util.Locale;
 import java.util.Map;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "IcebergCatalog";
-    private static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
+    public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
 
     @Test
     public void testListDatabaseNames(@Mocked IcebergCatalog icebergCatalog) {
@@ -384,7 +394,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+                "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
         new Expectations(metadata) {
             {
@@ -396,11 +406,11 @@ public class IcebergMetadataTest extends TableTestBase {
 
         TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
         TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
-        String path = table.location() + "/data/data_bucket=0/c.parquet";
+        String path = mockedNativeTableA.location() + "/data/data_bucket=0/c.parquet";
         String format = "parquet";
         long recordCount = 10;
         long fileSize = 2000;
-        String partitionPath = table.location() + "/data/data_bucket=0/";
+        String partitionPath = mockedNativeTableA.location() + "/data/data_bucket=0/";
         List<Long> splitOffsets = Lists.newArrayList(4L);
         tIcebergDataFile.setPath(path);
         tIcebergDataFile.setFormat(format);
@@ -414,7 +424,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo));
 
-        List<FileScanTask> fileScanTasks = Lists.newArrayList(table.newScan().planFiles());
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(mockedNativeTableA.newScan().planFiles());
         Assert.assertEquals(1, fileScanTasks.size());
         FileScanTask task = fileScanTasks.get(0);
         Assert.assertEquals(0, task.deletes().size());
@@ -444,8 +454,8 @@ public class IcebergMetadataTest extends TableTestBase {
         tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
 
         metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo));
-        table.refresh();
-        TableScan scan = table.newScan().includeColumnStats();
+        mockedNativeTableA.refresh();
+        TableScan scan = mockedNativeTableA.newScan().includeColumnStats();
         fileScanTasks = Lists.newArrayList(scan.planFiles());
 
         Assert.assertEquals(1, fileScanTasks.size());
@@ -470,7 +480,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+                "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
 
         new Expectations(append) {
             {
@@ -505,7 +515,7 @@ public class IcebergMetadataTest extends TableTestBase {
         String format = "parquet";
         long recordCount = 10;
         long fileSize = 2000;
-        String partitionPath = table.location() + "/data/data_bucket=0/";
+        String partitionPath = mockedNativeTableA.location() + "/data/data_bucket=0/";
         List<Long> splitOffsets = Lists.newArrayList(4L);
         tIcebergDataFile.setPath(path);
         tIcebergDataFile.setFormat(format);
@@ -529,45 +539,189 @@ public class IcebergMetadataTest extends TableTestBase {
         config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
         config.put(ICEBERG_CATALOG_TYPE, "hive");
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
-
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
-                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+                "iceberg_table", columns, mockedNativeTableB, Maps.newHashMap());
 
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
 
-        new Expectations(metadata) {
-            {
-                metadata.getTable(anyString, anyString);
-                result = icebergTable;
-                minTimes = 0;
-            }
-        };
-
-        new Expectations(icebergTable) {
-            {
-                icebergTable.getPartitionColumns();
-                result = new Column("data", Type.VARBINARY);
-                minTimes = 0;
-            }
-        };
-        table.newAppend().appendFile(FILE_A).commit();
-        table.newAppend().appendFile(FILE_B).commit();
-        table.refresh();
-
-        long snapshotId = table.currentSnapshot().snapshotId();
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
-                new ColumnRefOperator(1, STRING, "data", true), ConstantOperator.createVarchar("0"));
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
         List<RemoteFileInfo> res = metadata.getRemoteFileInfos(
-                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 1);
+                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
+        Assert.assertEquals(7, res.get(0).getFiles().get(0).getIcebergScanTasks().stream()
+                .map(x -> x.file().recordCount()).reduce(0L, Long::sum), 0.001);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.getCtx().getSessionVariable().setEnablePruneIcebergManifest(true);
-        table.refresh();
-        snapshotId = table.currentSnapshot().snapshotId();
+        mockedNativeTableB.refresh();
+        snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
         predicate = new BinaryPredicateOperator(BinaryType.EQ,
-                new ColumnRefOperator(1, STRING, "data", true), ConstantOperator.createVarchar("16"));
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(2));
         res = metadata.getRemoteFileInfos(
-                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 1);
+                icebergTable, null, snapshotId, predicate, Lists.newArrayList(), 10);
         Assert.assertEquals(1, res.get(0).getFiles().get(0).getIcebergScanTasks().size());
+        Assert.assertEquals(3, res.get(0).getFiles().get(0).getIcebergScanTasks().get(0).file().recordCount());
+
+        IcebergFilter filter = IcebergFilter.of("db", "table", 1, null);
+        Assert.assertEquals("IcebergFilter{databaseName='db', tableName='table', snapshotId=1, predicate=true}",
+                filter.toString());
+    }
+
+    @Test
+    public void testGetTableStatistics() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        new ConnectContext().setThreadLocalInfo();
+        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        context.getSessionVariable().setEnableIcebergColumnStatistics(true);
+        Assert.assertTrue(context.getSessionVariable().enableIcebergColumnStatistics());
+        context.getSessionVariable().setEnableReadIcebergPuffinNdv(true);
+        Assert.assertTrue(context.getSessionVariable().enableReadIcebergPuffinNdv());
+        Statistics statistics = metadata.getTableStatistics(context, icebergTable, colRefToColumnMetaMap, null, null, -1);
+        Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(2, statistics.getColumnStatistics().size());
+        Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
+        Assert.assertFalse(statistics.getColumnStatistic(columnRefOperator2).isUnknown());
+    }
+
+    @Test
+    public void testGetTableStatisticsWithColumnStats() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_4).commit();
+        mockedNativeTableB.refresh();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableB, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "k1", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, INT, "k2", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("k1", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("k2", Type.INT));
+        new ConnectContext().setThreadLocalInfo();
+        Statistics statistics = metadata.getTableStatistics(
+                new OptimizerContext(null, null), icebergTable, colRefToColumnMetaMap, null, null, -1);
+        Assert.assertEquals(4.0, statistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(2, statistics.getColumnStatistics().size());
+        Assert.assertTrue(statistics.getColumnStatistic(columnRefOperator1).isUnknown());
+        ColumnStatistic columnStatistic = statistics.getColumnStatistic(columnRefOperator1);
+        Assert.assertEquals(1.0, columnStatistic.getMinValue(), 0.001);
+        Assert.assertEquals(2.0, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(0, columnStatistic.getNullsFraction(), 0.001);
+
+        Assert.assertFalse(statistics.getColumnStatistic(columnRefOperator2).isUnknown());
+    }
+
+    @Test
+    public void testPartitionPrune() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableA, Maps.newHashMap());
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        new ConnectContext().setThreadLocalInfo();
+
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        Assert.assertEquals(1, partitionKeys.size());
+        Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
+        IcebergPartitionKey partitionKey =  (IcebergPartitionKey) partitionKeys.get(0);
+        Assert.assertEquals("types: [VARCHAR]; keys: [0]; ", partitionKey.toString());
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A_2).commit();
+        mockedNativeTableA.refresh();
+        icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableA, Maps.newHashMap());
+        partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 100);
+        Assert.assertEquals(2, partitionKeys.size());
+    }
+
+    @Test
+    public void testPartitionPruneWithDuplicated() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("id", INT), new Column("data", STRING));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).appendFile(FILE_A_1).commit();
+        mockedNativeTableA.refresh();
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableA, Maps.newHashMap());
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        Assert.assertEquals(1, partitionKeys.size());
+        Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
+        PartitionKey partitionKey = partitionKeys.get(0);
+        Assert.assertEquals("types: [VARCHAR]; keys: [0]; ", partitionKey.toString());
+    }
+
+    @Test
+    public void testRefreshTable() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        Assert.assertFalse(icebergTable.getSnapshot().isPresent());
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Assert.assertTrue(icebergTable.getSnapshot().isPresent());
+        Snapshot snapshot = icebergTable.getSnapshot().get();
+        mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
+        Assert.assertSame(snapshot, icebergTable.getSnapshot().get());
+        metadata.refreshTable("db_name", icebergTable, null, false);
+        Assert.assertNotSame(snapshot, icebergTable.getSnapshot().get());
+    }
+
+    @Test
+    public void testGetRepeatedTableStats() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "data", true);
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("id", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("data", Type.STRING));
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        mockedNativeTableA.refresh();
+        Statistics statistics = metadata.getTableStatistics(
+                new OptimizerContext(null, null), icebergTable, colRefToColumnMetaMap, null, null, -1);
+        Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
     }
 }

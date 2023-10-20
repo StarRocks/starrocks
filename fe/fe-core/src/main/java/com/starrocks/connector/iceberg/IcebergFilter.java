@@ -56,4 +56,15 @@ public class IcebergFilter {
     public int hashCode() {
         return Objects.hash(databaseName, tableName, snapshotId);
     }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("IcebergFilter{");
+        sb.append("databaseName='").append(databaseName).append('\'');
+        sb.append(", tableName='").append(tableName).append('\'');
+        sb.append(", snapshotId=").append(snapshotId);
+        sb.append(", predicate=").append(predicate);
+        sb.append('}');
+        return sb.toString();
+    }
 }

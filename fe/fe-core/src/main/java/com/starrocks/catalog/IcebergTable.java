@@ -38,6 +38,8 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -49,6 +51,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
@@ -59,6 +62,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
+    private Optional<Snapshot> snapshot = Optional.empty();
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -112,6 +116,15 @@ public class IcebergTable extends Table {
         return remoteTableName;
     }
 
+    public Optional<Snapshot> getSnapshot() {
+        if (snapshot.isPresent()) {
+            return snapshot;
+        } else {
+            snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
+            return snapshot;
+        }
+    }
+
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
@@ -131,6 +144,21 @@ public class IcebergTable extends Table {
         }
 
         return partitionColumns;
+    }
+
+    public List<Column> getPartitionColumnsIncludeTransformed() {
+        List<Column> allPartitionColumns = new ArrayList<>();
+        PartitionSpec currentSpec = getNativeTable().spec();
+        boolean existPartitionEvolution = currentSpec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity() && existPartitionEvolution) {
+                continue;
+            }
+            String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
+            Column partitionCol = getColumn(baseColumnName);
+            allPartitionColumns.add(partitionCol);
+        }
+        return allPartitionColumns;
     }
 
     public List<Integer> partitionColumnIndexes() {
@@ -154,6 +182,10 @@ public class IcebergTable extends Table {
         }
 
         return indexes;
+    }
+
+    public void resetSnapshot() {
+        snapshot = Optional.empty();
     }
 
     public boolean isV2Format() {
