@@ -173,7 +173,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         // sync mv always has the same partition with
         // Compensate partition predicates and add them into query predicate.
         final ScalarOperator queryPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(context, queryExpression, queryColumnRefFactory, isCompensate);
+                MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory, isCompensate);
         if (queryPartitionPredicate == null) {
             logMVRewrite(context, this, "Compensate query expression's partition predicates " +
                     "from pruned partitions failed.");
