@@ -100,6 +100,13 @@ public:
     virtual void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                             size_t end) const {}
 
+    // For aggregation window functions
+    // For certain window functions, such as "rank," the process will be executed in streaming mode,
+    // and the columns that were previously buffered but are no longer needed will be contracted.
+    // And if the implementation of the window function record some certain information, such as partition boundary,
+    // this information should be updated as well.
+    virtual void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const {}
+
     virtual std::string get_name() const = 0;
 
     // State management methods:
