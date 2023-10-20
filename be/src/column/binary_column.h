@@ -29,7 +29,7 @@ public:
 
         Slice operator[](size_t index) const { return _column.get_slice(index); }
 
-        size_t size() { return _column.size(); }
+        size_t size() const { return _column.size(); }
 
     private:
         const BinaryColumnBase& _column;
