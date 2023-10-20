@@ -89,8 +89,8 @@ private:
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
-    bool _use_block_cache = false;
-    bool _enable_populate_block_cache = false;
+    bool _use_datacache = false;
+    bool _enable_populate_datacache = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
@@ -137,6 +137,8 @@ private:
     bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
+    bool _has_scan_range_indicate_const_column = false;
+    bool _use_partition_column_value_only = false;
     // ======================================
     // The following are profile metrics
     HdfsScanProfile _profile;

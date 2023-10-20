@@ -19,6 +19,7 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
@@ -90,12 +91,12 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
-    _use_block_cache = config::block_cache_enable;
-    if (state->query_options().__isset.use_scan_block_cache) {
-        _use_block_cache &= state->query_options().use_scan_block_cache;
+    _use_datacache = config::datacache_enable;
+    if (state->query_options().__isset.enable_scan_datacache) {
+        _use_datacache &= state->query_options().enable_scan_datacache;
     }
-    if (state->query_options().__isset.enable_populate_block_cache) {
-        _enable_populate_block_cache = state->query_options().enable_populate_block_cache;
+    if (state->query_options().__isset.enable_populate_datacache) {
+        _enable_populate_datacache = state->query_options().enable_populate_datacache;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -217,6 +218,34 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
     }
+    if (hdfs_scan_node.__isset.use_partition_column_value_only) {
+        _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+    }
+
+    // The reason why we need double check here is for iceberg table.
+    // for some partitions, partition column maybe is not constant value.
+    // If partition column is not constant value, we can not use this optimization,
+    // And we can not use `can_use_any_column` either.
+    // So checks are:
+    // 1. can_use_any_column = true
+    // 2. only one materialized slot
+    // 3. besides that, all slots are partition slots.
+    auto check_opt_on_iceberg = [&]() {
+        if (!_can_use_any_column) {
+            return false;
+        }
+        if ((_partition_slots.size() + 1) != slots.size()) {
+            return false;
+        }
+        if (_materialize_slots.size() != 1) {
+            return false;
+        }
+        return true;
+    };
+    if (!check_opt_on_iceberg()) {
+        _use_partition_column_value_only = false;
+        _can_use_any_column = false;
+    }
 }
 
 Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
@@ -298,27 +327,34 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
     }
 
-    if (_use_block_cache) {
-        static const char* prefix = "BlockCache";
-        ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
-        _profile.block_cache_read_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_read_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES, prefix);
-        _profile.block_cache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheReadTimer", prefix);
-        _profile.block_cache_write_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_write_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
-        _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
-        _profile.block_cache_write_fail_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_write_fail_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
-        _profile.block_cache_read_block_buffer_counter =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
-        _profile.block_cache_read_block_buffer_bytes =
-                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
+    if (_use_datacache) {
+        static const char* prefix = "DataCache";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.datacache_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
+        _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_mem_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadMemBytes", TUnit::BYTES, "DataCacheReadBytes");
+        _profile.datacache_read_disk_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadDiskBytes", TUnit::BYTES, "DataCacheReadBytes");
+        _profile.datacache_skip_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadCounter", TUnit::UNIT, prefix);
+        _profile.datacache_skip_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
+        _profile.datacache_write_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
+        _profile.datacache_write_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteBytes", TUnit::BYTES, prefix);
+        _profile.datacache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheWriteTimer", prefix);
+        _profile.datacache_write_fail_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailCounter", TUnit::UNIT, prefix);
+        _profile.datacache_write_fail_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteFailBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_block_buffer_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferCounter", TUnit::UNIT, prefix);
+        _profile.datacache_read_block_buffer_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBlockBufferBytes", TUnit::BYTES, prefix);
     }
 
     {
@@ -531,8 +567,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
         scanner_params.iceberg_schema = tbl->get_iceberg_schema();
     }
-    scanner_params.use_block_cache = _use_block_cache;
-    scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
+    scanner_params.use_datacache = _use_datacache;
+    scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
 
@@ -548,7 +584,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
 
-    if (use_paimon_jni_reader) {
+    if (_use_partition_column_value_only) {
+        DCHECK(_can_use_any_column);
+        scanner = _pool.add(new HdfsPartitionScanner());
+    } else if (use_paimon_jni_reader) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();

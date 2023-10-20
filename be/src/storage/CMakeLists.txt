@@ -184,6 +184,7 @@ add_library(Storage STATIC
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
     lake/update_manager.cpp

@@ -66,12 +66,6 @@ public:
 
     [[nodiscard]] Status delete_tablet(int64_t tablet_id);
 
-    // Returns the the newly created tablet metadata
-    StatusOr<TabletMetadataPtr> publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                const int64_t* txns, int txns_size, int64_t commit_time);
-
-    void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
-
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
     [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
@@ -94,22 +88,17 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
-    StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+    StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
     [[nodiscard]] Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
 
     [[nodiscard]] Status delete_txn_vlog(int64_t tablet_id, int64_t version);
-
-    [[nodiscard]] Status delete_segment(int64_t tablet_id, std::string_view segment_name);
-
-    [[nodiscard]] Status delete_del(int64_t tablet_id, std::string_view del_name);
-
-    // Transform a txn log into versioned txn log(i.e., rename `{tablet_id}_{txn_id}.log` to `{tablet_id}_{log_version}.vlog`)
-    [[nodiscard]] Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
 
     [[nodiscard]] Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 

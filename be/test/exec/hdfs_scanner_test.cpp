@@ -49,7 +49,7 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
-    Status _init_block_cache(size_t mem_size, const std::string& engine);
+    Status _init_datacache(size_t mem_size, const std::string& engine);
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
@@ -80,12 +80,12 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     _runtime_state->init_instance_mem_tracker();
 }
 
-Status HdfsScannerTest::_init_block_cache(size_t mem_size, const std::string& engine) {
+Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
     BlockCache* cache = BlockCache::instance();
     CacheOptions cache_options;
     cache_options.mem_space_size = mem_size;
-    cache_options.block_size = starrocks::config::block_cache_block_size;
-    cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.block_size = starrocks::config::datacache_block_size;
+    cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
     cache_options.max_concurrent_inserts = 1500000;
     cache_options.engine = engine;
     return cache->init(cache_options);
@@ -1605,13 +1605,13 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(small_file, range, tuple_desc);
 #if defined(WITH_STARCACHE)
-        status = _init_block_cache(50 * 1024 * 1024, "starcache"); // 50MB
+        status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
-        param->use_block_cache = true;
+        param->use_datacache = true;
 #elif defined(WITH_CACHELIB)
-        status = _init_block_cache(50 * 1024 * 1024, "cachelib"); // 50MB
+        status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
-        param->use_block_cache = true;
+        param->use_datacache = true;
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();

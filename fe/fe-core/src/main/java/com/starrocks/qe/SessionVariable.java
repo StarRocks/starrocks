@@ -214,6 +214,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
+    public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -322,6 +324,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PRUNE_ICEBERG_MANIFEST = "enable_prune_iceberg_manifest";
 
+    public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
+
+    public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
@@ -361,8 +367,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
+    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_datacache";
+    public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
+    // The following configurations will be deprecated, and we use the `datacache` suffix instead.
+    // But it is temporarily necessary to keep them for a period of time to be compatible with
+    // the old session variable names.
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -498,6 +510,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
+    public static final String ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION =
+            "enable_partition_column_value_only_optimization";
+
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -583,6 +598,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
+
+    /**
+     * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
+     * fragments that access the same tablet to run on the same node to improve cache hit.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
+    private boolean enableQueryTabletAffinity = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -945,7 +967,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if transmission_encode_level & 4, binary columns are compressed by lz4
     // if transmission_encode_level & 1, enable adaptive encoding.
     // e.g.
-    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(< 0.9);
+    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding
+    // ratio(< 0.9);
     // if transmission_encode_level = 6, SR will force encoding numbers and string columns.
     // in short,
     // for transmission_encode_level,
@@ -1140,8 +1163,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
-    @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
-    private boolean useScanBlockCache = false;
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
+    private boolean enableScanDataCache = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateDataCache = true;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1160,9 +1186,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
-
-    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
-    private boolean enablePopulateBlockCache = true;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
@@ -1322,6 +1345,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionColumnValueOnlyOptimization = true;
+
     // This variable is introduced to solve compatibility issues/
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
@@ -1353,6 +1379,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
     private boolean enablePruneIcebergManifest = true;
 
+    @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
+    private boolean enableReadIcebergPuffinNdv = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
+    private boolean enableIcebergColumnStatistics = true;
+
+    @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
+    private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
     }
@@ -1361,13 +1396,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneIcebergManifest = enablePruneIcebergManifest;
     }
 
+    public boolean enableReadIcebergPuffinNdv() {
+        return enableReadIcebergPuffinNdv;
+    }
+
+    public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
+        this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public boolean enableIcebergColumnStatistics() {
+        return enableIcebergColumnStatistics;
+    }
+
+    public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
+        this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
-
-    @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
-    private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
-
+    
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -1449,6 +1497,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
+    }
+
+    public boolean isEnableQueryTabletAffinity() {
+        return enableQueryTabletAffinity;
     }
 
     public int getStatisticCollectParallelism() {
@@ -2560,6 +2612,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableCountStarOptimization = v;
     }
 
+    public boolean isEnablePartitionColumnValueOnlyOptimization() {
+        return enablePartitionColumnValueOnlyOptimization;
+    }
+
+    public void setEnablePartitionColumnValueOnlyOptimization(boolean v) {
+        enablePartitionColumnValueOnlyOptimization = v;
+    }
+
     public boolean isEnableExprPrunePartition() {
         return enableExprPrunePartition;
     }
@@ -2667,8 +2727,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
-        tResult.setUse_scan_block_cache(useScanBlockCache);
-        tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
+        tResult.setEnable_scan_datacache(enableScanDataCache);
+        tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);

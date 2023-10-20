@@ -28,7 +28,6 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/delta_writer.h"
@@ -41,6 +40,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vacuum.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
@@ -122,10 +122,6 @@ static size_t get_metacache_usage(void*) {
 static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 #endif
-
-static StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
-                                           int64_t new_version, const int64_t* txns, int txns_size,
-                                           int64_t commit_time);
 
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
@@ -345,7 +341,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
             req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb->mutable_schema(),
             req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
-    RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
+    if (req.create_schema_file) {
+        RETURN_IF_ERROR(create_schema_file(req.tablet_id, tablet_metadata_pb->schema()));
+    }
 
     return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
@@ -394,6 +392,7 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
 }
 
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
+    TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
     auto t0 = butil::gettimeofday_us();
     auto filepath = tablet_metadata_location(metadata->id(), metadata->version());
@@ -417,6 +416,7 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::load_tablet_metadata");
     auto t0 = butil::gettimeofday_us();
     auto metadata = std::make_shared<TabletMetadataPB>();
     ProtobufFile file(metadata_location);
@@ -475,6 +475,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
 }
 
 StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::load_txn_log");
     auto t0 = butil::gettimeofday_us();
     auto meta = std::make_shared<TxnLog>();
     ProtobufFile file(txn_log_path);
@@ -482,6 +483,11 @@ StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path,
     auto t1 = butil::gettimeofday_us();
     g_get_txn_log_latency << (t1 - t0);
     return std::move(meta);
+}
+
+StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_txn_vlog");
+    return get_txn_log(path, fill_cache);
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
@@ -550,18 +556,6 @@ Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
     TRACE("end delete txn vlog");
-    return st.is_not_found() ? Status::OK() : st;
-}
-
-Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
-    erase_metacache(segment_name);
-    auto st = fs::delete_file(segment_location(tablet_id, segment_name));
-    return st.is_not_found() ? Status::OK() : st;
-}
-
-Status TabletManager::delete_del(int64_t tablet_id, std::string_view del_name) {
-    erase_metacache(del_name);
-    auto st = fs::delete_file(del_location(tablet_id, del_name));
     return st.is_not_found() ? Status::OK() : st;
 }
 
@@ -675,163 +669,6 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t t
     }
 }
 
-StatusOr<TabletMetadataPtr> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                           const int64_t* txns, int txns_size, int64_t commit_time) {
-    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    return publish(this, &tablet, base_version, new_version, txns, txns_size, commit_time);
-}
-
-StatusOr<TabletMetadataPtr> publish(TabletManager* tablet_mgr, Tablet* tablet, int64_t base_version,
-                                    int64_t new_version, const int64_t* txns, int txns_size, int64_t commit_time) {
-    if (txns_size != 1) {
-        return Status::NotSupported("does not support publish multiple txns yet");
-    }
-
-    auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
-        auto res = tablet->get_metadata(new_version);
-        if (res.ok()) return res;
-        return error;
-    };
-
-    // Read base version metadata
-    auto res = tablet->get_metadata(base_version);
-    if (res.status().is_not_found()) {
-        return new_version_metadata_or_error(res.status());
-    }
-
-    if (!res.ok()) {
-        LOG(WARNING) << "Fail to get " << tablet->metadata_location(base_version) << ": " << res.status();
-        return res.status();
-    }
-
-    auto base_metadata = std::move(res).value();
-    auto new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
-    auto log_applier = new_txn_log_applier(*tablet, new_metadata, new_version);
-
-    if (new_metadata->compaction_inputs_size() > 0) {
-        new_metadata->mutable_compaction_inputs()->Clear();
-    }
-
-    if (new_metadata->orphan_files_size() > 0) {
-        new_metadata->mutable_orphan_files()->Clear();
-    }
-
-    if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
-        new_metadata->set_prev_garbage_version(base_metadata->version());
-    }
-
-    new_metadata->set_commit_time(commit_time);
-
-    auto init_st = log_applier->init();
-    if (!init_st.ok()) {
-        if (init_st.is_already_exist()) {
-            return new_version_metadata_or_error(init_st);
-        } else {
-            return init_st;
-        }
-    }
-
-    // Apply txn logs
-    int64_t alter_version = -1;
-    for (int i = 0; i < txns_size; i++) {
-        auto txn_id = txns[i];
-        auto txn_log_st = tablet->get_txn_log(txn_id);
-
-        if (txn_log_st.status().is_not_found()) {
-            return new_version_metadata_or_error(txn_log_st.status());
-        }
-
-        if (!txn_log_st.ok()) {
-            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
-            return txn_log_st.status();
-        }
-
-        auto& txn_log = txn_log_st.value();
-        if (txn_log->has_op_schema_change()) {
-            alter_version = txn_log->op_schema_change().alter_version();
-        }
-
-        auto st = log_applier->apply(*txn_log);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
-            return st;
-        }
-    }
-
-    // Apply vtxn logs for schema change
-    // Should firstly apply schema change txn log, then apply txn version logs,
-    // because the rowsets in txn log are older.
-    if (alter_version != -1 && alter_version + 1 < new_version) {
-        DCHECK(base_version == 1 && txns_size == 1);
-        for (int64_t v = alter_version + 1; v < new_version; ++v) {
-            auto txn_vlog = tablet->get_txn_vlog(v);
-            if (txn_vlog.status().is_not_found()) {
-                return new_version_metadata_or_error(txn_vlog.status());
-            }
-
-            if (!txn_vlog.ok()) {
-                LOG(WARNING) << "Fail to get " << tablet->txn_vlog_location(v) << ": " << txn_vlog.status();
-                return txn_vlog.status();
-            }
-
-            auto st = log_applier->apply(**txn_vlog);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to apply " << tablet->txn_vlog_location(v) << ": " << st;
-                return st;
-            }
-        }
-    }
-
-    // Save new metadata
-    RETURN_IF_ERROR(log_applier->finish());
-
-    // collect trash files, and remove them by background threads
-    auto trash_files = log_applier->trash_files();
-
-    CHECK_EQ(1, txns_size);
-    auto tablet_id = tablet->id();
-    auto txn_id = txns[0];
-    auto clear_task = [=]() {
-        // Delete txn logs
-        auto st = tablet_mgr->delete_txn_log(tablet_id, txn_id);
-        TEST_SYNC_POINT_CALLBACK("publish_version:delete_txn_log", &st);
-        LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet_mgr->txn_log_location(tablet_id, txn_id) << ": " << st;
-        // Delete vtxn logs
-        if (alter_version != -1 && alter_version + 1 < new_version) {
-            for (int64_t v = alter_version + 1; v < new_version; ++v) {
-                auto r = tablet_mgr->delete_txn_vlog(tablet_id, v);
-                LOG_IF(WARNING, !r.ok()) << "Fail to delete " << tablet_mgr->txn_vlog_location(tablet_id, v) << ": "
-                                         << r;
-            }
-        }
-        // Delete trash_file files
-        if (nullptr != trash_files) {
-            for (const auto& trash_file : *trash_files) {
-                if (is_del(trash_file)) {
-                    auto r = tablet_mgr->delete_del(tablet_id, trash_file);
-                    LOG_IF(WARNING, !r.ok())
-                            << "Fail to delete " << tablet_mgr->del_location(tablet_id, trash_file) << ": " << r;
-                } else if (is_segment(trash_file)) {
-                    auto r = tablet_mgr->delete_segment(tablet_id, trash_file);
-                    LOG_IF(WARNING, !r.ok())
-                            << "Fail to delete " << tablet_mgr->segment_location(tablet_id, trash_file) << ": " << r;
-                } else {
-                    LOG(ERROR) << "Unknown file: " << trash_file << " tablet_id: " << tablet_id;
-                }
-            }
-        }
-    };
-
-    auto tp = ExecEnv::GetInstance()->vacuum_thread_pool();
-    if (LIKELY(tp != nullptr)) {
-        auto st = tp->submit_func(std::move(clear_task));
-        LOG_IF(INFO, !st.ok()) << "Fail to submit clear task of txn " << txn_id << ", ignore this error";
-    } else {
-        clear_task();
-    }
-    return new_metadata;
-}
-
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
     tablet.set_version_hint(version);
@@ -844,72 +681,6 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
         return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
-    }
-}
-
-void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
-    // TODO: batch deletion
-    for (int i = 0; i < txns_size; i++) {
-        auto txn_id = txns[i];
-        auto txn_log_or = get_txn_log(tablet_id, txn_id);
-        if (!txn_log_or.ok()) {
-            LOG_IF(WARNING, !txn_log_or.status().is_not_found())
-                    << "Fail to get txn log " << txn_log_location(tablet_id, txn_id) << ": " << txn_log_or.status();
-            continue;
-        }
-
-        TxnLogPtr txn_log = std::move(txn_log_or).value();
-        if (txn_log->has_op_write()) {
-            for (const auto& segment : txn_log->op_write().rowset().segments()) {
-                auto st = delete_segment(tablet_id, segment);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
-            }
-            for (const auto& del_file : txn_log->op_write().dels()) {
-                auto st = delete_del(tablet_id, del_file);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << del_file << ": " << st;
-            }
-        }
-        if (txn_log->has_op_compaction()) {
-            for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
-                auto st = delete_segment(tablet_id, segment);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
-            }
-        }
-        if (txn_log->has_op_schema_change() && !txn_log->op_schema_change().linked_segment()) {
-            for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
-                for (const auto& segment : rowset.segments()) {
-                    auto st = delete_segment(tablet_id, segment);
-                    LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
-                }
-            }
-        }
-        auto st = delete_txn_log(tablet_id, txn_id);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found())
-                << "Fail to delete " << txn_log_location(tablet_id, txn_id) << ": " << st;
-    }
-}
-
-Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version) {
-    auto txn_log_path = txn_log_location(tablet_id, txn_id);
-    auto txn_vlog_path = txn_vlog_location(tablet_id, log_version);
-    // TODO: use rename() API if supported by the underlying filesystem.
-    auto st = fs::copy_file(txn_log_path, txn_vlog_path);
-    if (st.is_not_found()) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
-        auto check_st = fs->path_exists(txn_vlog_path);
-        if (check_st.ok()) {
-            return Status::OK();
-        } else {
-            LOG_IF(WARNING, !check_st.is_not_found())
-                    << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
-            return st;
-        }
-    } else if (!st.ok()) {
-        return st;
-    } else {
-        st = fs::delete_file(txn_log_path);
-        st.permit_unchecked_error();
-        return Status::OK();
     }
 }
 
@@ -927,27 +698,21 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
 }
 
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.
-// If this is a multi-partition table, then each partition directory will contain a schema file.
-// This method may be concurrently and repeatedly called multiple times. That means concurrent
-// creation and writes to the same schema file could happen. We assume the FileSystem interface
-// guarantees last-write-wins semantics here.
 Status TabletManager::create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb) {
-    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_pb.id()));
-    if (!fs::path_exist(schema_file_path)) {
-        VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
-        ProtobufFile file(schema_file_path);
-        RETURN_IF_ERROR(file.save(schema_pb));
+    auto schema_file_path = _location_provider->schema_file_location(tablet_id, schema_pb.id());
+    VLOG(3) << "Creating schema file of id " << schema_pb.id() << " for tablet " << tablet_id;
+    ProtobufFile file(schema_file_path);
+    RETURN_IF_ERROR(file.save(schema_pb));
 
-        // Save the schema into the in-memory cache
-        auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
-        if (UNLIKELY(schema == nullptr)) {
-            return Status::InternalError("failed to emplace the schema hash map");
-        }
-        auto cache_key = global_schema_cache_key(schema_pb.id());
-        auto cache_value = std::make_unique<CacheValue>(schema);
-        auto cache_size = inserted ? schema->mem_usage() : 0;
-        fill_metacache(cache_key, cache_value.release(), cache_size);
+    // Save the schema into the in-memory cache
+    auto [schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema_pb);
+    if (UNLIKELY(schema == nullptr)) {
+        return Status::InternalError("failed to emplace the schema hash map");
     }
+    auto cache_key = global_schema_cache_key(schema_pb.id());
+    auto cache_value = std::make_unique<CacheValue>(schema);
+    auto cache_size = inserted ? schema->mem_usage() : 0;
+    fill_metacache(cache_key, cache_value.release(), cache_size);
     return Status::OK();
 }
 

@@ -61,6 +61,7 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
@@ -252,8 +253,8 @@ public class PartitionUtil {
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
         } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
+            Preconditions.checkState(false, "Not support getPartitionNames for table type %s",
+                    table.getType());
         }
         return partitionNames;
     }
@@ -614,6 +615,24 @@ public class PartitionUtil {
             sb.append("/");
         }
         return sb.substring(0, sb.length() - 1);
+    }
+
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+        PartitionData partitionData = (PartitionData) partition;
+        List<String> partitionValues = new ArrayList<>();
+        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (int i = 0; i < spec.fields().size(); i++) {
+            PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+                continue;
+            }
+
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
     }
 
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {

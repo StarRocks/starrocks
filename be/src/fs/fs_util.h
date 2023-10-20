@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "fs/fs.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::fs {
 
@@ -129,6 +130,7 @@ inline StatusOr<int64_t> copy(SequentialFile* src, WritableFile* dest, size_t bu
 
 // copy the file from src path to dest path, it will overwrite the existing files
 inline Status copy_file(const std::string& src_path, const std::string& dst_path) {
+    TEST_ERROR_POINT("fs::copy_file");
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto src_fs, FileSystem::CreateSharedFromString(src_path));
     ASSIGN_OR_RETURN(auto dst_fs, FileSystem::CreateSharedFromString(dst_path));
