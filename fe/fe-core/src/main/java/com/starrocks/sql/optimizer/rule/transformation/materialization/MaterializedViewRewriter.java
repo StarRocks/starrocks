@@ -1685,22 +1685,27 @@ public class MaterializedViewRewriter {
     // pushdown predicates on join nodes
     // the OptExpression will be modified in place
     private OptExpression pushdownPredicatesForJoin(OptExpression optExpression, ScalarOperator predicate) {
-        if (predicate == null) {
-            return optExpression;
+        if (!(optExpression.getOp() instanceof LogicalJoinOperator)) {
+            if (predicate != null) {
+                // predicate can not be pushdown, we should add it it optExpression
+                Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
+                builder.withOperator(optExpression.getOp());
+                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                builder.setPredicate(MvUtils.canonizePredicateForRewrite(
+                        Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
+                Operator newQueryOp = builder.build();
+                return OptExpression.create(newQueryOp, optExpression.getInputs());
+            } else {
+                return optExpression;
+            }
         }
 
-        if (optExpression.getOp() instanceof LogicalJoinOperator) {
-            return doPushdownPredicate(optExpression, predicate);
-        } else {
-            // predicate can not be pushdown, we should add it it optExpression
-            Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
-            builder.withOperator(optExpression.getOp());
-            // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
-            builder.setPredicate(MvUtils.canonizePredicateForRewrite(
-                    Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
-            Operator newQueryOp = builder.build();
-            return OptExpression.create(newQueryOp, optExpression.getInputs());
+        OptExpression newJoin = doPushdownPredicate(optExpression, predicate);
+        List<OptExpression> children = Lists.newArrayList();
+        for (OptExpression child : newJoin.getInputs()) {
+            children.add(pushdownPredicatesForJoin(child, null));
         }
+        return OptExpression.create(newJoin.getOp(), children);
     }
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
