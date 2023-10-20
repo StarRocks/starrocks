@@ -109,6 +109,13 @@ public class PhysicalPartitionImplTest {
         p.deleteRollupIndex(4);
 
         Assert.assertFalse(p.equals(p2));
+
+        p.setIdForRestore(3);
+        Assert.assertEquals(3, p.getId());
+        Assert.assertEquals(1, p.getBeforeRestoreId());
+
+        p.setParentId(3);
+        Assert.assertEquals(3, p.getParentId());
     }
 
     @Test
