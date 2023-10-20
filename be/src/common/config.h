@@ -936,6 +936,10 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "16");
+// make sure 2^spill_max_partition_level < spill_max_partition_size
+CONF_Int32(spill_max_partition_level, "7");
+CONF_Int32(spill_max_partition_size, "1024");
+
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
