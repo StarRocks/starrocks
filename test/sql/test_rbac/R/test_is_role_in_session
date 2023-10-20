@@ -1,0 +1,70 @@
+-- name: test_is_role_in_session
+drop role if exists r1;
+-- result:
+-- !result
+create role r1;
+-- result:
+-- !result
+drop role if exists r2;
+-- result:
+-- !result
+create role r2;
+-- result:
+-- !result
+drop role if exists r3;
+-- result:
+-- !result
+create role r3;
+-- result:
+-- !result
+drop user if exists u1;
+-- result:
+-- !result
+create user u1;
+-- result:
+-- !result
+grant impersonate on user root to u1;
+-- result:
+-- !result
+grant r3 to role r2;
+-- result:
+-- !result
+grant r2 to role r1;
+-- result:
+-- !result
+grant r1 to u1;
+-- result:
+-- !result
+execute as u1 with no revert;
+-- result:
+-- !result
+select is_role_in_session("r1");
+-- result:
+0
+-- !result
+select is_role_in_session("r2");
+-- result:
+0
+-- !result
+select is_role_in_session("r3");
+-- result:
+0
+-- !result
+set role all;
+-- result:
+-- !result
+select is_role_in_session("r1");
+-- result:
+1
+-- !result
+select is_role_in_session("r2");
+-- result:
+1
+-- !result
+select is_role_in_session("r3");
+-- result:
+1
+-- !result
+execute as root with no revert;
+-- result:
+-- !result

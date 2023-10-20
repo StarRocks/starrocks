@@ -60,6 +60,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -89,6 +90,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -1264,5 +1266,18 @@ public class ScalarOperatorFunctions {
             }
         }
         return values[values.length - 1];
+    }
+
+    @ConstantFunction(name = "is_role_in_session", argTypes = {VARCHAR}, returnType = BOOLEAN)
+    public static ConstantOperator isRoleInSession(ConstantOperator role) {
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        Set<String> roleNames = new HashSet<>();
+        ConnectContext connectContext = ConnectContext.get();
+
+        for (Long roleId : connectContext.getCurrentRoleIds()) {
+            manager.getRecursiveRole(roleNames, roleId);
+        }
+
+        return ConstantOperator.createBoolean(roleNames.contains(role.getVarchar()));
     }
 }
