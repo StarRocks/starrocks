@@ -22,7 +22,7 @@ Returns a value of the same data type as the object that you specify in the `par
 
 Example 1: Reverse a string.
 
-```Plain%20Text
+```Plain_Text
 MySQL > SELECT reverse('hello');
 
 +------------------+
@@ -38,7 +38,7 @@ MySQL > SELECT reverse('hello');
 
 Example 2: Reverse an array.
 
-```Plain%20Text
+```Plain_Text
 MYSQL> SELECT reverse([4,1,5,8]);
 
 +--------------------+

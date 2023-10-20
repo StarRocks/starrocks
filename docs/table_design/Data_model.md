@@ -184,7 +184,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 8;
 
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
 
-- For information about the aggregate functions that are supported by the Aggregate Key model, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md).
+- For information about the aggregate functions that are supported by the Aggregate Key model, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md).
 
 - When queries are run, sort key columns are filtered before the aggregation of multiple data versions, whereas metric columns are filtered after the aggregation of multiple data versions. Therefore, we recommend that you identify the columns that are frequently used as filter conditions and define these columns as the sort key. This way, data filtering can start before the aggregation of multiple data versions to improve query performance.
 
@@ -423,7 +423,7 @@ PROPERTIES("replication_num" = "3");
 
 - The Primary Key model does not support materialized views.
 
-- You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
 
 ### What to do next
 

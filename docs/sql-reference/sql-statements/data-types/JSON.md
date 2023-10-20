@@ -16,7 +16,7 @@ StarRocks supports both storage and efficient querying and analytics of JSON dat
 
 When you create a table, you can use the `JSON` keyword to specify the `j` column of the table as a JSON column.
 
-```Plain%20Text
+```Plain_Text
 CREATE TABLE `tj` (
 
     `id` INT(11) NOT NULL COMMENT "",
@@ -48,7 +48,7 @@ StarRocks provides the following three methods for you to load data and store th
 
 - Method 1: Use `INSERT INTO` to write data to a JSON column of a table. In the following example, a table named `tj` is used, and the `j` column of the table is specified as the JSON column.
 
-```Plain%20Text
+```Plain_Text
 INSERT INTO tj (id, j) VALUES (1, parse_json('{"a": 1, "b": true}'));
 
 INSERT INTO tj (id, j) VALUES (2, parse_json('{"a": 2, "b": false}'));
@@ -87,7 +87,7 @@ StarRocks supports the querying and processing of JSON data and the use of JSON 
 
 In the following examples, a table named `tj` is used, and the `j` column of the table is specified as the JSON column.
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from tj;
 
 +------+----------------------+
@@ -109,7 +109,7 @@ mysql> select * from tj;
 
 Example 1: Filter the data of the JSON column in the table to retrieve the data that meets the `id=1` filter condition.
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from tj where id = 1;
 
 +------+---------------------+
@@ -127,7 +127,7 @@ Example 2: Filter the data of the JSON column in the table to retrieve the data 
 
 > `j->'a'` returns JSON data. You can interpret SQL data as JSON data by using the PARSE_JSON function and then compare the data. Alternatively, you can convert JSON data to INT data by using the CAST function and then compare the data.
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from tj where j->'a' = parse_json('1');
 
 +------+---------------------+
@@ -157,7 +157,7 @@ mysql> select * from tj where cast(j->'a' as INT) = 1;
 
 Example 3: Use the CAST function to convert the values in the JSON column of the table to BOOLEAN values. Then, filter the data of the JSON column to retrieve the data that meets the specified filter condition.
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from tj where cast(j->'b' as boolean);
 
 +------+---------------------+
@@ -175,7 +175,7 @@ mysql> select * from tj where cast(j->'b' as boolean);
 
 Example 4: Use the CAST function to convert the values in the JSON column of the table to BOOLEAN values. Then, filter the data of the JSON column to retrieve the data that meets the specified filter condition, and perform arithmetic operations on the data.
 
-```Plain%20Text
+```Plain_Text
 mysql> select cast(j->'a' as int) from tj where cast(j->'b' as boolean);
 
 +-----------------------+
@@ -207,7 +207,7 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 
 Example 5: Sort the data of the table by using the JSON column as a sort key.
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from tj
 
        where j->'a' <= parse_json('3')

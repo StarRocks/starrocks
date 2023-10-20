@@ -6,7 +6,7 @@ Create a new table in StarRocks.
 
 ## Syntax
 
-```Plain%20Text
+```Plain_Text
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, ndex_definition12,]])
@@ -32,7 +32,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 Note:
 
-```Plain%20Text
+```Plain_Text
 col_name：Column name
 col_type：Column type
 
@@ -194,7 +194,7 @@ Default: olap. Optional: mysql, elasticsearch, and hive.
 
 - For MySQL, properties should include:
 
-    ```Plain%20Text
+    ```Plain_Text
     PROPERTIES (
 
         "host" = "mysql_server_host",
@@ -214,7 +214,7 @@ Default: olap. Optional: mysql, elasticsearch, and hive.
 
 - For Elasticsearch, specify the following properties:
 
-```Plain%20Text
+```Plain_Text
 PROPERTIES (
 
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
@@ -255,7 +255,7 @@ Syntax：
 
 Note：
 
-```Plain%20Text
+```Plain_Text
 Data is sequenced in specified key columns and has different attributes for different key_type. 
 
 Key_type supports: 
@@ -283,7 +283,7 @@ Partition description can be used in the following three ways:
 
 Syntax:
 
-```Plain%20Text
+```Plain_Text
 PARTITION BY RANGE (k1, k2, ...)
 (
     PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
@@ -329,7 +329,7 @@ Note:
 
 Syntax
 
-```Plain%20Text
+```Plain_Text
 PARTITION BY RANGE (datekey) (
 
     START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
@@ -344,7 +344,7 @@ You can specify the value for `START` and `END` and the expression in `EVERY` to
 - If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
 - If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data Distribution](../table_design/Data_distribution#create-and-modify-partitions-in-bulk).
+For more information, see [Data Distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
 
 ### distribution_des
 
@@ -366,7 +366,7 @@ It is recommended to use Hash bucketing method.
 
 - If ENGINE type is olap. Users can specify storage medium, cooldown time and replica number.
 
-```Plain%20Text
+```Plain_Text
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
     [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
@@ -663,7 +663,7 @@ PROPERTIES ("storage_type"="column");
 
 - Create a dynamic partition table. (The dynamic partitioning function should be turned on in FE configuration.) This table will create partitions for three days and delete those created three days ago. For example, assuming today is 2020-01-08, partitions with these names will be created: p20200108, p20200109, p20200110, p20200111. And their ranges are:
 
-```Plain%20Text
+```Plain_Text
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )

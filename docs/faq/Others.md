@@ -16,20 +16,20 @@ To solve this problem, perform the following steps:
 
 1. For example, there is a file named **original**, whose text is garbled. The character set of this file is ISO-8859-1. Run the following code to obtain the character set of the file.
 
-    ```Plain%20Text
+    ```Plain_Text
     file --mime-encoding origin.txt
     origin.txt：iso-8859-1
     ```
 
 2. Run the `iconv` command to convert the character set of this file into UTF-8.
 
-    ```Plain%20Text
+    ```Plain_Text
     iconv -f iso-8859-1 -t utf-8 origin.txt > origin_utf-8.txt
     ```
 
 3. After the conversion, the text of this file still appears garbled. You can then regrade the character set of this file as GBK and convert the character set into UTF-8 again.
 
-    ```Plain%20Text
+    ```Plain_Text
     iconv -f gbk -t utf-8 origin.txt > origin_utf-8.txt
     ```
 
@@ -51,7 +51,7 @@ Execute the SHOW DATA statement to see the corresponding storage space. You can 
 
 To request a quota increase, run the following code:
 
-```Plain%20Text
+```Plain_Text
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
@@ -111,7 +111,7 @@ This error occurs due to BDBJE's bug. To solve this problem, update the BDBJE ve
 
 ### Problem description
 
-```Plain%20Text
+```Plain_Text
 msg:Broker list path exception
 
 path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, broker=TNetworkAddress(hostname:172.31.4.233, port:8000)
@@ -125,7 +125,7 @@ Contact the StarRocks technical support and check whether the address and port o
 
 ### Problem description
 
-```Plain%20Text
+```Plain_Text
 msg:get hive partition meta data failed: java.net.UnknownHostException: emr-header-1.cluster-242
 ```
 
@@ -139,7 +139,7 @@ Ensure that the network is connected and upload the **host** file to each backen
 
 The metadata of the Apache Hive is cached in the FEs. But there is a two-hours time lag for StarRocks to update the metadata. Before StarRocks finishes the update, If you insert new data or update data in the Apache Hive table, the data in HDFS scanned by the BEs and the data obtained by the FEs are different. Therefore, this error occurs.
 
-```Plain%20Text
+```Plain_Text
 MySQL [bdp_dim]> select * from dim_page_func_s limit 1;
 
 ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscript length
@@ -150,7 +150,6 @@ ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscr
 To solve this problem, perform one of the following operations:
 
 - Upgrade your current version to StarRocks 2.2 or later.
-- Manually refresh your Apache Hive table. For more information, see [Metadata caching strategy](../using_starrocks/External_table#metadata-caching-strategy).
 
 ## This error "caching_sha2_password cannot be loaded" occurs when I connect external tables of MySQL
 
@@ -170,7 +169,7 @@ ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpass
 
 - Modify the `my.cnf` file.
 
-```Plain%20Text
+```Plain_Text
 vim my.cnf
 
 [mysqld]

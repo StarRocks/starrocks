@@ -32,7 +32,7 @@ Returns an array.
 
 In this section, the following table is used as an example:
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from test;
 
 +------+--------------+
@@ -54,7 +54,7 @@ mysql> select * from test;
 
 Sort the values of column `c2` in ascending order.
 
-```Plain%20Text
+```Plain_Text
 mysql> select c1, array_sort(c2) from test;
 
 +------+------------------+

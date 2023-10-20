@@ -22,7 +22,7 @@ Returns an array. The array that is returned consists of all elements held in th
 
 Example 1:
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_concat([57.73,97.32,128.55,null,324.2], [3], [5]) as res;
 
 +-------------------------------------+
@@ -38,7 +38,7 @@ mysql> select array_concat([57.73,97.32,128.55,null,324.2], [3], [5]) as res;
 
 Example 2:
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_concat(["sql","storage","execute"], ["Query"], ["Vectorized", "cbo"]);
 
 +----------------------------------------------------------------------------+
@@ -54,7 +54,7 @@ mysql> select array_concat(["sql","storage","execute"], ["Query"], ["Vectorized"
 
 Example 3:
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_concat(["sql",null], [null], ["Vectorized", null]);
 
 +---------------------------------------------------------+

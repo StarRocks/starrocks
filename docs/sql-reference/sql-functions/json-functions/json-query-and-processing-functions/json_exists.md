@@ -6,7 +6,7 @@ Checks whether a JSON object contains an element that can be located by the `jso
 
 ## Syntax
 
-```Plain%20Text
+```Plain_Text
 json_exists(json_object_expr, json_path)
 ```
 
@@ -24,7 +24,7 @@ Returns a BOOLEAN value.
 
 Example 1: Check whether the specified JSON object contains an element that can be located by the `'$.a.b'` expression. In this example, the element exists in the JSON object. Therefore, the json_exists function returns `1`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_exists(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
 
        -> 1
@@ -32,7 +32,7 @@ mysql> SELECT json_exists(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
 
 Example 2: Check whether the specified JSON object contains an element that can be located by the `'$.a.c'` expression. In this example, the element does not exist in the JSON object. Therefore, the json_exists function returns `0`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_exists(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
 
        -> 0
@@ -40,7 +40,7 @@ mysql> SELECT json_exists(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
 
 Example 3: Check whether the specified JSON object contains an element that can be located by the `'$.a[2]'` expression. In this example, the JSON object, which is an array named a, contains an element at index 2. Therefore, the json_exists function returns `1`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_exists(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 
        -> 1
@@ -48,7 +48,7 @@ mysql> SELECT json_exists(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 
 Example 4: Check whether the specified JSON object contains an element that can be located by the `'$.a[3]'` expression. In this example, the JSON object, which is an array named a, does not contain an element at index 3. Therefore, the json_exists function returns `0`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_exists(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
 
        -> 0
