@@ -21,11 +21,7 @@
 
 package com.starrocks.qe;
 
-<<<<<<< HEAD
-=======
 import com.google.common.base.Strings;
-import com.google.common.collect.Sets;
->>>>>>> 444cc3aeb1 ([BugFix] Fix sql is lost in audit log when creating OLAP table (#33176))
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -42,11 +38,7 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
->>>>>>> 444cc3aeb1 ([BugFix] Fix sql is lost in audit log when creating OLAP table (#33176))
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
