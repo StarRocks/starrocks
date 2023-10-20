@@ -40,6 +40,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.load.Load;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import org.apache.commons.lang3.StringUtils;
@@ -248,6 +249,12 @@ public class KeysDesc implements ParseNode, Writable {
             if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
                     t.isDatetime())) {
                 throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
+            }
+        }
+
+        for (int i = 0; i < cols.size(); ++i) {
+            if (cols.get(i).getName().equals(Load.LOAD_OP_COLUMN)) {
+                throw new SemanticException("column name [" + cols.get(i).getName() + "] is reserved by StarRocks, please use another one");
             }
         }
     }

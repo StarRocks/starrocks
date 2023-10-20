@@ -1671,4 +1671,15 @@ public class CreateTableTest {
 
         ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(sql1));
     }
+
+    @Test
+    public void testReservedColumnName() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
+                " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Getting analyzing error. Detail message: column name [__op] is reserved by StarRocks, please use another one",
+                () -> starRocksAssert.withTable(sql1));
+    }
 }
