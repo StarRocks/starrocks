@@ -8,7 +8,7 @@ Struct 中的字段名称不能重复。字段可以是基本数据类型 (Primi
 
 Struct 中的字段可以是另外一个 Struct，Map，或者 Array，方便用户定义嵌套数据结构。例如 `STRUCT<a INT, b STRUCT<c INT, d INT>, c MAP<INT, INT>, d ARRAY<INT>>`。
 
-StarRocks 从 3.1 版本开始支持 STRUCT 数据类型。您可以在建表时定义 STRUCT 列，向表中导入 STRUCT 数据，查询 STRUCT 数据。
+StarRocks 从 3.1 版本开始支持存储和导入 STRUCT 数据类型。您可以在建表时定义 STRUCT 列，向表中导入 STRUCT 数据，查询 STRUCT 数据。
 
 StarRocks 从 2.5 版本开始支持查询数据湖中的复杂数据类型 MAP 和 STRUCT。您可以通过 StarRocks 提供的 External Catalog 方式来查询 Apache Hive™，Apache Hudi，Apache Iceberg 中的 MAP 和 STRUCT 数据。仅支持查询 ORC 和 Parquet 类型文件。
 

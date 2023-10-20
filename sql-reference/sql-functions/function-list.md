@@ -321,6 +321,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [json_length](./json-functions/json-query-and-processing-functions/json_length.md)| 计算 JSON 字符串的长度。|
 |  [json_query](./json-functions/json-query-and-processing-functions/json_query.md)| 查询 JSON 对象中指定路径（json_path）的值，并输出 JSON 类型的结果。 |
 |  [json_string](./json-functions/json-query-and-processing-functions/json_string.md)| 将 JSON 类型转化为 JSON 字符串。|
+|  [to_json](./json-functions/json-query-and-processing-functions/to_json.md)| 将 Map 或 Struct 类型的数据转换成 JSON 数据。 |
 
 ## Map 函数
 
