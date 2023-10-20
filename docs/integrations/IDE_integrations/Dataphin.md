@@ -6,7 +6,7 @@ There are several ways to integrate Dataphin with StarRocks:
 
 - As the source or destination data source for data integration. Data can be read from StarRocks and push into other data sources, or data can be pull from other data sources and written into StarRocks.
 
-- As a source table (unbounded scan), dimension table (bounded scan), or result table(streaming sink and batch sink) of flink SQL and datastram development.
+- As a source table (unbounded scan), dimension table (bounded scan), or result table (streaming sink and batch sink) of flink SQL and datastram development.
 
 - As a data warehouse or a datamart. StarRocks can be registered as a compute source, which can be used for SQL scripts development, scheduling, data quality detection, security identification, and other data research and governance tasks.
 
