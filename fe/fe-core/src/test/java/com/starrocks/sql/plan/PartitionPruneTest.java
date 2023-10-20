@@ -28,7 +28,7 @@ public class PartitionPruneTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("CREATE TABLE `ptest` (\n"
                 + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
-                + "  `d2` date NOT NULL COMMENT \"\",\n"
+                + "  `d2` date    NULL COMMENT \"\",\n"
                 + "  `v1` int(11) NULL COMMENT \"\",\n"
                 + "  `v2` int(11) NULL COMMENT \"\",\n"
                 + "  `v3` int(11) NULL COMMENT \"\"\n"
@@ -117,6 +117,10 @@ public class PartitionPruneTest extends PlanTestBase {
         sql = "select * from ptest where (cast(d2 as int) * null) <=> null";
         plan = getFragmentPlan(sql);
         assertCContains(plan, "partitions=4/4");
+
+        sql = "select * from ptest where d2 is null;";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=1/4");
     }
 
     @Test
