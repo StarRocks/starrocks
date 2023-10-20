@@ -1400,6 +1400,17 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
+
+                case FunctionSet.IS_ROLE_IN_SESSION: {
+                    if (node.getChildren().size() != 1) {
+                        throw new SemanticException("IS_ROLE_IN_SESSION currently only supports a single parameter");
+                    }
+
+                    if (!(node.getChild(0) instanceof StringLiteral)) {
+                        throw new SemanticException("IS_ROLE_IN_SESSION currently only supports constant parameters");
+                    }
+                    break;
+                }
             }
         }
 
