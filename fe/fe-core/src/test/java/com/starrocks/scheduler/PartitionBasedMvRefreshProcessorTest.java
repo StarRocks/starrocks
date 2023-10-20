@@ -720,8 +720,9 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
+                        "'replication_num' = '1', \n" +
+                        "'storage_medium' = 'HDD', \n" +
+                        "'force_external_table_query_rewrite' = 'true' " +
                         ")\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_mv2` " +
@@ -730,7 +731,8 @@ public class PartitionBasedMvRefreshProcessorTest {
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
+                        "\"storage_medium\" = \"HDD\", \n" +
+                        "'force_external_table_query_rewrite' = 'true' " +
                         ")\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
 
