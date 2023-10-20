@@ -144,15 +144,25 @@ public class OptimizerTaskTest {
         scan1ColumnMap.put(column1, new Column("t1", ScalarType.INT, true));
         scan1ColumnMap.put(column2, new Column("t2", ScalarType.INT, true));
 
-        Map<ColumnRefOperator, Column> scan2ColumnMap = Maps.newHashMap();
-        scan2ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
-        scan2ColumnMap.put(column4, new Column("t4", ScalarType.INT, true));
-
         OptExpression logicOperatorTree = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
                         scan1ColumnMap, Maps.newHashMap(), null, -1, null)),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable2,
                         scan1ColumnMap, Maps.newHashMap(), null, -1, null)));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scan1ColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable2.getBaseSchema();
+                result = new ArrayList<>(scan1ColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, logicOperatorTree, new PhysicalPropertySet(), new ColumnRefSet(),
@@ -221,6 +231,26 @@ public class OptimizerTaskTest {
                 bottomJoin,
                 new OptExpression(new LogicalOlapScanOperator(olapTable3,
                         scanColumnMap, Maps.newHashMap(), null, -1, null)));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable2.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable3.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
@@ -299,6 +329,32 @@ public class OptimizerTaskTest {
         scan3ColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         Map<ColumnRefOperator, Column> scan4ColumnMap = Maps.newHashMap();
         scan4ColumnMap.put(column4, new Column("t4", ScalarType.INT, true));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scan1ColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable2.getBaseSchema();
+                result = new ArrayList<>(scan2ColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable3.getBaseSchema();
+                result = new ArrayList<>(scan3ColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable4.getBaseSchema();
+                result = new ArrayList<>(scan4ColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         OptExpression bottomJoin = OptExpression.create(new LogicalJoinOperator(),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
@@ -381,6 +437,34 @@ public class OptimizerTaskTest {
                 new OptExpression(
                         new LogicalOlapScanOperator(olapTable4, scanColumnMap,
                                 Maps.newHashMap(), null, -1, null)));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+            {
+                olapTable2.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+            {
+                olapTable3.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+            {
+                olapTable4.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+            {
+                olapTable5.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
@@ -478,6 +562,56 @@ public class OptimizerTaskTest {
                 new OptExpression(
                         new LogicalOlapScanOperator(olapTable4, scanColumnMap,
                                 Maps.newHashMap(), null, -1, null)));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable2.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable3.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable4.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable5.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable6.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable7.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+
+            {
+                olapTable8.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
@@ -599,6 +733,14 @@ public class OptimizerTaskTest {
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1,
                         scanColumnMap, Maps.newHashMap(), null, -1, null)));
 
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
+
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
@@ -669,6 +811,14 @@ public class OptimizerTaskTest {
                 OptExpression.create(
                         new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null,
                                 -1, null)));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
@@ -813,6 +963,14 @@ public class OptimizerTaskTest {
         scanColumnMap.put(column3, new Column("t3", ScalarType.INT, true));
         scanColumnMap.put(column4, new Column("t4", ScalarType.INT, true));
 
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
+
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column5, call);
         LogicalAggregationOperator aggregationOperator =
@@ -872,6 +1030,14 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(column4.getId());
 
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
+
         Optimizer optimizer = new Optimizer();
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
@@ -921,6 +1087,14 @@ public class OptimizerTaskTest {
                 new LogicalProjectOperator(projectColumnMap), limit);
 
         ColumnRefSet outputColumns = new ColumnRefSet(column4.getId());
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         try {
@@ -1077,8 +1251,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        List<ColumnRefOperator> scanColumns = Lists.newArrayList(column1, column2);
-
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("t1", ScalarType.INT, true));
         scanColumnMap.put(column2, new Column("t2", ScalarType.INT, true));
@@ -1093,6 +1265,14 @@ public class OptimizerTaskTest {
         OptExpression expression = OptExpression.create(aggregationOperator, OptExpression.create(scanOperator));
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3));
+
+        new Expectations() {
+            {
+                olapTable1.getBaseSchema();
+                result = new ArrayList<>(scanColumnMap.values());
+                minTimes = 0;
+            }
+        };
 
         Optimizer optimizer = new Optimizer();
         try {
