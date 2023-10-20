@@ -61,7 +61,6 @@
   + Load data from Apache Kafka®
     + [Load data using Kafka connector](./loading/Kafka-connector-starrocks.md)
     + [Load data using Routine Load](./loading/RoutineLoad.md)
-  + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
   + Load data from Apache Spark™
     + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
