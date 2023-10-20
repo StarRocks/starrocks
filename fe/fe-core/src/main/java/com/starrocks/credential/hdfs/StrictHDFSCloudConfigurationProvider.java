@@ -14,11 +14,8 @@
 
 package com.starrocks.credential.hdfs;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationProvider;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
@@ -33,39 +30,12 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
 
-public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
-
-    protected static String getOrDefault(Map<String, String> prop, String... args) {
-        for (String k : args) {
-            String v = prop.get(k);
-            if (v != null) {
-                return v;
-            }
-        }
-        return "";
-    }
-
-    protected Map<String, String> preprocessProperties(Map<String, String> properties) {
-        Preconditions.checkNotNull(properties);
-        Map<String, String> prop = new HashMap<>(properties);
-
-        String[] keys = {
-                HDFS_AUTHENTICATION, HDFS_USERNAME_DEPRECATED, HDFS_USERNAME, HDFS_PASSWORD_DEPRECATED, HDFS_PASSWORD,
-                HDFS_KERBEROS_PRINCIPAL_DEPRECATED, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_KEYTAB_DEPRECATED,
-                HADOOP_KERBEROS_KEYTAB,
-                HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, HADOOP_KERBEROS_KEYTAB_CONTENT
-        };
-        for (String k : keys) {
-            prop.remove(k);
-        }
-        return prop;
-    }
-
+public class StrictHDFSCloudConfigurationProvider extends HDFSCloudConfigurationProvider {
     @Override
     public CloudConfiguration build(Map<String, String> properties) {
         Map<String, String> prop = preprocessProperties(properties);
 
-        HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
+        HDFSCloudCredential hdfsCloudCredential = new StrictHDFSCloudCredential(
                 getOrDefault(properties, HDFS_AUTHENTICATION),
                 getOrDefault(properties, HDFS_USERNAME, HDFS_USERNAME_DEPRECATED),
                 getOrDefault(properties, HDFS_PASSWORD, HDFS_PASSWORD_DEPRECATED),
@@ -77,6 +47,7 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         if (!hdfsCloudCredential.validate()) {
             return null;
         }
+
         return new HDFSCloudConfiguration(hdfsCloudCredential);
     }
 }

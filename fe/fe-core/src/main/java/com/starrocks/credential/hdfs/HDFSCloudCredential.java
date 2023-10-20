@@ -23,31 +23,35 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+
 public class HDFSCloudCredential implements CloudCredential {
-    public static final String EMPTY = "empty";
+    public static final String NO_AUTH = "no_auth";
+    public static final String SIMPLE_AUTH = "simple";
+    public static final String KERBEROS_AUTH = "kerberos";
     private String authentication;
     private String userName;
     private String password;
-    private String krbPrincipal;
-    private String krbKeyTabFile;
-    private String krbKeyTabData;
+    private String kerberosPrincipal;
+    private String keytab;
+    private String keytabContent;
     private Map<String, String> hadoopConfiguration;
 
-    protected HDFSCloudCredential(String authentication, String username, String password, String krbPrincipal,
-                                  String krbKeyTabFile, String krbKeyTabData, Map<String, String> hadoopConfiguration) {
+    protected HDFSCloudCredential(String authentication, String username, String password, String kerberosPrincipal,
+                                  String keytab, String keytabContent, Map<String, String> hadoopConfiguration) {
         Preconditions.checkNotNull(authentication);
         Preconditions.checkNotNull(username);
         Preconditions.checkNotNull(password);
-        Preconditions.checkNotNull(krbPrincipal);
-        Preconditions.checkNotNull(krbKeyTabFile);
-        Preconditions.checkNotNull(krbKeyTabData);
+        Preconditions.checkNotNull(kerberosPrincipal);
+        Preconditions.checkNotNull(keytab);
+        Preconditions.checkNotNull(keytabContent);
         Preconditions.checkNotNull(hadoopConfiguration);
         this.authentication = authentication;
         this.userName = username;
         this.password = password;
-        this.krbPrincipal = krbPrincipal;
-        this.krbKeyTabFile = krbKeyTabFile;
-        this.krbKeyTabData = krbKeyTabData;
+        this.kerberosPrincipal = kerberosPrincipal;
+        this.keytab = keytab;
+        this.keytabContent = keytabContent;
         this.hadoopConfiguration = hadoopConfiguration;
     }
 
@@ -65,19 +69,14 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
-        if (authentication.equals(EMPTY)) {
+        if (authentication.equals(SIMPLE_AUTH)) {
             return true;
         }
-
-        if (authentication.equals("simple")) {
-            return true;
-        }
-
-        if (authentication.equals("kerberos")) {
-            if (krbPrincipal.isEmpty()) {
+        if (authentication.equals(KERBEROS_AUTH)) {
+            if (kerberosPrincipal.isEmpty()) {
                 return false;
             }
-            return !(krbKeyTabData.isEmpty() && krbKeyTabFile.isEmpty());
+            return !(keytab.isEmpty() && keytabContent.isEmpty());
         }
 
         return false;
@@ -93,9 +92,9 @@ public class HDFSCloudCredential implements CloudCredential {
                 "authentication='" + authentication + '\'' +
                 ", username='" + userName + '\'' +
                 ", password='" + password + '\'' +
-                ", krbPrincipal='" + krbPrincipal + '\'' +
-                ", krbKeyTabFile='" + krbKeyTabFile + '\'' +
-                ", krbKeyTabData='" + krbKeyTabData + '\'' +
+                ", krbPrincipal='" + kerberosPrincipal + '\'' +
+                ", krbKeyTabFile='" + keytab + '\'' +
+                ", krbKeyTabData='" + keytabContent + '\'' +
                 '}';
     }
 
@@ -104,6 +103,13 @@ public class HDFSCloudCredential implements CloudCredential {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.HDFS);
         HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
+        if (!authentication.isEmpty()) {
+            hdfsFileStoreInfo.putConfiguration(HDFS_AUTHENTICATION, authentication);
+            if (authentication.equals(SIMPLE_AUTH) && !userName.isEmpty()) {
+                hdfsFileStoreInfo.setUsername(userName);
+            }
+        }
+        hdfsFileStoreInfo.putAllConfiguration(hadoopConfiguration);
         fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
         return fileStore.build();
     }
