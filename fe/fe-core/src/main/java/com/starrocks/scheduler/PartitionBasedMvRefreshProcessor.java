@@ -1082,7 +1082,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
             List<String> targetColumnNames = queryOutputIndexes.stream()
                     .map(i -> baseSchema.get(i))
-                    .map(Column::getName).collect(Collectors.toList());
+                    .map(Column::getName)
+                    .map(String::toLowerCase) // case insensitive
+                    .collect(Collectors.toList());
             insertStmt.setTargetColumnNames(targetColumnNames);
         }
 

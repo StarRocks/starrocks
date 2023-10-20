@@ -14,7 +14,25 @@ PROPERTIES (
 );
 -- result:
 -- !result
+CREATE TABLE `TEST_SORT_KEY_TBL2` (
+  `ORDER_NUMBER` bigint(20) NULL COMMENT "",
+  `DATE` datetime NULL COMMENT "",
+  `SKU_NUMBER` varchar(65533) NULL COMMENT "",
+  `COST` decimal64(18, 0) NULL COMMENT "",
+  `PRICE` double NULL COMMENT "",
+  `PT` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`order_number`, `date`, `sku_number`)
+DISTRIBUTED BY HASH(`order_number`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
 insert into test_sort_key_tbl1 values (1, '2023-10-01', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-02', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-01', 'a1', 2.0, 1010.00, '20231001');
+-- result:
+-- !result
+insert into TEST_SORT_KEY_TBL2 values (1, '2023-10-01', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-02', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-01', 'a1', 2.0, 1010.00, '20231001');
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_sort_key_tbl_mv1
@@ -28,16 +46,37 @@ AS select sum(price), sum(price + 1), sum(cost), `date` from test_sort_key_tbl1 
 -- !result
 CREATE MATERIALIZED VIEW test_sort_key_tbl_mv2
 DISTRIBUTED BY RANDOM
-ORDER BY (`date`, sum_cost)
+ORDER BY (`DATE`, SUM_COST)
 REFRESH MANUAL
 PROPERTIES (
 "replication_num" = "1"
 )
-AS select sum(price), max(price), sum(cost) as sum_cost, `date` from test_sort_key_tbl1 group by `date`;
+AS SELECT SUM(PRICE), MAX(PRICE), SUM(COST) AS SUM_COST, `DATE` FROM TEST_SORT_KEY_TBL2 GROUP BY `DATE`;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW TEST_SORT_KEY_TBL_MV3
+DISTRIBUTED BY RANDOM
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1"
+)
+AS select sum(price), sum(price + 1), sum(cost), `date` from test_sort_key_tbl1 group by `date`;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW TEST_SORT_KEY_TBL_MV4
+DISTRIBUTED BY RANDOM
+ORDER BY (`DATE`, SUM_COST)
+REFRESH MANUAL
+PROPERTIES (
+"replication_num" = "1"
+)
+AS SELECT SUM(PRICE), MAX(PRICE), SUM(COST) AS SUM_COST, `DATE` FROM TEST_SORT_KEY_TBL2 GROUP BY `DATE`;
 -- result:
 -- !result
 refresh materialized view test_sort_key_tbl_mv1 with sync mode;
 refresh materialized view test_sort_key_tbl_mv2 with sync mode;
+refresh materialized view TEST_SORT_KEY_TBL_MV3 with sync mode;
+refresh materialized view TEST_SORT_KEY_TBL_MV4 with sync mode;
 select * from test_sort_key_tbl_mv1 order by 1, 2;
 -- result:
 1	2023-10-02 00:00:00	100.0	101.0
@@ -48,11 +87,26 @@ select * from test_sort_key_tbl_mv2 order by 1, 2;
 2023-10-01 00:00:00	3	1110.0	1010.0
 2023-10-02 00:00:00	1	100.0	100.0
 -- !result
+select * from TEST_SORT_KEY_TBL_MV3 order by 1, 2;
+-- result:
+1	2023-10-02 00:00:00	100.0	101.0
+3	2023-10-01 00:00:00	1110.0	1112.0
+-- !result
+select * from TEST_SORT_KEY_TBL_MV4 order by 1, 2;
+-- result:
+2023-10-01 00:00:00	3	1110.0	1010.0
+2023-10-02 00:00:00	1	100.0	100.0
+-- !result
 insert into test_sort_key_tbl1 values (1, '2023-10-01', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-02', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-01', 'a1', 2.0, 1010.00, '20231001');
+-- result:
+-- !result
+insert into TEST_SORT_KEY_TBL2 values (1, '2023-10-01', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-02', 'a1', 1.0, 100.00, '20231001'), (1, '2023-10-01', 'a1', 2.0, 1010.00, '20231001');
 -- result:
 -- !result
 refresh materialized view test_sort_key_tbl_mv1 with sync mode;
 refresh materialized view test_sort_key_tbl_mv2 with sync mode;
+refresh materialized view TEST_SORT_KEY_TBL_MV3 with sync mode;
+refresh materialized view TEST_SORT_KEY_TBL_MV4 with sync mode;
 select * from test_sort_key_tbl_mv1 order by 1, 2;
 -- result:
 2	2023-10-02 00:00:00	200.0	202.0
@@ -63,9 +117,25 @@ select * from test_sort_key_tbl_mv2 order by 1, 2;
 2023-10-01 00:00:00	6	2220.0	1010.0
 2023-10-02 00:00:00	2	200.0	100.0
 -- !result
+select * from TEST_SORT_KEY_TBL_MV3 order by 1, 2;
+-- result:
+2	2023-10-02 00:00:00	200.0	202.0
+6	2023-10-01 00:00:00	2220.0	2224.0
+-- !result
+select * from TEST_SORT_KEY_TBL_MV4 order by 1, 2;
+-- result:
+2023-10-01 00:00:00	6	2220.0	1010.0
+2023-10-02 00:00:00	2	200.0	100.0
+-- !result
 drop materialized view test_sort_key_tbl_mv1;
 -- result:
 -- !result
 drop materialized view test_sort_key_tbl_mv2;
+-- result:
+-- !result
+drop materialized view TEST_SORT_KEY_TBL_MV3;
+-- result:
+-- !result
+drop materialized view TEST_SORT_KEY_TBL_MV4;
 -- result:
 -- !result
