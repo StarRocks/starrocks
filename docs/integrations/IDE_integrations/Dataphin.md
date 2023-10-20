@@ -22,23 +22,27 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 - **Name**: Required. Enter a data source name. It can only contain Chinese characters, letters, numbers, underscores (_), and hyphens (-). It cannot exceed 64 characters in length.
 
-- **Data source code**: Optional. After you configure the data source code, you can use the data source code. table or data source code. schema.table format to reference the Flink SQL in the data source. If you want to automatically access the data source in the corresponding environment, use ${data source code}.table or ${data source code}.schema.table format access; Note: Currently, only MySQL, Hologres, and MaxCompute data sources are supported.
+- **Data source code**: Optional. After you configure the data source code, you can use the data source code. table or data source code. schema.table format to reference the Flink SQL in the data source. If you want to automatically access the data source in the corresponding environment, use `${data source code}.table` or `${data source code}.schema.table` format access.
 
-- **Support scenerios**：Scenerios that data source can be applied in.
+  > **NOTE**
+  >
+  > Currently, only MySQL, Hologres, and MaxCompute data sources are supported.
+
+- **Support scenerios**：The scenerios that data source can be applied in.
 
 - **Description**: Optional. You can enter a brief description of the data source. A maximum of 128 characters are allowed.
 
-- **Environment**: If the business data source distinguishes between production data source and development data source, choose ‘Prod and Dev’. If the business data source does not distinguish between production and development data sources, choose ‘Prod and Dev’.
+- **Environment**: If the business data source distinguishes between production data source and development data source, choose **Prod and Dev**. If the business data source does not distinguish between production and development data sources, choose **Prod**.
 
-- **Tags**: you can select tags to label data sources.
+- **Tags**: You can select tags to label data sources.
 
 #### Configuration information
 
 ![Create a StarRocks data source - 2](../../assets/Dataphin/create_sr_datasource_2.png)
 
-- **JDBC URL**: Required. The format is jdbc:mysql://<host>:<port>/<dbname>. Host is the IP address of the FE(Front End) host in the StarRocks cluster, port is the query port of FE, and dbname is the database name.
+- **JDBC URL**: Required. The format is `jdbc:mysql://<host>:<port>/<dbname>`. `host` is the IP address of the FE (Front End) host in the StarRocks cluster, `port` is the query port of FE, and `dbname` is the database name.
 
-- **Load URL**: Required. The format is ""fe_ip:http_port;fe_ip:http_port", fe_ip is host of FE(Front End), and http_port is th port of FE.
+- **Load URL**: Required. The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is the host of the FE (Front End), and `http_port` is th port of the FE.
 
 - **Username**: Required. The username of the database.
 
@@ -58,9 +62,9 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 ![Read data from StarRocks - 1](../../assets/Dataphin/read_from_sr_datasource_1.png)
 
-#### tarRocks input component configuration
+#### StarRocks input component configuration
 
-![Read data from StarRocks - 2](../../assets/Dataphin/create_sr_datasource_2.png)
+![Read data from StarRocks - 2](../../assets/Dataphin/read_from_sr_datasource_2.png)
 
 - **Step name**: Enter an appropriate name based on the scenario and location of the current component.
 
@@ -74,7 +78,12 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 - **Batch number**: The number of data records extracted in a batch.
 
-- **Input Filtering**: Optional. In the following two cases, you need to fill in the filter information: (1) If you want to filter a certain part of data; (2) If you need to incrementally append data on a daily basis or obtain full data, you need to fill in the date whose value is set as the system time of Dataphin console. For example, a transaction table in the StarRocks and the transaction creation date of it is set as ${bizdate}.
+- **Input Filtering**: Optional.
+
+  In the following two cases, you need to fill in the filter information:
+  
+  - If you want to filter a certain part of data.
+  - If you need to incrementally append data on a daily basis or obtain full data, you need to fill in the date whose value is set as the system time of Dataphin console. For example, a transaction table in the StarRocks and the transaction creation date of it is set as `${bizdate}`.
 
 - **Output fields**: List the related fields based on the input table information. You can rename, remove, add, and move the fields again. In general, fields are renamed to increase the readability of downstream data or facilitate mapping of fields during output. Fields can be removed during the input stage because relevant fields are not needed in application scenarios. The order of fields is changed to ensure that you can effectively merge data or map output data by mapping fields with different names in the same line when multiple input data are merged or output at the downstream side.
 
@@ -100,9 +109,9 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 - **Generate Target Table by One Click**: If you have not created a target table in StarRocks data source, you can automatically obtain the name, type, and remarks of the fields read from the upstream, and generate a table creation statement. Click to generate a target table with one click.
 
-- **CSV import column delimiter**: Use StreamLoad CSV to import. You can configure the CSV import column delimiter. Default value \t. Do not specify the default value here. If the data itself contains \t, you must use other characters as delimiters.
+- **CSV import column delimiter**: Use StreamLoad CSV to import. You can configure the CSV import column delimiter. Default value `\t`. Do not specify the default value here. If the data itself contains `\t`, you must use other characters as delimiters.
 
-- **CSV import row delimiter**: Use StreamLoad CSV to import. You can configure the CSV import row delimiter. Default value: \n. Do not specify the default value here. If the data itself contains \n, you must use other characters as delimiters.
+- **CSV import row delimiter**: Use StreamLoad CSV to import. You can configure the CSV import row delimiter. Default value: `\n`. Do not specify the default value here. If the data itself contains `\n`, you must use other characters as delimiters.
 
 - **Parse Solution**: Optional. It is some special processing before or after the data is written. The preparation statement is executed before the data is written to the StarRocks data source, and the completion Statement is executed after the data is written.
 
@@ -224,9 +233,9 @@ Parameters are described as follows:
 
   - Part I: The format is `jdbc:mysql://<Host>:<Port>/`. `Host` is the IP address of the FE host in the StarRocks cluster. `Port` is the query Port of FE. Default value: `9030`.
 
-  - Part Two: format is "database? key1 = value1 & key2 = value2 ", where `database` is the name of the StarRocks database used for metadata calculation, which is required. The parameter after '?' is optional.
+  - Part Two: format is `database? key1 = value1 & key2 = value2`, where `database` is the name of the StarRocks database used for metadata calculation, which is required. The parameter after '?' is optional.
 
-- **Load URL**：The format is ""fe_ip:http_port;fe_ip:http_port", `fe_ip` is host of FE (Front End), and `http_port` is th port of FE.
+- **Load URL**：The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is host of FE (Front End), and `http_port` is th port of FE.
 
 - **Username**: The username used to connect to the StarRocks.
 
@@ -240,7 +249,7 @@ Parameters are described as follows:
 
 - **Password**: the password of the link of StarRocks.
 
-- **Meta Project**: The name of the project used for metadata processing in Dataphin. It is only used within the Dataphin system. We recommend that you use ‘dataphin_meta’ as the project name.
+- **Meta Project**: The name of the project used for metadata processing in Dataphin. It is only used within the Dataphin system. We recommend that you use `dataphin_meta` as the project name.
 
 #### Create StarRocks project and start data development
 
