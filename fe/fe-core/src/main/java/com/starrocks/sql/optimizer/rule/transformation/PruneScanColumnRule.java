@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -51,10 +50,22 @@ public class PruneScanColumnRule extends TransformationRule {
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
         outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
+<<<<<<< HEAD
 
         if (outputColumns.size() == 0) {
             outputColumns.add(Utils.findSmallestColumnRef(
                     new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet())));
+=======
+        boolean canUseAnyColumn = false;
+        if (outputColumns.isEmpty()) {
+            outputColumns.add(
+                    Utils.findSmallestColumnRefFromTable(scanOperator.getColRefToColumnMetaMap(), scanOperator.getTable()));
+            canUseAnyColumn = true;
+        }
+
+        if (!context.getSessionVariable().isEnableCountStarOptimization()) {
+            canUseAnyColumn = false;
+>>>>>>> d86f3bab50 ([BugFix] Fix count(*) error during adding smaller type column (#33243))
         }
 
         if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
