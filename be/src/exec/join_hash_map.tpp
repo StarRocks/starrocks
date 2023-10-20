@@ -428,12 +428,14 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         }
 
         *has_remain = _probe_state->has_remain;
-#ifdef BE_TEST
-        if (!_probe_state->has_remain && !_probe_state->handles.empty()) {
-            throw std::runtime_error(print_id(state->fragment_instance_id()) +
-                                     " haven't remain tuples but have coroutines");
+
+        if (UNLIKELY(!_probe_state->has_remain && !_probe_state->handles.empty())) {
+            std::string msg =
+                    "HashJoin probe haven't remain tuples but have coroutines, likely leaking coroutines, please set "
+                    "global interleaving_group_size = 0 to disable coroutines, rerun this query and report to SR";
+            LOG(ERROR) << "fragment = " << print_id(state->fragment_instance_id()) << " " << msg;
+            throw std::runtime_error(msg);
         }
-#endif
     }
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN) {
@@ -826,30 +828,30 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_remain(RuntimeState* stat
     _probe_state->count = match_count;
 }
 
-#define DO_PROBE(X, Y)                                                                               \
-    if (_probe_state->active_coroutines != 0) {                                                      \
-        if constexpr (first_probe) {                                                                 \
-            auto group_size = std::abs(state->query_options().interleaving_group_size);              \
-            _probe_state->cur_probe_index = 0;                                                       \
-            if (!_probe_state->handles.empty()) {                                                    \
-                for (auto& h : _probe_state->handles) {                                              \
-                    h.destroy();                                                                     \
-                }                                                                                    \
-                _probe_state->handles.clear();                                                       \
-                std::string msg = "HashJoin probe leaks coroutines, " +                              \
-                                  "please set global interleaving_group_size = 0 " +                 \
-                                  "to disable coroutines, rerun this query and report to SR";        \
-                LOG(ERROR) << "fragment = " + print_id(state->fragment_instance_id()) << " " << msg; \
-                throw std::runtime_error(msg);                                                       \
-            }                                                                                        \
-            for (int i = 0; i < group_size; ++i) {                                                   \
-                _probe_state->handles.insert(X(state, build_data, data));                            \
-            }                                                                                        \
-            _probe_state->active_coroutines = group_size;                                            \
-        }                                                                                            \
-        _probe_coroutine<first_probe, Y>(state, build_data, data);                                   \
-    } else {                                                                                         \
-        X<first_probe>(state, build_data, data);                                                     \
+#define DO_PROBE(X, Y)                                                                                               \
+    if (_probe_state->active_coroutines != 0) {                                                                      \
+        if constexpr (first_probe) {                                                                                 \
+            auto group_size = std::abs(state->query_options().interleaving_group_size);                              \
+            _probe_state->cur_probe_index = 0;                                                                       \
+            if (!_probe_state->handles.empty()) {                                                                    \
+                for (auto& h : _probe_state->handles) {                                                              \
+                    h.destroy();                                                                                     \
+                }                                                                                                    \
+                _probe_state->handles.clear();                                                                       \
+                std::string msg =                                                                                    \
+                        "HashJoin probe leaks coroutines, please set global interleaving_group_size = 0 to disable " \
+                        "coroutines, rerun this query and report to SR";                                             \
+                LOG(ERROR) << "fragment = " + print_id(state->fragment_instance_id()) << " " << msg;                 \
+                throw std::runtime_error(msg);                                                                       \
+            }                                                                                                        \
+            for (int i = 0; i < group_size; ++i) {                                                                   \
+                _probe_state->handles.insert(X(state, build_data, data));                                            \
+            }                                                                                                        \
+            _probe_state->active_coroutines = group_size;                                                            \
+        }                                                                                                            \
+        _probe_coroutine<first_probe, Y>(state, build_data, data);                                                   \
+    } else {                                                                                                         \
+        X<first_probe>(state, build_data, data);                                                                     \
     }
 
 template <LogicalType LT, class BuildFunc, class ProbeFunc>
