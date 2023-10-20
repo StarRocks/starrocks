@@ -20,6 +20,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -287,10 +289,17 @@ public abstract class JoinOrder {
 
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
             if (joinOperator.getJoinType().isCrossJoin()) {
+                // punish cross join
                 long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
                 cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST / crossJoinCostPenalty) ?
                         StatisticsEstimateCoefficient.MAXIMUM_COST :
                         cost * crossJoinCostPenalty;
+            } else if (!existsEqOnPredicate(exprInfo.expr)) {
+                // punish nestloop join
+                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST /
+                        StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY) ?
+                        StatisticsEstimateCoefficient.MAXIMUM_COST :
+                        cost * StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;
@@ -429,5 +438,17 @@ public abstract class JoinOrder {
 
     private boolean contains(BitSet left, BitSet right) {
         return right.stream().allMatch(left::get);
+    }
+
+    private boolean existsEqOnPredicate(OptExpression optExpression) {
+        LogicalJoinOperator joinOp = optExpression.getOp().cast();
+        List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOp.getOnPredicate());
+
+        ColumnRefSet leftChildColumns = optExpression.inputAt(0).getOutputColumns();
+        ColumnRefSet rightChildColumns = optExpression.inputAt(1).getOutputColumns();
+
+        List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                leftChildColumns, rightChildColumns, onPredicates);
+        return !eqOnPredicates.isEmpty();
     }
 }
