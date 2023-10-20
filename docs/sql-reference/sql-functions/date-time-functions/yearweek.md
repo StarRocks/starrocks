@@ -33,7 +33,7 @@ Returns a value of the INT type. Value range: 0~53. The specific range is determ
 
 ## Examples
 
-Returns year and week for a date.The value of the mode argument defaults to 0.
+Returns year and week for a date.The value of the mode argument defaults to 0
 
 ```Plaintext
 mysql> SELECT YEARWEEK('2007-01-01', 0);
