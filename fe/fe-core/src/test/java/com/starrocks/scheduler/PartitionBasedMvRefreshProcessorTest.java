@@ -803,7 +803,7 @@ public class PartitionBasedMvRefreshProcessorTest {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "CAST(3: date AS DATE) >= '2020-01-02', CAST(3: date AS DATE) < '2020-01-03'");
+        assertPlanContains(execPlan, "3: date >= '2020-01-02', 3: date < '2020-01-03'");
 
         Map<String, Long> partitionVersionMap = partitionedMaterializedView.getPartitions().stream()
                 .collect(Collectors.toMap(Partition::getName, Partition::getVisibleVersion));

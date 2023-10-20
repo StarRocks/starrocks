@@ -29,6 +29,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.FunctionSet;
@@ -67,6 +68,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -84,6 +86,7 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+    public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
     private static final String PARTITION_USE_STR2DATE_MINVALUE = "0001-01-01";
     private static final String PARTITION_USE_STR2DATE_MAXVALUE = "9999-12-31";
@@ -485,26 +488,34 @@ public class PartitionUtil {
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             if (index == 0) {
                 lastPartitionName = entry.getKey();
-                lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
+                lastPartitionKey = entry.getValue();
                 if (lastPartitionKey.getKeys().get(0).isNullable()) {
                     // If partition key is NULL literal, rewrite it to min value.
                     lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
-                            ImmutableList.of(isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType()),
+                            ImmutableList.of(partitionColumn.getPrimitiveType()),
                             false);
                 }
                 ++index;
                 continue;
             }
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-            PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
+            PartitionKey upperBound = entry.getValue();
             mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
             lastPartitionName = entry.getKey();
             lastPartitionKey = upperBound;
         }
         if (lastPartitionName != null) {
             PartitionKey endKey = new PartitionKey();
-            endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1),
-                    isConvertToDate ? PrimitiveType.DATE : partitionColumn.getPrimitiveType());
+            if (!isConvertToDate) {
+                endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1), partitionColumn.getPrimitiveType());
+            } else {
+                PartitionKey lastDate = convertToDate(lastPartitionKey);
+                String lastDateFormat = lastPartitionKey.getKeys().get(0).getStringValue();
+                DateTimeFormatter formatter = DateUtils.probeFormat(lastDateFormat);
+                DateLiteral nextDate = (DateLiteral) addOffsetForLiteral(lastDate.getKeys().get(0), 1);
+                LiteralExpr nextStringDate = new StringLiteral(nextDate.toLocalDateTime().format(formatter));
+                endKey.pushColumn(nextStringDate, partitionColumn.getPrimitiveType());
+            }
 
             Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
             mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, endKey));
@@ -589,11 +600,18 @@ public class PartitionUtil {
         return partitionKeyList;
     }
 
+    // return partition name in forms of `col1=value1/col2=value2`
+    // if the partition field is explicitly named, use this name without change
+    // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
+    // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
-        int filePartitionFields = partition.size();
         StringBuilder sb = new StringBuilder();
-        for (int index = 0; index < filePartitionFields; ++index) {
+        for (int index = 0; index < partition.size(); ++index) {
             PartitionField partitionField = partitionSpec.fields().get(index);
+            // skip inactive partition field
+            if (partitionField.transform().isVoid()) {
+                continue;
+            }
             sb.append(partitionField.name());
             sb.append("=");
             String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
@@ -601,7 +619,11 @@ public class PartitionUtil {
             sb.append(value);
             sb.append("/");
         }
-        return sb.substring(0, sb.length() - 1);
+
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return ICEBERG_DEFAULT_PARTITION;
     }
 
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
