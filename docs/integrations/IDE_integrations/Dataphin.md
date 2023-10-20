@@ -22,7 +22,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 - **Name**: Required. Enter a data source name. It can only contain Chinese characters, letters, numbers, underscores (_), and hyphens (-). It cannot exceed 64 characters in length.
 
-- **Data source code**: Optional. After you configure the data source code, you can use the data source code. table or data source code. schema.table format to reference the Flink SQL in the data source. If you want to automatically access the data source in the corresponding environment, use `${data source code}.table` or `${data source code}.schema.table` format access.
+- **Data source code**: Optional. After you configure the data source code, you can use the `data source code.table` or `data source code.schema.table` format to reference the Flink SQL in the data source. If you want to automatically access the data source in the corresponding environment, use `${data source code}.table` or `${data source code}.schema.table` format access.
 
   > **NOTE**
   >
