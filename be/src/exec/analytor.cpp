@@ -359,6 +359,10 @@ bool Analytor::is_chunk_buffer_empty() {
     return _buffer.empty();
 }
 
+bool Analytor::is_chunk_buffer_full() {
+    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
+}
+
 ChunkPtr Analytor::poll_chunk_buffer() {
     std::lock_guard<std::mutex> l(_buffer_mutex);
     if (_buffer.empty()) {
@@ -541,7 +545,7 @@ bool Analytor::is_new_partition() {
             ((_partition_end == 0) | (_partition_end != _found_partition_end.second)));
 }
 
-int64_t Analytor::get_total_position(int64_t local_position) {
+int64_t Analytor::get_total_position(int64_t local_position) const {
     return _removed_from_buffer_rows + local_position;
 }
 
@@ -695,6 +699,10 @@ void Analytor::remove_unused_buffer_values(RuntimeState* state) {
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             _order_columns[i]->remove_first_n_values(remove_count);
         }
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            _agg_functions[i]->reset_state_for_contraction(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_count);
+        }
     }
 
     _removed_from_buffer_rows += remove_count;
@@ -727,10 +735,15 @@ std::string Analytor::debug_string() const {
     std::stringstream ss;
     ss << std::boolalpha;
 
-    ss << "current_row_position=" << _current_row_position << ", partition=(" << _partition_start << ", "
-       << _partition_end << ", " << _found_partition_end.second << "/" << _found_partition_end.first
-       << "), peer_group=(" << _peer_group_start << ", " << _peer_group_end << ")"
-       << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")";
+    ss << "current_row_position=" << get_total_position(_current_row_position) << ", partition=("
+       << get_total_position(_partition_start) << ", " << get_total_position(_partition_end) << ", "
+       << get_total_position(_found_partition_end.second) << "/" << _found_partition_end.first << "), peer_group=("
+       << get_total_position(_peer_group_start) << ", " << get_total_position(_peer_group_end) << ", "
+       << get_total_position(_found_peer_group_end.second) << "/" << _found_peer_group_end.first << ")"
+       << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")"
+       << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
+       << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
+       << ", removed_chunk_index=" << _removed_chunk_index;
 
     return ss.str();
 }
