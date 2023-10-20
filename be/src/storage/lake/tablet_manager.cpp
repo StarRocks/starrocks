@@ -165,11 +165,6 @@ std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view d
     return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
-std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
-                                                         int64_t expire_time) const {
-    return _location_provider->tablet_metadata_lock_location(tablet_id, version, expire_time);
-}
-
 std::string TabletManager::global_schema_cache_key(int64_t schema_id) {
     return fmt::format("GS{}", schema_id);
 }
@@ -356,41 +351,6 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return tablet;
 }
 
-Status TabletManager::delete_tablet(int64_t tablet_id) {
-    std::vector<std::string> objects;
-    // TODO: construct prefix in LocationProvider or a common place
-    const auto tablet_prefix = fmt::format("{:016X}_", tablet_id);
-    auto root_path = _location_provider->metadata_root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    auto scan_cb = [&](std::string_view name) {
-        if (HasPrefixString(name, tablet_prefix)) {
-            objects.emplace_back(join_path(root_path, name));
-        }
-        return true;
-    };
-    auto st = fs->iterate_dir(root_path, scan_cb);
-    if (!st.ok() && !st.is_not_found()) {
-        return st;
-    }
-
-    root_path = _location_provider->txn_log_root_location(tablet_id);
-    st = fs->iterate_dir(root_path, scan_cb);
-    st.permit_unchecked_error();
-
-    for (const auto& obj : objects) {
-        erase_metacache(obj);
-        st = fs->delete_file(obj);
-        st.permit_unchecked_error();
-    }
-    //drop tablet schema from metacache;
-    erase_metacache(tablet_schema_cache_key(tablet_id));
-
-    std::unique_lock wrlock(_meta_lock);
-    _tablet_in_writing_txn_size.erase(tablet_id);
-
-    return Status::OK();
-}
-
 Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
@@ -537,6 +497,7 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
     return put_txn_log(std::make_shared<TxnLog>(log));
 }
 
+<<<<<<< HEAD
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto t0 = butil::gettimeofday_us();
     auto location = txn_log_location(tablet_id, txn_id);
@@ -586,6 +547,15 @@ bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
         auto shard_info_or = g_worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
             return false;
+=======
+StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
+    int64_t size = 0;
+    TabletMetadataPtr metadata;
+    if (version_hint != nullptr && *version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, get_tablet_metadata(tablet_id, *version_hint));
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+>>>>>>> 7175d69881 ([Refactor] Remove unused methods (#33289))
         }
     }
     // think the tablet is assigned to this worker by default,
@@ -696,19 +666,6 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
         return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
     }
-}
-
-Status TabletManager::put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
-    auto path = tablet_metadata_lock_location(tablet_id, version, expire_time);
-    TabletMetadataLockPB lock;
-    ProtobufFile file(path);
-    return file.save(lock);
-}
-
-Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
-    auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
-    auto st = fs::delete_file(location);
-    return st.is_not_found() ? Status::OK() : st;
 }
 
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.

@@ -64,8 +64,6 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    [[nodiscard]] Status delete_tablet(int64_t tablet_id);
-
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
     [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
@@ -94,6 +92,7 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
 
+<<<<<<< HEAD
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
     [[nodiscard]] Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
@@ -108,6 +107,8 @@ public:
     bool is_tablet_in_worker(int64_t tablet_id);
 #endif // USE_STAROS
 
+=======
+>>>>>>> 7175d69881 ([Refactor] Remove unused methods (#33289))
     void prune_metacache();
 
     // TODO: remove this method
@@ -132,8 +133,6 @@ public:
     std::string del_location(int64_t tablet_id, std::string_view del_name) const;
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
-
-    std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }
 
