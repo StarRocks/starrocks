@@ -979,6 +979,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setDb(ctx.getDatabase());
         ctx.getPlannerProfile().reset();
         ctx.setThreadLocalInfo();
+
+        // TODO: Support use mv when refreshing mv.
         ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
@@ -986,7 +988,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         // insert overwrite mv must set system = true
         insertStmt.setSystem(true);
+
+        // if materialized view has set sort keys, materialized view's output columns
+        // may be different from the defined query's output.
+        // so set materialized view's defined outputs as target columns.
+        List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndices();
+        List<Column> baseSchema = materializedView.getBaseSchema();
+        if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
+            List<String> targetColumnNames = queryOutputIndexes.stream()
+                    .map(i -> baseSchema.get(i))
+                    .map(Column::getName)
+                    .map(String::toLowerCase) // case insensitive
+                    .collect(Collectors.toList());
+            insertStmt.setTargetColumnNames(targetColumnNames);
+        }
+
         Analyzer.analyze(insertStmt, ctx);
+
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Multimap<String, TableRelation> tableRelations =
