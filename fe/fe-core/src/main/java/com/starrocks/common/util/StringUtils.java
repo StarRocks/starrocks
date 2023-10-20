@@ -39,7 +39,7 @@ public class StringUtils {
      *
      * NOTE: OLAP table name is case-sensitive and other catalogs are not.
      */
-    public static boolean areTableNameEqual(Table table, String toCheck) {
+    public static boolean areTableNamesEqual(Table table, String toCheck) {
         if (table == null) {
             return false;
         }
