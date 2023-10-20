@@ -393,9 +393,9 @@ WITH BROKER broker_name
     WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
     ```
 
-    hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing contains following files:
+    `hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing` contains following files:
 
-    [hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
+    `[hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]`
 
     Extract city and utc_date fields in the file path.
 

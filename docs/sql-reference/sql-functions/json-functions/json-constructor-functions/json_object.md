@@ -6,7 +6,7 @@ Converts one or more key-value pairs to a JSON object that consists of the key-v
 
 ## Syntax
 
-```Plain%20Text
+```Plain_Text
 json_object(key, value, ...)
 ```
 
@@ -26,7 +26,7 @@ Returns a JSON object.
 
 Example 1: Construct a JSON object that consists of values of different data types.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_object('name', 'starrocks', 'active', true, 'published', 2020);
 
        -> {"active": true, "name": "starrocks", "published": 2020}            
@@ -34,7 +34,7 @@ mysql> SELECT json_object('name', 'starrocks', 'active', true, 'published', 2020
 
 Example 2: Construct a JSON object by using nested JSON_OBJECT functions.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_object('k1', 1, 'k2', json_object('k2', 2), 'k3', json_array(4, 5));
 
        -> {"k1": 1, "k2": {"k2": 2}, "k3": [4, 5]} 
@@ -42,7 +42,7 @@ mysql> SELECT json_object('k1', 1, 'k2', json_object('k2', 2), 'k3', json_array(
 
 Example 3: Construct an empty JSON object.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_object();
 
        -> {}

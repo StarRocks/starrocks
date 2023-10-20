@@ -6,7 +6,7 @@ Expands the outermost elements of a JSON object into a set of key-value pairs in
 
 ## Syntax
 
-```Plain%20Text
+```Plain_Text
 json_each(json_object_expr)
 ```
 
@@ -24,7 +24,7 @@ The json_each function is a table function that returns a table. The returned ta
 
 ## Examples
 
-```Plain%20Text
+```Plain_Text
 -- A table named tj is used as an example. In the tj table, the j column is a JSON object.
 
 mysql> SELECT * FROM tj;

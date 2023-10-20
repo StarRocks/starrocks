@@ -19,7 +19,7 @@ Returns the hash value. When one of values of the previous two parameters is `Nu
 
 ## Examples
 
-```Plain%20Text
+```Plain_Text
 mysql> select sha2('abc',224);
 
 +----------------------------------------------------------+

@@ -2,7 +2,7 @@
 
 StarRocks provides the loading method MySQL-based Broker Load to help you load dozens to hundreds of gigabytes of data from HDFS or cloud storage into StarRocks.
 
-Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
+Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the `curl` command to check the result of the job.
 
 Broker Load supports loading one or more data files at a time. Additionally, Broker Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
@@ -34,7 +34,7 @@ Broker Load supports the following storage systems:
 
 A broker is deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#broker-deployment).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#broker-deployment).
 
 In this topic, assume that a broker named mybroker is deployed in your StarRocks cluster.
 
@@ -50,7 +50,7 @@ The following figure shows the workflow of a Broker Load job.
 
 ### Create a load job
 
-This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 #### Data examples
 
@@ -217,7 +217,7 @@ Broker Load allows you to view a lob job by using the SHOW LOAD statement or the
 
 #### Use SHOW LOAD
 
-For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md).
+For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md).
 
 #### Use curl
 
@@ -256,7 +256,7 @@ The following table describes the parameters in `jobInfo`.
 
 ### Cancel a load job
 
-When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) statement to cancel the job.
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) statement to cancel the job.
 
 For example, you can execute the following statement to cancel a load job, whose label is `label1`, in the database `test_db`:
 

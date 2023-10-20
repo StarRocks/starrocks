@@ -245,7 +245,7 @@ This command runs Prometheus in the background and specifies its web port as 909
 
 **4.** Accessing Prometheus
 
-Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (<http://fe_host:fe_http_port/metrics> or <http://be_host:be_http_port/metrics>) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
+Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (`http://fe_host:fe_http_port/metrics` or `http://be_host:be_http_port/metrics`) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
 
 ![8.10.2-6](../assets/8.10.2-6.png)
 

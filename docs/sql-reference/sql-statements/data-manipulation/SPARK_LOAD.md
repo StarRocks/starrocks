@@ -233,9 +233,9 @@ NULL value: \ N
     WITH RESOURCE 'my_spark';
     ```
 
-    hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing  The directory includes the following files:
+    `hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing` The directory includes the following files:
 
-    [hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
+    `[hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]`
 
     The city and utc_date field in the file path are extracted
 

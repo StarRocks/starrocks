@@ -26,7 +26,7 @@ In the **$FE_HOME/conf/fe.conf** file of each frontend (FE), set `enable_ud``f` 
 
 1. Create a Maven project, whose basic directory structure is as follows:
 
-    ```Plain%20Text
+    ```Plain_Text
     project
 
     |--pom.xml
@@ -703,11 +703,11 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 
 ## Manage UDFs
 
-Execute the SHOW FUNCTIONS statement to query UDFs. For more information, see [SHOW FUNCTIONS](../sql-reference/sql-statements/data-definition/show-functions.md).
+Execute the SHOW FUNCTIONS statement to query UDFs. For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
 
 ## Delete UDFs
 
-Execute the DROP FUNCTION statement to delete a UDF. For more information, see [DROP FUNCTION](../sql-reference/sql-statements/data-definition/drop-function.md).
+Execute the DROP FUNCTION statement to delete a UDF. For more information, see [DROP FUNCTION](../sql-statements/data-definition/drop-function.md).
 
 ## Mapping between SQL data types and Java data types
 

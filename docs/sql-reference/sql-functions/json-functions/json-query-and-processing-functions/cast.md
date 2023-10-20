@@ -56,7 +56,7 @@ When you convert a JSON value to an SQL value, take note of the following points
 
 Example 1: Convert a JSON value to an SQL value.
 
-```Plain%20Text
+```Plain_Text
 -- Convert a JSON value to an INT value.
 
 mysql> select cast(parse_json('1') as int);
@@ -122,7 +122,7 @@ mysql> select cast(parse_json('[1,2,3]') as varchar);
 
 Example 2: Convert an SQL value to a JSON value.
 
-```Plain%20Text
+```Plain_Text
 -- Convert an INT value to a JSON value.
 
 mysql> select cast(1 as json);
