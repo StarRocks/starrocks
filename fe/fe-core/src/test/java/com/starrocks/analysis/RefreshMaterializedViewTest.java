@@ -688,9 +688,9 @@ public class RefreshMaterializedViewTest {
 
     @Test
     public void testMaterializedViewPartitionTTL() throws Exception {
+        String dbName = "test";
         String tableName = "test.tbl1";
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE " + tableName +
+        starRocksAssert.withTable("CREATE TABLE " + tableName +
                         "(\n" +
                         "    k1 date,\n" +
                         "    v1 int \n" +
@@ -720,56 +720,58 @@ public class RefreshMaterializedViewTest {
         buildTimePartitions(tableName, tbl, 10);
 
         // initial partitions should consider the ttl
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
 
         // normal ttl
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='2 month')");
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='2 month')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
 
         // large ttl
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='10 year')");
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='10 year')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(tbl.getRangePartitionMap().toString(), 14, tbl.getPartitions().size());
 
         // tiny ttl
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='1 day')");
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='1 day')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(ImmutableSet.of("pp_2023_9"), tbl.getPartitionNames());
 
         // zero ttl
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(tbl.getRangePartitionMap().toString(), 14, tbl.getPartitions().size());
         Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
 
         // tiny ttl
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='24 hour')");
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='24 hour')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(tbl.getRangePartitionMap().toString(), 1, tbl.getPartitions().size());
         Assert.assertEquals(ImmutableSet.of("pp_2023_9"), tbl.getPartitionNames());
 
         // the ttl cross two partitions
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='32 day')");
-        starRocksAssert.getCtx().executeSql("refresh materialized view test.mv_ttl_mv1 with sync mode");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='32 day')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
         Assert.assertEquals(tbl.getRangePartitionMap().toString(), 2, tbl.getPartitions().size());
 
         // corner cases
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='error')");
+        Assert.assertThrows(Exception.class,
+                () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='error')"));
+        Assert.assertThrows(Exception.class,
+                () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='day')"));
+        Assert.assertThrows(Exception.class,
+                () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0')"));
         Assert.assertEquals("P32D", tbl.getTableProperty().getPartitionTTL().toString());
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='day')");
-        Assert.assertEquals("P32D", tbl.getTableProperty().getPartitionTTL().toString());
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0')");
-        Assert.assertEquals("P32D", tbl.getTableProperty().getPartitionTTL().toString());
-        starRocksAssert.getCtx().executeSql("alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
         Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
+
     }
 }
