@@ -62,11 +62,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-<<<<<<< HEAD
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-=======
-import com.starrocks.sql.ast.ExecuteStmt;
->>>>>>> 444cc3aeb1 ([BugFix] Fix sql is lost in audit log when creating OLAP table (#33176))
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
