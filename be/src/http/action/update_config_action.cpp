@@ -121,7 +121,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             (void)StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
 #if defined(USE_STAROS) && !defined(BE_TEST)
-            (void)_exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
+            (void)_exec_env->lake_update_manager()->update_primary_index_memory_limit(
+                    config::update_memory_limit_percent);
 #endif
         });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
