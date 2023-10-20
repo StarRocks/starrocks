@@ -20,7 +20,7 @@ In standard SQL, every calculation that includes an operand with a `NULL` value 
 
 See the following examples:
 
-```Plain%20Text
+```Plain_Text
 select cust_id,idno 
 
 from llyt_dev.dwd_mbr_custinfo_dd 
@@ -120,7 +120,7 @@ To solve this problem, check the profile and see MERGE details：
 
 - Check whether there are too many indicator columns. If so, aggregate hundreds of columns of millions of rows.
 
-```Plain%20Text
+```Plain_Text
 MERGE:
 
     - aggr: 26s270ms

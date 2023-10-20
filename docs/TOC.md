@@ -44,7 +44,6 @@
   + [Cost Based Optimizer](./using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Configure a time zone](./using_starrocks/timezone.md)
-  + [File manager](./using_starrocks/filemanager.md)
 + Administration
   + [Build in docker](./administration/Build_in_docker.md)
   + [Manage a cluster](./administration/Cluster_administration.md)

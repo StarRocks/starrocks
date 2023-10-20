@@ -8,7 +8,7 @@ Before you start data synchronization, enable the binary logging in MySQL and do
 
 - Modify the **/etc/my.cnf** file to enable binary logging in MySQL and then restart MySQL Server (mysqld). You can execute the SHOW VARIABLES LIKE 'log_bin' statement to check whether binary logging is enabled.
 
-    ```Plain%20Text
+    ```Plain_Text
     #Enable binlog
 
     log-bin=/var/lib/mysql/mysql-bin
@@ -62,7 +62,7 @@ The preceding figure shows the workflow of data synchronization:
 
     - `flink.starrocks.*`: the configuration information of your StarRocks cluster. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
-        ```Plain%20Text
+        ```Plain_Text
         [db]
 
         host = 192.168.1.1
@@ -164,7 +164,7 @@ The preceding figure shows the workflow of data synchronization:
 
 - If you configure multiple match rules, you need to match the database, table, and flink-connector-starrocks for each match rule.
 
-    ```Plain%20Text
+    ```Plain_Text
     [table-rule.1]
 
     # pattern to match databases for setting properties
@@ -240,7 +240,7 @@ The preceding figure shows the workflow of data synchronization:
 
 - You can configure an individual match rule for a sharded large table. For example, you have two databases, `edu_db_1` and `edu_db_2`, each database contains two tables, `course_1` and `course_2`. In addition, all these tables use the same schema. You can use the following configurations to load the preceding four tables into StarRocks:
 
-    ```Plain%20Text
+    ```Plain_Text
     [table-rule.3]
 
     # pattern to match databases for setting properties
