@@ -15,13 +15,14 @@
 package com.starrocks.privilege.ranger.starrocks;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.privilege.AccessControl;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
@@ -39,6 +40,8 @@ import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
@@ -303,41 +306,45 @@ public class RangerStarRocksAccessControl implements AccessControl {
     }
 
     @Override
-    public Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {
-        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
-                new RangerStarRocksResource(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), columnName),
-                currentUser.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
+        Map<String, Expr> maskingExprMap = Maps.newHashMap();
+        for (Column column : columns) {
+            RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
+                    new RangerStarRocksResource(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), column.getName()),
+                    context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
 
-        RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
-        if (result.isMaskEnabled()) {
-            String maskType = result.getMaskType();
-            RangerServiceDef.RangerDataMaskTypeDef maskTypeDef = result.getMaskTypeDef();
-            String transformer = null;
+            RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
+            if (result.isMaskEnabled()) {
+                String maskType = result.getMaskType();
+                RangerServiceDef.RangerDataMaskTypeDef maskTypeDef = result.getMaskTypeDef();
+                String transformer = null;
 
-            if (maskTypeDef != null) {
-                transformer = maskTypeDef.getTransformer();
-            }
-
-            if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_NULL)) {
-                transformer = "NULL";
-            } else if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_CUSTOM)) {
-                String maskedValue = result.getMaskedValue();
-
-                if (maskedValue == null) {
-                    transformer = "NULL";
-                } else {
-                    transformer = maskedValue;
+                if (maskTypeDef != null) {
+                    transformer = maskTypeDef.getTransformer();
                 }
-            }
 
-            if (StringUtils.isNotEmpty(transformer)) {
-                transformer = transformer.replace("{col}", columnName).replace("{type}", type.toSql());
-            }
+                if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_NULL)) {
+                    transformer = "NULL";
+                } else if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_CUSTOM)) {
+                    String maskedValue = result.getMaskedValue();
 
-            return SqlParser.parseSqlToExpr(transformer, currentUser.getSessionVariable().getSqlMode());
-        } else {
-            return null;
+                    if (maskedValue == null) {
+                        transformer = "NULL";
+                    } else {
+                        transformer = maskedValue;
+                    }
+                }
+
+                if (StringUtils.isNotEmpty(transformer)) {
+                    transformer = transformer.replace("{col}", column.getName())
+                            .replace("{type}", column.getType().toSql());
+                }
+
+                maskingExprMap.put(column.getName(),
+                        SqlParser.parseSqlToExpr(transformer, context.getSessionVariable().getSqlMode()));
+            }
         }
+        return maskingExprMap;
     }
 
     @Override
