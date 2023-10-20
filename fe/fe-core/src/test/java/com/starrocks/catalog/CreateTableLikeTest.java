@@ -66,7 +66,6 @@ public class CreateTableLikeTest {
         String createDbStmtStr2 = "create database test2;";
         CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr2, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt2.getFullDbName());
-        Config.enable_collect_query_detail_info = true;
     }
 
     private static void createTable(String sql) throws Exception {
