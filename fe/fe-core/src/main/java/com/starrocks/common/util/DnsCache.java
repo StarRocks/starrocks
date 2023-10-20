@@ -14,7 +14,6 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.net.InetAddress;
@@ -23,10 +22,20 @@ import java.net.UnknownHostException;
 // This class is used to translate hostname to IP.
 // Because JVM has DNS cache already, this class doesn't maintain its own cache.
 public class DnsCache {
-    public static TNetworkAddress lookup(TNetworkAddress address) throws UnknownHostException {
-        if (InetAddressValidator.getInstance().isValidInet4Address(address.hostname)) {
-            return address;
+    public static String lookup(String hostname) throws UnknownHostException {
+        if (InetAddressValidator.getInstance().isValidInet4Address(hostname)) {
+            return hostname;
         }
-        return new TNetworkAddress(InetAddress.getByName(address.hostname).getHostAddress(), address.port);
+        return InetAddress.getByName(hostname).getHostAddress();
+    }
+
+    // This function will try to look up the given hostname. If there is an exception, this function will
+    // return the input hostname directly.
+    public static String tryLookup(String hostname) {
+        try {
+            return lookup(hostname);
+        } catch (UnknownHostException e) {
+            return hostname;
+        }
     }
 }
