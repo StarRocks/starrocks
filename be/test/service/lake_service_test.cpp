@@ -89,12 +89,9 @@ public:
         ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
     }
 
-    void SetUp() override {
-        ASSERT_OK(_tablet_mgr->delete_tablet(_tablet_id));
-        create_tablet();
-    }
+    void SetUp() override { create_tablet(); }
 
-    void TearDown() override { (void)_tablet_mgr->delete_tablet(_tablet_id); }
+    void TearDown() override {}
 
 protected:
     // Return the new generated segment file name
@@ -911,43 +908,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 4)));
 }
 
-// NOLINTNEXTLINE
-TEST_F(LakeServiceTest, test_lock_unlock_tablet_metadata) {
-    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
-    lake::LockTabletMetadataRequest lock_request;
-    lake::LockTabletMetadataResponse lock_response;
-
-    brpc::Controller cntl;
-    _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
-    ASSERT_TRUE(cntl.Failed());
-    ASSERT_EQ("missing version", cntl.ErrorText());
-
-    cntl.Reset();
-    lock_request.set_tablet_id(_tablet_id);
-    lock_request.set_version(1);
-    lock_request.set_expire_time(1);
-    _lake_service.lock_tablet_metadata(&cntl, &lock_request, &lock_response, nullptr);
-    ASSERT_FALSE(cntl.Failed());
-    std::string tablet_metadata_lock_path = _location_provider->tablet_metadata_lock_location(_tablet_id, 1, 1);
-    ASSERT_OK(FileSystem::Default()->path_exists(tablet_metadata_lock_path));
-
-    cntl.Reset();
-    lake::UnlockTabletMetadataRequest unlock_request;
-    lake::UnlockTabletMetadataResponse unlock_response;
-    _lake_service.unlock_tablet_metadata(&cntl, &unlock_request, &unlock_response, nullptr);
-    ASSERT_TRUE(cntl.Failed());
-    ASSERT_EQ("missing version", cntl.ErrorText());
-
-    cntl.Reset();
-    unlock_request.set_tablet_id(_tablet_id);
-    unlock_request.set_expire_time(1);
-    unlock_request.set_version(1);
-    _lake_service.unlock_tablet_metadata(&cntl, &unlock_request, &unlock_response, nullptr);
-    ASSERT_FALSE(cntl.Failed());
-    auto st = FileSystem::Default()->path_exists(tablet_metadata_lock_path);
-    ASSERT_TRUE(st.is_not_found()) << st;
-}
-
 TEST_F(LakeServiceTest, test_abort_compaction) {
     SyncPoint::GetInstance()->EnableProcessing();
     SyncPoint::GetInstance()->LoadDependency(
@@ -1198,6 +1158,28 @@ TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     t.join();
 
     ASSERT_TRUE(duplicate);
+}
+
+TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {
+    {
+        lake::LockTabletMetadataRequest request;
+        lake::LockTabletMetadataResponse response;
+        request.set_tablet_id(10);
+        request.set_version(5);
+        brpc::Controller cntl;
+        _lake_service.lock_tablet_metadata(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+    }
+    {
+        lake::UnlockTabletMetadataRequest request;
+        lake::UnlockTabletMetadataResponse response;
+        request.set_tablet_id(10);
+        request.set_version(13);
+        request.set_expire_time(10000);
+        brpc::Controller cntl;
+        _lake_service.unlock_tablet_metadata(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+    }
 }
 
 } // namespace starrocks

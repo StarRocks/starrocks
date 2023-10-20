@@ -82,14 +82,6 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
 
-    [[nodiscard]] Status delete_txn_log(int64_t txn_id);
-
-    [[nodiscard]] Status delete_txn_vlog(int64_t version);
-
-    [[nodiscard]] Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
-
-    [[nodiscard]] Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
-
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,

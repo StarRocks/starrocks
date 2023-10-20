@@ -265,10 +265,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
     // 2. For each tablet, remove the metadata first and then upload snapshot.
     // we only support overwriting now.
     for (auto& restore_info : request->restore_infos()) {
-        // 2.1 Remove the tablet metadata
-        RETURN_IF_ERROR(_env->lake_tablet_manager()->delete_tablet(restore_info.tablet_id()));
-
-        // 2.2. Get remote files
+        // 2.1. Get remote files
         std::map<std::string, FileStat> remote_files;
         RETURN_IF_ERROR(
                 _get_existing_files_from_remote(*client, restore_info.snapshot_path(), broker_prop, &remote_files));
@@ -279,7 +276,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             return Status::InternalError(ss.str());
         }
 
-        // 2.3. Upload the tablet metadata. Metadata need to be uploaded first,
+        // 2.2. Upload the tablet metadata. Metadata need to be uploaded first,
         // otherwise the segment files may be deleted by gc.
         for (auto& iter : remote_files) {
             if (!starrocks::lake::is_tablet_metadata(iter.first)) {
@@ -306,7 +303,7 @@ Status LakeSnapshotLoader::restore(const ::starrocks::lake::RestoreSnapshotsRequ
             RETURN_IF_ERROR(_env->lake_tablet_manager()->put_tablet_metadata(meta));
         }
 
-        // 2.4. upload the segment files.
+        // 2.3. upload the segment files.
         for (auto& iter : remote_files) {
             if (starrocks::lake::is_tablet_metadata(iter.first)) {
                 continue;
