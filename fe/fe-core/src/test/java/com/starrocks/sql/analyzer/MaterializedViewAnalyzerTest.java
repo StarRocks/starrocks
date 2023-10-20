@@ -38,7 +38,9 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -287,14 +289,23 @@ public class MaterializedViewAnalyzerTest {
 
     @Test
     public void testGetQueryOutputIndices() {
-        List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
-        mvColumnPairs.add(Pair.create(new Column(), 1));
-        mvColumnPairs.add(Pair.create(new Column(), 2));
-        mvColumnPairs.add(Pair.create(new Column(), 0));
-        mvColumnPairs.add(Pair.create(new Column(), 3));
+        checkQueryOutputIndices(Arrays.asList(1, 2, 0, 3), "2,0,1,3", true);
+        checkQueryOutputIndices(Arrays.asList(0, 1, 2, 3), "0,1,2,3", false);
+        checkQueryOutputIndices(Arrays.asList(3, 2, 1, 0), "3,2,1,0", true);
+        checkQueryOutputIndices(Arrays.asList(1, 2, 3, 0), "3,0,1,2", true);
+        checkQueryOutputIndices(Arrays.asList(0, 1), "0,1", false);
+    }
 
+    private void checkQueryOutputIndices(List<Integer> inputs, String expect, boolean isChanged) {
+        List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
+        for (Integer i : inputs) {
+            mvColumnPairs.add(Pair.create(new Column(), i));
+        }
         List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
         Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
-        Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), "2,0,1,3");
+        Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), expect);
+        Assert.assertEquals(IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i)),
+                isChanged);
+
     }
 }
