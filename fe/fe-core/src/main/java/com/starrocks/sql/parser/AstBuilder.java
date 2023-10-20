@@ -5559,8 +5559,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr(functionName, ImmutableList.of(split, e2), pos);
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
-            return new InformationFunction("CONNECTION_ID");
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+            return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
         if (functionName.equals(FunctionSet.MAP)) {
