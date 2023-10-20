@@ -298,7 +298,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         AggregatePushDownContext childContext = new AggregatePushDownContext();
         childContext.origAggregator = aggregate;
 
-        if (checkAggOverJoinContext.from.stream().allMatch(x -> x == checkAggOverJoinContext.from.get(0))) {
+        if (checkAggOverJoinContext.from.stream().filter(x -> x != ChildSide.ANY).distinct().count() <= 1) {
             Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap(aggregate.getAggregations());
             // rewrite origin aggregation
             for (ColumnRefOperator ref : aggOutput) {
@@ -323,6 +323,11 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             }
             ChildSide side = sessionVariable.getPushDownAggToWhichSide().equalsIgnoreCase("right")
                     ? ChildSide.RIGHT : ChildSide.LEFT;
+            for (int i = 0; i < aggInputFroms.size(); i++) {
+                if (aggInputFroms.get(i) == ChildSide.ANY) {
+                    aggInputFroms.set(i, side);
+                }
+            }
 
             Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap(aggregate.getAggregations());
             for (int i = 0; i < aggOutput.size(); i++) {
@@ -395,7 +400,6 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         AggregatePushDownContext childContext = new AggregatePushDownContext();
         childContext.aggregations.putAll(context.aggregations);
-        context.aggregations.clear();
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
@@ -540,7 +544,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         UNKNOWN,
         LEFT,
         RIGHT,
-        ONESIDE
+        ONESIDE,
+        ANY
     }
     
     private static class CheckAggOverJoinContext {
@@ -601,7 +606,9 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
             for (int i = 0; i < context.needCheck.length; i++) {
                 if (context.needCheck[i]) {
                     ColumnRefSet col = context.usedColumns.get(i);
-                    if (leftChildOutput.containsAll(col)) {
+                    if (col.isEmpty()) {
+                        context.from.set(i, ChildSide.ANY);
+                    } else if (leftChildOutput.containsAll(col)) {
                         context.from.set(i, ChildSide.LEFT);
                     } else if (rightChildOutput.containsAll(col)) {
                         context.from.set(i, ChildSide.RIGHT);
