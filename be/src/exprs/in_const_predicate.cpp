@@ -103,34 +103,34 @@ void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size
         }
     } else {
         switch (type) {
-#define M(FIELD_TYPE)                                                                \
-    case LogicalType::FIELD_TYPE: {                                                  \
-        using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;       \
-        auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);             \
-        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column); \
-        const auto& data_array = GetContainer<FIELD_TYPE>().get_data(column);        \
-        if (in_pred->is_use_array()) {                                               \
-            for (size_t j = column_offset; j < data_array.size(); j++) {             \
-                if (!nullable_column->is_null(j)) {                                  \
-                    in_pred->insert_array(data_array[j]);                            \
-                } else {                                                             \
-                    if (_eq_null) {                                                  \
-                        in_pred->insert_null();                                      \
-                    }                                                                \
-                }                                                                    \
-            }                                                                        \
-        } else {                                                                     \
-            for (size_t j = column_offset; j < data_array.size(); j++) {             \
-                if (!nullable_column->is_null(j)) {                                  \
-                    in_pred->insert(data_array[j]);                                  \
-                } else {                                                             \
-                    if (_eq_null) {                                                  \
-                        in_pred->insert_null();                                      \
-                    }                                                                \
-                }                                                                    \
-            }                                                                        \
-        }                                                                            \
-        break;                                                                       \
+#define M(FIELD_TYPE)                                                                                 \
+    case LogicalType::FIELD_TYPE: {                                                                   \
+        using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                        \
+        auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                              \
+        auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                  \
+        const auto& data_array = GetContainer<FIELD_TYPE>().get_data(nullable_column->data_column()); \
+        if (in_pred->is_use_array()) {                                                                \
+            for (size_t j = column_offset; j < data_array.size(); j++) {                              \
+                if (!nullable_column->is_null(j)) {                                                   \
+                    in_pred->insert_array(data_array[j]);                                             \
+                } else {                                                                              \
+                    if (_eq_null) {                                                                   \
+                        in_pred->insert_null();                                                       \
+                    }                                                                                 \
+                }                                                                                     \
+            }                                                                                         \
+        } else {                                                                                      \
+            for (size_t j = column_offset; j < data_array.size(); j++) {                              \
+                if (!nullable_column->is_null(j)) {                                                   \
+                    in_pred->insert(data_array[j]);                                                   \
+                } else {                                                                              \
+                    if (_eq_null) {                                                                   \
+                        in_pred->insert_null();                                                       \
+                    }                                                                                 \
+                }                                                                                     \
+            }                                                                                         \
+        }                                                                                             \
+        break;                                                                                        \
     }
             APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M
