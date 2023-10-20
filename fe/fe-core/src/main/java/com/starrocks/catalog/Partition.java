@@ -76,6 +76,9 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     @SerializedName(value = "id")
     private long id;
+
+    private long beforeRestoreId;
+
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "state")
@@ -176,12 +179,19 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return partition;
     }
 
+    @Override
     public void setIdForRestore(long id) {
+        this.beforeRestoreId = this.id;
         this.id = id;
     }
 
     public long getId() {
         return this.id;
+    }
+
+    @Override
+    public long getBeforeRestoreId() {
+        return beforeRestoreId;
     }
 
     @Override
@@ -200,6 +210,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         }
     }
 
+    public void removeSubPartition(long id) {
+        idToSubPartition.remove(id);
+    }
+
     public Collection<PhysicalPartition> getSubPartitions() {
         List<PhysicalPartition> subPartitions = idToSubPartition.values().stream().collect(Collectors.toList());
         subPartitions.add(this);
@@ -212,6 +226,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public long getParentId() {
         return this.id;
+    }
+
+    public void setParentId(long parentId) {
+        return;
     }
 
     public long getShardGroupId() {
