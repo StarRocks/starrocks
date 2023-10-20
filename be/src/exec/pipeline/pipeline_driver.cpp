@@ -28,6 +28,22 @@ PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
     }
+    check_operator_close_states("deleting pipeline drivers");
+}
+
+void PipelineDriver::check_operator_close_states(std::string func_name) {
+    if (_driver_id == -1) { // in test cases
+        return;
+    }
+    for (auto& op : _operators) {
+        auto& op_state = _operator_stages[op->get_id()];
+        if (op_state != OperatorStage::CLOSED) {
+            auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
+                                   to_readable_string(), op->get_name(), func_name);
+            LOG(ERROR) << msg;
+            DCHECK(false) << msg;
+        }
+    }
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
@@ -430,7 +446,69 @@ void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
+<<<<<<< HEAD
         _mark_operator_closed(op, runtime_state);
+=======
+        WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
+                      fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
+    }
+    check_operator_close_states("closing pipeline drivers");
+}
+
+void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op,
+                                          const ChunkPtr& chunk) {
+    auto& mem_resource_mgr = op->mem_resource_manager();
+
+    if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
+
+    // try to release buffer if memusage > mid level threhold
+    _try_to_release_buffer(state, op);
+
+    // force mark operator to low memory mode
+    if (state->spill_revocable_max_bytes() > 0 && op->revocable_mem_bytes() > state->spill_revocable_max_bytes()) {
+        mem_resource_mgr.to_low_memory_mode();
+        return;
+    }
+
+    // convert to low-memory mode if reserve memory failed
+    if (mem_resource_mgr.releaseable() && op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
+        int64_t request_reserved = 0;
+        if (chunk == nullptr) {
+            request_reserved = op->estimated_memory_reserved();
+        } else {
+            request_reserved = op->estimated_memory_reserved(chunk);
+        }
+        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
+
+        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
+                                               tracker->limit() * state->spill_mem_limit_threshold())) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+    }
+}
+
+const double release_buffer_mem_ratio = 0.8;
+
+void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op) {
+    if (state->enable_spill() && op->releaseable()) {
+        auto& mem_resource_mgr = op->mem_resource_manager();
+        if (mem_resource_mgr.is_releasing()) {
+            return;
+        }
+        auto query_mem_tracker = _query_ctx->mem_tracker();
+        auto query_mem_limit = query_mem_tracker->limit();
+        auto query_consumption = query_mem_tracker->consumption();
+        auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
+        if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio) {
+            // if the currently used memory is very close to the threshold that triggers spill,
+            // try to release buffer first
+            TRACE_SPILL_LOG << "release operator due to mem pressure, consumption: " << query_consumption
+                            << ", release buffer threshold: "
+                            << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_ratio)
+                            << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
+            mem_resource_mgr.to_low_memory_mode();
+        }
+>>>>>>> 31049a93d8 ([Refactor] check operators state of closing (#33077))
     }
 }
 
@@ -527,9 +605,10 @@ void PipelineDriver::_update_overhead_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
-    ss << "query_id=" << print_id(this->query_ctx()->query_id())
-       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << this
-       << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+    ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+       << " fragment_id="
+       << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
+       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
@@ -626,10 +705,12 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
 }
 
 Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* state) {
+    auto msg = strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
+                                   op->get_name());
     if (_fragment_ctx->is_canceled()) {
-        RETURN_IF_ERROR(_mark_operator_cancelled(op, state));
+        WARN_IF_ERROR(_mark_operator_cancelled(op, state), msg + " is failed to cancel");
     } else {
-        RETURN_IF_ERROR(_mark_operator_finished(op, state));
+        WARN_IF_ERROR(_mark_operator_finished(op, state), msg + " is failed to finish");
     }
 
     auto& op_state = _operator_stages[op->get_id()];
@@ -637,8 +718,7 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
-                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
+    VLOG_ROW << msg;
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
