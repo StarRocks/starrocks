@@ -4640,7 +4640,74 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new SemanticException("No matching function with signature: %s(%s).", functionName,
                         Joiner.on(", ").join(params.stream().map(p -> p.getType().toSql()).collect(toList())));
             }
+<<<<<<< HEAD
             return new IsNullPredicate(params.get(0), false);
+=======
+            return new IsNullPredicate(params.get(0), false, pos);
+        }
+
+        if (functionName.equals(FunctionSet.ISNOTNULL)) {
+            List<Expr> params = visit(context.expression(), Expr.class);
+            if (params.size() != 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+            }
+            return new IsNullPredicate(params.get(0), true, pos);
+        }
+
+        if (ArithmeticExpr.isArithmeticExpr(fnName.getFunction())) {
+            if (context.expression().size() < 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
+            }
+
+            Expr e1 = (Expr) visit(context.expression(0));
+            Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
+            return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
+        }
+
+        // add default delimiters and rewrite str_to_map(str, del1, del2) to str_to_map(split(str, del1),del2)
+        if (functionName.equals(FunctionSet.STR_TO_MAP)) {
+            Expr e0;
+            Expr e1;
+            Expr e2;
+            String collectionDelimiter = ",";
+            String mapDelimiter = ":";
+            if (context.expression().size() == 1) {
+                e0 = (Expr) visit(context.expression(0));
+                e1 = new StringLiteral(collectionDelimiter, pos);
+                e2 = new StringLiteral(mapDelimiter, pos);
+            } else if (context.expression().size() == 2) {
+                e0 = (Expr) visit(context.expression(0));
+                e1 = (Expr) visit(context.expression(1));
+                e2 = new StringLiteral(mapDelimiter, pos);
+            } else if (context.expression().size() == 3) {
+                e0 = (Expr) visit(context.expression(0));
+                e1 = (Expr) visit(context.expression(1));
+                e2 = (Expr) visit(context.expression(2));
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(FunctionSet.STR_TO_MAP));
+            }
+            FunctionCallExpr split = new FunctionCallExpr(FunctionSet.SPLIT, ImmutableList.of(e0, e1), pos);
+            return new FunctionCallExpr(functionName, ImmutableList.of(split, e2), pos);
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+            return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
+        }
+
+        if (functionName.equals(FunctionSet.MAP)) {
+            List<Expr> exprs;
+            if (context.expression() != null) {
+                int num = context.expression().size();
+                if (num % 2 == 1) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
+                            "Arguments must be in key/value pairs"), pos);
+                }
+                exprs = visit(context.expression(), Expr.class);
+            } else {
+                exprs = Collections.emptyList();
+            }
+            return new MapExpr(Type.ANY_MAP, exprs, pos);
+>>>>>>> 750130c403 ([BugFix] fix trino parser doesn't process information function correctly (#33273))
         }
 
         if (functionName.equals(FunctionSet.SUBSTR) || functionName.equals(FunctionSet.SUBSTRING)) {

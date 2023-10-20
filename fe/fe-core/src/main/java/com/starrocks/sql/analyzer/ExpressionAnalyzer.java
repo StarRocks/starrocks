@@ -1122,11 +1122,12 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitInformationFunction(InformationFunction node, Scope context) {
             String funcType = node.getFuncType();
-            if (funcType.equalsIgnoreCase("DATABASE") || funcType.equalsIgnoreCase("SCHEMA")) {
+            if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
-            } else if (funcType.equalsIgnoreCase("USER")) {
+            } else if (funcType.equalsIgnoreCase(FunctionSet.USER)) {
                 node.setType(Type.VARCHAR);
+<<<<<<< HEAD
                 node.setStrValue(session.getUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_USER")) {
                 node.setType(Type.VARCHAR);
@@ -1136,6 +1137,43 @@ public class ExpressionAnalyzer {
                 node.setIntValue(session.getConnectionId());
                 node.setStrValue("");
             }  else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
+=======
+
+                String user = session.getQualifiedUser();
+                String remoteIP = session.getRemoteIP();
+
+                node.setStrValue(new UserIdentity(user, remoteIP).toString());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_USER)) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getCurrentUserIdentity().toString());
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_ROLE)) {
+                node.setType(Type.VARCHAR);
+                AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                List<String> roleName = new ArrayList<>();
+
+                try {
+                    for (Long roleId : session.getCurrentRoleIds()) {
+                        RolePrivilegeCollectionV2 rolePrivilegeCollection =
+                                manager.getRolePrivilegeCollectionUnlocked(roleId, false);
+                        if (rolePrivilegeCollection != null) {
+                            roleName.add(rolePrivilegeCollection.getName());
+                        }
+                    }
+                } catch (PrivilegeException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+
+                if (roleName.isEmpty()) {
+                    node.setStrValue("NONE");
+                } else {
+                    node.setStrValue(Joiner.on(", ").join(roleName));
+                }
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+                node.setType(Type.BIGINT);
+                node.setIntValue(session.getConnectionId());
+                node.setStrValue("");
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
+>>>>>>> 750130c403 ([BugFix] fix trino parser doesn't process information function correctly (#33273))
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog().toString());
             }
