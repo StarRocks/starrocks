@@ -29,7 +29,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.DnsCache;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
@@ -91,7 +90,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.UnknownHostException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -1063,12 +1061,6 @@ public class CoordinatorPreprocessor {
         }
     }
 
-    // Because there is no DNS cache when compute node is in container.
-    // Try to avoid flooding the DNS server, we translate the hostname to IP here.
-    private TNetworkAddress toIpAddress(TNetworkAddress address) throws UnknownHostException {
-        return DnsCache.lookup(address);
-    }
-
     @VisibleForTesting
     void computeFragmentExecParams() throws Exception {
         // fill hosts field in fragmentExecParams
@@ -1159,7 +1151,7 @@ public class CoordinatorPreprocessor {
                         if (driverSeq != null) {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
-                            dest.setBrpc_server(toIpAddress(SystemInfoService.toBrpcHost(instanceExecParams.host)));
+                            dest.setBrpc_server(SystemInfoService.toBrpcIp(instanceExecParams.host));
                             if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                 dest.setPipeline_driver_sequence(driverSeq);
                             }
@@ -1176,7 +1168,7 @@ public class CoordinatorPreprocessor {
                     TPlanFragmentDestination dest = new TPlanFragmentDestination();
                     dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
                     dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                    dest.setBrpc_server(toIpAddress(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host)));
+                    dest.setBrpc_server(SystemInfoService.toBrpcIp(destParams.instanceExecParams.get(j).host));
                     params.destinations.add(dest);
                 }
             }
@@ -1232,7 +1224,7 @@ public class CoordinatorPreprocessor {
                             if (driverSeq != null) {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
-                                dest.setBrpc_server(SystemInfoService.toBrpcHost(instanceExecParams.host));
+                                dest.setBrpc_server(SystemInfoService.toBrpcIp(instanceExecParams.host));
                                 if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
                                     dest.setPipeline_driver_sequence(driverSeq);
                                 }
@@ -1249,7 +1241,7 @@ public class CoordinatorPreprocessor {
                         TPlanFragmentDestination dest = new TPlanFragmentDestination();
                         dest.fragment_instance_id = destParams.instanceExecParams.get(j).instanceId;
                         dest.server = toRpcHost(destParams.instanceExecParams.get(j).host);
-                        dest.setBrpc_server(SystemInfoService.toBrpcHost(destParams.instanceExecParams.get(j).host));
+                        dest.setBrpc_server(SystemInfoService.toBrpcIp(destParams.instanceExecParams.get(j).host));
                         multiSink.getDestinations().get(i).add(dest);
                     }
                 }
