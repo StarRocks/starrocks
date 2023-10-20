@@ -42,7 +42,7 @@ WITH resource_limit
     | big_query_cpu_second_limit | No           | The upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second. |
     | big_query_scan_rows_limit  | No           | The upper limit of row counts that can be scanned by a big query. |
     | big_query_mem_limit        | No           | The upper limit of memory usage of a big query. The unit is byte. |
-    | type                       | No           | The type of resource group. Valid values:<br>`short_query`: When queries from the `short_query` resource group are executing, the BE node reserves the CPU cores defined in `short_query.cpu_core_limit`. CPU cores for all `normal` resource groups are limited to "the total CPU cores - `short_query.cpu_core_limit`".<br>`normal`: when no query from the `short_query` resource group is executing, the CPU core limit above is not imposed on the `normal` resource groups.<br>Note that you can only create ONE `short_query` resource group in a cluster. |
+    | type                       | No           | The type of resource group. Valid values:<br />`short_query`: When queries from the `short_query` resource group are executing, the BE node reserves the CPU cores defined in `short_query.cpu_core_limit`. CPU cores for all `normal` resource groups are limited to "the total CPU cores - `short_query.cpu_core_limit`".<br />`normal`: when no query from the `short_query` resource group is executing, the CPU core limit above is not imposed on the `normal` resource groups.<br />Note that you can only create ONE `short_query` resource group in a cluster. |
 
 ## Example
 

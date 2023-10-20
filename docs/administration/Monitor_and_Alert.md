@@ -292,7 +292,7 @@ nohup ./bin/grafana-server \
 
 #### DashBoard Configuration
 
-Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username/password (i.e. admin/admin).
+Log in to Grafana through the address configured in the previous step `http://grafana_host:8000` with the default username/password (i.e. admin/admin).
 
 **1.** Add a data source.
 
