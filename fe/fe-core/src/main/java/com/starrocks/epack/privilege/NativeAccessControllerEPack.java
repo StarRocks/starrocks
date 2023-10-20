@@ -7,7 +7,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Column;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessController;
@@ -63,7 +63,7 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
     }
 
     @Override
-    public Expr getColumnMaskingPolicy(ConnectContext context, TableName tableName, String columnName, Type type) {
+    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         SecurityPolicyMgr policyManager = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         TableUID tableUID = TableUID.generate(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (!policyManager.hasTableAppliedPolicy(tableUID)) {
@@ -72,25 +72,29 @@ public class NativeAccessControllerEPack extends NativeAccessController implemen
 
         PolicyAppliedContext tableAppliedPolicyInfo = policyManager.getTableAppliedPolicyInfo(tableUID);
         Map<String, MaskingPolicyContext> maskingPolicyApply = tableAppliedPolicyInfo.getMaskingPolicyApply();
-        MaskingPolicyContext maskingPolicyContext = maskingPolicyApply.get(columnName);
 
-        if (maskingPolicyContext != null) {
-            Policy maskingPolicy = policyManager.getPolicyById(maskingPolicyContext.getPolicyId());
-            Map<SlotRef, SlotRef> onColumnsMap = new HashMap<>();
-            List<String> usingColumns = maskingPolicyContext.getUsingColumns();
-            List<String> argNames = maskingPolicy.getArgNames();
+        Map<String, Expr> maskingExprMap = new HashMap<>();
+        for (Column column : columns) {
+            MaskingPolicyContext maskingPolicyContext = maskingPolicyApply.get(column.getName());
 
-            for (int i = 0; i < maskingPolicyContext.getUsingColumns().size(); ++i) {
-                onColumnsMap.put(new SlotRef(null, argNames.get(i)), new SlotRef(tableName, usingColumns.get(i)));
+            if (maskingPolicyContext != null) {
+                Policy maskingPolicy = policyManager.getPolicyById(maskingPolicyContext.getPolicyId());
+                Map<SlotRef, SlotRef> onColumnsMap = new HashMap<>();
+                List<String> usingColumns = maskingPolicyContext.getUsingColumns();
+                List<String> argNames = maskingPolicy.getArgNames();
+
+                for (int i = 0; i < maskingPolicyContext.getUsingColumns().size(); ++i) {
+                    onColumnsMap.put(new SlotRef(null, argNames.get(i)), new SlotRef(tableName, usingColumns.get(i)));
+                }
+
+                RewriteAliasVisitor r = new RewriteAliasVisitor(onColumnsMap);
+                Expr policyExpr = SqlParser.parseSqlToExpr(maskingPolicy.getPolicyExpressionSQL(),
+                        context.getSessionVariable().getSqlMode());
+
+                maskingExprMap.put(column.getName(), (Expr) r.visit(policyExpr));
             }
-
-            RewriteAliasVisitor r = new RewriteAliasVisitor(onColumnsMap);
-            Expr policyExpr = SqlParser.parseSqlToExpr(maskingPolicy.getPolicyExpressionSQL(),
-                    context.getSessionVariable().getSqlMode());
-            return (Expr) r.visit(policyExpr);
-        } else {
-            return null;
         }
+        return maskingExprMap;
     }
 
     @Override
