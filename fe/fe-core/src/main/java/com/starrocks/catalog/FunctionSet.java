@@ -522,9 +522,9 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
+    private static final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
-                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT);
+                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, ASSERT_TRUE);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -708,7 +708,7 @@ public class FunctionSet {
         initAggregateBuiltins();
     }
 
-    public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
+    public static boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
         return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
                 || alwaysReturnNonNullableFunctions.contains(funcName);
     }
