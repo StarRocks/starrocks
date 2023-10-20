@@ -111,7 +111,7 @@ public class CachingHiveMetastoreTest {
     public void testRefreshTable() {
         new Expectations(metastore) {
             {
-                metastore.getTable(anyString, "notExistTbl");
+                metastore.getTable(anyString, "notexisttbl");
                 minTimes = 0;
                 Throwable targetException = new NoSuchObjectException("no such obj");
                 Throwable e = new InvocationTargetException(targetException);
@@ -174,7 +174,7 @@ public class CachingHiveMetastoreTest {
 
         new Expectations(metastore) {
             {
-                metastore.getTable(anyString, "notExistView");
+                metastore.getTable(anyString, "notexistview");
                 minTimes = 0;
                 Throwable targetException = new NoSuchObjectException("no such obj");
                 Throwable e = new InvocationTargetException(targetException);
