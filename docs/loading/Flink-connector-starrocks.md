@@ -13,7 +13,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 1. Download the [source code](https://github.com/StarRocks/flink-connector-starrocks) of flink-connector-starrocks.
 2. Find a file named **pom.xml**. Add the following code snippet to **pom.xml** and replace `x.x.x` in the code snippet with the latest version number of flink-connector-starrocks.
 
-    ```Plain%20Text
+    ```Plain_Text
     <dependency>
         <groupId>com.starrocks</groupId>
         <artifactId>flink-connector-starrocks</artifactId>
@@ -28,7 +28,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 
     - Load data as raw JSON string streams.
 
-        ```Plain%20Text
+        ```Plain_Text
         // -------- sink with raw json string stream --------
         fromElements(new String[]{
             "{\"score\": \"99\", \"name\": \"stephen\"}",
@@ -92,7 +92,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 
     - Load data as tables.  
 
-        ```Plain%20Text
+        ```Plain_Text
         // create a table with `structure` and `properties`
         // Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
         tEnv.executeSql(

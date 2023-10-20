@@ -194,7 +194,7 @@ INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 
 Example 5: Asynchronously query the table `order_detail` and create a new table `order_statistics` based on the query result, and then insert the query result into the new table.
 
-```Plain%20Text
+```Plain_Text
 SUBMIT TASK AS CREATE TABLE order_statistics AS SELECT COUNT(*) as count FROM order_detail;
 
 +-------------------------------------------+-----------+

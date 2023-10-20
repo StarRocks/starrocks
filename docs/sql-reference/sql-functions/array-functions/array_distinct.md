@@ -28,7 +28,7 @@ Returns an array.
 
 In this section, the following table is used as an example:
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from test;
 
 +------+---------------+
@@ -50,7 +50,7 @@ mysql> select * from test;
 
 Remove duplicate values from column `c2`.
 
-```Plain%20Text
+```Plain_Text
 mysql> select c1, array_distinct(c2) from test;
 
 +------+----------------------+

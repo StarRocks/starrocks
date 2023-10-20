@@ -14,7 +14,7 @@ USE [<catalog_name>.]<db_name>
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| catalog_name  | No           | The catalog name.<ul><li>If this parameter is not specified, a database in `default_catalog` is used by default.</li><li>You must specify this parameter when you use a database from an external catalog. For more information, see Example 2.</li><li>You must specify this parameter when you switch databases between different catalogs. For more information, see Example 3.</li></ul>For more information about catalogs, see [Overview](../../../data_source/catalog/catalog_overview.md). |
+| catalog_name  | No           | The catalog name.<ul><li>If this parameter is not specified, a database in `default_catalog` is used by default.</li><li>You must specify this parameter when you use a database from an external catalog. For more information, see Example 2.</li><li>You must specify this parameter when you switch databases between different catalogs. For more information, see Example 3. |
 | db_name       | Yes          | The database name. The database must exist.                  |
 
 ## Examples

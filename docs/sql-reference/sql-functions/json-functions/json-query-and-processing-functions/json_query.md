@@ -26,7 +26,7 @@ Returns a JSON value.
 
 Example 1: Query the value of an element that can be located by the `'$.a.b'` expression in the specified JSON object. In this example, the json_query function returns a JSON value of `1`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
 
        -> 1
@@ -34,7 +34,7 @@ mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.b') ;
 
 Example 2: Query the value of an element that can be located by the `'$.a.c'` expression in the specified JSON object. In this example, the element does not exist. Therefore, the json_query function returns an SQL value of `NULL`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
 
        -> NULL
@@ -42,7 +42,7 @@ mysql> SELECT json_query(PARSE_JSON('{"a": {"b": 1}}'), '$.a.c') ;
 
 Example 3: Query the value of an element that can be located by the `'$.a[2]'` expression in the specified JSON object. In this example, the JSON object, which is an array named a, contains an element at index 2, and the value of the element is 3. Therefore, the JSON_QUERY function returns a JSON value of `3`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 
        -> 3
@@ -50,7 +50,7 @@ mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[2]') ;
 
 Example 4: Query an element that can be located by the `'$.a[3]'` expression in the specified JSON object. In this example, the JSON object, which is an array named a, does not contain an element at index 3. Therefore, the json_query function returns an SQL value of `NULL`.
 
-```Plain%20Text
+```Plain_Text
 mysql> SELECT json_query(PARSE_JSON('{"a": [1,2,3]}'), '$.a[3]') ;
 
        -> NULL

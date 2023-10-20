@@ -20,8 +20,6 @@ unnest(array)
 
 Returns the multiple rows converted from the array. The type of return value depends on the types of elements in the array.
 
-For the element types supported in an array, see [ARRAY](../../sql-statements/data-types/Array.md).
-
 ## Usage notes
 
 - UNNEST is a table function. It must be used with Lateral Join but the keyword Lateral Join does not need to be explicitly specified.

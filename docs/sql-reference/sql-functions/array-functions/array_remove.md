@@ -21,7 +21,7 @@ Returns the array from which specified element has been removed.
 
 ## Examples
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_remove([1,2,3,null,3], 3);
 
 +---------------------------------+

@@ -23,7 +23,7 @@ Returns the position of the specified element if the element can be found in the
 
 - Example 1: Obtain the position of an element in an array.
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_position(["apple","orange","pear"], "orange");
 
 +-----------------------------------------------------+

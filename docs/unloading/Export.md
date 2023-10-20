@@ -6,7 +6,7 @@ This topic describes how to export data from specified tables or partitions in y
 
 Brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
@@ -18,7 +18,7 @@ In this topic, assume that a group of brokers collectively named 'mybroker' are 
 
 - If the FEs in your StarRocks cluster restart or a new leader FE is elected when an export job is running, the export job fails. In this situation, you must submit the export job again.
 
-- If the FEs in your StarRocks cluster restart or a new leader FE is elected after an export job finishes, some of the job information returned by the [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) statement may be lost.
+- If the FEs in your StarRocks cluster restart or a new leader FE is elected after an export job finishes, some of the job information returned by the [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md) statement may be lost.
 
 - StarRocks exports only the data of base tables. StarRocks does not export the data of materialized views created on base tables.
 
@@ -125,7 +125,7 @@ Timeout: 3600
 ErrorMsg: N/A
 ```
 
-For detailed syntax and parameter descriptions, see [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md).
+For detailed syntax and parameter descriptions, see [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md).
 
 ### Cancel an export job
 
@@ -139,7 +139,7 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 >
 > In the preceding example, `queryid` is the query ID of the export job.
 
-For detailed syntax and parameter descriptions, see [CANCEL EXPORT](../sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md).
+For detailed syntax and parameter descriptions, see [CANCEL EXPORT](../sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT.md).
 
 ## Best practices
 

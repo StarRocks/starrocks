@@ -38,7 +38,7 @@ Returns a value of the VARCHAR data type.
 
 Example 1: Concatenate the elements of an array. In this example, the `NULL` value in the array is discarded, and the concatenated array elements are separated by underscores (`_`).
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_join([1, 3, 5, null], '_');
 
 +-------------------------------+
@@ -54,7 +54,7 @@ mysql> select array_join([1, 3, 5, null], '_');
 
 Example 2: Concatenate the elements of an array. In this example, the `NULL` value in the array is substituted with `NULL` strings, and the concatenated array elements are separated by underscores (`_`).
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_join([1, 3, 5, null], '_', 'NULL');
 
 +---------------------------------------+
