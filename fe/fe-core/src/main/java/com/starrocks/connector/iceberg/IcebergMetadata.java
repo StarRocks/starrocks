@@ -209,27 +209,18 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Do not support get partitions from catalog type: " + nativeType);
         }
 
-        if (icebergTable.spec().fields().stream()
-                .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
-            throw new StarRocksConnectorException(
-                    "Do not support get partitions from No-Identity partition transform now");
-        }
-
         List<String> partitionNames = Lists.newArrayList();
-        if (icebergTable.spec().isUnpartitioned()) {
+        // all partitions specs are unpartitioned
+        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
             return partitionNames;
         }
 
-        if (icebergTable.spec().fields().stream()
-                .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
-            return partitionNames;
-        }
         TableScan tableScan = icebergTable.newScan();
         List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
 
         for (FileScanTask fileScanTask : tasks) {
             StructLike partition = fileScanTask.file().partition();
-            partitionNames.add(convertIcebergPartitionToPartitionName(icebergTable.spec(), partition));
+            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
         }
         return partitionNames;
     }
