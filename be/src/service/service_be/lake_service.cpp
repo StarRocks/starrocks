@@ -488,53 +488,7 @@ void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* co
                                            ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-
-    if (!request->has_version()) {
-        cntl->SetFailed("missing version");
-        return;
-    }
-    if (!request->has_tablet_id()) {
-        cntl->SetFailed("missing tablet id");
-        return;
-    }
-    if (!request->has_expire_time()) {
-        cntl->SetFailed("missing expire time");
-        return;
-    }
-
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
-    auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto tablet = _tablet_mgr->get_tablet(request->tablet_id());
-        if (!tablet.ok()) {
-            LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
-            cntl->SetFailed("Fail to get tablet");
-            return;
-        }
-        auto st = tablet->put_tablet_metadata_lock(request->version(), request->expire_time());
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to lock tablet metadata, tablet id: " << request->tablet_id()
-                       << ", version: " << request->version();
-            cntl->SetFailed("Fail to lock tablet metadata");
-            return;
-        }
-        auto tablet_meta = tablet->get_metadata(request->version());
-        // If metadata has been deleted, the request should fail.
-        if (!tablet_meta.ok()) {
-            LOG(ERROR) << "Tablet metadata has been deleted, tablet id: " << request->tablet_id()
-                       << ", version: " << request->version();
-            cntl->SetFailed("Tablet metadata has been deleted");
-        }
-    };
-    auto st = thread_pool->submit_func(task);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit lock tablet metadata task: " << st;
-        cntl->SetFailed(st.get_error_msg());
-        latch.count_down();
-    }
-
-    latch.wait();
+    cntl->SetFailed("does not support lock_tablet_metadata anymore");
 }
 
 void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* controller,
@@ -543,43 +497,7 @@ void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* 
                                              ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    if (!request->has_version()) {
-        cntl->SetFailed("missing version");
-        return;
-    }
-    if (!request->has_tablet_id()) {
-        cntl->SetFailed("missing tablet id");
-        return;
-    }
-    if (!request->has_expire_time()) {
-        cntl->SetFailed("missing expire time");
-        return;
-    }
-
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
-    auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto tablet = _tablet_mgr->get_tablet(request->tablet_id());
-        if (!tablet.ok()) {
-            LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
-            cntl->SetFailed("Fail to get tablet");
-            return;
-        }
-        auto st = tablet->delete_tablet_metadata_lock(request->version(), request->expire_time());
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to unlock tablet metadata, tablet id: " << request->tablet_id()
-                       << ", version: " << request->version();
-            cntl->SetFailed("Fail to unlock tablet metadata");
-        }
-    };
-    auto st = thread_pool->submit_func(task);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit unlock tablet metadata task: " << st;
-        cntl->SetFailed(st.get_error_msg());
-        latch.count_down();
-    }
-    latch.wait();
+    cntl->SetFailed("does not support unlock_tablet_metadata anymore");
 }
 
 void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,
