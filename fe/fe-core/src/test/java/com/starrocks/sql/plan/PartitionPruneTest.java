@@ -109,6 +109,17 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneNullPredicate() throws Exception {
+        String sql = "select * from ptest where (cast(d2 as int) / null) is null";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=4/4");
+
+        sql = "select * from ptest where (cast(d2 as int) * null) <=> null";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=4/4");
+    }
+
+    @Test
     public void testInClauseCombineOr_1() throws Exception {
         String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
         assertTrue(plan.contains("  0:OlapScanNode\n" +
