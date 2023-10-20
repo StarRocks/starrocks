@@ -113,8 +113,8 @@ PROPERTIES(
 
 ## References
 
-[SHOW ANALYZE STATUS](../data-definition/SHOW%20ANALYZE%20STATUS.md): view the status of a manual collection task.
+[SHOW ANALYZE STATUS](../data-definition/SHOW_ANALYZE_STATUS.md): view the status of a manual collection task.
 
-[KILL ANALYZE](../data-definition/KILL%20ANALYZE.md): cancel a manual collection task that is running.
+[KILL ANALYZE](../data-definition/KILL_ANALYZE.md): cancel a manual collection task that is running.
 
 For more information about collecting statistics for CBO, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md).

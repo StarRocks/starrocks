@@ -6,7 +6,7 @@ You can use the GRANT statement to perform the following operations:
 
 - Grant specific privileges to a user or a role.
 - Grant a role to a user. This feature is supported only in StarRock 2.4 and later versions.
-- Grant user `a` the privilege to impersonate user `b`. Then user `a` can perform operations as user `b` by using the [EXECUTE AS](../account-management/EXECUTE%20AS.md) statement. This feature is supported only in StarRock 2.4 and later versions.
+- Grant user `a` the privilege to impersonate user `b`. Then user `a` can perform operations as user `b` by using the [EXECUTE AS](../account-management/EXECUTE_AS.md) statement. This feature is supported only in StarRock 2.4 and later versions.
 
 ## Syntax
 

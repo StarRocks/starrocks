@@ -115,7 +115,7 @@ PROPERTIES("replication_num" = "3",
 
 - `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is false.
 
-  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
   > - It is recommended to set this property to true if the disk is SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
 
@@ -127,7 +127,7 @@ PROPERTIES("replication_num" = "3",
 
 - The Primary Key table does not support materialized views.
 
-- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
 
 ## What to do next
 

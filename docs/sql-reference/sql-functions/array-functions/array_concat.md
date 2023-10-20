@@ -26,7 +26,7 @@ Returns an array that contains all the elements held in the arrays that are spec
 
 Example 1: Concatenate arrays that contain numeric elements.
 
-```Plain%20Text
+```Plain_Text
 select array_concat([57.73,97.32,128.55,null,324.2], [3], [5]) as res;
 
 +-------------------------------------+
@@ -42,7 +42,7 @@ select array_concat([57.73,97.32,128.55,null,324.2], [3], [5]) as res;
 
 Example 2: Concatenate arrays that contain string elements.
 
-```Plain%20Text
+```Plain_Text
 select array_concat(["sql","storage","execute"], ["Query"], ["Vectorized", "cbo"]);
 
 +----------------------------------------------------------------------------+
@@ -58,7 +58,7 @@ select array_concat(["sql","storage","execute"], ["Query"], ["Vectorized", "cbo"
 
 Example 3: Concatenate two arrays of different types.
 
-```Plain%20Text
+```Plain_Text
 select array_concat([57,65], ["pear","apple"]);
 +-------------------------------------------+
 | array_concat([57, 65], ['pear', 'apple']) |
@@ -69,7 +69,7 @@ select array_concat([57,65], ["pear","apple"]);
 
 Example 4: Process nulls as normal values.
 
-```Plain%20Text
+```Plain_Text
 select array_concat(["sql",null], [null], ["Vectorized", null]);
 
 +---------------------------------------------------------+

@@ -79,7 +79,7 @@ To query the latest Hudi data, make sure that the metadata cached in StarRocks i
     [PARTITION ('partition_name', ...)];
     ```
 
-For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
+For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md).
 
 ## Use catalog to query Hudi data
 
@@ -87,6 +87,6 @@ After you complete all the preceding operations, you can use the Hudi catalog to
 
 ## References
 
-- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
-- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md).
-- To delete an external catalog, see [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md).
+- To view examples of creating an external catalog, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md).
+- To view all catalogs in the current StarRocks cluster, see [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md).
+- To delete an external catalog, see [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md).

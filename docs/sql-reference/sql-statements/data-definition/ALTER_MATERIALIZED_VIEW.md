@@ -17,7 +17,7 @@ Parameters in brackets [] is optional.
 | **Parameter**           | **Required** | **Description**                                              |
 | ----------------------- | ------------ | ------------------------------------------------------------ |
 | mv_name                 | yes          | The name of the materialized view to alter.                  |
-| new_refresh_scheme_desc | no           | New async refresh strategy, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../data-definition/CREATE%20MATERIALIZED%20VIEW.md#parameters) for details. |
+| new_refresh_scheme_desc | no           | New async refresh strategy, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../data-definition/CREATE_MATERIALIZED_VIEW.md#parameters) for details. |
 | new_mv_name             | no           | New name for the materialized view.                          |
 
 ## Example

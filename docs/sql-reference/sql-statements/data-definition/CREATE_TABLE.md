@@ -6,7 +6,7 @@ Creates a new table in StarRocks.
 
 ## Syntax
 
-```Plain%20Text
+```Plain_Text
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
@@ -32,7 +32,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 Note:
 
-```Plain%20Text
+```Plain_Text
 col_name: Column name
 col_type: Column type
 
@@ -157,7 +157,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For MySQL, specify the following properties:
 
-    ```Plain%20Text
+    ```Plain_Text
     PROPERTIES (
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
@@ -176,7 +176,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Elasticsearch, specify the following properties:
 
-    ```Plain%20Text
+    ```Plain_Text
     PROPERTIES (
 
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
@@ -195,7 +195,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hive, specify the following properties:
 
-    ```Plain%20Text
+    ```Plain_Text
     PROPERTIES (
 
         "database" = "hive_db_name",
@@ -208,7 +208,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For JDBC, specify the following properties:
 
-    ```Plain%20Text
+    ```Plain_Text
     PROPERTIES (
     "resource"="jdbc0",
     "table"="dest_tbl"
@@ -219,7 +219,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Iceberg, specify the following properties:
 
-   ```Plain%20Text
+   ```Plain_Text
     PROPERTIES (
     "resource" = "iceberg0", 
     "database" = "iceberg", 
@@ -231,7 +231,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hudi, specify the following properties:
 
-  ```Plain%20Text
+  ```Plain_Text
     PROPERTIES (
     "resource" = "hudi0", 
     "database" = "hudi", 
@@ -265,7 +265,7 @@ Partition description can be used in the following three ways:
 
 Syntax:
 
-```Plain%20Text
+```Plain_Text
 PARTITION BY RANGE (k1, k2, ...)
 (
     PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
@@ -311,7 +311,7 @@ Note:
 
 Syntax
 
-```Plain%20Text
+```Plain_Text
 PARTITION BY RANGE (datekey) (
     START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
 )
@@ -348,7 +348,7 @@ It is recommended to use Hash bucketing method.
 
 - If ENGINE type is olap. Users can specify storage medium, cooldown time, and replica number.
 
-```Plain%20Text
+```Plain_Text
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
     [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
@@ -669,7 +669,7 @@ The dynamic partitioning function must be enabled ("dynamic_partition.enable" = 
 
 This example creates partitions for the next three days and deletes partitions created three days ago. For example, if today is 2020-01-08, partitions with the following names will be created: p20200108, p20200109, p20200110, p20200111, and their ranges are:
 
-```Plain%20Text
+```Plain_Text
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )

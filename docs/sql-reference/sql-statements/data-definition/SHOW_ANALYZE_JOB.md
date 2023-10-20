@@ -41,10 +41,10 @@ SHOW ANALYZE JOB where `database` = 'test';
 
 ## References
 
-[CREATE ANALYZE](../data-definition/CREATE%20ANALYZE.md): customize an automatic collection task.
+[CREATE ANALYZE](../data-definition/CREATE_ANALYZE.md): customize an automatic collection task.
 
-[DROP ANALYZE](../data-definition/DROP%20ANALYZE.md): delete a custom collection task.
+[DROP ANALYZE](../data-definition/DROP_ANALYZE.md): delete a custom collection task.
 
-[KILL ANALYZE](../data-definition/KILL%20ANALYZE.md): cancel a custom collection task that is running.
+[KILL ANALYZE](../data-definition/KILL_ANALYZE.md): cancel a custom collection task that is running.
 
 For more information about collecting statistics for CBO, see [Gather statistics for CBO](../../../using_starrocks/Cost_based_optimizer.md).

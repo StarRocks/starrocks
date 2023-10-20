@@ -2,7 +2,7 @@
 
 ## Description
 
-Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh single-table materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
+Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh single-table materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
 
 > **CAUTION**
 >
