@@ -21,6 +21,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Streams;
+import com.starrocks.analysis.AnalyticExpr;
+>>>>>>> 6990b274a7 ([BugFix] Fix bugs when materialized view with sort keys (#33125))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
@@ -101,7 +106,11 @@ import org.apache.logging.log4j.util.Strings;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Arrays;
+=======
+import java.util.Comparator;
+>>>>>>> 6990b274a7 ([BugFix] Fix bugs when materialized view with sort keys (#33125))
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -210,6 +219,15 @@ public class MaterializedViewAnalyzer {
         }
     }
 
+    @VisibleForTesting
+    protected static List<Integer> getQueryOutputIndices(List<Pair<Column, Integer>> mvColumnPairs) {
+        return Streams
+                .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int) idx))
+                .sorted(Comparator.comparingInt(x -> x.first))
+                .map(x -> x.second)
+                .collect(Collectors.toList());
+    }
+
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
         public enum RefreshTimeUnit {
@@ -259,6 +277,10 @@ public class MaterializedViewAnalyzer {
             // set the columns into createMaterializedViewStatement
             List<Column> mvColumns = genMaterializedViewColumns(statement);
             statement.setMvColumnItems(mvColumns);
+
+            // record query output indices
+            List<Integer> queryOutputIndices = getQueryOutputIndices(mvColumnPairs);
+            statement.setQueryOutputIndices(queryOutputIndices);
 
             // set the Indexes into createMaterializedViewStatement
             List<Index> mvIndexes = genMaterializedViewIndexes(statement);
@@ -384,7 +406,68 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         private List<Column> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
+=======
+        /**
+         * when the materialized view's sort keys are not set by hand, choose the sort keys by iterating the columns
+         *  and find the satisfied columns as sort keys.
+         */
+        List<String> chooseSortKeysByDefault(List<Column> mvColumns) {
+            List<String> keyCols = Lists.newArrayList();
+            int theBeginIndexOfValue = 0;
+            int keySizeByte = 0;
+
+            // skip the firth nth columns which can not be used for keys.
+            for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
+                Column column = mvColumns.get(theBeginIndexOfValue);
+                if (column.getType().canBeMVKey()) {
+                    break;
+                }
+            }
+            if (theBeginIndexOfValue == mvColumns.size()) {
+                throw new SemanticException("All columns of materialized view cannot be used for keys");
+            }
+
+            int skip = theBeginIndexOfValue;
+            for (; theBeginIndexOfValue < mvColumns.size(); theBeginIndexOfValue++) {
+                Column column = mvColumns.get(theBeginIndexOfValue);
+                keySizeByte += column.getType().getIndexSize();
+                if (keySizeByte > FeConstants.SHORTKEY_MAXSIZE_BYTES) {
+                    if (column.getType().getPrimitiveType().isCharFamily()) {
+                        keyCols.add(column.getName());
+                        theBeginIndexOfValue++;
+                    }
+                    break;
+                }
+
+                if (!column.getType().canBeMVKey()) {
+                    continue;
+                }
+
+                if (column.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
+                    keyCols.add(column.getName());
+                    theBeginIndexOfValue++;
+                    break;
+                }
+
+                keyCols.add(column.getName());
+            }
+            if (theBeginIndexOfValue == skip) {
+                throw new SemanticException("Data type of {}th column cannot be " +
+                        mvColumns.get(theBeginIndexOfValue).getType(), theBeginIndexOfValue);
+            }
+            return keyCols;
+        }
+
+        /**
+         * NOTE: order or column names of the defined query may be changed when generating.
+         * @param statement : creating materialized view statement
+         * @return          : Generate materialized view's columns and corresponding output expression index pair
+         *                      from creating materialized view statement.
+         */
+        private List<Pair<Column, Integer>> genMaterializedViewColumns(CreateMaterializedViewStatement statement) {
+>>>>>>> 6990b274a7 ([BugFix] Fix bugs when materialized view with sort keys (#33125))
             List<String> columnNames = statement.getQueryStatement().getQueryRelation()
                     .getRelationFields().getAllFields().stream()
                     .map(Field::getName).collect(Collectors.toList());
