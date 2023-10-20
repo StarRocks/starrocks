@@ -425,6 +425,20 @@ public class FunctionSet {
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
+    public static final String CONNECTION_ID = "connection_id";
+
+    public static final String CATALOG = "catalog";
+
+    public static final String DATABASE = "database";
+
+    public static final String SCHEMA = "schema";
+
+    public static final String USER = "user";
+
+    public static final String CURRENT_USER = "current_user";
+
+    public static final String CURRENT_ROLE = "current_role";
+
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
@@ -569,6 +583,35 @@ public class FunctionSet {
             .add(FunctionSet.CORR)
             .build();
 
+<<<<<<< HEAD
+=======
+    public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
+            .add(ARRAY_SUM)
+            .add(ARRAY_AVG)
+            .add(ARRAY_MIN)
+            .add(ARRAY_MAX)
+            .add(ARRAY_DISTINCT)
+            .add(ARRAY_SORT)
+            .add(REVERSE)
+            .add(ARRAY_INTERSECT)
+            .add(ARRAY_DIFFERENCE)
+            .add(ARRAYS_OVERLAP)
+            .add(ARRAY_AGG)
+            .add(ARRAY_CONCAT)
+            .add(ARRAY_SLICE)
+            .build();
+
+    public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
+            .add(CONNECTION_ID)
+            .add(CATALOG)
+            .add(DATABASE)
+            .add(SCHEMA)
+            .add(USER)
+            .add(CURRENT_USER)
+            .add(CURRENT_ROLE)
+            .build();
+
+>>>>>>> 750130c403 ([BugFix] fix trino parser doesn't process information function correctly (#33273))
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
             (Type itemType) -> {
                 ArrayList<StructField> fields = Lists.newArrayList();

@@ -325,4 +325,28 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         System.out.println(getFragmentPlan(sql));
     }
 
+    @Test
+    public void testInformationFunction() throws Exception {
+        String sql = "select connection_id() from tall";
+        assertPlanContains(sql, "<slot 12> : CONNECTION_ID()");
+
+        sql = "select catalog() from tall";
+        assertPlanContains(sql, "<slot 12> : CATALOG()");
+
+        sql = "select database() from tall";
+        assertPlanContains(sql, "<slot 12> : 'test'");
+
+        sql = "select schema() from tall";
+        assertPlanContains(sql, "<slot 12> : 'test'");
+
+        sql = "select user() from tall";
+        assertPlanContains(sql, "<slot 12> : USER()");
+
+        sql = "select CURRENT_USER from tall";
+        assertPlanContains(sql, "<slot 12> : CURRENT_USER()");
+
+        sql = "select CURRENT_ROLE from tall";
+        assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
+    }
+
 }
