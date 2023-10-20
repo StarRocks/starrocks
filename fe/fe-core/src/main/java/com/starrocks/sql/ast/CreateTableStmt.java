@@ -299,11 +299,7 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public boolean needAuditEncryption() {
-<<<<<<< HEAD
-        return !isOlapOrLakeEngine();
-=======
-        return !Strings.isNullOrEmpty(engineName) && !isOlapEngine();
->>>>>>> 444cc3aeb1 ([BugFix] Fix sql is lost in audit log when creating OLAP table (#33176))
+        return !Strings.isNullOrEmpty(engineName) && !isOlapOrLakeEngine();
     }
 
     @Override
