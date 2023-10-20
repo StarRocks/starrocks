@@ -103,11 +103,6 @@ std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view d
     return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
-std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
-                                                         int64_t expire_time) const {
-    return _location_provider->tablet_metadata_lock_location(tablet_id, version, expire_time);
-}
-
 std::string TabletManager::global_schema_cache_key(int64_t schema_id) {
     return fmt::format("GS{}", schema_id);
 }
@@ -184,41 +179,6 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
         tablet.set_version_hint(metadata->version());
     }
     return tablet;
-}
-
-Status TabletManager::delete_tablet(int64_t tablet_id) {
-    std::vector<std::string> objects;
-    // TODO: construct prefix in LocationProvider or a common place
-    const auto tablet_prefix = fmt::format("{:016X}_", tablet_id);
-    auto root_path = _location_provider->metadata_root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
-    auto scan_cb = [&](std::string_view name) {
-        if (HasPrefixString(name, tablet_prefix)) {
-            objects.emplace_back(join_path(root_path, name));
-        }
-        return true;
-    };
-    auto st = fs->iterate_dir(root_path, scan_cb);
-    if (!st.ok() && !st.is_not_found()) {
-        return st;
-    }
-
-    root_path = _location_provider->txn_log_root_location(tablet_id);
-    st = fs->iterate_dir(root_path, scan_cb);
-    st.permit_unchecked_error();
-
-    for (const auto& obj : objects) {
-        _metacache->erase(obj);
-        st = fs->delete_file(obj);
-        st.permit_unchecked_error();
-    }
-    //drop tablet schema from metacache;
-    _metacache->erase(tablet_schema_cache_key(tablet_id));
-
-    std::unique_lock wrlock(_meta_lock);
-    _tablet_in_writing_txn_size.erase(tablet_id);
-
-    return Status::OK();
 }
 
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
@@ -363,49 +323,6 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
     return put_txn_log(std::make_shared<TxnLog>(log));
 }
 
-Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
-    auto t0 = butil::gettimeofday_us();
-    auto location = txn_log_location(tablet_id, txn_id);
-    _metacache->erase(location);
-    auto st = fs::delete_file(location);
-    auto t1 = butil::gettimeofday_us();
-    g_del_txn_log_latency << (t1 - t0);
-    TRACE("end delete txn log");
-    return st.is_not_found() ? Status::OK() : st;
-}
-
-Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
-    auto t0 = butil::gettimeofday_us();
-    auto location = txn_vlog_location(tablet_id, version);
-    _metacache->erase(location);
-    auto st = fs::delete_file(location);
-    auto t1 = butil::gettimeofday_us();
-    g_del_txn_log_latency << (t1 - t0);
-    TRACE("end delete txn vlog");
-    return st.is_not_found() ? Status::OK() : st;
-}
-
-StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_tablet) {
-    std::vector<std::string> objects{};
-    // TODO: construct prefix in LocationProvider
-    std::string prefix;
-    if (filter_tablet) {
-        prefix = fmt::format("{:016X}_", tablet_id);
-    }
-
-    auto root = _location_provider->txn_log_root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
-    auto scan_cb = [&](std::string_view name) {
-        if (HasPrefixString(name, prefix)) {
-            objects.emplace_back(join_path(root, name));
-        }
-        return true;
-    };
-
-    RETURN_IF_ERROR(fs->iterate_dir(root, scan_cb));
-    return TxnLogIter{this, std::move(objects)};
-}
-
 #ifdef USE_STAROS
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
     if (g_worker != nullptr) {
@@ -520,19 +437,6 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
         return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
     }
-}
-
-Status TabletManager::put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
-    auto path = tablet_metadata_lock_location(tablet_id, version, expire_time);
-    TabletMetadataLockPB lock;
-    ProtobufFile file(path);
-    return file.save(lock);
-}
-
-Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
-    auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
-    auto st = fs::delete_file(location);
-    return st.is_not_found() ? Status::OK() : st;
 }
 
 // Store a copy of the tablet schema in a separate schema file named SCHEMA_{indexId}.
