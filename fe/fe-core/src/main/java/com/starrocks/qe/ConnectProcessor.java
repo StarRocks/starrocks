@@ -62,7 +62,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -267,7 +266,7 @@ public class ConnectProcessor {
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
     }
 
-    private void addRunningQueryDetail(StatementBase parsedStmt) {
+    protected void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
