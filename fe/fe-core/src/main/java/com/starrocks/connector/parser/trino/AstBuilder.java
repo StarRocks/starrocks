@@ -1088,7 +1088,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new InformationFunction(FunctionSet.CURRENT_USER.toUpperCase());
     }
 
-                                         @Override
+    @Override
     protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
         return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
     }
