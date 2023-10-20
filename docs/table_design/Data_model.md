@@ -296,7 +296,7 @@ The data loading procedure is similar for stream load and broker load. The loadi
 
 * If the operation type is UPSERT, you do not need to add the `__op` column. You can set `__op` to upsert or leave it empty. StarRocks regards upsert as the default operation type. The following code is an example of the data to be imported to table t.
 
-~~~Plain%20Text
+~~~Plain_Text
 # data
 0,aaaa
 1,bbbb
@@ -334,7 +334,7 @@ load label demo.demo (
 
 * If the operation type is DELETE, you do not need to add the `__op` column. You only need to set `__op` to delete. The following code is an example of the data to delete.
 
-~~~Plain%20Text
+~~~Plain_Text
 # Data to import
 1,bbbb
 4,dddd
@@ -362,7 +362,7 @@ load label demo.ttt3 (
 
 * If the operation type includes both UPDATE and DELETE,  you must specify `__op` to indicate the operation types. The following code is an example of the data to import.
 
-~~~Plain%20Text
+~~~Plain_Text
 1,bbbb,1
 4,dddd,1
 5,eeee,0
@@ -395,7 +395,7 @@ load label demo.ttt3 (
 
 In the statement for creating a data loading task using routine load, the `__op` column can be added at the end of the columns keyword. The value 0 indicates UPSERT and the value 1 indicates DELETE. The following code is an example of the data to import.
 
-~~~Plain%20Text
+~~~Plain_Text
 2020-06-23  2020-06-23 00:00:00 beijing haidian 1   -128    -32768  -2147483648    0
 2020-06-23  2020-06-23 00:00:01 beijing haidian 0   -127    -32767  -2147483647    1
 2020-06-23  2020-06-23 00:00:02 beijing haidian 1   -126    -32766  -2147483646    0
