@@ -146,7 +146,7 @@ Tablets reflect how data files are organized in StarRocks. StarRocks 2.4 and lat
 
 You can partition a table in threes ways by using `PARTITION BY RANGE` clause:
 
-- Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+- Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
   ```SQL
   PARTITION BY RANGE (k1, k2, ...)
@@ -287,7 +287,7 @@ The following examples demonstrate how to partition a table by specifying START,
   )
   ```
 
-- After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement to add partitions for the table.
+- After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement to add partitions for the table.
 
   ```SQL
   ALTER TABLE site_access 

@@ -103,7 +103,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="References​">
 <NavBoxPartItem>
 
-- [SQL reference](../sql-reference/sql-statements/account-management/ALTER%20USER.md)
+- [SQL reference](../sql-reference/sql-statements/account-management/ALTER_USER.md)
 - [Function reference](../sql-reference/sql-functions/date-time-functions/convert_tz.md)
 
 </NavBoxPartItem>

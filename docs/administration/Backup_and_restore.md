@@ -18,7 +18,7 @@ If you have stored a large quantity of data in a table, we recommend that you ba
 
 ### Create a repository
 
-Before backing up data, you need to create a repository to store data in a remote storage system. For detailed instructions, see [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE%20REPOSITORY.md).
+Before backing up data, you need to create a repository to store data in a remote storage system. For detailed instructions, see [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md).
 
 The following example creates a repository named `test_repo` in an Apache™ Hadoop® cluster.
 
@@ -29,7 +29,7 @@ ON LOCATION "hdfs://xxx.xx.xxx.xxxx:xxxx/data/sr_backup"
 PROPERTIES("username" = "xxxx");
 ```
 
-After restoring data, you can delete the repository using [DROP REPOSITORY](../sql-reference/sql-statements/data-definition/DROP%20REPOSITORY.md).
+After restoring data, you can delete the repository using [DROP REPOSITORY](../sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md).
 
 > **CAUTION**
 >
@@ -47,7 +47,7 @@ TO test_repo
 ON (sr_member);
 ```
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md).
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job status using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md).
 
 ## Restore or migrate data
 
@@ -64,7 +64,7 @@ To migrate data to another StarRocks cluster, you need to create a repository wi
 
 ### Check the snapshot
 
-Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW%20SNAPSHOT.md).
+Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md).
 
 The following example checks the snapshot information in`test_repo`.
 
@@ -91,4 +91,4 @@ ON (sr_member)
 PROPERTIES ("backup_timestamp"="2022-11-21-10-42-26-315");
 ```
 
-RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md).
+RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md).

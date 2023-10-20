@@ -7,7 +7,7 @@ Cancels a given load job: Broker Load, Spark Load, or INSERT. A load job in one 
 - The state is `CANCELLED` or `FINISHED`.
 - The transaction has been committed.
 
-Canceling a load job is an asynchronous process. You can use the [SHOW LOAD](../data-manipulation/SHOW%20LOAD.md) statement to check whether a load job is successfully canceled. The load job is successfully canceled if the value of `State` is `CANCELLED` and the value of `type` (displayed in `ErrorMsg`) is `USER_CANCEL`.
+Canceling a load job is an asynchronous process. You can use the [SHOW LOAD](../data-manipulation/SHOW_LOAD.md) statement to check whether a load job is successfully canceled. The load job is successfully canceled if the value of `State` is `CANCELLED` and the value of `type` (displayed in `ErrorMsg`) is `USER_CANCEL`.
 
 ## Syntax
 

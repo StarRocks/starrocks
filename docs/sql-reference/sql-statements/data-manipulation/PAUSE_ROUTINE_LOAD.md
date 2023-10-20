@@ -2,7 +2,7 @@
 
 ## Description
 
-This statement pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](./RESUME%20ROUTINE%20LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md) and [ALTER ROUTINE LOAD](./alter-routine-load.md) to view and modify information about the paused load job.
+This statement pauses a Routine Load job but does not terminate this job. You can execute [RESUME ROUTINE LOAD](./RESUME_ROUTINE_LOAD.md) to resume it. After the load job is paused, you can execute [SHOW ROUTINE LOAD](./SHOW_ROUTINE_LOAD.md) and [ALTER ROUTINE LOAD](./alter-routine-load.md) to view and modify information about the paused load job.
 
 > **Note**
 >

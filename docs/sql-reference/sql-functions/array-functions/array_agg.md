@@ -27,7 +27,7 @@ Returns a value of the ARRAY data type.
 
 Take the following data table as an example:
 
-```Plain%20Text
+```Plain_Text
 mysql> select * from test;
 
 +------+------+
@@ -51,7 +51,7 @@ mysql> select * from test;
 
 Example 1: Group the values in column c1 and aggregate the values in column c2 into an array based on the grouping of column c1.
 
-```Plain%20Text
+```Plain_Text
 mysql> select c1, array_agg(c2) from test group by c1;
 
 +------+-----------------+
@@ -71,7 +71,7 @@ mysql> select c1, array_agg(c2) from test group by c1;
 
 Example 2: Use the WHERE clause when the values in column c2 are aggregated into an array. If no data in column c2 meets the condition that is specified in the WHERE clause, a `NULL` value is returned.
 
-```Plain%20Text
+```Plain_Text
 mysql> select array_agg(c2) from test where c1>4;
 
 +-----------------+

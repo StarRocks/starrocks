@@ -8,7 +8,7 @@ Creates a repository in a remote storage system that is used to store data snaps
 >
 > Only root user and superuser can create a repository.
 
-For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md).
+For detailed instructions on deleting a repository, see [DROP REPOSITORY](../data-definition/DROP_REPOSITORY.md).
 
 ## Syntax
 

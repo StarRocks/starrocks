@@ -66,7 +66,7 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
 
-For detailed syntax and parameters about Stream Load, see [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameters about Stream Load, see [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ### Broker Load
 
@@ -87,7 +87,7 @@ PROPERTIES
 )
 ```
 
-The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Broker Load, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Broker Load, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Routine Load
 
@@ -104,7 +104,7 @@ FROM KAFKA
 )
 ```
 
-The preceding code snippet uses Apache Kafka® as an example. For detailed syntax and parameters about Routine Load, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+The preceding code snippet uses Apache Kafka® as an example. For detailed syntax and parameters about Routine Load, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 ### Spark Load
 
@@ -126,7 +126,7 @@ PROPERTIES
 )
 ```
 
-The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Spark Load, see [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
+The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Spark Load, see [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md).
 
 ### INSERT
 

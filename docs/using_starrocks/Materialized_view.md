@@ -172,7 +172,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 AS (query);
 ```
 
-For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
 Based on the table `sales_records` and the query statement mentioned above, the following example creates the materialized view `store_amt` to analyze the sum of sales amount in each store.
 
@@ -265,7 +265,7 @@ As you can see, now the output of `rollup` section in the query profile is `stor
 
 ### Check the building status of a materialized view
 
-Creating a single-table materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command.
+Creating a single-table materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) command.
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
@@ -328,7 +328,7 @@ CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 
 #### Drop an existing materialized view
 
-You can drop an existing materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
+You can drop an existing materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) command.
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;
@@ -424,7 +424,7 @@ When a query is executed with a materialized view, the original query statement 
 >
 > StarRocks prior to 2.4 does not support the functions demonstrated below.
 
-StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md).
+StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse. Asynchronous materialized views support all Data Models.
 
 As for the current version, multi-table materialized views support two refresh strategies:
 
@@ -514,7 +514,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 AS (query);
 ```
 
-For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
 Based on the table `goods`, `order_list` and the query statement mentioned above, the following example creates the materialized view `order_mv` to analyze the total of each order. The materialized view is set to refresh asynchronously at an interval of one day.
 
@@ -617,7 +617,7 @@ REFRESH MATERIALIZED VIEW order_mv;
 >
 > You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
 
-You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) statement.
+You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md) statement.
 
 ### Check the execution status of a multi-table materialized view
 
@@ -634,7 +634,7 @@ SELECT * FROM INFORMATION_SCHEMA.task_runs;
 
 ### Drop a materialized view
 
-You can drop a materialized view via [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
+You can drop a materialized view via [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) command.
 
 ```SQL
 DROP MATERIALIZED VIEW order_mv;
