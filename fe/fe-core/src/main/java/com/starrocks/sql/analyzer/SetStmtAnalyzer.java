@@ -57,6 +57,7 @@ import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -192,6 +193,7 @@ public class SetStmtAnalyzer {
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
         }
 
+<<<<<<< HEAD
         if (variable.equalsIgnoreCase(SessionVariable.CHOOSE_EXECUTE_INSTANCES_MODE)) {
             SessionVariableConstants.ChooseInstancesMode mode =
                     Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -199,6 +201,16 @@ public class SetStmtAnalyzer {
             if (mode == null) {
                 String legalValues = Joiner.on(" | ").join(SessionVariableConstants.ChooseInstancesMode.values());
                 throw new IllegalArgumentException("Legal values of choose_execute_instances_mode are " + legalValues);
+=======
+        // materialized_view_rewrite_mode
+        if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
+                throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
+                                "supported list is %s", rewriteModeName, supportedList));
+>>>>>>> 8fec1138fb ([BugFix] Add check for materialized_view_rewrite_mode (#33156))
             }
         }
 
