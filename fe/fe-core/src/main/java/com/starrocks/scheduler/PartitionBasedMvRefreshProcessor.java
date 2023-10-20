@@ -1039,6 +1039,24 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         // insert overwrite mv must set system = true
         insertStmt.setSystem(true);
+<<<<<<< HEAD
+=======
+
+        // if materialized view has set sort keys, materialized view's output columns
+        // may be different from the defined query's output.
+        // so set materialized view's defined outputs as target columns.
+        List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndices();
+        List<Column> baseSchema = materializedView.getBaseSchema();
+        if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
+            List<String> targetColumnNames = queryOutputIndexes.stream()
+                    .map(i -> baseSchema.get(i))
+                    .map(Column::getName)
+                    .map(String::toLowerCase) // case insensitive
+                    .collect(Collectors.toList());
+            insertStmt.setTargetColumnNames(targetColumnNames);
+        }
+
+>>>>>>> a0a58bed9b ([BugFix] fix case insensitive bugs when mv has set sort keys (#33223))
         Analyzer.analyze(insertStmt, ctx);
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();

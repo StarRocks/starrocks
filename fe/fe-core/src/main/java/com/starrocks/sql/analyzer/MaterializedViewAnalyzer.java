@@ -105,6 +105,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
@@ -255,6 +256,15 @@ public class MaterializedViewAnalyzer {
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
 
+<<<<<<< HEAD
+=======
+            List<Integer> queryOutputIndices = getQueryOutputIndices(mvColumnPairs);
+            // to avoid disturbing original codes, only set query output indices when column orders have changed.
+            if (IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i))) {
+                statement.setQueryOutputIndices(queryOutputIndices);
+            }
+
+>>>>>>> a0a58bed9b ([BugFix] fix case insensitive bugs when mv has set sort keys (#33223))
             // set the Indexes into createMaterializedViewStatement
             List<Index> mvIndexes = genMaterializedViewIndexes(statement);
             statement.setMvIndexes(mvIndexes);

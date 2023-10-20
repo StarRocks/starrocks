@@ -28,6 +28,13 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.IntStream;
+
+>>>>>>> a0a58bed9b ([BugFix] fix case insensitive bugs when mv has set sort keys (#33223))
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
@@ -165,4 +172,29 @@ public class MaterializedViewAnalyzerTest {
                     " should contain the partition column k1 of materialized view");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetQueryOutputIndices() {
+        checkQueryOutputIndices(Arrays.asList(1, 2, 0, 3), "2,0,1,3", true);
+        checkQueryOutputIndices(Arrays.asList(0, 1, 2, 3), "0,1,2,3", false);
+        checkQueryOutputIndices(Arrays.asList(3, 2, 1, 0), "3,2,1,0", true);
+        checkQueryOutputIndices(Arrays.asList(1, 2, 3, 0), "3,0,1,2", true);
+        checkQueryOutputIndices(Arrays.asList(0, 1), "0,1", false);
+    }
+
+    private void checkQueryOutputIndices(List<Integer> inputs, String expect, boolean isChanged) {
+        List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
+        for (Integer i : inputs) {
+            mvColumnPairs.add(Pair.create(new Column(), i));
+        }
+        List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
+        Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
+        Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), expect);
+        Assert.assertEquals(IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i)),
+                isChanged);
+
+    }
+>>>>>>> a0a58bed9b ([BugFix] fix case insensitive bugs when mv has set sort keys (#33223))
 }
