@@ -63,6 +63,26 @@ static bvar::Adder<uint64_t> g_segment_cache_miss;
 static bvar::Window<bvar::Adder<uint64_t>> g_segment_cache_miss_minute("lake", "segment_cache_miss_minute",
                                                                        &g_segment_cache_miss, 60);
 
+#ifndef BE_TEST
+static Metacache* get_metacache() {
+    auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+    return (mgr != nullptr) ? mgr->metacache() : nullptr;
+}
+
+static size_t get_metacache_capacity(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->capacity() : 0;
+}
+
+static size_t get_metacache_usage(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->memory_usage() : 0;
+}
+
+static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
+static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
+#endif
+
 static std::string tablet_latest_metadata_cache_key(int64_t tablet_id) {
     return fmt::format("TL{}", tablet_id);
 }

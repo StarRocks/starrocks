@@ -61,26 +61,6 @@ static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
 
-#ifndef BE_TEST
-static Cache* get_metacache() {
-    auto mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-    return (mgr != nullptr) ? mgr->metacache() : nullptr;
-}
-
-static size_t get_metacache_capacity(void*) {
-    auto cache = get_metacache();
-    return (cache != nullptr) ? cache->get_capacity() : 0;
-}
-
-static size_t get_metacache_usage(void*) {
-    auto cache = get_metacache();
-    return (cache != nullptr) ? cache->get_memory_usage() : 0;
-}
-
-static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
-static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
-#endif
-
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
@@ -319,7 +299,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t versi
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
-Status TabletManager::put_txn_log(TxnLogPtr log) {
+Status TabletManager::put_txn_log(const TxnLogPtr& log) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }
