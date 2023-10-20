@@ -48,14 +48,14 @@ For the Time Zone Database, please refer to [tz database time zones](https://en.
 
 Example 1: Convert a date and time in Shanghai to Los_Angeles.
 
-```Plain%20Text
+```Plain_Text
 MySQL > select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
         -> 2019-07-31 22:21:03                                                       |
 ```
 
 Example 2: Convert a date and time in UTC+08:00 to Los_Angeles.
 
-```Plain%20Text
+```Plain_Text
 MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 +--------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles') |

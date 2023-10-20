@@ -1,6 +1,6 @@
 # Deploy StarRocks
 
-This QuickStart tutorial guides you through the procedures to deploy a simple StarRocks cluster. Before getting started, you can read [StarRocks Architecture](../quick_start/Architecture.md) for more conceptual details.
+This QuickStart tutorial guides you through the procedures to deploy a simple StarRocks cluster. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
 
 Following these steps, you can deploy a StarRocks instance with only one frontend (FE) node and one backend (BE) node on your local machine. This instance can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
 

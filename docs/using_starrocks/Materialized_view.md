@@ -145,7 +145,7 @@ AS (query)
 [PROPERTIES ("key"="value", ...)];
 ```
 
-For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
 Based on the table `sales_records` and the query statement mentioned above, the following example creates the materialized view `store_amt` to analyze the sum of sales amount in each store.
 
@@ -238,7 +238,7 @@ As you can see, now the output of `rollup` section in the query profile is `stor
 
 ### Check the building status of a materialized view
 
-Creating a materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER.md) command.
+Creating a materialized view is an asynchronous operation. Running CREATE MATERIALIZED VIEW command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) command.
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
@@ -301,7 +301,7 @@ CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 
 #### Drop an existing materialized view
 
-You can drop an existing materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
+You can drop an existing materialized view with the [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) command.
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;

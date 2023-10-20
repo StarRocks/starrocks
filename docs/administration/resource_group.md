@@ -91,7 +91,7 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 
 If multiple classifiers match a query, the classifier with a larger number of conditions has a higher degree of matching.
 
-```Plain%20Text
+```Plain_Text
 -- Classifier B has more conditions than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 
 
@@ -103,7 +103,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 If multiple matching classifiers have the same number of conditions, the classifier whose conditions are described more accurately has a higher degree of matching.
 
-```Plain%20Text
+```Plain_Text
 The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')

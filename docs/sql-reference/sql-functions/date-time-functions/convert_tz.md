@@ -32,7 +32,7 @@ For Time Zone Database, see [List of tz database time zones](https://en.wikipedi
 
 Example 1: Convert a datetime in Shanghai to Los_Angeles.
 
-```Plain%20Text
+```Plain_Text
 select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
 +---------------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles') |
@@ -44,7 +44,7 @@ select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles')
 
 Example 2: Convert a date in Shanghai to Los_Angeles.
 
-```Plain%20Text
+```Plain_Text
 select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
 +------------------------------------------------------------------+
 | convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles') |
@@ -56,7 +56,7 @@ select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
 
 Example 3: Convert a datetime in UTC+08:00 to Los_Angeles.
 
-```Plain%20Text
+```Plain_Text
 select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 +--------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles') |

@@ -164,7 +164,3 @@ Drop an external catalog named `hive_catalog`.
 ```SQL
 DROP EXTERNAL CATALOG hive_catalog;
 ```
-
-## Update the metadata of the tables in an external catalog
-
-The metadata of the tables in external catalogs is cached in FEs. Therefore, the refresh strategy for the metadata (such as table schema and partition file) is the same as [Metadata caching strategy](../using_starrocks/External_table#metadata-caching-strategy). You can run the `refresh external table catalog.db.table` command to refresh the cached metadata.

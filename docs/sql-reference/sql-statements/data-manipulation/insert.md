@@ -2,7 +2,7 @@
 
 ## Description
 
-Inserts data into a specific table. For detailed information about the application scenarios, see [Load data with INSERT](../loading/InsertInto.md).
+Inserts data into a specific table. For detailed information about the application scenarios, see [Load data with INSERT](../../../loading/InsertInto.md).
 
 ## Syntax
 
@@ -22,7 +22,7 @@ INSERT INTO table_name
 | table_name    | The name of the table into which you want to load data. It can be specified with the database the table resides as `db_name.table_name`. |
 | PARTITION    |  The partitions into which you want to load the data. You can specify multiple partitions, which must be separated by commas (,). It must be set to partitions that exist in the target table. If you specify this parameter, the data will be inserted only into the specified partitions. If you do not specify this parameter, the data will be inserted into all partitions. |
 | TEMPORARY_PARTITION|The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).|
-| label         | The unique identification label for each data load transaction within the database. If it is not specified, the system automatically generates one for the transaction. We recommend you specify the label for the transaction. Otherwise, you cannot check the transaction status if a connection error occurs and no result is returned. You can check the transaction status via `SHOW LOAD WHERE label="label"` statement. For limitations on naming a label, see [System Limits](../reference/System_limit.md). |
+| label         | The unique identification label for each data load transaction within the database. If it is not specified, the system automatically generates one for the transaction. We recommend you specify the label for the transaction. Otherwise, you cannot check the transaction status if a connection error occurs and no result is returned. You can check the transaction status via `SHOW LOAD WHERE label="label"` statement. For limitations on naming a label, see [System Limits](../../../reference/System_limit.md). |
 | column_name   | The name of the target column(s) to load data in. It must be set as columns exist in the target table. The order of columns specified in this property must match that of the data source, and the name of fields must match that of the target table. If no target column is specified, the default value is all columns in the target table. If the specified column in the source table does not exist in the target column, the default value will be written to this column, and the transaction will fail if the specified column does not have a default value. If the column type of the source table is inconsistent with that of the target table, the system will perform an implicit conversion on the mismatched column. If the conversion fails, a syntax parsing error will be returned. |
 | expression    | Expression that assigns values to the column.                |
 | DEFAULT       | Assigns default value to the column.                         |

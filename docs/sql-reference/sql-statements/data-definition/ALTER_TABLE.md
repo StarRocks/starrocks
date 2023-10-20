@@ -23,7 +23,7 @@ alter_clause1[, alter_clause2, ...]
 > **NOTE**
 >
 > - Schema change, rollup, and partition cannot be used in one ALTER TABLE statement.
-> - Schema change, rollup, and swap are asynchronous operations and are returned if the task is submitted successfully. User can use the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
+> - Schema change, rollup, and swap are asynchronous operations and are returned if the task is submitted successfully. User can use the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 > - Partition, rename, and index are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Modify partition
@@ -51,7 +51,7 @@ Note:
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
 3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
 4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in ["key"="value"]. See [CREATE TABLE](CREATE%20TABLE.md) for details.
+5. User can set some properties of the partition in ["key"="value"]. See [CREATE TABLE](CREATE_TABLE.md) for details.
 
 #### Drop a partition
 

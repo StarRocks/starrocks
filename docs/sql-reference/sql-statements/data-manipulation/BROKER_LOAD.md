@@ -2,9 +2,9 @@
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to check the job result. For more information about the background information, prerequisites, principles, supported data file formats, supported external storage systems, and how to perform single-table loads and multi-table loads, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) or `curl` to check the job result. For more information about the background information, prerequisites, principles, supported data file formats, supported external storage systems, and how to perform single-table loads and multi-table loads, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
 
-Before you use Broker Load, make sure that brokers are deployed in your StarRocks cluster. You can use [SHOW BROKER](../../../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../../../quick_start/Deploy.md). In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
+Before you use Broker Load, make sure that brokers are deployed in your StarRocks cluster. You can use [SHOW BROKER](../../../sql-reference/sql-statements/Administration/SHOW_BROKER.md) to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../../../quick_start/Deploy.md). In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
 ## Syntax
 
@@ -317,7 +317,7 @@ The following parameters are supported:
     >
     > Rows that are filtered out due to inadequate data quality do not include rows that are filtered out by the WHERE clause.
 
-  If the load job fails because the maximum error tolerance is set to `0`, you can use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) to view the job result. Then, determine whether unqualified rows can be filtered out. If unqualified rows can be filtered out, calculate the maximum error tolerance based on the values returned for `dpp.abnorm.ALL` and `dpp.norm.ALL` in the job result, adjust the maximum error tolerance, and submit the load job again. The formula for calculating the maximum error tolerance is as follows:
+  If the load job fails because the maximum error tolerance is set to `0`, you can use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) to view the job result. Then, determine whether unqualified rows can be filtered out. If unqualified rows can be filtered out, calculate the maximum error tolerance based on the values returned for `dpp.abnorm.ALL` and `dpp.norm.ALL` in the job result, adjust the maximum error tolerance, and submit the load job again. The formula for calculating the maximum error tolerance is as follows:
 
   `max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]
 
