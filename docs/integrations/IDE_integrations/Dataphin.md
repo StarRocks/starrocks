@@ -89,7 +89,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 #### Select and configure an output component as the destination data source
 
-![Read data from StarRocks - 3](../../assets/Dataphin/create_sr_datasource_3.png)
+![Read data from StarRocks - 3](../../assets/Dataphin/read_from_sr_datasource_3.png)
 
 ### Read data from other data sources and write data to StarRocks data sources
 
