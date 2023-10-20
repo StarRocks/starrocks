@@ -21,9 +21,15 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
+>>>>>>> 444cc3aeb1 ([BugFix] Fix sql is lost in audit log when creating OLAP table (#33176))
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
@@ -36,7 +42,13 @@ import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
+>>>>>>> 444cc3aeb1 ([BugFix] Fix sql is lost in audit log when creating OLAP table (#33176))
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -525,5 +537,26 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.loop();
         Assert.assertTrue(myContext.isKilled());
+    }
+
+    @Test
+    public void testAddRunningQueryDetail() throws Exception {
+        com.starrocks.common.Config.enable_collect_query_detail_info = true;
+        ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        String sql = "CREATE ROUTINE LOAD example_db.example_tbl2_ordertest1 ON example_tbl2\n" +
+                "COLUMNS TERMINATED BY \",\",\n" +
+                "COLUMNS (order_id, pay_dt, customer_name, nationality, temp_gender, price)\n" +
+                "FROM KAFKA\n" +
+                "(\n" +
+                "    \"kafka_broker_list\" =\"127.0.0.1:9000\",\n" +
+                "    \"kafka_topic\" = \"ordertest1\"\n" +
+                ");";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
+        processor.addRunningQueryDetail(statementBase);
+
+        Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }
 }
