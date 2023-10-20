@@ -655,7 +655,7 @@ public class Coordinator {
                     queryOptions.query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, SystemInfoService.toBrpcHost(execBeAddr));
+            setGlobalRuntimeFilterParams(topParams, SystemInfoService.toBrpcIp(execBeAddr));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -1265,7 +1265,7 @@ public class Coordinator {
                 for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
-                    probeParam.setFragment_instance_address(SystemInfoService.toBrpcHost(instance.host));
+                    probeParam.setFragment_instance_address(SystemInfoService.toBrpcIp(instance.host));
                     probeParamList.add(probeParam);
                 }
                 if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&

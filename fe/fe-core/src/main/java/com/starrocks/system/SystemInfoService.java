@@ -566,6 +566,22 @@ public class SystemInfoService implements GsonPostProcessable {
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
+    public static TNetworkAddress toBrpcIp(TNetworkAddress host) throws Exception {
+        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        }
+        if (computeNode.getBrpcPort() < 0) {
+            return null;
+        }
+        return computeNode.getBrpcIpAddress();
+    }
+
     public Backend getBackendWithBePort(String host, int bePort) {
 
         Pair<String, String> targetPair;
