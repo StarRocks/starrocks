@@ -40,6 +40,8 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @SerializedName(value = "id")
     private long id;
 
+    private long beforeRestoreId;
+
     @SerializedName(value = "parentId")
     private long parentId;
 
@@ -101,8 +103,24 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     }
 
     @Override
+    public void setIdForRestore(long id) {
+        this.beforeRestoreId = this.id;
+        this.id = id;
+    }
+
+    @Override
+    public long getBeforeRestoreId() {
+        return this.beforeRestoreId;
+    }
+
+    @Override
     public long getParentId() {
         return this.parentId;
+    }
+
+    @Override
+    public void setParentId(long parentId) {
+        this.parentId = parentId;
     }
  
     @Override
