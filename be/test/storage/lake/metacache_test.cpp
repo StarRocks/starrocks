@@ -115,8 +115,8 @@ TEST_F(LakeMetacacheTest, test_txn_log_cache) {
     auto log3 = metacache->lookup_txn_log("log2");
     ASSERT_TRUE(log3 == nullptr);
 
-    auto meta = metacache->lookup_tablet_metadata("log1");
-    ASSERT_TRUE(meta == nullptr);
+    auto schema = metacache->lookup_tablet_schema("log1");
+    ASSERT_TRUE(schema == nullptr);
 }
 
 TEST_F(LakeMetacacheTest, test_tablet_schema_cache) {
@@ -131,8 +131,8 @@ TEST_F(LakeMetacacheTest, test_tablet_schema_cache) {
     auto schema3 = metacache->lookup_tablet_schema("schema2");
     ASSERT_TRUE(schema3 == nullptr);
 
-    auto meta = metacache->lookup_tablet_metadata("schema1");
-    ASSERT_TRUE(meta == nullptr);
+    auto delvec = metacache->lookup_delvec("schema1");
+    ASSERT_TRUE(delvec == nullptr);
 }
 
 TEST_F(LakeMetacacheTest, test_deletion_vector_cache) {
@@ -147,8 +147,11 @@ TEST_F(LakeMetacacheTest, test_deletion_vector_cache) {
     auto dv3 = metacache->lookup_delvec("dv2");
     ASSERT_TRUE(dv3 == nullptr);
 
-    auto log = metacache->lookup_txn_log("dv1");
-    ASSERT_TRUE(log == nullptr);
+    auto seg = metacache->lookup_segment("dv1");
+    ASSERT_TRUE(seg == nullptr);
+
+    auto meta = metacache->lookup_tablet_metadata("dv1");
+    ASSERT_TRUE(meta == nullptr);
 }
 
 TEST_F(LakeMetacacheTest, test_segment_cache) {
