@@ -94,21 +94,6 @@ public:
         return _field_id_2_field_idx.find(field_id) != _field_id_2_field_idx.end();
     }
 
-    size_t estimate_memory() const {
-        // This is only a rough approximate statistics, we try to calculate the maximum possible memory usage.
-        size_t static_object_size = sizeof(*this);
-        size_t fields_elem_size = _fields.size() * sizeof(ParquetField);
-        size_t physical_fields_elem_size = _physical_fields.size() * 8;
-        // 15 represents an average column name length.
-        size_t name2field_elem_size = _formatted_column_name_2_field_idx.size() * (15 + sizeof(size_t));
-        size_t id2field_elem_size = _field_id_2_field_idx.size() * (sizeof(int32_t) + sizeof(size_t));
-        // We multiply 2 because some container reserve much element space than the elment size.
-        // `_fields` is directly resized to the element size, so we skip considering the redundant space.
-        size_t elem_data_size =
-                fields_elem_size + (physical_fields_elem_size + name2field_elem_size + id2field_elem_size) * 2;
-        return static_object_size + elem_data_size;
-    }
-
 private:
     void leaf_to_field(const tparquet::SchemaElement& t_schema, const LevelInfo& cur_level_info, bool is_nullable,
                        ParquetField* field);
