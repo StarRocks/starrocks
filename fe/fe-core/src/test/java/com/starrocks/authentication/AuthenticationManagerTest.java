@@ -28,10 +28,13 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -479,5 +482,93 @@ public class AuthenticationManagerTest {
         }
         Assert.assertEquals(Arrays.asList(
                 "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
+    }
+
+    @Test
+    public void testIsRoleInSession() throws Exception {
+        AuthenticationMgr masterManager = ctx.getGlobalStateMgr().getAuthenticationMgr();
+        AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
+
+        String sql = "create role test_in_role_r1";
+        CreateRoleStmt createStmt =
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "create role test_in_role_r2";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "create role test_in_role_r3";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "create role test_in_role_r4";
+        createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.createRole(createStmt);
+
+        sql = "grant test_in_role_r3 to role test_in_role_r2";
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.grantRole(grantRoleStmt);
+
+        sql = "grant test_in_role_r2 to role test_in_role_r1";
+        grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationManager.grantRole(grantRoleStmt);
+
+        sql = "create user test_in_role_u1 default role test_in_role_r1";
+        CreateUserStmt stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.createUser(stmt);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("test_in_role_u1", "%"));
+        ctx.setCurrentRoleIds(new UserIdentity("test_in_role_u1", "%"));
+
+        Assert.assertTrue(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r1")).getBoolean());
+        Assert.assertTrue(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r2")).getBoolean());
+        Assert.assertTrue(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r3")).getBoolean());
+
+        Assert.assertFalse(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r4")).getBoolean());
+
+        sql = "create user test_in_role_u2 default role test_in_role_r2";
+        stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        masterManager.createUser(stmt);
+
+        ctx.setCurrentUserIdentity(new UserIdentity("test_in_role_u2", "%"));
+        ctx.setCurrentRoleIds(new UserIdentity("test_in_role_u2", "%"));
+
+        Assert.assertFalse(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r1")).getBoolean());
+        Assert.assertTrue(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r2")).getBoolean());
+        Assert.assertTrue(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r3")).getBoolean());
+
+        ctx.setCurrentRoleIds(new HashSet<>());
+
+        Assert.assertFalse(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r1")).getBoolean());
+        Assert.assertFalse(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r2")).getBoolean());
+        Assert.assertFalse(ScalarOperatorFunctions.isRoleInSession(
+                ConstantOperator.createVarchar("test_in_role_r3")).getBoolean());
+
+
+        sql = "select is_role_in_session(v1) from (select 1 as v1) t";
+        try {
+            stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("IS_ROLE_IN_SESSION currently only supports constant parameters"));
+        }
+
+        sql = "select is_role_in_session(\"a\", \"b\") from (select 1 as v1) t";
+        try {
+            stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("IS_ROLE_IN_SESSION currently only supports a single parameter"));
+        }
     }
 }

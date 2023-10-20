@@ -454,6 +454,9 @@ public class FunctionSet {
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
 
+    //user and role function
+    public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";

@@ -978,6 +978,17 @@ public class AuthorizationMgr {
         }
     }
 
+    public void getRecursiveRole(Set<String> roleNames, Long roleId) {
+        RolePrivilegeCollectionV2 rolePrivilegeCollection = getRolePrivilegeCollection(roleId);
+        if (rolePrivilegeCollection != null) {
+            roleNames.add(rolePrivilegeCollection.getName());
+
+            for (Long parentId : rolePrivilegeCollection.getParentRoleIds()) {
+                getRecursiveRole(roleNames, parentId);
+            }
+        }
+    }
+
     public RolePrivilegeCollectionV2 getRolePrivilegeCollectionUnlocked(long roleId, boolean exceptionIfNotExists)
             throws PrivilegeException {
         RolePrivilegeCollectionV2 collection = roleIdToPrivilegeCollection.get(roleId);
