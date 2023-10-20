@@ -1,8 +1,8 @@
-# Load data from S3
+# Load data from GCS
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks provides two options for loading data from S3:
+StarRocks provides two options for loading data from GCS:
 
 1. Asynchronous loading using Broker Load
 2. Synchronous loading using the `FILES()` table function
@@ -15,21 +15,21 @@ Small datasets are often loaded synchronously using the `FILES()` table function
 
 > **NOTE**
 >
-> The examples use IAM user-based authentication. Other authentication methods are available and linked at the bottom of this page.
+> The examples use service account key authentication. Other authentication methods are available and linked at the bottom of this page.
 >
-> This guide uses a dataset hosted by StarRocks. The dataset is readable by any authenticated AWS user, so
-you can use your IAM credentials to read the Parquet file used below.
+> This guide uses a dataset hosted by StarRocks. The dataset is readable by any authenticated GCP user, so
+you can use your credentials to read the Parquet file used below.
 
-Loading data from S3 requires having the:
+Loading data from GCS requires having the:
 
-- S3 bucket
-- S3 object keys (object names) if accessing a specific object in the bucket. Note that the object key can include a prefix if your S3 objects are stored in sub-folders. The full syntax is linked in **more information**.
-- S3 region
-- Access key and secret
+- GCS bucket
+- GCS object keys (object names) if accessing a specific object in the bucket. Note that the object key can include a prefix if your GCS objects are stored in sub-folders. The full syntax is linked in **more information**.
+- GCS region
+- Service account Access key and secret
 
 ## Using Broker Load
 
-An asynchronous Broker Load process handles making the connection to S3, pulling the data, and storing the data in StarRocks.
+An asynchronous Broker Load process handles making the connection to GCS, pulling the data, and storing the data in StarRocks.
 
 ### Advantages of Broker Load
 
@@ -48,7 +48,7 @@ An asynchronous Broker Load process handles making the connection to S3, pulling
 
 ### Typical example
 
-Create a table, start a load process that pulls a Parquet file from S3, and verify the progress and success of the data loading.
+Create a table, start a load process that pulls a Parquet file from GCS, and verify the progress and success of the data loading.
 
 > **NOTE**
 >
@@ -63,7 +63,7 @@ CREATE DATABASE IF NOT EXISTS project;
 USE project;
 ```
 
-Create a table. This schema matches a sample dataset in an S3 bucket hosted in a StarRocks account.
+Create a table. This schema matches a sample dataset in a GCS bucket hosted in a StarRocks account.
 
 ```SQL
 DROP TABLE IF EXISTS user_behavior;
@@ -82,6 +82,10 @@ PROPERTIES (
 );
 ```
 
+> **NOTE**
+>
+> The examples in this document have the property `replication_num` set to `1` so that they can be run on a simple single BE system. If you are using three or more BEs, then remove the `PROPERTIES` section of the DDL.
+
 #### Start a Broker Load
 
 This job has four main sections:
@@ -93,22 +97,21 @@ This job has four main sections:
 
 > **NOTE**
 >
-> The dataset used in these examples is hosted in an S3 bucket in a StarRocks account. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user. Substitute your credentials for `AAA` and `BBB` in the commands below.
+> The dataset used in these examples is hosted in a GCS bucket in a StarRocks account. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user. Substitute your credentials for the placeholders in the commands below.
 
 ```SQL
 LOAD LABEL user_behavior
 (
-    DATA INFILE("s3://starrocks-datasets/user_behavior_sample_data.parquet")
+    DATA INFILE("gs://starrocks-samples/user_behavior_ten_million_rows.parquet")
     INTO TABLE user_behavior
     FORMAT AS "parquet"
  )
  WITH BROKER
  (
-    "aws.s3.enable_ssl" = "true",
-    "aws.s3.use_instance_profile" = "false",
-    "aws.s3.region" = "us-west-1",
-    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+ 
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
  )
 PROPERTIES
 (
@@ -174,10 +177,6 @@ There are three examples using the `FILES()` table function:
 - Creating and loading the table using schema inference
 - Creating a table by hand and then loading the data
 
-> **NOTE**
->
-> The dataset used in these examples is hosted in an S3 bucket in a StarRocks account. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user. Substitute your credentials for `AAA` and `BBB` in the commands below.
-
 #### Querying directly from S3
 
 Querying directly from S3 using `FILES()` can gives a good preview of the content of a dataset before you create a table. For example:
@@ -188,11 +187,11 @@ Querying directly from S3 using `FILES()` can gives a good preview of the conten
 
 ```sql
 SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
-    "aws.s3.region" = "us-west-1",
-    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 ) LIMIT 10;
 ```
 
@@ -231,11 +230,11 @@ USE project;
 
 CREATE TABLE `user_behavior_inferred` AS
 SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
-    "aws.s3.region" = "us-west-1",
-    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 );
 ```
 
@@ -319,19 +318,18 @@ After creating the table, you can load it with `INSERT INTO` … `SELECT FROM FI
 ```SQL
 INSERT INTO user_behavior_declared
   SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
-    "aws.s3.region" = "us-west-1",
-    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
-    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 );
 ```
 
 ## More information
 
+- This document only covered service account key authentication. For other options please see [authenticate to GCS resources](../integrations/authenticate_to_gcs.md).
 - For more details on synchronous and asynchronous data loading please see the [overview of data loading](../loading/Loading_intro.md) documentation.
 - Learn about how Broker Load supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
-- This document only covered IAM user-based authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
-- The [AWS CLI Command Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) covers the S3 URI in detail.
 - Learn more about [table design](../table_design/StarRocks_table_design.md).
 - Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
