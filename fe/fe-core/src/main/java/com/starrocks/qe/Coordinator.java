@@ -748,7 +748,11 @@ public class Coordinator {
                     queryOptions.query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
+<<<<<<< HEAD
             setGlobalRuntimeFilterParams(topParams, toBrpcHost(execBeAddr));
+=======
+            setGlobalRuntimeFilterParams(topParams, SystemInfoService.toBrpcIp(execBeAddr));
+>>>>>>> 19f472acc6 ([Enhancement] Resolve OlapSink and GRF in Frontend (#33190))
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -1359,7 +1363,11 @@ public class Coordinator {
                 for (final FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
+<<<<<<< HEAD
                     probeParam.setFragment_instance_address(toBrpcHost(instance.host));
+=======
+                    probeParam.setFragment_instance_address(SystemInfoService.toBrpcIp(instance.host));
+>>>>>>> 19f472acc6 ([Enhancement] Resolve OlapSink and GRF in Frontend (#33190))
                     probeParamList.add(probeParam);
                 }
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {

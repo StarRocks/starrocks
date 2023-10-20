@@ -473,6 +473,50 @@ public class SystemInfoService {
         return -1L;
     }
 
+<<<<<<< HEAD
+=======
+    public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
+        for (ComputeNode cn : idToComputeNodeRef.values()) {
+            if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+                return cn.getId();
+            }
+        }
+        return -1L;
+    }
+
+    public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
+        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        }
+        if (computeNode.getBrpcPort() < 0) {
+            return null;
+        }
+        return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
+    }
+
+    public static TNetworkAddress toBrpcIp(TNetworkAddress host) throws Exception {
+        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+            }
+        }
+        if (computeNode.getBrpcPort() < 0) {
+            return null;
+        }
+        return computeNode.getBrpcIpAddress();
+    }
+
+>>>>>>> 19f472acc6 ([Enhancement] Resolve OlapSink and GRF in Frontend (#33190))
     public Backend getBackendWithBePort(String host, int bePort) {
 
         Pair<String, String> targetPair;
