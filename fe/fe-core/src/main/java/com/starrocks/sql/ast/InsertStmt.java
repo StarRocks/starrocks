@@ -61,7 +61,7 @@ public class InsertStmt extends DmlStmt {
     // parsed from targetPartitionNames.
     // if targetPartitionNames is not set, add all formal partitions' id of the table into it
     private List<Long> targetPartitionIds = Lists.newArrayList();
-    private final List<String> targetColumnNames;
+    private List<String> targetColumnNames;
     private QueryStatement queryStatement;
     private String label = null;
 
@@ -205,6 +205,10 @@ public class InsertStmt extends DmlStmt {
 
     public boolean isSpecifyPartitionNames() {
         return targetPartitionNames != null && !targetPartitionNames.isStaticKeyPartitionInsert();
+    }
+
+    public void setTargetColumnNames(List<String> targetColumnNames) {
+        this.targetColumnNames = targetColumnNames;
     }
 
     public List<String> getTargetColumnNames() {
