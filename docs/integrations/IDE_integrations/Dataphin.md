@@ -42,7 +42,7 @@ You can create StarRocks data sources and use StarRocks data sources as source d
 
 - **JDBC URL**: Required. The format is `jdbc:mysql://<host>:<port>/<dbname>`. `host` is the IP address of the FE (Front End) host in the StarRocks cluster, `port` is the query port of FE, and `dbname` is the database name.
 
-- **Load URL**: Required. The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is the host of the FE (Front End), and `http_port` is th port of the FE.
+- **Load URL**: Required. The format is `fe_ip:http_port;fe_ip:http_port`. `fe_ip` is the host of the FE (Front End), and `http_port` is the port of the FE.
 
 - **Username**: Required. The username of the database.
 
