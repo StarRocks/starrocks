@@ -143,6 +143,9 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -2214,9 +2217,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        Map<String, AddPartitionClause> addPartitionClauseMap;
+        AddPartitionClause addPartitionClause;
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
@@ -2225,27 +2228,34 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
-            try {
-                if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
-                    throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
-                            Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
-                            " max_automatic_partition_number larger.");
-                }
-                state.addPartitions(db, olapTable.getName(), addPartitionClause);
-            } catch (Exception e) {
-                LOG.warn(e);
-                errorStatus.setError_msgs(Lists.newArrayList(
-                        String.format("automatic create partition failed. error:%s", e.getMessage())));
-                result.setStatus(errorStatus);
-                return result;
+
+        try {
+            if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
+                throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
+                        Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
+                        " max_automatic_partition_number larger.");
             }
+            state.addPartitions(db, olapTable.getName(), addPartitionClause);
+        } catch (Exception e) {
+            LOG.warn(e);
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error:%s", e.getMessage())));
+            result.setStatus(errorStatus);
+            return result;
         }
+
 
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-        for (String partitionName : addPartitionClauseMap.keySet()) {
+        PartitionDesc partitionDesc =  addPartitionClause.getPartitionDesc();
+        List<String> partitionColNames = Lists.newArrayList();
+        if (partitionDesc instanceof RangePartitionDesc) {
+            partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+        }
+        for (String partitionName : partitionColNames) {
             Partition partition = table.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());

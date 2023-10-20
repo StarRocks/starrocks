@@ -48,7 +48,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -221,7 +220,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private void createPartitionByValue(InsertStmt insertStmt) {
-        Map<String, AddPartitionClause> addPartitionClauseMap;
+        AddPartitionClause addPartitionClause;
         if (insertStmt.getTargetPartitionNames() == null) {
             return;
         }
@@ -242,7 +241,7 @@ public class InsertOverwriteJobRunner {
             }
         }
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
@@ -251,15 +250,13 @@ public class InsertOverwriteJobRunner {
         String targetDb = insertStmt.getTableName().getDb();
         Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
-        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
-            try {
-                state.addPartitions(db, olapTable.getName(), addPartitionClause);
-                Partition partition = olapTable.getPartition(addPartitionClause.getPartitionDesc().getPartitionName());
-                sourcePartitionIds.add(partition.getId());
-            } catch (Exception ex) {
-                LOG.warn(ex);
-                throw new RuntimeException(ex);
-            }
+        try {
+            state.addPartitions(db, olapTable.getName(), addPartitionClause);
+            Partition partition = olapTable.getPartition(addPartitionClause.getPartitionDesc().getPartitionName());
+            sourcePartitionIds.add(partition.getId());
+        } catch (Exception ex) {
+            LOG.warn(ex);
+            throw new RuntimeException(ex);
         }
     }
 
