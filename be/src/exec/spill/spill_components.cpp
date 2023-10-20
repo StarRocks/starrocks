@@ -14,6 +14,7 @@
 
 #include "exec/spill/spill_components.h"
 
+#include "common/config.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
@@ -136,7 +137,7 @@ PartitionedSpillerWriter::PartitionedSpillerWriter(Spiller* spiller, RuntimeStat
 
 void PartitionedSpillerWriter::prepare(RuntimeState* state) {
     DCHECK_GT(options().init_partition_nums, 0);
-    _partition_set.resize(max_partition_size);
+    _partition_set.resize(config::spill_max_partition_size);
     _init_with_partition_nums(state, options().init_partition_nums);
     for (auto [_, partition] : _id_to_partitions) {
         partition->spill_writer->prepare(state);
@@ -187,7 +188,7 @@ void PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPart
 
 void PartitionedSpillerWriter::reset_partition(RuntimeState* state, size_t num_partitions) {
     num_partitions = BitUtil::next_power_of_two(num_partitions);
-    num_partitions = std::min<size_t>(num_partitions, 1 << max_partition_level);
+    num_partitions = std::min<size_t>(num_partitions, 1 << config::spill_max_partition_level);
     num_partitions = std::max<size_t>(num_partitions, _spiller->options().init_partition_nums);
 
     _level_to_partitions.clear();
@@ -262,7 +263,7 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
         for (const auto& [pid, partition] : _id_to_partitions) {
             const auto& mem_table = partition->spill_writer->mem_table();
             // partition not in memory
-            if (!partition->in_mem && partition->level < max_partition_level &&
+            if (!partition->in_mem && partition->level < config::spill_max_partition_level &&
                 mem_table->mem_usage() + partition->bytes > options().spill_mem_table_bytes_size) {
                 RETURN_IF_ERROR(mem_table->done());
                 partition->in_mem = false;
