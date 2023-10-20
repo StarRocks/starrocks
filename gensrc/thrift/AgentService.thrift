@@ -112,6 +112,8 @@ struct TCreateTabletReq {
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
     19: optional i32 primary_index_cache_expire_sec;
+    // Whether or not need to create a separate file to hold schema information.
+    20: optional bool create_schema_file = true;
 }
 
 struct TDropTabletReq {

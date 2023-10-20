@@ -108,28 +108,61 @@ TEST_F(LakeTabletManagerTest, txnlog_write_and_read) {
 
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
     TCreateTabletReq req;
-    req.tablet_id = 65535;
+    req.tablet_id = tablet_id;
     req.__set_version(1);
     req.__set_version_hash(0);
-    req.tablet_schema.__set_id(next_id());
+    req.tablet_schema.__set_id(schema_id);
     req.tablet_schema.__set_schema_hash(270068375);
     req.tablet_schema.__set_short_key_column_count(2);
     req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
     EXPECT_OK(_tablet_manager->create_tablet(req));
-    auto res = _tablet_manager->get_tablet(65535);
-    EXPECT_TRUE(res.ok());
+    EXPECT_TRUE(_tablet_manager->get_tablet(tablet_id).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
 
     starrocks::lake::TxnLog txnLog;
-    txnLog.set_tablet_id(65535);
+    txnLog.set_tablet_id(tablet_id);
     txnLog.set_txn_id(2);
     EXPECT_OK(_tablet_manager->put_txn_log(txnLog));
-    EXPECT_OK(_tablet_manager->delete_tablet(65535));
+    EXPECT_OK(_tablet_manager->delete_tablet(tablet_id));
 
-    auto st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 1));
-    EXPECT_TRUE(st.is_not_found());
-    st = FileSystem::Default()->path_exists(_location_provider->tablet_metadata_location(65535, 2));
-    EXPECT_TRUE(st.is_not_found());
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).is_not_found());
+    EXPECT_TRUE(fs->path_exists(_location_provider->txn_log_location(tablet_id, 2)).is_not_found());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, create_tablet_without_schema_file) {
+    auto fs = FileSystem::Default();
+
+    for (auto create_schema_file : {false, true}) {
+        auto tablet_id = next_id();
+        auto schema_id = next_id();
+
+        TCreateTabletReq req;
+        req.tablet_id = tablet_id;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.tablet_schema.__set_id(schema_id);
+        req.tablet_schema.__set_schema_hash(270068375);
+        req.tablet_schema.__set_short_key_column_count(2);
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+        req.__set_create_schema_file(create_schema_file);
+        EXPECT_OK(_tablet_manager->create_tablet(req));
+        EXPECT_TRUE(_tablet_manager->get_tablet(tablet_id).ok());
+        EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+        auto st = fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id));
+        if (create_schema_file) {
+            EXPECT_TRUE(st.ok()) << st;
+        } else {
+            EXPECT_TRUE(st.is_not_found()) << st;
+        }
+    }
 }
 
 // NOLINTNEXTLINE
