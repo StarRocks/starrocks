@@ -14,10 +14,6 @@
 
 package com.starrocks.jdbcbridge;
 
-import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
-
 /*
  * In order to simplify the implementation of jni cpp code, we add JDBCBridge as a bridge,
  * encapsulate some complex logic, and only provide the simplest interface for C++ calls.
@@ -33,10 +29,6 @@ public class JDBCBridge {
     private String driverLocation = null;
 
     public void setClassLoader(String driverLocation) throws Exception {
-        URLClassLoader loader = URLClassLoader.newInstance(new URL[] {
-                new File(driverLocation).toURI().toURL(),
-        });
-        Thread.currentThread().setContextClassLoader(loader);
         this.driverLocation = driverLocation;
     }
 
