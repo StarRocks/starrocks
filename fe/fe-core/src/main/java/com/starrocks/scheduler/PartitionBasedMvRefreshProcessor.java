@@ -21,7 +21,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
@@ -50,7 +49,6 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -1164,13 +1162,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("Generate partition predicate failed: " +
                     "cannot find partition slot ref {} from query relation", partitionSlot);
             return null;
-        }
-
-        Pair<Table, Column> partitionInfo = materializedView.getBaseTableAndPartitionColumn();
-        boolean isConvertToDate =
-                PartitionUtil.isConvertToDate(materializedView.getFirstPartitionRefTableExpr(), partitionInfo.second);
-        if (isConvertToDate) {
-            outputPartitionSlot = new CastExpr(Type.DATE, outputPartitionSlot);
         }
 
         if (mvPartitionInfo.isRangePartition()) {

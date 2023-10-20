@@ -39,6 +39,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -201,10 +202,6 @@ public class MvRewritePreprocessor {
                 LOG.warn("[SYNC={}] Preprocess mv {} failed for query tables:{}", isSyncMV, mv.getName(), tableNames, e);
             }
         }
-        if (relatedMvs.isEmpty()) {
-            logMVPrepare(connectContext, "[SYNC={}] There are no related mvs after process", isSyncMV);
-            return;
-        }
         // all base table related mvs
         List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
@@ -216,7 +213,7 @@ public class MvRewritePreprocessor {
     }
 
     private void preprocessMv(MaterializedView mv, Set<Table> queryTables,
-                              Set<ColumnRefOperator> originQueryColumns, boolean isSyncMV) {
+                              Set<ColumnRefOperator> originQueryColumns, boolean isSyncMV) throws AnalysisException {
         if (!mv.isActive()) {
             logMVPrepare(connectContext, mv, "[SYNC={}] MV is not active: {}", isSyncMV, mv.getName());
             return;
