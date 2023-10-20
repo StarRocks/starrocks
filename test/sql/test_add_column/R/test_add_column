@@ -1,0 +1,69 @@
+-- name: test_count_star_after_adding_column @sequential
+ADMIN SET FRONTEND CONFIG ("allow_default_light_schema_change"="false");
+-- result:
+-- !result
+create table t0(
+    k1 INT,
+    c1 INT
+) 
+DUPLICATE KEY(k1) 
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+-- result:
+-- !result
+insert into t0 values (1,1);
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select * from t0 order by k1;
+-- result:
+1	1
+-- !result
+alter table t0 add column b1 BOOLEAN;
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+function: wait_alter_table_not_pending()
+-- result:
+None
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select count(*) from t0;
+-- result:
+1
+-- !result
+select * from t0 order by k1;
+-- result:
+1	1	None
+-- !result
+ADMIN SET FRONTEND CONFIG ("allow_default_light_schema_change"="true");
+-- result:
+-- !result
