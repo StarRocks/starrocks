@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/lake/metacache.h"
+
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
@@ -21,7 +23,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -34,9 +35,9 @@ namespace starrocks::lake {
 
 using namespace starrocks;
 
-class LakeMetadataCacheTest : public TestBase {
+class LakeMetacacheTest : public TestBase {
 public:
-    LakeMetadataCacheTest() : TestBase(kTestDirectory) {
+    LakeMetacacheTest() : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -86,7 +87,71 @@ protected:
     std::shared_ptr<Schema> _schema;
 };
 
-TEST_F(LakeMetadataCacheTest, test_segment_cache) {
+TEST_F(LakeMetacacheTest, test_tablet_metadata_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto m1 = std::make_shared<TabletMetadataPB>();
+    metacache->cache_tablet_metadata("metadata1", m1);
+
+    auto m2 = metacache->lookup_tablet_metadata("metadata1");
+    EXPECT_EQ(m1.get(), m2.get());
+
+    auto m3 = metacache->lookup_tablet_metadata("metadata2");
+    ASSERT_TRUE(m3 == nullptr);
+
+    auto log = metacache->lookup_txn_log("metadata1");
+    ASSERT_TRUE(log == nullptr);
+}
+
+TEST_F(LakeMetacacheTest, test_txn_log_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto log1 = std::make_shared<TxnLogPB>();
+    metacache->cache_txn_log("log1", log1);
+
+    auto log2 = metacache->lookup_txn_log("log1");
+    EXPECT_EQ(log1.get(), log2.get());
+
+    auto log3 = metacache->lookup_txn_log("log2");
+    ASSERT_TRUE(log3 == nullptr);
+
+    auto meta = metacache->lookup_tablet_metadata("log1");
+    ASSERT_TRUE(meta == nullptr);
+}
+
+TEST_F(LakeMetacacheTest, test_tablet_schema_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto schema1 = std::make_shared<TabletSchema>();
+    metacache->cache_tablet_schema("schema1", schema1, 0);
+
+    auto schema2 = metacache->lookup_tablet_schema("schema1");
+    EXPECT_EQ(schema1.get(), schema2.get());
+
+    auto schema3 = metacache->lookup_tablet_schema("schema2");
+    ASSERT_TRUE(schema3 == nullptr);
+
+    auto meta = metacache->lookup_tablet_metadata("schema1");
+    ASSERT_TRUE(meta == nullptr);
+}
+
+TEST_F(LakeMetacacheTest, test_deletion_vector_cache) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto dv1 = std::make_shared<DelVector>();
+    metacache->cache_delvec("dv1", dv1);
+
+    auto dv2 = metacache->lookup_delvec("dv1");
+    EXPECT_EQ(dv1.get(), dv2.get());
+
+    auto dv3 = metacache->lookup_delvec("dv2");
+    ASSERT_TRUE(dv3 == nullptr);
+
+    auto log = metacache->lookup_txn_log("dv1");
+    ASSERT_TRUE(log == nullptr);
+}
+
+TEST_F(LakeMetacacheTest, test_segment_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
     // write data and metadata
@@ -173,6 +238,32 @@ TEST_F(LakeMetadataCacheTest, test_segment_cache) {
     std::cout << "metadata cache memory usage: " << sz0 << "-" << sz1 << "-" << sz2;
     ASSERT_GT(sz1, sz0);
     ASSERT_LT(sz2, sz1);
+}
+
+TEST_F(LakeMetacacheTest, test_update_capacity) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto old_cap = metacache->capacity();
+    metacache->update_capacity(old_cap + 1024 * 1024);
+    auto new_cap = metacache->capacity();
+    ASSERT_EQ(old_cap + 1024 * 1024, new_cap);
+    metacache->update_capacity(new_cap - 1024);
+    auto new_cap2 = metacache->capacity();
+    ASSERT_EQ(new_cap - 1024, new_cap2);
+}
+
+TEST_F(LakeMetacacheTest, test_prune) {
+    auto* metacache = _tablet_mgr->metacache();
+
+    auto meta = std::make_shared<TabletMetadataPB>();
+    metacache->cache_tablet_metadata("meta1", meta);
+    auto meta2 = metacache->lookup_tablet_metadata("meta1");
+    ASSERT_TRUE(meta2 != nullptr);
+
+    metacache->prune();
+
+    auto meta3 = metacache->lookup_tablet_metadata("meta1");
+    ASSERT_TRUE(meta3 == nullptr);
 }
 
 } // namespace starrocks::lake

@@ -84,34 +84,13 @@ static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capac
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
 #endif
 
-static std::string tablet_latest_metadata_cache_key(int64_t tablet_id) {
-    return fmt::format("TL{}", tablet_id);
-}
-
 Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capacity)) {}
 
 Metacache::~Metacache() = default;
 
 void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
     Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
-    if (handle == nullptr) {
-        delete ptr;
-    } else {
-        _cache->release(handle);
-    }
-}
-
-std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_latest_metadata(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
-    if (handle == nullptr) {
-        g_metadata_cache_miss << 1;
-        return nullptr;
-    }
-    g_metadata_cache_hit << 1;
-    auto value = static_cast<CacheValue*>(_cache->value(handle));
-    auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
     _cache->release(handle);
-    return metadata;
 }
 
 std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_metadata(std::string_view key) {
@@ -120,11 +99,16 @@ std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_metadata(std::s
         g_metadata_cache_miss << 1;
         return nullptr;
     }
-    g_metadata_cache_hit << 1;
-    auto value = static_cast<CacheValue*>(_cache->value(handle));
-    auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
-    _cache->release(handle);
-    return metadata;
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
+        g_metadata_cache_hit << 1;
+        return metadata;
+    } catch (const std::bad_variant_access& e) {
+        return nullptr;
+    }
 }
 
 std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) {
@@ -133,11 +117,16 @@ std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) 
         g_txnlog_cache_miss << 1;
         return nullptr;
     }
-    g_txnlog_cache_hit << 1;
-    auto value = static_cast<CacheValue*>(_cache->value(handle));
-    auto log = std::get<std::shared_ptr<const TxnLogPB>>(*value);
-    _cache->release(handle);
-    return log;
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto log = std::get<std::shared_ptr<const TxnLogPB>>(*value);
+        g_txnlog_cache_hit << 1;
+        return log;
+    } catch (const std::bad_variant_access& e) {
+        return nullptr;
+    }
 }
 
 std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_view key) {
@@ -146,11 +135,16 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_
         g_schema_cache_miss << 1;
         return nullptr;
     }
-    g_schema_cache_hit << 1;
-    auto value = static_cast<CacheValue*>(_cache->value(handle));
-    auto schema = std::get<std::shared_ptr<const TabletSchema>>(*value);
-    _cache->release(handle);
-    return schema;
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto schema = std::get<std::shared_ptr<const TabletSchema>>(*value);
+        g_schema_cache_hit << 1;
+        return schema;
+    } catch (const std::bad_variant_access& e) {
+        return nullptr;
+    }
 }
 
 std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
@@ -159,11 +153,16 @@ std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
         g_segment_cache_miss << 1;
         return nullptr;
     }
-    g_segment_cache_hit << 1;
-    auto value = static_cast<CacheValue*>(_cache->value(handle));
-    auto segment = std::get<std::shared_ptr<Segment>>(*value);
-    _cache->release(handle);
-    return segment;
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto segment = std::get<std::shared_ptr<Segment>>(*value);
+        g_segment_cache_hit << 1;
+        return segment;
+    } catch (const std::bad_variant_access& e) {
+        return nullptr;
+    }
 }
 
 std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) {
@@ -172,11 +171,16 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
         g_dv_cache_miss << 1;
         return nullptr;
     }
-    g_dv_cache_hit << 1;
-    auto value = static_cast<CacheValue*>(_cache->value(handle));
-    auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
-    _cache->release(handle);
-    return delvec;
+    DeferOp defer([this, handle]() { _cache->release(handle); });
+
+    try {
+        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
+        g_dv_cache_hit << 1;
+        return delvec;
+    } catch (const std::bad_variant_access& e) {
+        return nullptr;
+    }
 }
 
 void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
@@ -189,11 +193,6 @@ void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVect
     auto mem_cost = delvec->memory_usage();
     auto value = std::make_unique<CacheValue>(std::move(delvec));
     insert(key, value.release(), mem_cost);
-}
-
-void Metacache::cache_tablet_latest_metadata(std::shared_ptr<const TabletMetadataPB> metadata) {
-    auto value_ptr = std::make_unique<CacheValue>(metadata);
-    insert(tablet_latest_metadata_cache_key(metadata->id()), value_ptr.release(), metadata->SpaceUsedLong());
 }
 
 void Metacache::cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata) {

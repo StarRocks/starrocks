@@ -44,8 +44,6 @@ public:
 
     DISALLOW_COPY_AND_MOVE(Metacache);
 
-    std::shared_ptr<const TabletMetadataPB> lookup_tablet_latest_metadata(std::string_view key);
-
     std::shared_ptr<const TabletMetadataPB> lookup_tablet_metadata(std::string_view key);
 
     std::shared_ptr<const TxnLogPB> lookup_txn_log(std::string_view key);
@@ -65,8 +63,6 @@ public:
     void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
 
     void cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec);
-
-    void cache_tablet_latest_metadata(std::shared_ptr<const TabletMetadataPB> metadata);
 
     void erase(std::string_view key);
 

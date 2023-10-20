@@ -191,7 +191,7 @@ Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
     RETURN_IF_ERROR(file.save(*metadata));
 
     _metacache->cache_tablet_metadata(filepath, metadata);
-    _metacache->cache_tablet_latest_metadata(metadata);
+    _metacache->cache_tablet_metadata(tablet_latest_metadata_cache_key(metadata->id()), metadata);
 
     auto t1 = butil::gettimeofday_us();
     g_put_tablet_metadata_latency << (t1 - t0);
@@ -215,7 +215,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& me
 }
 
 TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t tablet_id) {
-    return _metacache->lookup_tablet_latest_metadata(tablet_latest_metadata_cache_key(tablet_id));
+    return _metacache->lookup_tablet_metadata(tablet_latest_metadata_cache_key(tablet_id));
 }
 
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version) {
