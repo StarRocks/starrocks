@@ -1,0 +1,37 @@
+-- name: test_generated_column_rewrite
+CREATE DATABASE test_generated_column_rewrite;
+-- result:
+-- !result
+USE test_generated_column_rewrite;
+-- result:
+-- !result
+CREATE TABLE t (id BIGINT NOT NULL, g1 bigint null as id + 1) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values(1);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Table t1 is not found.')
+-- !result
+ explain select * from (select id + 1 as v from t) t2;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: g1
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:EMPTYSET
+-- !result
+ explain select v from (select id + 1 as v from t) t2;
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:2: g1
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  0:EMPTYSET
+-- !result
+DROP DATABASE test_generated_column_rewrite;
+-- result:
+-- !result
