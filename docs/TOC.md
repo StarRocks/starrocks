@@ -52,14 +52,9 @@
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
   + Load data from Apache Kafka®
-<<<<<<< HEAD
-    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
-    + [Load data using Routine Load](/loading/RoutineLoad.md)
-=======
     + [Load data using Kafka connector](./loading/Kafka-connector-starrocks.md)
     + [Load data using Routine Load](./loading/RoutineLoad.md)
   + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
->>>>>>> e1823ddea2 ([Doc] add to_json function and fix links in toc (#33172))
   + Load data from Apache Spark™
     + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
@@ -479,7 +474,6 @@
         + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
-        + [to_json](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/to_json.md)
     + Map Functions
       + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
       + [element_at](./sql-reference/sql-functions/map-functions/element_at.md)
