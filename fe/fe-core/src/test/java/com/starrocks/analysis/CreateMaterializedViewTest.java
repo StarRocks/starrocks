@@ -3991,4 +3991,11 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
     }
+
+    @Test
+    public void createDeltaLakeMV() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
+                " refresh manual" +
+                " as select * from deltalake_catalog.deltalake_db.tbl");
+    }
 }
