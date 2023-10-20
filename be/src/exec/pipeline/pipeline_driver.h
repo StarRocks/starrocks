@@ -150,7 +150,10 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    int32_t driver_id)
             : _operators(operators),
+<<<<<<< HEAD
               _first_unfinished(0),
+=======
+>>>>>>> 31049a93d8 ([Refactor] check operators state of closing (#33077))
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _source_node_id(operators[0]->get_plan_node_id()),
@@ -166,7 +169,12 @@ public:
     PipelineDriver(const PipelineDriver& driver)
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
 
+<<<<<<< HEAD
     ~PipelineDriver() noexcept;
+=======
+    virtual ~PipelineDriver() noexcept;
+    void check_operator_close_states(std::string func_name);
+>>>>>>> 31049a93d8 ([Refactor] check operators state of closing (#33077))
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
