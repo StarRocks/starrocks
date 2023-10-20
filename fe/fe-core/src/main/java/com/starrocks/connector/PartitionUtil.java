@@ -86,6 +86,7 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+    public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
@@ -602,11 +603,18 @@ public class PartitionUtil {
         return partitionKeyList;
     }
 
+    // return partition name in forms of `col1=value1/col2=value2`
+    // if the partition field is explicitly named, use this name without change
+    // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
+    // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
-        int filePartitionFields = partition.size();
         StringBuilder sb = new StringBuilder();
-        for (int index = 0; index < filePartitionFields; ++index) {
+        for (int index = 0; index < partition.size(); ++index) {
             PartitionField partitionField = partitionSpec.fields().get(index);
+            // skip inactive partition field
+            if (partitionField.transform().isVoid()) {
+                continue;
+            }
             sb.append(partitionField.name());
             sb.append("=");
             String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
@@ -614,7 +622,11 @@ public class PartitionUtil {
             sb.append(value);
             sb.append("/");
         }
-        return sb.substring(0, sb.length() - 1);
+
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return ICEBERG_DEFAULT_PARTITION;
     }
 
     public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
