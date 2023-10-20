@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
