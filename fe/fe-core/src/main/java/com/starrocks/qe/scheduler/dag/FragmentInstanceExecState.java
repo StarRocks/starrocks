@@ -332,6 +332,10 @@ public class FragmentInstanceExecState {
         }
     }
 
+    public boolean isRuntimeFilterCoordinator() {
+        return requestToDeploy.params.isSetRuntime_filter_params();
+    }
+
     /**
      * Cancel the fragment instance.
      *

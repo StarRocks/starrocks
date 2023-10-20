@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.api.client.util.Lists;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -37,10 +38,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
 
@@ -104,12 +108,19 @@ public class Deployer {
         }
 
         for (List<FragmentInstanceExecState> executions : twoStageExecutionsToDeploy) {
-            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
-                executions.forEach(FragmentInstanceExecState::deployAsync);
-            }
-
-            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
-                waitForDeploymentCompletion(executions);
+            // Fragment Instance carrying runtime filter params for runtime filter coordinator
+            // must be delivered at first.
+            Map<Boolean, List<FragmentInstanceExecState>> partitionedBatches = executions.stream()
+                    .collect(Collectors.partitioningBy(FragmentInstanceExecState::isRuntimeFilterCoordinator));
+            List<FragmentInstanceExecState> firstBatch = partitionedBatches.get(true);
+            List<FragmentInstanceExecState> secondBatch = partitionedBatches.get(false);
+            for (List<FragmentInstanceExecState> batch : Arrays.asList(firstBatch, secondBatch)) {
+                try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
+                    batch.forEach(FragmentInstanceExecState::deployAsync);
+                }
+                try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
+                    waitForDeploymentCompletion(batch);
+                }
             }
         }
     }
@@ -199,6 +210,9 @@ public class Deployer {
     }
 
     private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException, UserException {
+        if (executions.isEmpty()) {
+            return;
+        }
         DeploymentResult firstErrResult = null;
         FragmentInstanceExecState firstErrExecution = null;
         for (FragmentInstanceExecState execution : executions) {
