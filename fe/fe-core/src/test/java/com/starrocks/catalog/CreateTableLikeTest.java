@@ -36,6 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -65,6 +66,7 @@ public class CreateTableLikeTest {
         String createDbStmtStr2 = "create database test2;";
         CreateDbStmt createDbStmt2 = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr2, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt2.getFullDbName());
+        Config.enable_collect_query_detail_info = true;
     }
 
     private static void createTable(String sql) throws Exception {
