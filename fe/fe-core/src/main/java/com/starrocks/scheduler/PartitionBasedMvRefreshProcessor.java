@@ -1475,18 +1475,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<Table, Set<String>> tableNamePartitionNames = Maps.newHashMap();
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table table = tablePair.second;
-            if (partitionTable != null && partitionTable == table) {
-                // do nothing.
+            if (partitionTable != null && partitionTable.equals(table)) {
+                // do nothing
             } else {
                 if (table.isNativeTableOrMaterializedView()) {
                     tableNamePartitionNames.put(table, ((OlapTable) table).getVisiblePartitionNames());
-                } else if (table.isHiveTable()) {
-                    tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 } else if (table.isView()) {
-                    continue;
+                    // do nothing
                 } else {
-                    LOG.warn("Do not support get partition names and columns for" +
-                            " table type {}", table.getType());
+                    tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 }
             }
         }
