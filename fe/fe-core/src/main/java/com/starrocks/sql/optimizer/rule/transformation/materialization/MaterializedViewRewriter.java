@@ -448,7 +448,7 @@ public class MaterializedViewRewriter {
         }
         if (!isAllPredicateEquivalent(mvPredicates, queryPredicates)) {
             logMVRewrite(mvRewriteContext, "join child predicate not matched, queryPredicates: {}, " +
-                            "mvPredicates: {}, index: {}", queryPredicates, mvPredicates, index);
+                    "mvPredicates: {}, index: {}", queryPredicates, mvPredicates, index);
             return false;
         }
         return true;
@@ -1744,31 +1744,22 @@ public class MaterializedViewRewriter {
     // pushdown predicates on join nodes
     // the OptExpression will be modified in place
     private OptExpression pushdownPredicatesForJoin(OptExpression optExpression, ScalarOperator predicate) {
-        if (!(optExpression.getOp() instanceof LogicalJoinOperator)) {
-            if (predicate != null) {
-                // predicate can not be pushdown, we should add it it optExpression
-                Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
-                builder.withOperator(optExpression.getOp());
-                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
-                builder.setPredicate(MvUtils.canonizePredicateForRewrite(
-                        Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
-                Operator newQueryOp = builder.build();
-                return OptExpression.create(newQueryOp, optExpression.getInputs());
-            } else {
-                return optExpression;
-            }
+        if (predicate == null) {
+            return optExpression;
         }
-        OptExpression newJoin = doPushdownPredicate(optExpression, predicate);
-        // pushdown predicates in children
-        List<OptExpression> children = Lists.newArrayList();
-        for (int i = 0; i < 2; i++) {
-            if (optExpression.inputAt(i).getOp() instanceof LogicalJoinOperator) {
-                children.add(pushdownPredicatesForJoin(newJoin.inputAt(i), null));
-            } else {
-                children.add(newJoin.inputAt(i));
-            }
+
+        if (optExpression.getOp() instanceof LogicalJoinOperator) {
+            return doPushdownPredicate(optExpression, predicate);
+        } else {
+            // predicate can not be pushdown, we should add it it optExpression
+            Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
+            builder.withOperator(optExpression.getOp());
+            // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+            builder.setPredicate(MvUtils.canonizePredicateForRewrite(
+                    Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
+            Operator newQueryOp = builder.build();
+            return OptExpression.create(newQueryOp, optExpression.getInputs());
         }
-        return OptExpression.create(newJoin.getOp(), children);
     }
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {

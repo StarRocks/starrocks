@@ -37,6 +37,43 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
+
+        starRocksAssert.withTable("CREATE TABLE `table_with_day_partition1` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`,`id_date`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`id_date`)\n" +
+                "(PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31')),\n" +
+                "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01')),\n" +
+                "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02')),\n" +
+                "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE `table_with_day_partition2` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`,`id_date`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`id_date`)\n" +
+                "(PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31')),\n" +
+                "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01')),\n" +
+                "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02')),\n" +
+                "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
@@ -226,6 +263,69 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan15, "partial_mv_10");
         dropMv("test", "partial_mv_9");
         dropMv("test", "partial_mv_10");
+    }
+
+    @Test
+    public void testMultiLeftOuterJoinMVRewrite() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW if not exists test_mv1\n" +
+                "PARTITION BY date_trunc('day', id_date) \n" +
+                "DISTRIBUTED BY hash(t1a) BUCKETS 4  \n" +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ") " +
+                "AS " +
+                "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) " +
+                "from table_with_day_partition a" +
+                " left join table_with_day_partition1 b on a.id_date=b.id_date " +
+                " left join table_with_day_partition2 c on a.id_date=c.id_date " +
+                "group by a.t1a,a.id_date;");
+        cluster.runSql("test", "refresh materialized view test_mv1 partition " +
+                "start('1991-03-30') end('1991-03-31') with sync mode; ");
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " where a.id_date='1991-03-30' " +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " where a.id_date>='1991-03-30' " +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=4/4");
+        }
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=4/4");
+        }
     }
 
     @Test
