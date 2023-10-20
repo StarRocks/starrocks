@@ -66,7 +66,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.PrepareStmt;
@@ -294,7 +293,7 @@ public class ConnectProcessor {
         }
         String sql;
         if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
-            sql = AstToStringBuilder.toString(parsedStmt);
+            sql = AstToSQLBuilder.toSQL(parsedStmt);
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
