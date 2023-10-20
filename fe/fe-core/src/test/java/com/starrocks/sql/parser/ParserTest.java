@@ -27,9 +27,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
@@ -46,6 +48,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -171,7 +174,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
         } catch (Throwable err) {
             Assert.fail(err.getMessage());
         }
@@ -182,7 +185,7 @@ class ParserTest {
             QueryStatement stmt = (QueryStatement) SqlParser.parse(sql, sessionVariable).get(0);
             Analyzer.analyze(stmt, ctx);
             Type type = stmt.getQueryRelation().getOutputExpression().get(0).getType();
-            Assert.assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+            assertEquals(type, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
         } catch (Throwable err) {
             Assert.fail(err.getMessage());
         }
@@ -206,8 +209,8 @@ class ParserTest {
         Analyzer.analyze(stmt, ctx);
         Type type1 = stmt.getQueryRelation().getOutputExpression().get(0).getType();
         Type type2 = stmt.getQueryRelation().getOutputExpression().get(1).getType();
-        Assert.assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
-        Assert.assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
+        assertEquals(type1, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
+        assertEquals(type2, ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 0));
     }
 
     @Test
@@ -282,5 +285,14 @@ class ParserTest {
         sqls.add(Pair.create("select 1 select 2", false));
         sqls.add(Pair.create("select 1 xxx select 2 xxx", false));
         return sqls.stream().map(e -> Arguments.of(e.first, e.second));
+    }
+
+    @Test
+    void testModOperator() {
+        String sql = "select 100 MOD 2";
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        Analyzer.analyze(stmts.get(0), UtFrameUtils.createDefaultCtx());
+        String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        assertEquals("SELECT 100 % 2 AS `100 % 2`", newSql);
     }
 }
