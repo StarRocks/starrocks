@@ -174,7 +174,6 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, int32_t driver_id)
             : _operators(operators),
-
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _pipeline(pipeline),
@@ -192,6 +191,7 @@ public:
                              driver._driver_id) {}
 
     virtual ~PipelineDriver() noexcept;
+    void check_operator_close_states(std::string func_name);
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
