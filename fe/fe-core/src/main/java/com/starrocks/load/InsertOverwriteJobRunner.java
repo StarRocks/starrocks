@@ -41,14 +41,16 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -221,7 +223,7 @@ public class InsertOverwriteJobRunner {
     }
 
     private void createPartitionByValue(InsertStmt insertStmt) {
-        Map<String, AddPartitionClause> addPartitionClauseMap;
+        AddPartitionClause addPartitionClause;
         if (insertStmt.getTargetPartitionNames() == null) {
             return;
         }
@@ -242,7 +244,7 @@ public class InsertOverwriteJobRunner {
             }
         }
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
@@ -251,15 +253,24 @@ public class InsertOverwriteJobRunner {
         String targetDb = insertStmt.getTableName().getDb();
         Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
-        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
-            try {
-                state.addPartitions(db, olapTable.getName(), addPartitionClause);
-                Partition partition = olapTable.getPartition(addPartitionClause.getPartitionDesc().getPartitionName());
-                sourcePartitionIds.add(partition.getId());
-            } catch (Exception ex) {
-                LOG.warn(ex);
-                throw new RuntimeException(ex);
-            }
+        try {
+            state.addPartitions(db, olapTable.getName(), addPartitionClause);
+        } catch (Exception ex) {
+            LOG.warn(ex);
+            throw new RuntimeException(ex);
+        }
+        PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
+        List<String> partitionColNames;
+        if (partitionDesc instanceof RangePartitionDesc) {
+            partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+        } else  {
+            throw new RuntimeException("Unsupported partitionDesc");
+        }
+        for (String partitionColName : partitionColNames) {
+            Partition partition = olapTable.getPartition(partitionColName);
+            sourcePartitionIds.add(partition.getId());
         }
     }
 
