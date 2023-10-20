@@ -37,8 +37,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
@@ -127,6 +125,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
                     Table.TableType.PAIMON,
+                    Table.TableType.DELTALAKE,
                     Table.TableType.VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -181,21 +180,9 @@ public class MaterializedViewAnalyzer {
             return false;
         } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
             return false;
-        } else if (table instanceof HiveTable || table instanceof HudiTable) {
-            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            String catalogName = hiveMetaStoreTable.getCatalogName();
-            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-        } else if (table instanceof IcebergTable) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            String catalogName = icebergTable.getCatalogName();
-            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-        } else if (table instanceof PaimonTable) {
-            PaimonTable paimonTable = (PaimonTable) table;
-            String catalogName = paimonTable.getCatalogName();
-            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
-        } else {
-            return true;
         }
+        String catalog = table.getCatalogName();
+        return Strings.isBlank(catalog) || isResourceMappingCatalog(catalog);
     }
 
     private static void processViews(QueryStatement queryStatement, Set<BaseTableInfo> baseTableInfos,
