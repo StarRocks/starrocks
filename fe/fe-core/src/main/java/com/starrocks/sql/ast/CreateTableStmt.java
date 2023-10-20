@@ -288,7 +288,7 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public boolean needAuditEncryption() {
-        return !isOlapEngine();
+        return !Strings.isNullOrEmpty(engineName) && !isOlapEngine();
     }
 
     @Override
