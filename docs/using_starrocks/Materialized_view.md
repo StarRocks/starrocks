@@ -41,11 +41,7 @@ A materialized view can be created with the following command. The creation of a
 CREATE MATERIALIZED VIEW
 ~~~
 
-<<<<<<< HEAD
 Suppose the user has a sales record duplicate table that stores the transaction id, salesperson, selling store, sold time, and sold price t for each transaction. The table creation statement is as follows:
-=======
-#### Accelerating queries with repetitive aggregate functions
->>>>>>> 1bdc91c00 ([Doc] Markdown 23 (#33341))
 
 ~~~SQL
 CREATE TABLE sales_records(
