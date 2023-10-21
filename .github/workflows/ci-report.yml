@@ -279,7 +279,7 @@ jobs:
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          if [[ ${{ github.repository }} == 'StarRocks/starrocks' ]] || [[ ${merge_outcome} == 'failure' ]]; then
+          if [[ "${{ github.repository }}" != "StarRocks/starrocks" ]] || [[ "${merge_outcome}" == "failure" ]]; then
               total_xml=${be_path}/be_ut_coverage.xml
           fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
