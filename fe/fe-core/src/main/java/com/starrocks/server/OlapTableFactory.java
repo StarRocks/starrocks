@@ -42,6 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.Util;
@@ -269,9 +270,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            boolean enablePersistentIndex =
-                    PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
-                            false);
+            Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties, 
+                    table.getKeysType() == KeysType.PRIMARY_KEYS);
+            boolean enablePersistentIndex = analyzeRet.first;
+            boolean enablePersistentIndexByUser = analyzeRet.second;
             if (enablePersistentIndex && table.isCloudNativeTable()) {
                 // Judge there are whether compute nodes without storagePath or not.
                 // Cannot create cloud native table with persistent_index = true when ComputeNode without storagePath
@@ -279,8 +281,13 @@ public class OlapTableFactory implements AbstractTableFactory {
                         stream().filter(id -> !GlobalStateMgr.getCurrentSystemInfo().getComputeNode(id).
                                 isSetStoragePath()).collect(Collectors.toSet());
                 if (cnUnSetStoragePath.size() != 0) {
-                    throw new DdlException("Cannot create cloud native table with persistent_index = true " +
+                    if (enablePersistentIndexByUser) {
+                        throw new DdlException("Cannot create cloud native table with persistent_index = true " +
                             "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
+                    } else {
+                        // if user has not requested persistent index, switch it to false
+                        table.setEnablePersistentIndex(false);
+                    }
                 } else {
                     try {
                         table.setPersistentIndexType(PropertyAnalyzer.analyzePersistentIndexType(properties));
