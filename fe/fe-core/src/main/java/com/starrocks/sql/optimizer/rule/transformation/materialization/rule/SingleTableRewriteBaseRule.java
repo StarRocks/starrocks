@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -60,7 +61,8 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         }
     }
 
-    private static class CandidateContext {
+    @VisibleForTesting
+    public static class CandidateContext {
         private Statistics mvStatistics;
         private int index;
 
@@ -78,7 +80,8 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         }
     }
 
-    private static class CandidateContextComparator implements Comparator<CandidateContext> {
+    @VisibleForTesting
+    public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
             int ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
