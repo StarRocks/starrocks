@@ -90,7 +90,7 @@ ADD TEMPORARY PARTITIONS START ("2020-04-01") END ("2021-01-01") EVERY (INTERVAL
 
 ## Show temporary partitions
 
-You can view the temporary partitions by using the [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS) command.
+You can view the temporary partitions by using the [SHOW TEMPORARY PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) command.
 
 ```SQL
 SHOW TEMPORARY PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
@@ -121,7 +121,7 @@ curl --location-trusted -u root: -H "label:123" -H "Expect:100-continue" -H "tem
     http://host:port/api/example_db/site_access/_stream_load    
 ```
 
-For detailed syntax and parameter descriptions, see [STREAM LOAD](..sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
+For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ### Load data by using BROKER LOAD
 

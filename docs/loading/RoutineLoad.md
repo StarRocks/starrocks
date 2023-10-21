@@ -404,4 +404,4 @@ STOP ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## FAQ
 
-Please see [Routine Load FAQ](../faq/loading/Routine_load_faq).
+Please see [Routine Load FAQ](../faq/loading/Routine_load_faq.md).
