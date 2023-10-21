@@ -120,6 +120,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -478,8 +479,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 baseTableAndPartitionNames.putAll(nonRefTableAndPartitionNames);
             }
 
-            MaterializedView.AsyncRefreshContext refreshContext =
-                    materializedView.getRefreshScheme().getAsyncRefreshContext();
+            MaterializedView.MvRefreshScheme mvRefreshScheme = materializedView.getRefreshScheme();
+            MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
+
+            // update materialized view partition to ref base table partition names meta
+            updateAssociatedPartitionMeta(refreshContext, mvRefreshedPartitions, refTableAndPartitionNames);
+
             Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedOlapTablePartitionInfos =
                     getSelectedPartitionInfosOfOlapTable(baseTableAndPartitionNames);
             Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedExternalTablePartitionInfos
@@ -506,6 +511,34 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw e;
         } finally {
             database.writeUnlock();
+        }
+    }
+
+    private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
+                                               Set<String> mvRefreshedPartitions,
+                                               Map<Table, Set<String>> refTableAndPartitionNames) {
+        Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
+        if (!Objects.isNull(mvToBaseNameRef) && !Objects.isNull(refTableAndPartitionNames) &&
+                !refTableAndPartitionNames.isEmpty()) {
+            try {
+                Preconditions.checkState(refTableAndPartitionNames.size() == 1);
+                Table refBaseTable = refTableAndPartitionNames.keySet().iterator().next();
+                Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                        refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
+                for (String mvRefreshedPartition : mvRefreshedPartitions) {
+                    Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
+                    for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(mvRefreshedPartition)) {
+                        realBaseTableAssociatedPartitions.addAll(
+                                convertMVPartitionNameToRealPartitionName(refBaseTable, refBaseTableAssociatedPartition));
+                    }
+                    mvPartitionNameRefBaseTablePartitionMap
+                            .put(mvRefreshedPartition, realBaseTableAssociatedPartitions);
+                }
+
+            } catch (Exception e) {
+                LOG.warn("Update materialized view {} with the associated ref base table partitions failed: ",
+                        materializedView.getName(), e);
+            }
         }
     }
 
@@ -544,11 +577,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
         }
     }
 
@@ -587,10 +619,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (!changedTablePartitionInfos.isEmpty()) {
             ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                     new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
             long maxChangedTableRefreshTime =
                     MvUtils.getMaxTablePartitionInfoRefreshTime(changedTablePartitionInfos.values());
             materializedView.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
         }
     }
 
@@ -1032,6 +1064,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
         ctx.setThreadLocalInfo();
+
+        // TODO: Support use mv when refreshing mv.
         ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
@@ -1039,7 +1073,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         // insert overwrite mv must set system = true
         insertStmt.setSystem(true);
+
+        // if materialized view has set sort keys, materialized view's output columns
+        // may be different from the defined query's output.
+        // so set materialized view's defined outputs as target columns.
+        List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndices();
+        List<Column> baseSchema = materializedView.getBaseSchema();
+        if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
+            List<String> targetColumnNames = queryOutputIndexes.stream()
+                    .map(i -> baseSchema.get(i))
+                    .map(Column::getName)
+                    .map(String::toLowerCase) // case insensitive
+                    .collect(Collectors.toList());
+            insertStmt.setTargetColumnNames(targetColumnNames);
+        }
+
         Analyzer.analyze(insertStmt, ctx);
+
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Multimap<String, TableRelation> tableRelations =

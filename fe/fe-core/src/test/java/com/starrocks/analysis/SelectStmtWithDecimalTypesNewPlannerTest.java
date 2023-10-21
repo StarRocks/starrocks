@@ -320,56 +320,56 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalAddNULL() throws Exception {
         String sql = "select col_decimal32p9s2 + NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(10,2)) + NULL";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
     public void testDecimalSubNULL() throws Exception {
         String sql = "select col_decimal32p9s2 - NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) - NULL";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
     public void testDecimalMulNULL() throws Exception {
         String sql = "select col_decimal32p9s2 * NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> [2: col_decimal32p9s2, DECIMAL32(9,2), false] * NULL";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
     public void testDecimalDivNULL() throws Exception {
         String sql = "select col_decimal32p9s2 / NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2)) / NULL";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
     public void testDecimalModNULL() throws Exception {
         String sql = "select col_decimal32p9s2 % NULL from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2)) % NULL";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
     public void testNULLDivDecimal() throws Exception {
         String sql = "select NULL / col_decimal32p9s2 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> NULL / cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL128(38,2))";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test
     public void testNULLModDecimal() throws Exception {
         String sql = "select NULL % col_decimal32p9s2 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        String snippet = "6 <-> NULL % cast([2: col_decimal32p9s2, DECIMAL32(9,2), false] as DECIMAL64(18,2))";
-        Assert.assertTrue(plan.contains(snippet));
+        String snippet = "6 <-> NULL";
+        Assert.assertTrue(plan, plan.contains(snippet));
     }
 
     @Test

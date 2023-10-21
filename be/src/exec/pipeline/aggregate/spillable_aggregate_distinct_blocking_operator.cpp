@@ -97,6 +97,14 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
     return Status::OK();
 }
 
+Status SpillableAggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                                   const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::reset_state(state, refill_chunks));
+    return Status::OK();
+}
+
 Status SpillableAggregateDistinctBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     _aggregator->hash_set_variant().visit(
             [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
@@ -228,6 +236,14 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(
     }
 
     return res;
+}
+
+Status SpillableAggregateDistinctBlockingSourceOperator::reset_state(RuntimeState* state,
+                                                                     const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    _has_last_chunk = true;
+    _accumulator.reset_state();
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
