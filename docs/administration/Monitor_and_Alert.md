@@ -10,51 +10,51 @@ The available metrics are:
 |---|:---:|:---:|---|
 |be_broker_count|pcs|average|Number of brokers |
 |be_brpc_endpoint_count|pcs|average|Number of StubCache in BRPC|
-|be_bytes_read_per_second|bytes/s|average| Read speed of BE |
-|be_bytes_written_per_second|bytes/s|average|Write speed of BE |
-|be_base_compaction_bytes_per_second|bytes/s|average|Base compaction speed of BE|
-|be_cumulative_compaction_bytes_per_second|bytes/s|average|Cumulative compaction speed of BE|
-|be_base_compaction_rowsets_per_second|rowsets/s|average| Base compaction speed of BE rowsets|
-|be_cumulative_compaction_rowsets_per_second|rowsets/s|average| Cumulative compaction speed of BE rowsets |
-|be_base_compaction_failed|pcs/s|average|Base compaction failure of BE |
-|be_clone_failed| pcs/s |average|BE clone failure |
-|be_create_rollup_failed| pcs/s |average|Materialized view creation failure of BE |
-|be_create_tablet_failed| pcs/s |average|Tablet creation failure of BE |
-|be_cumulative_compaction_failed| pcs/s |average|Cumulative compaction failure of BE |
-|be_delete_failed| pcs/s |average| Delete failure of BE |
-|be_finish_task_failed| pcs/s |average|Task failure of BE |
-|be_publish_failed| pcs/s |average| Version release failure of BE |
-|be_report_tables_failed| pcs/s |average| Table report failure of BE |
-|be_report_disk_failed| pcs/s |average|Disk report failure of BE |
-|be_report_tablet_failed| pcs/s |average|Tablet report failure of BE |
-|be_report_task_failed| pcs/s |average|Task report failure of BE |
-|be_schema_change_failed| pcs/s |average|Schema change failure of BE |
-|be_base_compaction_requests| pcs/s |average|Base compaction request of BE |
-|be_clone_total_requests| pcs/s |average|Clone request of BE |
-|be_create_rollup_requests| pcs/s |average| Materialized view creation request of BE |
-|be_create_tablet_requests|pcs/s|average| Tablet creation request of BE |
-|be_cumulative_compaction_requests|pcs/s|average|Cumulative compaction request of BE |
-|be_delete_requests|pcs/s|average| Delete request of BE |
-|be_finish_task_requests|pcs/s|average| Task finish request of BE |
-|be_publish_requests|pcs/s|average| Version publish request of BE |
-|be_report_tablets_requests|pcs/s|average|Tablet report request of BE |
-|be_report_disk_requests|pcs/s|average|Disk report request of BE |
-|be_report_tablet_requests|pcs/s|average|Tablet report request of BE |
-|be_report_task_requests|pcs/s|average|Task report request of BE |
-|be_schema_change_requests|pcs/s|average|Schema change report request of BE |
-|be_storage_migrate_requests|pcs/s|average| Migration request of BE |
+|be_bytes_read_per_second|bytes|average| Read speed of BE |
+|be_bytes_written_per_second|bytes|average|Write speed of BE |
+|be_base_compaction_bytes_per_second|bytes|average|Base compaction speed of BE|
+|be_cumulative_compaction_bytes_per_second|bytes|average|Cumulative compaction speed of BE|
+|be_base_compaction_rowsets_per_second|rowsets|average| Base compaction speed of BE rowsets|
+|be_cumulative_compaction_rowsets_per_second|rowsets|average| Cumulative compaction speed of BE rowsets |
+|be_base_compaction_failed|pcs|average|Base compaction failure of BE |
+|be_clone_failed| pcs |average|BE clone failure |
+|be_create_rollup_failed| pcs |average|Materialized view creation failure of BE |
+|be_create_tablet_failed| pcs |average|Tablet creation failure of BE |
+|be_cumulative_compaction_failed| pcs |average|Cumulative compaction failure of BE |
+|be_delete_failed| pcs |average| Delete failure of BE |
+|be_finish_task_failed| pcs |average|Task failure of BE |
+|be_publish_failed| pcs |average| Version release failure of BE |
+|be_report_tables_failed| pcs |average| Table report failure of BE |
+|be_report_disk_failed| pcs |average|Disk report failure of BE |
+|be_report_tablet_failed| pcs |average|Tablet report failure of BE |
+|be_report_task_failed| pcs |average|Task report failure of BE |
+|be_schema_change_failed| pcs |average|Schema change failure of BE |
+|be_base_compaction_requests| pcs |average|Base compaction request of BE |
+|be_clone_total_requests| pcs |average|Clone request of BE |
+|be_create_rollup_requests| pcs |average| Materialized view creation request of BE |
+|be_create_tablet_requests|pcs|average| Tablet creation request of BE |
+|be_cumulative_compaction_requests|pcs|average|Cumulative compaction request of BE |
+|be_delete_requests|pcs|average| Delete request of BE |
+|be_finish_task_requests|pcs|average| Task finish request of BE |
+|be_publish_requests|pcs|average| Version publish request of BE |
+|be_report_tablets_requests|pcs|average|Tablet report request of BE |
+|be_report_disk_requests|pcs|average|Disk report request of BE |
+|be_report_tablet_requests|pcs|average|Tablet report request of BE |
+|be_report_task_requests|pcs|average|Task report request of BE |
+|be_schema_change_requests|pcs|average|Schema change report request of BE |
+|be_storage_migrate_requests|pcs|average| Migration request of BE |
 |be_fragment_endpoint_count|pcs|average|Number of BE DataStream |
 |be_fragment_request_latency_avg|ms|average| Latency of fragment requests |
-|be_fragment_requests_per_second|pcs/s|average|Number of fragment requests|
+|be_fragment_requests_per_second|pcs|average|Number of fragment requests|
 |be_http_request_latency_avg|ms|average|Latency of HTTP requests |
-|be_http_requests_per_second|pcs/s|average|Number of HTTP requests|
-|be_http_request_send_bytes_per_second|bytes/s|average| Number of bytes sent for HTTP requests |
-|fe_connections_per_second|connections/s|average| New connection rate of FE |
+|be_http_requests_per_second|pcs|average|Number of HTTP requests|
+|be_http_request_send_bytes_per_second|bytes|average| Number of bytes sent for HTTP requests |
+|fe_connections_per_second|connections|average| New connection rate of FE |
 |fe_connection_total|connections| cumulative | Total number of FE connections |
-|fe_edit_log_read|operations/s|average|Read speed of FE edit log |
-|fe_edit_log_size_bytes|bytes/s|average|Size of FE edit log |
-|fe_edit_log_write|bytes/s|average|Write speed of FE edit log |
-|fe_checkpoint_push_per_second|operations/s|average|Number of FE checkpoints |
+|fe_edit_log_read|operations|average|Read speed of FE edit log |
+|fe_edit_log_size_bytes|bytes|average|Size of FE edit log |
+|fe_edit_log_write|bytes|average|Write speed of FE edit log |
+|fe_checkpoint_push_per_second|operations|average|Number of FE checkpoints |
 |fe_pending_hadoop_load_job|pcs|average| Number of pending hadoop jobs|
 |fe_committed_hadoop_load_job|pcs|average| Number of committed hadoop jobs|
 |fe_loading_hadoop_load_job|pcs|average| Number of loading hadoop jobs|
@@ -97,7 +97,7 @@ The available metrics are:
 Background information on the monitoring system:
 
 1. The system collects information every 15 seconds.
-2. Some indicators are divided by 15 seconds and the unit is pcs/sec. Some indicators are not divided, and the count is still 15 seconds.
+2. Some indicators are divided by 15 seconds and the unit is pcs per sec. Some indicators are not divided, and the count is still 15 seconds.
 3. P90, P99 and other quantile values are currently counted within 15 seconds. When calculating at a greater granularity (1 minute, 5 minutes, etc.), use "how many alarms greater than a certain value" rather than "what is the average value".
 
 ### References
@@ -105,7 +105,7 @@ Background information on the monitoring system:
 1. The purpose of monitoring is to only alert on abnormal conditions, not  normal conditions.
 2. Different clusters have different resources (e.g., memory, disk), different usage, and need to be set to different values; however, "percentage" is universal as a measurement unit.
 3. For indicators such as `number of failures`, it is necessary to monitor the change of the total number, and calculate the alarm boundary value according to a certain proportion (for example, for the amount of P90, P99, P999).
-4. `A value of 2x or more` or `a value higher than the peak` can generally be used as a warning value for the growth of used/query.
+4. `A value of 2x or more` or `a value higher than the peak` can generally be used as a warning value for the growth of used per query.
 
 ### Alarm settings
 
@@ -147,7 +147,7 @@ You can set a stricter value than "high resource usage".For example, for  a CPU 
 
 ### Caution
 
-Usually FE/BE are monitored together, but there are some values that only FE or BE has.
+Usually FE and BE are monitored together, but there are some values that only FE or BE has.
 
 There may be some machines that need to be set up  in batches for monitoring.
 
@@ -183,7 +183,7 @@ Grafana is an open-source metric analysis and visualization system that supports
 
 ![8.10.2-1](../assets/8.10.2-1.png)
 
-Prometheus pulls the metrics from the FE/BE interface and then stores the data into its temporal database.
+Prometheus pulls the metrics from the FE and BE interface and then stores the data into its temporal database.
 
 In Grafana, users can configure Prometheus as a data source to customize the Dashboard.
 
@@ -285,7 +285,7 @@ nohup ./bin/grafana-server \
 
 #### DashBoard Configuration
 
-Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username/password (i.e. admin/admin).
+Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username and password (i.e. admin and admin).
 
 **1.** Data source configuration
 
@@ -296,7 +296,7 @@ Data Source Configuration Introduction
 ![8.10.2-2](../assets/8.10.2-2.png)
 
 * Name: Name of the data source. Can be customized, e.g. starrocks_monitor
-* URL: The web address of Prometheus, e.g. <http://prometheus_host:9090>
+* URL: The web address of Prometheus, e.g. `http://prometheus_host:9090`
 * Access: Select the Server method, i.e., the server where Grafana is located for Prometheus to access.
 The rest of the options are default.
 
@@ -358,10 +358,10 @@ In Grafana, the concept of a `Row` is a collection of diagrams. You can collapse
 
 If you need to access the monitoring data in your own Prometheus system, access it through the following interface.
 
-* FE: fe_host:fe_http_port/metrics
-* BE: be_host:be_web_server_port/metrics
+* FE: `fe_host:fe_http_port/metrics`
+* BE: `be_host:be_web_server_port/metrics`
 
 If JSON format is required, access the following instead.
 
-* FE: fe_host:fe_http_port/metrics?type=json
-* BE: be_host:be_web_server_port/metrics?type=json
+* FE: `fe_host:fe_http_port/metrics?type=json`
+* BE: `be_host:be_web_server_port/metrics?type=json`

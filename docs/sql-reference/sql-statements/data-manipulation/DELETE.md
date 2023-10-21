@@ -16,7 +16,7 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 Note:
 
-1. Optional types of op include: =, >, <, >=, <=, <=, <=, !=, in, not in
+1. Optional types of op include: `=, >, <, >=, <=, <=, <=, !=, in, not in`
 2. Only the conditions on key columns can be specified.
 3. When the selected key column does not exist in a certain rollup, delete cannot be performed.
 4. The relationship between conditions can only be "and". If you want to achieve the "or" relationship, you need to divide the conditions into two DELETE statements.

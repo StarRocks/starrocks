@@ -30,7 +30,7 @@ If you need to debug code, you can select the corresponding branch code and comp
 
 > The source function of flink-connector-starrocks cannot guarantee exactly-once semantics. If the reading task fails, you must repeat this step to create another reading task.
 
-- If you use a Flink SQL client (recommended), you can read data from StarRocks by referring to the following command. For more information about the parameters in this command, see [Parameter description](<https://docs.starrocks.com/en-us/main/unloading/Flink_connector#Parameter> description).
+- If you use a Flink SQL client (recommended), you can read data from StarRocks by referring to the following command. For more information about the parameters in this command, see [Parameter description](https://docs.starrocks.com/en-us/main/unloading/Flink_connector#Parameter-description).
 
 ~~~SQL
 -- Create a table in Flink based on the target StarRocks table and configure table properties (including information about flink-connector-starrocks, database, and table).

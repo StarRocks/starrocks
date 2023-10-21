@@ -103,7 +103,7 @@ SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 
 Usually, users use the most equal join, which requires the operator of the join condition to be an equal sign.
 
-Unequal join can be used on join conditions!=, Equal sign. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
+Unequal join can be used on join conditions`!=`, Equal sign. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
 
 Use with caution. Unequal join only supports inner join. For example:
 
