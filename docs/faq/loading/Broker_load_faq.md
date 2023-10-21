@@ -29,7 +29,7 @@ Timezone was set to China time when the table was created and when brokerload is
 
 Remove the timezone when creating the table.
 
-## In Broker Load, orc data import failed. ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to `ARRAY<VARCHAR(30)>`
+## In Broker Load, orc data import failed. `ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>`
 
 Column names on both sides are not consistent in the source file and the StarRocks. Type inference within the system was performed on Set and failed on Cast. To resolve this, you can change the field names on both sides to be identical. After that, Set or Cast is not needed, thus making import successful.
 
