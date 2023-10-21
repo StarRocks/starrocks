@@ -275,6 +275,8 @@ public class AlterJobMgr {
     }
 
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+        LOG.info("process change materialized view {} status to {}, isReplay: {}",
+                materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
             ConnectContext context = new ConnectContext();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -425,13 +427,14 @@ public class AlterJobMgr {
                     MvUtils.getMaxTablePartitionInfoRefreshTime(
                             log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
+
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
-                            "interval step to {}, timeunit to {}, id: {}",
+                            "interval step to {}, timeunit to {}, id: {}, maxChangedTableRefreshTime:{}",
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
-                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+                    asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId(), maxChangedTableRefreshTime);
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
                 oldMaterializedView.setInactiveAndReason("replay failed: " + e.getMessage());

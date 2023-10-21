@@ -85,6 +85,7 @@ public class SystemTable extends Table {
         return new Builder();
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }

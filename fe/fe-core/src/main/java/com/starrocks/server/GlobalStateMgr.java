@@ -582,12 +582,12 @@ public class GlobalStateMgr {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
-                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
+                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
         } else {
             for (Long id : systemInfoService.getBackendIds(false)) {
                 Backend backend = systemInfoService.getBackend(id);
-                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
             }
         }
 
@@ -3699,7 +3699,7 @@ public class GlobalStateMgr {
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
-        return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
+        return FunctionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
     public void replayCreateCluster(Cluster cluster) {

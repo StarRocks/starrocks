@@ -27,9 +27,12 @@ public interface PhysicalPartition {
 
     // partition id which contains this physical partition
     public long getParentId();
+    public void setParentId(long parentId);
 
     // physical partition id
     public long getId();
+    public void setIdForRestore(long id);
+    public long getBeforeRestoreId();
 
     public long getShardGroupId();
 

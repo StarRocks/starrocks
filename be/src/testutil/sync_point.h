@@ -176,7 +176,7 @@ private:
         if (!st.ok()) return st;                              \
     } while (0)
 #define TEST_ENABLE_ERROR_POINT(x, y) \
-    starrocks::SyncPoint::GetInstance()->SetCallBack(x, [](void* arg) { *(Status*)arg = y; })
+    starrocks::SyncPoint::GetInstance()->SetCallBack(x, [&](void* arg) { *(Status*)arg = y; })
 #define TEST_DISABLE_ERROR_POINT(x) starrocks::SyncPoint::GetInstance()->ClearCallBack(x)
 #endif // NDEBUG
 

@@ -714,6 +714,8 @@ CONF_Int64(pipeline_scan_queue_mode, "0");
 CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
 CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
+CONF_Int32(pipeline_analytic_max_buffer_size, "128");
+
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -864,10 +866,10 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
+CONF_mBool(starlet_use_star_cache, "false");
 // TODO: support runtime change
-CONF_Bool(starlet_use_star_cache, "false");
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
-CONF_Int32(starlet_star_cache_disk_size_percent, "60");
+CONF_Int32(starlet_star_cache_disk_size_percent, "80");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 // domain list separated by comma, e.g. '.example.com,.helloworld.com'
@@ -922,6 +924,10 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "16");
+// make sure 2^spill_max_partition_level < spill_max_partition_size
+CONF_Int32(spill_max_partition_level, "7");
+CONF_Int32(spill_max_partition_size, "1024");
+
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
