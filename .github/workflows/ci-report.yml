@@ -249,21 +249,24 @@ jobs:
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
           fi
 
-      - name: Merge Total Coverage
+      - name: Merge BE Total Coverage
         id: merge
-        if: steps.download-ut-xml.outputs.size != '0'
+        if: github.repository == 'StarRocks/starrocks' && steps.download-ut-xml.outputs.size != '0'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
-          TOTAL_COV_XML=/var/local/env/be_total_coverage_${PR_ID}.xml
           
+          export ECI_ID=`./bin/create_eci.sh ${BASE_REF} ${REPO}`
+          export TOTAL_COV_XML=/var/local/env/be_total_coverage_${PR_NUMBER}.xml
+          export COV_LOG=/var/local/env/be_total_coverage_${PR_NUMBER}.log
+          export RES_FILE=/var/local/env/be_total_coverage_res_${PR_NUMBER}.log
+               
+          echo ${ECI_ID}
           echo "ECI_ID=${ECI_ID}" >> $GITHUB_OUTPUT
           echo "COV_XML=${TOTAL_COV_XML}" >> $GITHUB_OUTPUT
+          echo "COV_LOG=${COV_LOG}" >> $GITHUB_OUTPUT
+          echo "RES_FILE=${RES_FILE}" >> $GITHUB_OUTPUT
           
-          eci cp ./bin/gen_be_cov.sh $ECI_ID:/root/gen_be_cov.sh
-          eci exec ${ECI_ID} bash -c "cd /root; ./gen_be_cov.sh ${REPO} ${BASE_REF} ${PR_NUMBER} ${HEAD_SHA}" | tee run.log
-          result=`tail -n 1 run.log`
-          echo "RESULT=${result}" >> $GITHUB_OUTPUT
+          ./bin/gen_be_cov.sh ${REPO} ${BASE_REF} ${PR_NUMBER} ${HEAD_SHA}
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
@@ -271,13 +274,12 @@ jobs:
         env:
           be_path: ${{ github.workspace }}/be
           merge_outcome: ${{ steps.merge.outcome }}
-          merge_result: ${{ steps.merge.outputs.RESULT }}
           total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export JAVA_HOME=/var/local/env/jdk1.8.0_202;
           export PATH=$JAVA_HOME/bin:$PATH;
-          if [[ ${merge_outcome} == 'failure' || ${merge_result} == 'FALSE' ]]; then
+          if [[ ${{ github.repository }} == 'StarRocks/starrocks' ]] || [[ ${merge_outcome} == 'failure' ]]; then
               total_xml=${be_path}/be_ut_coverage.xml
           fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
@@ -287,16 +289,10 @@ jobs:
 
       - name: Clean ENV
         if: always()
-        env:
-          total_xml: ${{ steps.merge.outputs.COV_XML }}
         run: |
           rm -rf ${{ github.workspace }}/*
-          if [[ "${{ steps.merge.outputs.ECI_ID }}" != "" ]]; then
-            eci rm ${{ steps.merge.outputs.ECI_ID }}
-          fi
-          if [[ "${total_xml}" != "" ]]; then
-            rm -f ${total_xml}
-          fi
+          eci rm ${{ steps.merge.outputs.ECI_ID }} || true
+          rm -rf ${{ steps.merge.outputs.COV_LOG }} ${{ steps.merge.outputs.COV_XML }} ${{ steps.merge.outputs.RES_FILE }}
 
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
