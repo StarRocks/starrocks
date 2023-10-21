@@ -375,7 +375,7 @@ jobs:
           set -x
           export JAVA_HOME=/var/local/env/jdk17.0.8;
           export PATH=$JAVA_HOME/bin:/var/local/env/tools/maven/bin:$PATH;
-          export MAVEN_OPTS='-D"maven.repo.local"=/var/local/env/.m2/repository -Xmx1024m';
+          export MAVEN_OPTS='-D"maven.repo.local"=/var/local/env/.m2/repository -Xmx512m';
           export STARROCKS_HOME=${{ github.workspace }}
           source env.sh
           mkdir -p thirdparty/installed/bin/
