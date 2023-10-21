@@ -30,7 +30,7 @@ Materialized views are useful in the following situation:
 
 ### Use case
 
-**Accelerating queries with repetitive aggregate functions**
+#### Accelerating queries with repetitive aggregate functions
 
   Suppose that most queries in your data warehouse include the same sub-query with an aggregate function, and these queries have consumed a huge proportion of your computing resources. Based on this sub-query, you can create a materialized view, which will compute and store all results of the sub-query. After the materialized view is built, the system will rewrite all queries that contain the sub-query, load the intermediate result stored in the materialized view, and thus accelerate these queries.
 

@@ -189,7 +189,7 @@ mysql> desc duplicate_table;
     select k3, k4, k5, k6, k7 from all_type_table;
     ```
 
-    The system's default supplementary sort columns are k3, k4, and k5. The sum of the number of bytes for these three column types is 4 (INT) + 8 (BIGINT) + 16 (DECIMAL) = 28 <36. So these three columns are added as sort columns.
+    The system's default supplementary sort columns are k3, k4, and k5. The sum of the number of bytes for these three column types is `4 (INT) + 8 (BIGINT) + 16 (DECIMAL) = 28 <36`. So these three columns are added as sort columns.
 
     The materialized view's schema is as follows. You can see that the key fields of the k3, k4, and k5 columns are true, which is the sort order. The key field of the k6, k7 columns is false, which is the non-sort order.
 

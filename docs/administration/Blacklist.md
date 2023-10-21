@@ -44,7 +44,7 @@ ADD SQLBLACKLIST "select count(\\*) from .+"
 ADD SQLBLACKLIST "select count(distinct .+) from .+"
 ~~~
 
-* Prohibit order by limit x, y, 1 <= x <=7, 5 <=y <=7:
+* Prohibit order by limit `x, y, 1 <= x <=7, 5 <=y <=7`:
 
 ~~~sql
 ADD SQLBLACKLIST "select id_int from test_all_type_select1 order by id_int limit [1-7], [5-7]"

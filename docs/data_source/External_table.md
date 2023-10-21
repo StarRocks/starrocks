@@ -282,14 +282,14 @@ StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsear
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL  |
+|  `=`   |  term query   |
+|  `in`   |  terms query   |
+|  `\>=,  <=, >, <`   |  range   |
+|  `and`   |  bool.filter   |
+|  `or`   |  bool.should   |
+|  `not`   |  bool.must_not   |
+|  `not in`   |  bool.must_not + terms   |
+|  `esquery`   |  ES Query DSL  |
 
 ### Example
 

@@ -512,7 +512,7 @@ Example:
     SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
     ```
 
-2. Uncorrelated scalar quantum queries with predicates >, <etc. For example, output information about people who are paid more than average.
+2. Uncorrelated scalar quantum queries with predicates `>`, `<`, etc. For example, output information about people who are paid more than average.
 
     ```sql
     SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);

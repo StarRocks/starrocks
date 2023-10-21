@@ -235,9 +235,9 @@ BE static parameters are as follows:
 | clone_worker_count | 3 | N/A | The number of threads used for clone. |
 | storage_medium_migrate_count | 1 | N/A | The number of threads used for storage medium migration (from SATA to SSD). |
 | check_consistency_worker_count | 1 | N/A | The number of threads used for check the consistency of tablets. |
-| sys_log_dir | ${STARROCKS_HOME}/log | N/A | The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL). |
-| user_function_dir | ${STARROCKS_HOME}/lib/udf | N/A | The directory used to store the User-defined Functions (UDFs). |
-| small_file_dir | ${STARROCKS_HOME}/lib/small_file | N/A | The directory used to store the files downloaded by the file manager. |
+| sys_log_dir | `${STARROCKS_HOME}/log` | N/A | The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL). |
+| user_function_dir | `${STARROCKS_HOME}/lib/udf` | N/A | The directory used to store the User-defined Functions (UDFs). |
+| small_file_dir | `${STARROCKS_HOME}/lib/small_file` | N/A | The directory used to store the files downloaded by the file manager. |
 | sys_log_level | INFO | N/A | The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. |
 | sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. The default value indicates that logs are segmented into rolls which are 1 GB each. |
 | sys_log_roll_num | 10 | N/A | The number of log rolls to reserve. |
@@ -247,7 +247,7 @@ BE static parameters are as follows:
 | num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
 | compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
 | serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
-| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
+| storage_root_path | `${STARROCKS_HOME}/storage` | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
@@ -473,11 +473,11 @@ You can only set the configuration items of a broker by changing them in the cor
 | hdfs_write_buffer_size_kb | 1024 | KB | Size of the buffer that is used to write data into HDFS. |
 | client_expire_seconds | 300 | Second | Client sessions will be deleted if they do not receive any ping after the specified time. |
 | broker_ipc_port | 8000 | N/A | The HDFS thrift RPC port. |
-| sys_log_dir | ${BROKER_HOME}/log | N/A | The directory used to store system logs (including INFO, WARNING, ERROR, and FATAL). |
+| sys_log_dir | `${BROKER_HOME}/log` | N/A | The directory used to store system logs (including INFO, WARNING, ERROR, and FATAL). |
 | sys_log_level | INFO | N/A | The log level. Valid values include INFO, WARNING, ERROR, and FATAL. |
 | sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include TIME-DAY, TIME-HOUR, and SIZE-MB-nnn. The default value indicates that logs are segmented into rolls which are 1 GB each. |
 | sys_log_roll_num | 30 | N/A | The number of log rolls to reserve. |
-| audit_log_dir | ${BROKER_HOME}/log | N/A | The directory that stores audit log files. |
+| audit_log_dir | `${BROKER_HOME}/log` | N/A | The directory that stores audit log files. |
 | audit_log_modules | Empty string | N/A | The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. You can specify multiple modules, whose names must be separated by a comma (,) and a space. |
 | audit_log_roll_mode | TIME-DAY | N/A | Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. |
 | audit_log_roll_num | 10 | N/A | This configuration does not work if the audit_log_roll_mode is set to `SIZE-MB-<size>`. |
