@@ -19,7 +19,7 @@ Parameter description:
 - `alive_be_number`: the number of BE nodes alive.
 - `partition_number`: the number of partitions to be consumed.
 - `desired_concurrent_number`: the desired load task parallelism for a Routine Load job. The default value is `3`. You can set a higher value for this parameter to increase the actual load task parallelism.
-  - If you have not created a Routine Load job, you need to set this parameter when using [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md) to create a Routine Load job.
+  - If you have not created a Routine Load job, you need to set this parameter when using [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) to create a Routine Load job.
   - If you have already created a Routine Load job, you need to use [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/alter-routine-load.md) to modify this parameter.
 - `max_routine_load_task_concurrent_num`: the default maximum task parallelism for a Routine Load job. The default value is `5`. This parameter is a an FE dynamic parameter. For more information and the configuration method, see [Parameter configuration](../../administration/Configuration.md#loading-and-unloading).
 
@@ -27,7 +27,7 @@ Therefore, when the number of partitions to be consumed and the number of BE nod
 
 For example, the number of partitions to be consumed is `7`, the number of live BE nodes is `5`, and `max_routine_load_task_concurrent_num` is the default value `5`. At this time, if you need to increase the load task parallelism to the upper limit, you need to set `desired_concurrent_number` to `5` (the default value is `3`). Then, the actual task parallelism `min(5,7,5,5)` is computed to be `5`.
 
-For more parameter descriptions, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md#example).
+For more parameter descriptions, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#example).
 
 **Method 2: Increase the amount of data consumed by a Routine Load task from one or more partitions.**
 
