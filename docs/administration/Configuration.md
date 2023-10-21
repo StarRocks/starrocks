@@ -276,9 +276,76 @@ echo kyber | sudo tee /sys/block/vdb/queue/scheduler
 
 If the system does not support kyber, it is recommended to use the none scheduling algorithm
 
+<<<<<<< HEAD
 ~~~shell
 echo none | sudo tee /sys/block/vdb/queue/scheduler
 ~~~
+=======
+| Configuration item | Default | Unit | Description |
+| -------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| be_port | 9060 | N/A | The BE thrift server port, which is used to receive requests from FEs. |
+| brpc_port | 8060 | N/A | The BE BRPC port, which is used to view the network statistics of BRPCs. |
+| brpc_num_threads | -1 | N/A | The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads. |
+| priority_networks | Empty string | N/A | The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses. |
+| heartbeat_service_port | 9050 | N/A | The BE heartbeat service port, which is used to receive heartbeats from FEs. |
+| heartbeat_service_thread_count | 1 | N/A | The thread count of the BE heartbeat service. |
+| create_tablet_worker_count | 3 | N/A | The number of threads used to create a tablet. |
+| drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
+| push_worker_count_normal_priority | 3 | N/A | The number of threads used to handle a load task with NORMAL priority. |
+| push_worker_count_high_priority | 3 | N/A | The number of threads used to handle a load task with HIGH priority. |
+| transaction_publish_version_worker_count | 8 | N/A | The number of threads used to publish a version. |
+| clear_transaction_task_worker_count | 1 | N/A | The number of threads used for clearing transaction. |
+| alter_tablet_worker_count | 3 | N/A | The number of threads used for schema change. |
+| clone_worker_count | 3 | N/A | The number of threads used for clone. |
+| storage_medium_migrate_count | 1 | N/A | The number of threads used for storage medium migration (from SATA to SSD). |
+| check_consistency_worker_count | 1 | N/A | The number of threads used for check the consistency of tablets. |
+| sys_log_dir | `${STARROCKS_HOME}/log` | N/A | The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL). |
+| user_function_dir | `${STARROCKS_HOME}/lib/udf` | N/A | The directory used to store the User-defined Functions (UDFs). |
+| small_file_dir | `${STARROCKS_HOME}/lib/small_file` | N/A | The directory used to store the files downloaded by the file manager. |
+| sys_log_level | INFO | N/A | The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. |
+| sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. The default value indicates that logs are segmented into rolls which are 1 GB each. |
+| sys_log_roll_num | 10 | N/A | The number of log rolls to reserve. |
+| sys_log_verbose_modules | Empty string | N/A | The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::vectorized`, and `pipeline`. |
+| sys_log_verbose_level | 10 | N/A | The level of the logs to be printed. This configuration item is used to control the ouput of logs initiated with VLOG in codes. |
+| log_buffer_level | Empty string | N/A | The strategy how logs are flushed. The default value indicates that logs are buffered in memory. Valid values are `-1` and `0`. `-1` indicates that logs are not buffering in memory. |
+| num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
+| compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
+| serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
+| storage_root_path | `${STARROCKS_HOME}/storage` | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
+| max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
+| max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
+| min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
+| row_nums_check | TRUE | N/A | The boolean value to control if to check the row counts before and after the compaction. The value true indicates to enable the row count check. The value false indicates disable the row count check. |
+| file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
+| min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
+| index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
+| storage_page_cache_limit | 0 | | The capacity of page cache. You can set it as a percentage ("20%") or a physical value ("100MB"). |
+| disable_storage_page_cache | TRUE | N/A | The boolean value to control if to disable the Page Cache. The value true indicates to disable the Page Cache. The value false indicates to enable the Page Cache. |
+| base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
+| base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
+| max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
+| compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
+| webserver_port | 8040 | N/A | The HTTP server port. |
+| webserver_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
+| load_data_reserve_hours | 4 | Hour | The reservation time for the files produced by small-scale loadings. |
+| number_tablet_writer_threads | 16 | N/A | The number of threads used for Stream Load. |
+| streaming_load_rpc_max_alive_time_sec | 1200 | Second | The RPC timeout for Stream Load. |
+| fragment_pool_thread_num_min | 64 | N/A | The minimum number of threads used for query. |
+| fragment_pool_thread_num_max | 4096 | N/A | The maximum number of threads used for query. |
+| fragment_pool_queue_size | 2048 | N/A | The upper limit of query number that can be processed on each BE node. |
+| enable_partitioned_aggregation | TRUE | N/A | The boolean value to control if to enable the Partition Aggregation. The value true indicates to enable the Partition Aggregation. The value false indicates to disable the Partition Aggregation. |
+| enable_token_check | TRUE | N/A | The boolean value to control if to enable the token check. The value true indicates to enable the token check. The value false indicates to disable the token check. |
+| enable_prefetch | TRUE | N/A | The boolean value to control if to enable the pre-fetch of the query. The value true indicates to enable the pre-fetch. The value false indicates to disable the pre-fetch. |
+| load_process_max_memory_limit_bytes | 107374182400 | Byte | The maximum size limit of memory resources can be taken up by all load process on a BE node. |
+| load_process_max_memory_limit_percent | 30 | % | The maximum percentage limit of memory resources can be taken up by all load process on a BE node. |
+| sync_tablet_meta | FALSE | N/A | The boolean value to control if to enable the synchronization of the tablet metadata. The value true indicates to enable the synchronization. The value false indicates to disable the synchronization. |
+| routine_load_thread_pool_size | 10 | N/A | The thread pool size of Routine Load. |
+| brpc_max_body_size | 2147483648 | Byte | The maximum body size of a BRPC. |
+| tablet_map_shard_size | 32 | N/A | The tablet map shard size. The value must be the power of two. |
+| enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
+| mem_limit | 90% | N/A | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB"). |
+| flush_thread_num_per_store | 2 | N/A | Number of threads that are used for flushing MemTable in each store. |
+>>>>>>> 1bdc91c00 ([Doc] Markdown 23 (#33341))
 
 Network
 
@@ -286,7 +353,25 @@ Please use at least a 10 GB network. A 1 GB network will work but won’t achiev
 
 File System
 
+<<<<<<< HEAD
 It is recommended to use the Ext4 file system. You can check the mount type with relevant commands.
+=======
+| Configuration item | Default | Unit | Description |
+| ------------------------- | ------------------ | ------ | ------------------------------------------------------------ |
+| hdfs_read_buffer_size_kb | 8192 | KB | Size of the buffer that is used to read data from HDFS. |
+| hdfs_write_buffer_size_kb | 1024 | KB | Size of the buffer that is used to write data into HDFS. |
+| client_expire_seconds | 300 | Second | Client sessions will be deleted if they do not receive any ping after the specified time. |
+| broker_ipc_port | 8000 | N/A | The HDFS thrift RPC port. |
+| sys_log_dir | `${BROKER_HOME}/log` | N/A | The directory used to store system logs (including INFO, WARNING, ERROR, and FATAL). |
+| sys_log_level | INFO | N/A | The log level. Valid values include INFO, WARNING, ERROR, and FATAL. |
+| sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include TIME-DAY, TIME-HOUR, and SIZE-MB-nnn. The default value indicates that logs are segmented into rolls which are 1 GB each. |
+| sys_log_roll_num | 30 | N/A | The number of log rolls to reserve. |
+| audit_log_dir | `${BROKER_HOME}/log` | N/A | The directory that stores audit log files. |
+| audit_log_modules | Empty string | N/A | The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. You can specify multiple modules, whose names must be separated by a comma (,) and a space. |
+| audit_log_roll_mode | TIME-DAY | N/A | Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. |
+| audit_log_roll_num | 10 | N/A | This configuration does not work if the audit_log_roll_mode is set to `SIZE-MB-<size>`. |
+| sys_log_verbose_modules | com.starrocks | N/A | The modules for which StarRocks generates system logs. Valid values are namespaces in BE, including `starrocks`, `starrocks::vectorized`, and `pipeline`. |
+>>>>>>> 1bdc91c00 ([Doc] Markdown 23 (#33341))
 
 ~~~shell
 df -Th
