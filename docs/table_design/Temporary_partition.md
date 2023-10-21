@@ -24,7 +24,7 @@ You can create one or more partitions at a time by using the [ALTER TABLE](../sq
 
 ### Syntax
 
-**Create a single temporary partition**
+#### Create a single temporary partition
 
 ```SQL
 ALTER TABLE <table_name>
@@ -37,7 +37,7 @@ ADD TEMPORARY PARTITION <temporary_partition_name> VALUES LESS THAN {MAXVALUE|(<
 [DISTRIBUTED BY HASH(<bucket_key>) BUCKETS <bucket_number>];
 ```
 
-**Create multiple partitions at a time**
+#### Create multiple partitions at a time
 
 ```SQL
 ALTER TABLE <table_name>
@@ -189,6 +189,7 @@ You can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/AL
 > **NOTE**
 >
 > The original formal partition and temporary partition that you operated in the ALTER TABLE statement are deleted and cannot be recovered.
+
 ### Syntax
 
 ```SQL
