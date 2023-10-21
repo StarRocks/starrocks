@@ -212,9 +212,9 @@ Rollup supports the following creation modes:
     Convert TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR.
     VARCHAR supports modification of maximum length.
     Convert VARCHAR to TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
-    Convert VARCHAR to DATE (currently support six formats: "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d")
-    Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` <--> `2019-12-09`)
-    Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` <--> `2019-12-09 00:00:00`)
+    Convert VARCHAR to DATE (currently support six formats: `%Y-%m-%d`, `%y-%m-%d`, `%Y%m%d`, `%y%m%d`, `%Y/%m/%d`, `%y/%m/%d`)
+    Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` `<-->` `2019-12-09`)
+    Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
     Convert FLOAT to DOUBLE
     Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
     6. Does not support conversion from NULL to NOT NULL.
