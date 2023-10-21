@@ -20,10 +20,10 @@ ALTER RESOURCE GROUP resource_group_name
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | resource_group_name | Name of the resource group to be altered.                    |
-| ADD                 | Add classifiers to the resource group. See [CREATE RESOURCE GROUP - Parameters]() for more information on how to define a classifier. |
-| DROP                | Drop classifiers from the resource group via classifier IDs. You can check the ID of a classifier via [SHOW RESOURCE GROUP]() statement. |
+| ADD                 | Add classifiers to the resource group. See CREATE RESOURCE GROUP - Parameters for more information on how to define a classifier. |
+| DROP                | Drop classifiers from the resource group via classifier IDs. You can check the ID of a classifier via SHOW RESOURCE GROUP statement. |
 | DROP ALL            | Drop all classifiers from the resource group.                |
-| WITH                | Modify the resource limits of the resource group. See [CREATE RESOURCE GROUP - Parameters]() for more information on how to set resource limits. |
+| WITH                | Modify the resource limits of the resource group. See CREATE RESOURCE GROUP - Parameters for more information on how to set resource limits. |
 
 ## Examples
 
