@@ -139,7 +139,7 @@ As described above, when your query filters on both `site_id` and `city_code`, S
 
 Additionally, note that a large number of sort key columns also increase memory consumption. To reduce memory consumption, StarRocks imposes the following limits on the usage of prefix indexes:
 
-- The prefix index entry of a block must be composed of the prefix of the table's sort key columns in the first row of that block. 
+- The prefix index entry of a block must be composed of the prefix of the table's sort key columns in the first row of that block.
 
 - A prefix index can be created on a maximum of 3 columns.
 
@@ -169,4 +169,4 @@ In summary, take note of the following points when you select sort key columns f
 
 - If your queries frequently filter only on `city_code` and occasionally filter on both `site_id` and `city_code`, we recommend that you select `city_code` as the beginning sort key column.
 
--  If the number of times that your queries filter on both `site_id` and `city_code` is roughly equal to the number of times that your queries filter only on `city_code`, we recommend that you create a materialized view, for which the first column is `city_code`. As such, StarRocks creates a sort index on the `city_code` column of the materialized view.
+- If the number of times that your queries filter on both `site_id` and `city_code` is roughly equal to the number of times that your queries filter only on `city_code`, we recommend that you create a materialized view, for which the first column is `city_code`. As such, StarRocks creates a sort index on the `city_code` column of the materialized view.
