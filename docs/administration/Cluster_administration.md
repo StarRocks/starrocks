@@ -88,7 +88,7 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 
 ##### Upgrade a  BE
 
-```Plain%20Text
+```Plain_Text
 cd be_work_dir
 
 sh bin/stop_be.sh
@@ -108,7 +108,7 @@ ps aux | grep starrocks_be
 
 ##### Upgrade an FE
 
-```Plain%20Text
+```Plain_Text
 cd fe_work_dir
 
 sh bin/stop_fe.sh
@@ -128,7 +128,7 @@ ps aux | grep StarRocksFE
 
 ##### Upgrade a Broker
 
-```Plain%20Text
+```Plain_Text
 cd broker_work_dir 
 
 mv lib lib.bak 
@@ -167,7 +167,7 @@ All StarRocks versions, which are named StarRocks-xx, support rollbacks. You nee
 
 #### Roll back an FE
 
-```Plain%20Text
+```Plain_Text
 cd fe_work_dir 
 
 mv lib libtmp.bak 
@@ -187,7 +187,7 @@ ps aux | grep StarRocksFe
 
 #### Roll back a BE
 
-```Plain%20Text
+```Plain_Text
 cd be_work_dir 
 
 mv lib libtmp.bak 
@@ -207,7 +207,7 @@ ps aux | grep starrocks_be
 
 #### Roll back a Broker
 
-```Plain%20Text
+```Plain_Text
 cd broker_work_dir 
 
 mv lib libtmp.bak 
