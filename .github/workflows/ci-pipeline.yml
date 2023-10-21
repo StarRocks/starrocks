@@ -383,6 +383,7 @@ jobs:
           cd ${{ github.workspace }}/fe
           sed -i 's#<tasks>#<target>#g' fe-core/pom.xml
           sed -i 's#</tasks>#</target>#g' fe-core/pom.xml
+          export MAVEN_OPTS="-Xmx512m"
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
       - name: clean
