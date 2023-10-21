@@ -44,7 +44,7 @@ jobs:
           set -x 
           labels=`curl -L \
                   -H "Accept: application/vnd.github+json" \
-                  -H "Authorization: token ${{ secrets.SYNC_PAT }}" \
+                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
                   https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
                   | jq '.labels[].name'`
@@ -120,9 +120,10 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       REPO: ${{ github.repository }}
     if: >
-      needs.code-checker.outputs.output1 == 'true' ||
+      (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened') &&
+      (needs.code-checker.outputs.output1 == 'true' ||
       needs.code-checker.outputs.output2 == 'true' ||
-      needs.code-checker.outputs.output3 == 'true'
+      needs.code-checker.outputs.output3 == 'true')
     outputs:
       ip: ${{ steps.update-image.outputs.ip }}
       instance_id: ${{ steps.update-image.outputs.instance_id }}
@@ -223,14 +224,14 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         if: needs.build.result == 'failure'
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: ERROR
 
       - name: remove label
         uses: actions-ecosystem/action-remove-labels@v1
         if: needs.build.result != 'failure'
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: ERROR
 
       - name: notify
@@ -259,7 +260,7 @@ jobs:
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.SYNC_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: automerge
 
       - uses: hmarr/auto-approve-action@v3
@@ -270,6 +271,6 @@ jobs:
       - name: automerge
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
-          token: ${{ secrets.SYNC_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: rebase

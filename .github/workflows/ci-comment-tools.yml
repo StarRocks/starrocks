@@ -99,6 +99,13 @@ jobs:
           fetch-depth: 0
 
       - name: BACKPORT
+        id: backport
         run: |
           cd /var/lib/elastic-service && git pull
           ./bin/backport.sh "${{ needs.info.outputs.title }}" "${{ github.event.comment.body }}"
+
+      - name: Report
+        if: always() && steps.backport.outcome == 'failure'
+        run: |
+          gh pr comment ${PR_NUMBER} -R ${{ github.repository }} -b "❌ BACKPORT ERROR!"
+          exit 1

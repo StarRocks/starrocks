@@ -168,7 +168,7 @@ jobs:
             steps.create_pending_pr.outcome == 'failure')
         env:
           GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
-          PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,error"
+          PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,ERROR"
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"

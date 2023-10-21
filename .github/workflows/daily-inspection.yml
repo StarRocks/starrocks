@@ -239,6 +239,7 @@ jobs:
     runs-on: [ self-hosted, normal ]
     needs: [ info, be-ut, clang-tidy, fe-ut ]
     name: BUILD
+    if: always() && needs.clang-tidy.result != 'failure' && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure'
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
     steps:
