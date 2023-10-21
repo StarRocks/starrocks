@@ -141,3 +141,22 @@ jobs:
         if: always()
         run: |
           rm -rf ${{ github.workspace }}/*
+
+  clean_ci_workflow:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.merged != true && github.base_ref == 'main'
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ github.base_ref }}
+    steps:
+      - name: cancel
+        run: |
+          if [[ "${BRANCH}" == "main" ]]; then
+            yaml=ci-pipeline.yml
+          else
+            yaml=ci-pipeline-branch.yml
+          fi
+          
+          gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
