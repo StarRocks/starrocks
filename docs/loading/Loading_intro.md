@@ -38,7 +38,7 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 - If the result indicates a job creation success, StarRocks asynchronously runs the job. However, that does not mean that the data has been successfully loaded. You must use statements or commands to check the status of the job. Then, you can determine whether the data is successfully loaded based on the job status.
 
-- If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information. 
+- If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information.
 
 StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [Spark Load](../loading/SparkLoad.md).
 
@@ -96,7 +96,7 @@ You can determine the loading method of your choice based on your business scena
 
 - If you load data from Kafka and the data requires multi-table joins and extract, transform and load (ETL), you can use Apache Flink® to pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in to perform a Stream Load job to load the data into StarRocks.
 
-- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table. 
+- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table.
 
 - If you load data from MySQL databases, you can use [starrockswriter](../loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](../data_source/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
 

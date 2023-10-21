@@ -22,7 +22,7 @@ FROM data_source
 
 ## **Parameters**
 
-- **[db.] job_name**
+- **`[db.] job_name`**
 
 The name of the job you want to modify.
 
