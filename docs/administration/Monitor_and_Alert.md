@@ -303,7 +303,7 @@ Data Source Configuration Introduction
 ![8.10.2-2](../assets/8.10.2-2.png)
 
 * Name: Name of the data source. Can be customized, e.g. starrocks_monitor
-* URL: The web address of Prometheus, e.g. <http://prometheus_host:9090>
+* URL: The web address of Prometheus, e.g. `http://prometheus_host:9090`
 * Access: Select the Server method, i.e., the server where Grafana is located for Prometheus to access.
 The rest of the options are default.
 
@@ -375,8 +375,8 @@ In Grafana, the concept of a `Row` is a collection of diagrams. You can collapse
 
 If you need to access the monitoring data in your own Prometheus system, access it through the following interface.
 
-* FE: fe_host:fe_http_port/metrics
-* BE: be_host:be_web_server_port/metrics
+* FE: `fe_host:fe_http_port/metrics`
+* BE: `be_host:be_web_server_port/metrics`
 
 If JSON format is required, access the following instead.
 
