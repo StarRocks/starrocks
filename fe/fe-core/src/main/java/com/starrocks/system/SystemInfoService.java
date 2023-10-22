@@ -705,12 +705,18 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public List<Backend> getAvailableBackends() {
         return getBackends().stream()
-                .filter(v -> v.isAvailable())
+                .filter(ComputeNode::isAvailable)
                 .collect(Collectors.toList());
     }
 
     public List<ComputeNode> getComputeNodes() {
         return Lists.newArrayList(idToComputeNodeRef.values());
+    }
+
+    public List<ComputeNode> getAvailableComputeNodes() {
+        return getComputeNodes().stream()
+                .filter(ComputeNode::isAvailable)
+                .collect(Collectors.toList());
     }
 
     public Stream<ComputeNode> backendAndComputeNodeStream() {
@@ -729,16 +735,36 @@ public class SystemInfoService implements GsonPostProcessable {
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
     }
 
+    public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
+
+        final List<ComputeNode> candidateComputeNodes = needAvailable ? getAvailableComputeNodes() : getComputeNodes();
+        if (CollectionUtils.isEmpty(candidateComputeNodes)) {
+            LOG.warn("failed to find any compute nodes, needAvailable={}", needAvailable);
+            return Collections.emptyList();
+        }
+
+        if (CollectionUtils.isEmpty(candidateComputeNodes)) {
+            String computeNodeInfo = candidateComputeNodes.stream()
+                    .map(computeNode -> "[host=" + computeNode.getHost() + ", bePort=" + computeNode.getBePort() + "]")
+                    .collect(Collectors.joining("; "));
+
+            LOG.warn(
+                    "failed to find any compute node with qualified disk usage from {} candidate compute nodes, " +
+                            "needAvailable={}, [{}]", candidateComputeNodes.size(), needAvailable, computeNodeInfo);
+            return Collections.emptyList();
+        }
+        return seqChooseBackendIds(computeNodeNum, isCreate, candidateComputeNodes);
+    }
+
     private List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
                                            Predicate<? super Backend> predicate) {
-
         final List<Backend> candidateBackends = needAvailable ? getAvailableBackends() : getBackends();
         if (CollectionUtils.isEmpty(candidateBackends)) {
             LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
             return Collections.emptyList();
         }
 
-        final List<Backend> filteredBackends = candidateBackends.stream()
+        final List<ComputeNode> filteredBackends = candidateBackends.stream()
                 .filter(predicate)
                 .collect(Collectors.toList());
 
@@ -763,7 +789,7 @@ public class SystemInfoService implements GsonPostProcessable {
      * @param srcBackends list of the candidate backends
      * @return empty list if not enough backend, otherwise return a list of backend's id
      */
-    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<ComputeNode> srcBackends) {
 
         long lastBackendId;
 
@@ -774,8 +800,8 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // host -> BE list
-        Map<String, List<Backend>> backendMaps = Maps.newHashMap();
-        for (Backend backend : srcBackends) {
+        Map<String, List<ComputeNode>> backendMaps = Maps.newHashMap();
+        for (ComputeNode backend : srcBackends) {
             String host = backend.getHost();
 
             if (!backendMaps.containsKey(host)) {
@@ -786,8 +812,8 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // if more than one backend exists in same host, select a backend at random
-        List<Backend> backends = Lists.newArrayList();
-        for (List<Backend> list : backendMaps.values()) {
+        List<ComputeNode> backends = Lists.newArrayList();
+        for (List<ComputeNode> list : backendMaps.values()) {
             Collections.shuffle(list);
             backends.add(list.get(0));
         }
@@ -796,20 +822,20 @@ public class SystemInfoService implements GsonPostProcessable {
         // get last backend index
         int lastBackendIndex = -1;
         int index = -1;
-        for (Backend backend : backends) {
+        for (ComputeNode backend : backends) {
             index++;
             if (backend.getId() == lastBackendId) {
                 lastBackendIndex = index;
                 break;
             }
         }
-        Iterator<Backend> iterator = Iterators.cycle(backends);
+        Iterator<ComputeNode> iterator = Iterators.cycle(backends);
         index = -1;
         boolean failed = false;
         // 2 cycle at most
         int maxIndex = 2 * backends.size();
         while (iterator.hasNext() && backendIds.size() < backendNum) {
-            Backend backend = iterator.next();
+            ComputeNode backend = iterator.next();
             index++;
             if (index <= lastBackendIndex) {
                 continue;
@@ -836,7 +862,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
         if (failed) {
             // debug: print backend info when the selection failed
-            for (Backend backend : backends) {
+            for (ComputeNode backend : backends) {
                 LOG.debug("random select: {}", backend);
             }
             return Collections.emptyList();

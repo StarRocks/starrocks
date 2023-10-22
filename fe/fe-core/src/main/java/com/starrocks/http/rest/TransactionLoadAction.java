@@ -45,7 +45,8 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
@@ -206,12 +207,8 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-                    if (CollectionUtils.isEmpty(backendIds)) {
-                        throw new UserException("No backend alive.");
-                    }
-                    backendID = backendIds.get(0);
-                    // txnBackendMap is LRU cache, it automic remove unused entry
+                    backendID = getBackendOrComputeId();
+                    // txnBackendMap is LRU cache, it atomic remove unused entry
                     txnBackendMap.put(label, backendID);
                 } else if (channelIdStr == null) {
                     backendID = txnBackendMap.get(label);
@@ -268,7 +265,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (op.equalsIgnoreCase(TXN_COMMIT) && channelIdStr != null) {
-            int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, resp);
             sendResult(request, response, resp);
@@ -276,7 +272,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (op.equalsIgnoreCase(TXN_ROLLBACK) && channelIdStr != null) {
-            int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().rollbackLoadTask(label, resp);
             sendResult(request, response, resp);
@@ -288,9 +283,12 @@ public class TransactionLoadAction extends RestBaseAction {
             throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
+        ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
         if (backend == null) {
-            throw new UserException("Backend " + backendID + " is not alive");
+            backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendID);
+            if (backend == null) {
+                throw new UserException("Backend " + backendID + " is not alive");
+            }
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
@@ -298,6 +296,22 @@ public class TransactionLoadAction extends RestBaseAction {
         LOG.info("redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
                 redirectAddr, dbName, tableName, op, label);
         redirectTo(request, response, redirectAddr);
+    }
+
+    private static Long getBackendOrComputeId() throws UserException {
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true,
+                false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No compute node alive.");
     }
 }
 
