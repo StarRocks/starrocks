@@ -771,24 +771,34 @@ TEST_F(ParquetScannerTest, optional_map_key) {
     std::vector<std::tuple<std::string, std::vector<std::string>>> test_cases = {
             {"col_int", {"1", "2", "6", "3", "4", "5", "7", "8", "9", "1", "2", "3", "4", "5", "7", "8", "9", "6"}},
             {"col_map",
-             {R"({" ":" "})",
-              R"({"                                            aAbBcC":"                                            aAbBcC"})",
-              R"("你好，中国！":null})",
-              R"({"aAbBcC                                            ":"aAbBcC                                            "})",
-              R"({"                    aAbBcCdDeE                    ":"                    aAbBcCdDeE                    "})",
-              R"({"null":null})",
-              R"({"                                                  ":"                                                  "})",
-              R"({"Hello, world!你好":"Hello, world!你好"})",
-              R"({"Total MapReduce CPU Time Spent: 2 seconds 120 msec":"Total MapReduce CPU Time Spent: 2 seconds 120 msec"})",
-              R"({" ":" "})",
-              R"({"                                            aAbBcC":"                                            aAbBcC"})",
-              R"({"aAbBcC                                            ":"aAbBcC                                            "})",
-              R"({"                    aAbBcCdDeE                    ":"                    aAbBcCdDeE                    "})",
-              R"({"null":null})",
-              R"({"                                                  ":"                                                  "})",
-              R"({"Hello, world!你好":"Hello, world!你好"})",
-              R"({"Total MapReduce CPU Time Spent: 2 seconds 120 msec":"Total MapReduce CPU Time Spent: 2 seconds 120 msec"})",
-              R"("你好，中国！":null})"}}};
+             {"{' ':' '}",
+              "{'                                            aAbBcC':'                                            "
+              "aAbBcC'}",
+              "{'你好，中国！':NULL}",
+              "{'aAbBcC                                            ':'aAbBcC                                           "
+              " '}",
+              "{'                    aAbBcCdDeE                    ':'                    aAbBcCdDeE                   "
+              " '}",
+              "{'null':NULL}",
+              "{'                                                  ':'                                                 "
+              " '}",
+              "{'Hello, world!你好':'Hello, world!你好'}",
+              "{'Total MapReduce CPU Time Spent: 2 seconds 120 msec':'Total MapReduce CPU Time Spent: 2 seconds 120 "
+              "msec'}",
+              "{' ':' '}",
+              "{'                                            aAbBcC':'                                            "
+              "aAbBcC'}",
+              "{'aAbBcC                                            ':'aAbBcC                                           "
+              " '}",
+              "{'                    aAbBcCdDeE                    ':'                    aAbBcCdDeE                   "
+              " '}",
+              "{'null':NULL}",
+              "{'                                                  ':'                                                 "
+              " '}",
+              "{'Hello, world!你好':'Hello, world!你好'}",
+              "{'Total MapReduce CPU Time Spent: 2 seconds 120 msec':'Total MapReduce CPU Time Spent: 2 seconds 120 "
+              "msec'}",
+              "{'你好，中国！':NULL}"}}};
 
     std::vector<std::string> columns_from_path;
     std::vector<std::string> path_values;

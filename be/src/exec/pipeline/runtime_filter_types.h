@@ -218,10 +218,9 @@ public:
     }
 
     // mark runtime_filter as always true.
-    bool set_always_true() {
+    StatusOr<bool> set_always_true() {
         _always_true = true;
-        (void)_try_do_merge({});
-        return true;
+        return _try_do_merge({});
     }
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
@@ -404,7 +403,7 @@ private:
 private:
     ObjectPool* _pool;
     const size_t _limit;
-    bool _always_true = false;
+    std::atomic<bool> _always_true = false;
     std::atomic<size_t> _num_active_builders{0};
     std::vector<size_t> _ht_row_counts;
     std::vector<RuntimeInFilters> _partial_in_filters;

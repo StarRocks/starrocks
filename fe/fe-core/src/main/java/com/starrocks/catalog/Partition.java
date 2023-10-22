@@ -55,6 +55,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -75,6 +76,9 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     @SerializedName(value = "id")
     private long id;
+
+    private long beforeRestoreId;
+
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "state")
@@ -90,7 +94,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
-    private boolean isImmutable = false;
+    private AtomicBoolean isImmutable = new AtomicBoolean(false);
 
     @SerializedName(value = "baseIndex")
     private MaterializedIndex baseIndex;
@@ -127,7 +131,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     @SerializedName(value = "nextVersion")
     private long nextVersion;
 
-    private volatile long nextVacuumTime = 0;
+    private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
 
@@ -175,7 +179,9 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return partition;
     }
 
+    @Override
     public void setIdForRestore(long id) {
+        this.beforeRestoreId = this.id;
         this.id = id;
     }
 
@@ -183,18 +189,29 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return this.id;
     }
 
-    public void setImmutable(boolean isImmutable) {
-        this.isImmutable = isImmutable;
+    @Override
+    public long getBeforeRestoreId() {
+        return beforeRestoreId;
     }
 
+    @Override
+    public void setImmutable(boolean isImmutable) {
+        this.isImmutable.set(isImmutable);
+    }
+
+    @Override
     public boolean isImmutable() {
-        return this.isImmutable;
+        return this.isImmutable.get();
     }
 
     public void addSubPartition(PhysicalPartition subPartition) {
         if (subPartition instanceof PhysicalPartitionImpl) {
             idToSubPartition.put(subPartition.getId(), (PhysicalPartitionImpl) subPartition);
         }
+    }
+
+    public void removeSubPartition(long id) {
+        idToSubPartition.remove(id);
     }
 
     public Collection<PhysicalPartition> getSubPartitions() {
@@ -209,6 +226,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public long getParentId() {
         return this.id;
+    }
+
+    public void setParentId(long parentId) {
+        return;
     }
 
     public long getShardGroupId() {
@@ -373,6 +394,15 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
             count += subPartition.getMaterializedIndices(IndexExtState.VISIBLE).size();
         }
         return count;
+    }
+
+    @Override
+    public long getTabletMaxDataSize() {
+        long maxDataSize = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            maxDataSize = Math.max(maxDataSize, mIndex.getTabletMaxDataSize());
+        }
+        return maxDataSize;
     }
 
     public long storageDataSize() {
@@ -617,12 +647,12 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return hasChanged;
     }
 
-    public long getNextVacuumTime() {
-        return nextVacuumTime;
+    public long getLastVacuumTime() {
+        return lastVacuumTime;
     }
 
-    public void setNextVacuumTime(long nextVacuumTime) {
-        this.nextVacuumTime = nextVacuumTime;
+    public void setLastVacuumTime(long lastVacuumTime) {
+        this.lastVacuumTime = lastVacuumTime;
     }
 
     public long getMinRetainVersion() {

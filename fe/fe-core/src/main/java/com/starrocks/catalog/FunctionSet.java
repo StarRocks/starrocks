@@ -456,6 +456,9 @@ public class FunctionSet {
     // dict query function
     public static final String DICT_MAPPING = "dict_mapping";
 
+    //user and role function
+    public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";
@@ -468,6 +471,20 @@ public class FunctionSet {
     public static final String SECONDS_SUB = "seconds_sub";
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
+
+    public static final String CONNECTION_ID = "connection_id";
+
+    public static final String CATALOG = "catalog";
+
+    public static final String DATABASE = "database";
+
+    public static final String SCHEMA = "schema";
+
+    public static final String USER = "user";
+
+    public static final String CURRENT_USER = "current_user";
+
+    public static final String CURRENT_ROLE = "current_role";
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -519,9 +536,9 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
+    private static final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, PERCENTILE_HASH,
-                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT);
+                    HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, ASSERT_TRUE);
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -628,6 +645,16 @@ public class FunctionSet {
             .add(ARRAY_SLICE)
             .build();
 
+    public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
+            .add(CONNECTION_ID)
+            .add(CATALOG)
+            .add(DATABASE)
+            .add(SCHEMA)
+            .add(USER)
+            .add(CURRENT_USER)
+            .add(CURRENT_ROLE)
+            .build();
+
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
             (Type itemType) -> {
                 List<StructField> fields = Lists.newArrayList();
@@ -705,7 +732,7 @@ public class FunctionSet {
         initAggregateBuiltins();
     }
 
-    public boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
+    public static boolean isNotAlwaysNullResultWithNullParamFunctions(String funcName) {
         return notAlwaysNullResultWithNullParamFunctions.contains(funcName)
                 || alwaysReturnNonNullableFunctions.contains(funcName);
     }

@@ -219,6 +219,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     public static final String ENABLE_LOCAL_SHUFFLE_AGG = "enable_local_shuffle_agg";
 
+    public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
+
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL = "enable_tablet_internal_parallel";
     public static final String ENABLE_TABLET_INTERNAL_PARALLEL_V2 = "enable_tablet_internal_parallel_v2";
 
@@ -404,6 +406,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -513,6 +519,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COUNT_STAR_OPTIMIZATION = "enable_count_star_optimization";
 
+    public static final String ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION =
+            "enable_partition_column_value_only_optimization";
+
     public static final String HDFS_BACKEND_SELECTOR_HASH_ALGORITHM = "hdfs_backend_selector_hash_algorithm";
 
     public static final String CONSISTENT_HASH_VIRTUAL_NUMBER = "consistent_hash_virtual_number";
@@ -598,6 +607,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
     private long logRejectedRecordNum = 0;
+
+    /**
+     * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
+     * fragments that access the same tablet to run on the same node to improve cache hit.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
+    private boolean enableQueryTabletAffinity = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -966,7 +982,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if transmission_encode_level & 4, binary columns are compressed by lz4
     // if transmission_encode_level & 1, enable adaptive encoding.
     // e.g.
-    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(< 0.9);
+    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding
+    // ratio(< 0.9);
     // if transmission_encode_level = 6, SR will force encoding numbers and string columns.
     // in short,
     // for transmission_encode_level,
@@ -1343,6 +1360,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COUNT_STAR_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
     private boolean enableCountStarOptimization = true;
 
+    @VarAttr(name = ENABLE_PARTITION_COLUMN_VALUE_ONLY_OPTIMIZATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePartitionColumnValueOnlyOptimization = true;
+
     // This variable is introduced to solve compatibility issues/
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
@@ -1410,6 +1430,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -1500,6 +1525,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isCboUseDBLock() {
         return cboUseDBLock;
+    }
+
+    public boolean isEnableQueryTabletAffinity() {
+        return enableQueryTabletAffinity;
     }
 
     public int getStatisticCollectParallelism() {
@@ -2619,6 +2648,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableCountStarOptimization = v;
     }
 
+    public boolean isEnablePartitionColumnValueOnlyOptimization() {
+        return enablePartitionColumnValueOnlyOptimization;
+    }
+
+    public void setEnablePartitionColumnValueOnlyOptimization(boolean v) {
+        enablePartitionColumnValueOnlyOptimization = v;
+    }
+
     public boolean isEnableExprPrunePartition() {
         return enableExprPrunePartition;
     }
@@ -2644,6 +2681,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
+    }
+
+    public boolean getEnableIcebergIdentityColumnOptimize() {
+        return enableIcebergIdentityColumnOptimize;
+    }
+
+    public boolean getEnablePlanSerializeConcurrently() {
+        return enablePlanSerializeConcurrently;
     }
 
     // Serialize to thrift object

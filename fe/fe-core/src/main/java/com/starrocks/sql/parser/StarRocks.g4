@@ -609,7 +609,7 @@ dropTaskStatement
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
-    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
     withRowAccessPolicy*
     comment?
     materializedViewDesc*
@@ -976,7 +976,7 @@ modifyColumnClause
     ;
 
 columnRenameClause
-    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    : RENAME COLUMN oldColumn=identifier TO newColumn=identifier
     ;
 
 reorderColumnsClause

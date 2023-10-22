@@ -340,6 +340,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         sortKeyIdxes = copiedSortKeyIdxes;
                     }
 
+                    boolean createSchemaFile = true;
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
                         LakeTablet lakeTablet = ((LakeTablet) shadowTablet);
@@ -358,7 +359,9 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                         countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
                                         table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE,
                                         table.getCompressionType(),
-                                        copiedSortKeyIdxes, null);
+                                        copiedSortKeyIdxes, null, createSchemaFile);
+                        // For each partition, the schema file is created only when the first Tablet is created
+                        createSchemaFile = false;
                         batchTask.addTask(createReplicaTask);
                     }
                 }
@@ -614,7 +617,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 // modify column
                 for (Column col : shadowSchema) {
                     if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, col.getName()));
                     }
                 }
             } else if (shadowSchema.size() < originSchema.size()) {

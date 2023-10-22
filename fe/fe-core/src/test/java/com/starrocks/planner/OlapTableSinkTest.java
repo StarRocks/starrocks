@@ -466,6 +466,7 @@ public class OlapTableSinkTest {
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
                 TWriteQuorumType.MAJORITY, false, false, false);
+        sink.setAutomaticBucketSize(1);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());

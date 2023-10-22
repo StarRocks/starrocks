@@ -1,6 +1,6 @@
 # Continuously load data from Apache Flink®
 
-StarRocks provides a self-developed connector named Flink connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD).
+StarRocks provides a self-developed connector named Flink connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 The Flink connector supports DataStream API, Table API & SQL, and Python API. It has a higher and more stable performance than [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
 
@@ -179,7 +179,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       checkpoint, instead of due to timeout (which may cause data loss).
 
   - `label_keep_max_second` and `label_keep_max_num`: StarRocks FE configurations, default values are `259200` and `1000`
-    respectively. For details, see [FE configurations](https://docs.starrocks.io/en-us/latest/loading/Loading_intro#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
+    respectively. For details, see [FE configurations](../loading/Loading_intro.md#fe-configurations). The value of `label_keep_max_second` needs to be larger than the downtime of the Flink job. Otherwise, the Flink connector can not check the state of transactions in StarRocks by using the transaction labels saved in the Flink's savepoint or checkpoint and figure out whether these transactions are committed or not, which may eventually lead to data loss.
 
   These configurations are mutable and can be modified by using `ADMIN SET FRONTEND CONFIG`:
 
@@ -661,7 +661,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 ### Load data into columns of HLL type
 
-[`HLL`](../sql-reference/sql-statements/data-types/HLL) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL).
+[`HLL`](../sql-reference/sql-statements/data-types/HLL.md) can be used for approximate count distinct, see [Use HLL for approximate count distinct](../using_starrocks/Using_HLL.md).
 
 Here we take the counting of UV as an example to show how to load data into columns of the `HLL` type.
 
@@ -683,7 +683,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
    The column `visit_user_id` in the Flink table is of `BIGINT` type, and we want to load this column to the column `visit_users` of `HLL` type in the StarRocks table. So when defining the DDL of the Flink table, note that:
     - Because Flink does not support `BITMAP`, you need to define a column `visit_user_id` as `BIGINT` type to represent the column `visit_users` of `HLL` type in the StarRocks table.
-    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping between Flink table and StarRocks table.  Also you need to use [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash) function to tell the connector to convert the data of `BIGINT` type into `HLL` type.
+    - You need to set the option `sink.properties.columns` to `page_id,visit_date,user_id,visit_users=hll_hash(visit_user_id)` which tells the connector the column mapping between Flink table and StarRocks table.  Also you need to use [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash.md) function to tell the connector to convert the data of `BIGINT` type into `HLL` type.
 
     ```SQL
     CREATE TABLE `hll_uv` (

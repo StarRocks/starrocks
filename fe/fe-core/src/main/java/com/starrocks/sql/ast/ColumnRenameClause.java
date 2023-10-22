@@ -30,7 +30,7 @@ public class ColumnRenameClause extends AlterTableClause {
     }
 
     public ColumnRenameClause(String colName, String newColName, NodePosition pos) {
-        super(AlterOpType.SCHEMA_CHANGE, pos);
+        super(AlterOpType.RENAME, pos);
         this.colName = colName;
         this.newColName = newColName;
         this.needTableStable = false;
