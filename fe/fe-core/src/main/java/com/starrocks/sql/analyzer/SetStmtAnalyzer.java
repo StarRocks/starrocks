@@ -54,6 +54,7 @@ import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -187,6 +188,17 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+        }
+
+        // materialized_view_rewrite_mode
+        if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
+                throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
+                                "supported list is %s", rewriteModeName, supportedList));
+            }
         }
 
         var.setResolvedExpression(resolvedExpression);

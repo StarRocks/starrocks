@@ -62,6 +62,7 @@ public class PaimonTable extends Table {
         this.createTime = createTime;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }
