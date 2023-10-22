@@ -125,8 +125,8 @@ After the service is started, you may adjust the configuration parameters to mee
 |report_disk_state_interval_seconds|60| The interval of reporting the state of each disk, the amount of data on it, etc. |
 |report_tablet_interval_seconds|60| The interval of reporting the state of each tablet. Report the latest version of each tablet |
 |alter_tablet_timeout_seconds|86400|Timeout of schema change |
-|sys_log_dir|${STARROCKS_HOME}/log| The directory where logs, including INFO, WARNING, ERROR, FATAL, etc. are stored |
-|user_function_dir|${STARROKCS_HOME}/lib/udf| The directory where UDF programs are stored |
+|sys_log_dir|`${STARROCKS_HOME}/log`| The directory where logs, including INFO, WARNING, ERROR, FATAL, etc. are stored |
+|user_function_dir|`${STARROKCS_HOME}/lib/udf`| The directory where UDF programs are stored |
 |sys_log_level|INFO| log level，INFO < WARNING < ERROR < FATAL|
 |sys_log_roll_mode|SIZE-MB-1024| The size of the log split, per GB |
 |sys_log_roll_num|10| The number of logs to keep |
