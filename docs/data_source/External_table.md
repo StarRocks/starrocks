@@ -605,7 +605,7 @@ The following table describes the parameters.
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
 | hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the `<IP address of the Hive metastore\>:<Port number of the Hive metastore\>` format. The default port number is 9083. |
 
-From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](<https://docs.starrocks.com/en-us/2.3/sql-reference/sql-statements/data-definition/ALTER> RESOURCE).
+From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](https://docs.starrocks.com/en-us/2.3/sql-reference/sql-statements/data-definition/ALTER_RESOURCE).
 
 ##### View Hudi resources
 
