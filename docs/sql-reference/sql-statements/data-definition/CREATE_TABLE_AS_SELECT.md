@@ -32,7 +32,7 @@ AS SELECT query
 | ----------------- | ------------------------------------------------------------ |
 | column_name       | The column name. You do not need to pass in the column data type. StarRocks automatically selects an appropriate data type for each column and converts FLOAT and DOUBLE data into DECIMAL (38,9), and converts CHAR, VARCHAR, and STRING data into VARCHAR (65533). |
 | COMMENT           | The table comment.                                           |
-| partition_desc    | The partitioning method. For more information, see [partition_desc](<https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE> TABLE/#syntax). An empty value indicates that the table has no partition. |
+| partition_desc    | The partitioning method. For more information, see [partition_desc](https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE_TABLE/#syntax). An empty value indicates that the table has no partition. |
 | distribution_desc | The bucketing method. For more information, see [distribution_desc](https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE_TABLE/#syntax). An empty value indicates that the bucket key is the column that has the highest cardinality in the cost-based optimizer (CBO) statistical information and the number of buckets is 10. If the CBO does not contain related statistical information, the bucket key is the first column by default. |
 | properties        | The properties of the new table. For more information, see [PROPERTIES](https://docs.starrocks.com/zh-cn/main/sql-reference/sql-statements/data-definition/CREATE_TABLE/#syntax). Currently, CTAS can only be used to create a table whose ENGINE is OLAP. |
 
