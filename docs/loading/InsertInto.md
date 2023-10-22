@@ -244,15 +244,18 @@ The return is as follows:
 
 You can set the following configuration items for INSERT transaction:
 
-- **FE configuration**
+### FE configuration
 
-| FE configuration                   | Description                                                  |
-| ---------------------------------- | ------------------------------------------------------------ |
-| insert_load_default_timeout_second | Default timeout for INSERT transaction. Unit: second. If the current INSERT transaction is not completed within the time set by this parameter, it will be canceled by the system and the status will be CANCELLED. As for current version of StarRocks, you can only specify a uniform timeout for all INSERT transactions using this parameter, and you cannot set a different timeout for a specific INSERT transaction. The default is 3600 seconds (1 hour). If the INSERT transaction cannot be completed within the specified time, you can extend the timeout by adjusting this parameter. |
+#### insert_load_default_timeout_second
 
-- **Session variables**
+Default timeout for INSERT transaction. Unit: second. If the current INSERT transaction is not completed within the time set by this parameter, it will be canceled by the system and the status will be CANCELLED. As for current version of StarRocks, you can only specify a uniform timeout for all INSERT transactions using this parameter, and you cannot set a different timeout for a specific INSERT transaction. The default is 3600 seconds (1 hour). If the INSERT transaction cannot be completed within the specified time, you can extend the timeout by adjusting this parameter.
 
-| Session variable     | Description                                                  |
-| -------------------- | ------------------------------------------------------------ |
-| enable_insert_strict | Switch value to control if the INSERT transaction is tolerant of invalid data rows. When it is set to `true`, the transaction fails if any of the data rows is invalid. When it is set to `false`, the transaction succeeds when at least one row of data has been loaded correctly, and the label will be returned. The default is `true`. You can set this variable with `SET enable_insert_strict = {true | false};` command. |
-| query_timeout        | Timeout for SQL commands. Unit: second. INSERT, as a SQL command, is also restricted by this session variable. You can set this variable with the `SET query_timeout = xxx;` command. |
+### Session variables
+
+#### enable_insert_strict
+
+Switch value to control if the INSERT transaction is tolerant of invalid data rows. When it is set to `true`, the transaction fails if any of the data rows is invalid. When it is set to `false`, the transaction succeeds when at least one row of data has been loaded correctly, and the label will be returned. The default is `true`. You can set this variable with `SET enable_insert_strict = {true | false};` command.
+
+#### query_timeout
+
+Timeout for SQL commands. Unit: second. INSERT, as a SQL command, is also restricted by this session variable. You can set this variable with the `SET query_timeout = xxx;` command.
