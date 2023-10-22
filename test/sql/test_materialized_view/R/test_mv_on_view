@@ -56,7 +56,7 @@ ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views 
     WHERE table_name = 'mv_on_view_1';
 -- result:
-true	base view view1 changed
+true	
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
 SELECT * FROM mv_on_view_1 ORDER BY event_day;

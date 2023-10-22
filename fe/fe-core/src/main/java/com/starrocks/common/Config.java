@@ -1711,6 +1711,9 @@ public class Config extends ConfigBase {
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
+
+    @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
     @ConfField(mutable = true)
@@ -1802,7 +1805,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -2515,6 +2518,9 @@ public class Config extends ConfigBase {
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
     public static int pipe_scheduler_interval_millis = 1000;
+
+    @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,

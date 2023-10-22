@@ -17,14 +17,25 @@ package com.starrocks.jdbcbridge;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 
+import java.io.File;
 import java.lang.reflect.Array;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+
 
 public class JDBCScanner {
     private String driverLocation;
@@ -37,6 +48,8 @@ public class JDBCScanner {
     private List<String> resultColumnClassNames;
     private List<Object[]> resultChunk;
     private int resultNumRows = 0;
+    ClassLoader classLoader;
+
 
     public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
         this.driverLocation = driverLocation;
@@ -45,7 +58,12 @@ public class JDBCScanner {
 
     public void open() throws Exception {
         String key = scanContext.getUser() + "/" + scanContext.getJdbcURL();
-        dataSource = DataSourceCache.getInstance().getSource(key, () -> {
+        URL driverURL = new File(driverLocation).toURI().toURL();
+        DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(key, () -> {
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
+                    driverURL,
+            });
+            Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
             config.setJdbcUrl(scanContext.getJdbcURL());
@@ -54,9 +72,14 @@ public class JDBCScanner {
             config.setMaximumPoolSize(scanContext.getConnectionPoolSize());
             config.setMinimumIdle(scanContext.getMinimumIdleConnections());
             config.setIdleTimeout(scanContext.getConnectionIdleTimeoutMs());
-            dataSource = new HikariDataSource(config);
-            return dataSource;
+            HikariDataSource hikariDataSource = new HikariDataSource(config);
+            // hikari doesn't support user-provided class loader, we should save them ourselves to ensure that
+            // the classes of result data are loaded by the same class loader, otherwise we may encounter
+            // ArrayStoreException in getNextChunk
+            return new DataSourceCache.DataSourceCacheItem(hikariDataSource, classLoader);
         });
+        dataSource = cacheItem.getHikariDataSource();
+        classLoader = cacheItem.getClassLoader();
 
         connection = dataSource.getConnection();
         connection.setAutoCommit(false);
@@ -73,9 +96,32 @@ public class JDBCScanner {
         resultChunk = new ArrayList<>(resultSetMetaData.getColumnCount());
         for (int i = 1; i <= resultSetMetaData.getColumnCount(); i++) {
             resultColumnClassNames.add(resultSetMetaData.getColumnClassName(i));
-            Class<?> clazz = Class.forName(resultSetMetaData.getColumnClassName(i));
-            resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+            Class<?> clazz = classLoader.loadClass(resultSetMetaData.getColumnClassName(i));
+            if (isGeneralJDBCClassType(clazz)) {
+                resultChunk.add((Object[]) Array.newInstance(clazz, scanContext.getStatementFetchSize()));
+            } else {
+                resultChunk.add((Object[]) Array.newInstance(String.class, scanContext.getStatementFetchSize()));
+            }
         }
+    }
+
+    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET =  new HashSet<>(Arrays.asList(
+            Boolean.class,
+            Short.class,
+            Integer.class,
+            Long.class,
+            Float.class,
+            Double.class,
+            BigInteger.class,
+            BigDecimal.class,
+            java.sql.Date.class,
+            Timestamp.class,
+            LocalDateTime.class,
+            String.class
+    ));
+
+    private boolean isGeneralJDBCClassType(Class<?> clazz) {
+        return GENERAL_JDBC_CLASS_SET.contains(clazz);
     }
 
     // used for cpp interface
@@ -113,8 +159,15 @@ public class JDBCScanner {
                     dataColumn[resultNumRows] = ((Number) resultObject).floatValue();
                 } else if (dataColumn instanceof Double[]) {
                     dataColumn[resultNumRows] = ((Number) resultObject).doubleValue();
-                } else {
+                } else if (dataColumn instanceof String[] && resultObject instanceof String) {
+                    // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
+                } else if (!(dataColumn instanceof String[])) {
+                    // for other general class type, assign value directly
+                    dataColumn[resultNumRows] = resultObject;
+                } else {
+                    // for non-general class type, use string representation
+                    dataColumn[resultNumRows] = resultSet.getString(i + 1);
                 }
             }
             resultNumRows++;

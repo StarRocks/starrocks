@@ -58,6 +58,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -172,8 +173,8 @@ public class Utils {
         return list;
     }
 
-    private static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
-                                                             Predicate<Operator> lambda) {
+    public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
+                                                            Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
             return;
@@ -422,6 +423,16 @@ public class Utils {
             gid = gid * 2 + (bitSet.get(b) ? 1 : 0);
         }
         return gid;
+    }
+
+    public static ColumnRefOperator findSmallestColumnRefFromTable(Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                                   Table table) {
+        Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
+        List<ColumnRefOperator> visibleColumnRefs = colRefToColumnMetaMap.entrySet().stream()
+                .filter(e -> baseSchema.contains(e.getValue()))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        return findSmallestColumnRef(visibleColumnRefs);
     }
 
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {

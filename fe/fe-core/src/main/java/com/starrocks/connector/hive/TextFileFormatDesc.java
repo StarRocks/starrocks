@@ -55,10 +55,18 @@ public class TextFileFormatDesc {
 
     public TTextFileDesc toThrift() {
         TTextFileDesc desc = new TTextFileDesc();
-        desc.field_delim = fieldDelim;
-        desc.line_delim = lineDelim;
-        desc.collection_delim = collectionDelim;
-        desc.mapkey_delim = mapkeyDelim;
+        if (fieldDelim != null) {
+            desc.setField_delim(fieldDelim);
+        }
+        if (lineDelim != null) {
+            desc.setLine_delim(lineDelim);
+        }
+        if (collectionDelim != null) {
+            desc.setCollection_delim(collectionDelim);
+        }
+        if (mapkeyDelim != null) {
+            desc.setMapkey_delim(mapkeyDelim);
+        }
         return desc;
     }
 

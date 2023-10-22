@@ -1768,4 +1768,10 @@ public class ViewPlanTest extends PlanTestBase {
         sql = "SELECT Map{1:10,2:20,3:30}";
         testView(sql);
     }
+
+    @Test
+    public void testBackquoteAlias() throws Exception {
+        String sql = "select `select` from (select v1 from t0) `abc.bcd`(`select`);";
+        testView(sql);
+    }
 }

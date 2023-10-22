@@ -91,7 +91,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.user                                 | YES      | None          | The username of your StarRocks cluster account. The user needs the [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md) on the StarRocks table.             |
 | starrocks.password                             | YES      | None          | The password of your StarRocks cluster account.              |
 | starrocks.write.label.prefix                   | NO       | spark-        | The label prefix used by Stream Load.                        |
-| starrocks.write.enable.transaction-stream-load | NO | TRUE | Whether to use [Stream Load transaction interface](../loading/Stream_Load_transaction_interface) to load data. It requires StarRocks v2.5 or later. This feature can load more data in a transaction with less memory usage, and improve performance. <br/> **NOTICE:** Since 1.1.1, this parameter takes effect only when the value of `starrocks.write.max.retries` is non-positive because Stream Load transaction interface does not support retry. |
+| starrocks.write.enable.transaction-stream-load | NO | TRUE | Whether to use [Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md) to load data. It requires StarRocks v2.5 or later. This feature can load more data in a transaction with less memory usage, and improve performance. <br/> **NOTICE:** Since 1.1.1, this parameter takes effect only when the value of `starrocks.write.max.retries` is non-positive because Stream Load transaction interface does not support retry. |
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
 | starrocks.write.buffer.rows | NO | Integer.MAX_VALUE | Supported since version 1.1.1. The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
@@ -384,7 +384,7 @@ The following example explains how to load data with Spark SQL by using the `INS
 ### Load data to Primary Key table
 
 This section will show how to load data to StarRocks Primary Key table to achieve partial updates, and conditional updates.
-You can see [Change data through loading](../loading/Load_to_Primary_Key_tables) for the detailed introduction of these features.
+You can see [Change data through loading](../loading/Load_to_Primary_Key_tables.md) for the detailed introduction of these features.
 These examples use Spark SQL.
 
 #### Preparations
@@ -616,7 +616,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 2. Create a Spark table.
 
-   The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `HLL` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash) function to convert the data of `BIGINT` type into `HLL` type.
+   The schema of the Spark table is inferred from the StarRocks table, and the Spark does not support the `HLL` type. So you need to customize the corresponding column data type in Spark, for example as `BIGINT`, by configuring the option `"starrocks.column.types"="visit_users BIGINT"`. When using Stream Load to ingest data, the connector uses the [`hll_hash`](../sql-reference/sql-functions/aggregate-functions/hll_hash.md) function to convert the data of `BIGINT` type into `HLL` type.
 
     Run the following DDL in `spark-sql`:
 

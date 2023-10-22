@@ -14,10 +14,14 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableList;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -25,11 +29,16 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -54,6 +63,11 @@ public class AlterMaterializedViewTest {
                 "                )\n" +
                 "                as  select v1, count(v2) as count_c2, sum(v3) as sum_c3\n" +
                 "                from t0 group by v1;\n");
+    }
+
+    @Before
+    public void before() {
+        connectContext.setThreadLocalInfo();
     }
 
     @Test
@@ -182,5 +196,88 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
         }
+    }
+
+    @Test
+    public void testAlterMVOnView() throws Exception {
+        final String mvName = "mv_on_view_1";
+        starRocksAssert.withView("CREATE VIEW view1 as select v1, sum(v2) as k2 from t0 group by v1");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                "                DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "                PROPERTIES(\n" +
+                "                    \"replication_num\" = \"1\"\n" +
+                "                )\n" +
+                "                as select v1, k2 from view1");
+
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), mvName);
+        List<String> columns = mv.getColumns().stream().map(Column::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("k2", "v1"), columns);
+
+        // alter the view to a different type, cause MV inactive
+        connectContext.executeSql("alter view view1 as select v1, avg(v2) as k2 from t0 group by v1");
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base view view1 changed", mv.getInactiveReason());
+
+        // try to active the mv
+        connectContext.executeSql(String.format("alter materialized view %s active", mvName));
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("mv schema changed: " +
+                "[[`k2` bigint(20) NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]] " +
+                "does not match " +
+                "[[`k2` double NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]]", mv.getInactiveReason());
+
+        // use a illegal view schema, should active the mv correctly
+        connectContext.executeSql("alter view view1 as select v1, max(v2) as k2 from t0 group by v1");
+        connectContext.executeSql(String.format("alter materialized view %s active", mvName));
+        Assert.assertTrue(mv.isActive());
+        Assert.assertNull(mv.getInactiveReason());
+    }
+
+    @Test
+    public void testActiveChecker() throws Exception {
+        PlanTestBase.mockDml();
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        String baseTableName = "base_tbl_active";
+        String createTableSql =
+                "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
+        starRocksAssert.withTable(createTableSql);
+        starRocksAssert.withMaterializedView("create materialized view mv_active " +
+                " refresh manual as select * from base_tbl_active");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
+        Assert.assertTrue(mv.isActive());
+
+        // drop the base table and try to activate it
+        starRocksAssert.dropTable(baseTableName);
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+        checker.runForTest();
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+
+        // create the table again, and activate it
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.withTable(createTableSql);
+        checker.runForTest();
+        Assert.assertTrue(mv.isActive());
+
+        // activate before refresh
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.dropTable(baseTableName);
+        starRocksAssert.withTable(createTableSql);
+        Assert.assertFalse(mv.isActive());
+        Thread.sleep(1000);
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
+        Assert.assertTrue(mv.isActive());
+
+        // manually set to inactive
+        mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
+        Assert.assertFalse(mv.isActive());
+        checker.runForTest();
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
+
+        checker.start();
     }
 }

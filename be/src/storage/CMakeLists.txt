@@ -138,6 +138,9 @@ add_library(Storage STATIC
     projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
+    row_store_encoder.cpp
+    row_store_encoder_simple.cpp
+    row_store_encoder_factory.cpp
     schema_change.cpp
     schema_change_utils.cpp
     tablet_reader.cpp
@@ -184,6 +187,7 @@ add_library(Storage STATIC
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
     lake/update_manager.cpp

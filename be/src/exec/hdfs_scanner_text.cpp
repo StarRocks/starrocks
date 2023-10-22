@@ -25,6 +25,18 @@
 
 namespace starrocks {
 
+const std::string DEFAULT_FIELD_DELIM = "\001";
+const std::string DEFAULT_COLLECTION_DELIM = "\002";
+const std::string DEFAULT_MAPKEY_DELIM = "\003";
+// LF = Line Feed = '\n'
+const std::string LINE_DELIM_LF = "\n";
+// Most hive TextFile using LF as line delimiter
+const std::string DEFAULT_LINE_DELIM = LINE_DELIM_LF;
+// CR = Carriage Return = '\r'
+const std::string LINE_DELIM_CR = "\r";
+// TODO(SmithCruise) CR + LF, but we don't support it yet, because our code only support single char as line delimiter
+const std::string LINE_DELIM_CR_LF = "\r\n";
+
 static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
     ssize_t end = filename.size() - 1;
     while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
@@ -36,8 +48,8 @@ static CompressionTypePB return_compression_type_from_filename(const std::string
 class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
-    HdfsScannerCSVReader(RandomAccessFile* file, const std::string& row_delimiter, const std::string& column_separator,
-                         size_t file_length)
+    HdfsScannerCSVReader(RandomAccessFile* file, const std::string& row_delimiter, bool need_probe_line_delimiter,
+                         const std::string& column_separator, size_t file_length)
             : CSVReader(CSVParseOptions(row_delimiter, column_separator)) {
         _file = file;
         _offset = 0;
@@ -45,6 +57,7 @@ public:
         _file_length = file_length;
         _row_delimiter_length = row_delimiter.size();
         _column_delimiter_length = column_separator.size();
+        _need_probe_line_delimiter = need_probe_line_delimiter;
     }
 
     Status reset(size_t offset, size_t remain_length);
@@ -56,6 +69,8 @@ protected:
 
     void _trim_row_delimeter(Record* record);
 
+    char* _find_line_delimiter(starrocks::CSVBuffer& buffer, size_t pos) override;
+
 private:
     RandomAccessFile* _file;
     size_t _offset = 0;
@@ -63,6 +78,8 @@ private:
     size_t _file_length = 0;
     bool _should_stop_scan = false;
     bool _should_stop_next = false;
+    // Hive TextFile's line delimiter maybe \n, \r or \r\n, we need to probe it
+    bool _need_probe_line_delimiter = false;
 };
 
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
@@ -144,27 +161,82 @@ void HdfsScannerCSVReader::_trim_row_delimeter(Record* record) {
     }
 }
 
+char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, size_t pos) {
+    // If we can get explicit line.delim from hms, we don't need to probe it
+    if (LIKELY(!_need_probe_line_delimiter)) {
+        return buffer.find(_parse_options.row_delimiter, pos);
+    } else {
+        // If we didn't get explicit line.delim from hms, we need to probe it.
+        // We will probe '\n' first, most of TextFile's line.delim is '\n'
+        // Then we will try to probe '\r'
+        // TODO(Smith)
+        // We didn't support to treat '\r\n' as line.delim,
+        // because our code does not support line separator's length larger than one char.
+        char* p = buffer.find(LINE_DELIM_LF, pos);
+        if (p != nullptr) {
+            _need_probe_line_delimiter = false;
+            _parse_options.row_delimiter = LINE_DELIM_LF;
+            return p;
+        }
+        p = buffer.find(LINE_DELIM_CR, pos);
+        if (p != nullptr) {
+            _need_probe_line_delimiter = false;
+            _parse_options.row_delimiter = LINE_DELIM_CR;
+            return p;
+        }
+        return nullptr;
+    }
+}
+
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
 
-    // All delimiters will not be empty.
-    // Even if the user has not set it, there will be a default value.
-    if (text_file_desc.field_delim.empty() || text_file_desc.line_delim.empty() ||
-        text_file_desc.collection_delim.empty() || text_file_desc.mapkey_delim.empty()) {
-        return Status::Corruption("Hive TEXTFILE's delimiters is missing");
+    // _field_delimiter and _line_delimiter should use std::string,
+    // because the CSVReader is using std::string type as delimiter.
+    if (text_file_desc.__isset.field_delim) {
+        if (text_file_desc.field_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's field delim is empty");
+        }
+        _field_delimiter = text_file_desc.field_delim;
+    } else {
+        _field_delimiter = DEFAULT_FIELD_DELIM;
     }
 
-    // _field_delimiter and _record_delimiter should use std::string,
-    // because the CSVReader is using std::string type as delimiter.
-    _field_delimiter = text_file_desc.field_delim;
     // we should cast string to char now since csv reader only support record delimiter by char.
-    _record_delimiter = text_file_desc.line_delim.front();
+    if (text_file_desc.__isset.line_delim) {
+        if (text_file_desc.line_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's line delim is empty");
+        }
+        _line_delimiter = text_file_desc.line_delim.front();
+    } else {
+        _line_delimiter = DEFAULT_LINE_DELIM;
+        // We didn't get explicit line delimiter from hms, so we need to probe it by ourselves
+        _need_probe_line_delimiter = true;
+    }
 
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
     // So here, we only use the first character of collection_delim and mapkey_delim.
-    _collection_delimiter = text_file_desc.collection_delim.front();
-    _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    if (text_file_desc.__isset.collection_delim) {
+        if (text_file_desc.collection_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's collection delim is empty");
+        }
+        _collection_delimiter = text_file_desc.collection_delim.front();
+    } else {
+        _collection_delimiter = DEFAULT_COLLECTION_DELIM.front();
+    }
+    if (text_file_desc.__isset.mapkey_delim) {
+        if (text_file_desc.mapkey_delim.empty()) {
+            // Just a piece of defense code
+            return Status::Corruption("Hive TextFile's mapkey delim is empty");
+        }
+        _mapkey_delimiter = text_file_desc.mapkey_delim.front();
+    } else {
+        _mapkey_delimiter = DEFAULT_MAPKEY_DELIM.front();
+    }
 
     // by default it's unknown compression. we will synthesise informaiton from FE and BE(file extension)
     // parse compression type from FE first.
@@ -346,15 +418,16 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
         auto file_size = static_cast<size_t>(-1);
-        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size);
+        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
+                                                         _field_delimiter, file_size);
         return Status::OK();
     }
 
     // no compressed file, splittable.
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
     if (_current_range_index == 0) {
-        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
-                                                         scan_range->file_length);
+        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
+                                                         _field_delimiter, scan_range->file_length);
     }
     {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());

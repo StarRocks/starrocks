@@ -15,6 +15,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -40,6 +41,7 @@ import org.junit.Test;
 import java.util.List;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
+import static com.starrocks.thrift.TStorageType.COLUMN_WITH_ROW;
 
 public class ShowCreateViewStmtTest {
 
@@ -108,6 +110,24 @@ public class ShowCreateViewStmtTest {
                         "\"enable_persistent_index\" = \"false\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
+                        ");")
+                .withTable("CREATE TABLE `storage_test` (\n" +
+                        "  `a` varchar(125) COMMENT \"\\\\'abc'\",\n" +
+                        "  `b` varchar(125) NULL COMMENT 'abc \"ef\" abc',\n" +
+                        "  `c` varchar(123) NULL COMMENT \"abc \\\"ef\\\" abc\",\n" +
+                        "  `d` varchar(123) NULL COMMENT \"\\\\abc\",\n" +
+                        "  `e` varchar(123) NULL COMMENT '\\\\\\\\\"'\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(`a`)\n" +
+                        "COMMENT \"abc \\\"ef\\\" 'abc' \\\\abc\"\n" +
+                        "DISTRIBUTED BY HASH(`a`) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"compression\" = \"LZ4\", \n" +
+                        "\"storage_type\" = \"column_with_row\"\n" +
                         ");");
     }
 
@@ -204,5 +224,16 @@ public class ShowCreateViewStmtTest {
                 null, null, false, false);
         StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof CreateTableStmt);
+    }
+
+    @Test
+    public void testDdlStorageType() {
+        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
+        List<String> res = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt("storage_test", storageTest, res,
+                null, null, false, false);
+        Assert.assertTrue(storageTest.isOlapTable() &&
+                ((OlapTable) storageTest).getStorageType() == COLUMN_WITH_ROW);
     }
 }

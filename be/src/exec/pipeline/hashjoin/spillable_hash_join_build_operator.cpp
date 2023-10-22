@@ -130,8 +130,10 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
     // we could build global runtime filter for this case later.
     auto merged = _partial_rf_merger->set_always_true();
+    // for spillable operator, this interface never returns error status because we skip building rf here
+    DCHECK(merged.ok());
 
-    if (merged) {
+    if (merged.value()) {
         RuntimeInFilterList in_filters;
         RuntimeBloomFilterList bloom_filters;
         // publish empty runtime bloom-filters
@@ -215,15 +217,18 @@ std::function<StatusOr<ChunkPtr>()> SpillableHashJoinBuildOperator::_convert_has
     auto build_chunk = _join_builder->hash_join_builder()->hash_table().get_build_chunk();
     DCHECK_GT(build_chunk->num_rows(), 0);
 
+    auto st = build_chunk->upgrade_if_overflow();
     _hash_table_build_chunk_slice.reset(build_chunk);
     _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
 
-    return [this]() -> StatusOr<ChunkPtr> {
+    return [this, st]() -> StatusOr<ChunkPtr> {
+        RETURN_IF_ERROR(st);
         if (_hash_table_build_chunk_slice.empty()) {
             _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
             return Status::EndOfFile("eos");
         }
         auto chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
+        RETURN_IF_ERROR(chunk->downgrade());
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());
         return chunk;

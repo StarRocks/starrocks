@@ -42,6 +42,16 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = _runtime_state->chunk_size();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
+    TabletSchemaSPtr tablet_schema = std::make_shared<TabletSchema>();
+    tablet_schema->copy_from(_tablet->tablet_schema());
+    if (_parent->_meta_scan_node.__isset.columns && !_parent->_meta_scan_node.columns.empty() &&
+        _parent->_meta_scan_node.columns[0].col_unique_id > 0) {
+        tablet_schema->clear_columns();
+        for (auto& column : _parent->_meta_scan_node.columns) {
+            tablet_schema->append_column(TabletColumn(column));
+        }
+    }
+    _reader_params.tablet_schema = std::move(tablet_schema);
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
     return Status::OK();

@@ -177,14 +177,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public static class AsyncRefreshContext {
+        // Olap base table refreshed meta infos
         // base table id -> (partition name -> partition info (id, version))
         // partition id maybe changed after insert overwrite, so use partition name as key.
         // partition id which in BasePartitionInfo can be used to check partition is changed
         @SerializedName("baseTableVisibleVersionMap")
         private final Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap;
 
+        // External base table refreshed meta infos
         @SerializedName("baseTableInfoVisibleVersionMap")
         private final Map<BaseTableInfo, Map<String, BasePartitionInfo>> baseTableInfoVisibleVersionMap;
+
+        // Materialized view partition is updated/added associated with ref-base-table partitions. This meta
+        // is kept to track materialized view's partition change and update associated ref-base-table partitions
+        // at the same time.
+        @SerializedName("mvPartitionNameRefBaseTablePartitionMap")
+        private final Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap;
 
         @SerializedName(value = "defineStartTime")
         private boolean defineStartTime;
@@ -201,6 +209,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         public AsyncRefreshContext() {
             this.baseTableVisibleVersionMap = Maps.newConcurrentMap();
             this.baseTableInfoVisibleVersionMap = Maps.newConcurrentMap();
+            this.mvPartitionNameRefBaseTablePartitionMap = Maps.newConcurrentMap();
             this.defineStartTime = false;
             this.startTime = Utils.getLongFromDateTime(LocalDateTime.now());
             this.step = 0;
@@ -215,9 +224,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return baseTableInfoVisibleVersionMap;
         }
 
+        public Map<String, Set<String>> getMvPartitionNameRefBaseTablePartitionMap() {
+            return mvPartitionNameRefBaseTablePartitionMap;
+        }
+
         public void clearVisibleVersionMap() {
+            LOG.info("Clear materialized view's version map");
             this.baseTableInfoVisibleVersionMap.clear();
             this.baseTableVisibleVersionMap.clear();
+            this.mvPartitionNameRefBaseTablePartitionMap.clear();
         }
 
         public boolean isDefineStartTime() {
@@ -267,6 +282,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             AsyncRefreshContext arc = new AsyncRefreshContext();
             arc.baseTableVisibleVersionMap.putAll(this.baseTableVisibleVersionMap);
             arc.baseTableInfoVisibleVersionMap.putAll(this.baseTableInfoVisibleVersionMap);
+            arc.mvPartitionNameRefBaseTablePartitionMap.putAll(this.mvPartitionNameRefBaseTablePartitionMap);
             arc.defineStartTime = this.defineStartTime;
             arc.startTime = this.startTime;
             arc.step = this.step;
@@ -386,6 +402,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
+
+    // Materialized view's output columns may be different from defined query's output columns.
+    // Record the indexes based on materialized view's column output.
+    // eg: create materialized view mv as select col1, col2, col3 from tbl
+    //  desc mv             :  col2, col1, col3
+    //  queryOutputIndexes  :  1, 0, 2
+    // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
+    @SerializedName(value = "queryOutputIndices")
+    protected List<Integer> queryOutputIndices = Lists.newArrayList();
+
+
     // it is a property in momery, do not serialize it
     private PlanMode planMode = PlanMode.UNKNOWN;
 
@@ -460,6 +487,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public void setActive() {
         this.active = true;
+        this.inactiveReason = null;
         // reset mv rewrite cache when it is active again
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
     }
@@ -538,6 +566,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setMaxMVRewriteStaleness(int maxMVRewriteStaleness) {
         this.maxMVRewriteStaleness = maxMVRewriteStaleness;
+    }
+
+    public List<Integer> getQueryOutputIndices() {
+        return queryOutputIndices;
+    }
+
+    public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
+        this.queryOutputIndices = queryOutputIndices;
     }
 
     /**
@@ -741,8 +777,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                 continue;
             }
-            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName());
+            List<String> partitionNames = PartitionUtil.getPartitionNames(baseTable);
             Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
             long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
 
@@ -905,6 +940,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Try to fix relationship between base table and mv.
+     * It will set the state to inactive if it finds any issues
+     * <p>
+     * NOTE: caller need to hold the db lock
+     */
+    public void fixRelationship() {
+        onReloadImpl();
     }
 
     /**
@@ -1363,7 +1408,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                                                       boolean isQueryRewrite) {
         Preconditions.checkState(partitionInfo instanceof ExpressionRangePartitionInfo);
         // If non-partition-by table has changed, should refresh all mv partitions
-        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        Expr partitionExpr = getFirstPartitionRefTableExpr();
         Pair<Table, Column> partitionInfo = getBaseTableAndPartitionColumn();
         if (partitionInfo == null) {
             setInactiveAndReason("partition configuration changed");
@@ -1412,11 +1457,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = getRangePartitionMap();
-        // step1.1: collect ref base table's partition range diff.
-        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, refBasePartitionCol,
-                basePartitionNameToRangeMap, mvPartitionNameToRangeMap);
-
-        // refresh ref base table's deleted partitions
+        // TODO: prune the partitions based on ttl
+        RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionInfo.second,
+                basePartitionNameToRangeMap, mvPartitionNameToRangeMap, null);
         needRefreshMvPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
         // remove ref base table's deleted partitions from `mvPartitionMap`
         for (String deleted : rangePartitionDiff.getDeletes().keySet()) {

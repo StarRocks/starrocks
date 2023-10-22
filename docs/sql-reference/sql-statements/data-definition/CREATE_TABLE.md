@@ -107,6 +107,8 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
 **From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../data-manipulation/insert.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/insert.md). See [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
+
 - For MySQL, specify the following properties:
 
     ```plaintext
@@ -359,7 +361,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
   - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
 
-  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md#hash-bucketing).
 
   **Precautions**:
 

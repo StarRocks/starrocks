@@ -91,7 +91,9 @@ import java.lang.reflect.Field;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
@@ -248,7 +250,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setCurrentRoleIds(
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(testUser)
         );
-        starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(testUser.getUser());
     }
 
     private static void ctxToRoot() throws PrivilegeException {
@@ -257,7 +259,7 @@ public class PrivilegeCheckerTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT)
         );
 
-        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getUser());
     }
 
     private static void grantOrRevoke(String sql) throws Exception {
@@ -3071,7 +3073,8 @@ public class PrivilegeCheckerTest {
         TableName tableName = new TableName("default_catalog", "db_for_ranger", "tbl1");
 
         Expr e = SqlParser.parseSqlToExpr("exists (select * from db_for_ranger.tbl2)", SqlModeHelper.MODE_DEFAULT);
-        Expr e2 = SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT);
+        Map<String, Expr> e2 = new HashMap<>();
+        e2.put("k1", SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT));
         try (MockedStatic<Authorizer> authorizerMockedStatic =
                      Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic
@@ -3079,7 +3082,7 @@ public class PrivilegeCheckerTest {
                     .thenReturn(e);
             authorizerMockedStatic
                     .when(() -> Authorizer.getColumnMaskingPolicy(
-                            Mockito.any(), Mockito.eq(tableName), Mockito.eq("k1"), Mockito.any()))
+                            Mockito.any(), Mockito.eq(tableName), Mockito.any()))
                     .thenReturn(e2);
             authorizerMockedStatic.when(Authorizer::getInstance)
                     .thenCallRealMethod();
@@ -3108,6 +3111,16 @@ public class PrivilegeCheckerTest {
                     "grant select on table db_for_ranger.tbl1 to test",
                     "revoke select on table db_for_ranger.tbl1 from test",
                     "Access denied;");
+
+            sql = "select k1 from db_for_ranger.tbl1";
+            stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            Analyzer.analyze(stmt, context);
+            queryStatement = (QueryStatement) stmt;
+            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+            subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
+                    .getRelation();
+            selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
+            Assert.assertTrue(selectRelation.getOutputExpression().get(0) instanceof ArithmeticExpr);
         }
 
         Config.access_control = "native";

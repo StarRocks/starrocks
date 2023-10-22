@@ -63,13 +63,15 @@ struct TTupleDescriptor {
 }
 
 enum THdfsFileFormat {
-  TEXT,
-  LZO_TEXT,
-  RC_FILE,
-  SEQUENCE_FILE,
-  AVRO,
-  PARQUET,
-  ORC,
+  TEXT = 0,
+  LZO_TEXT = 1,
+  RC_FILE = 2,
+  SEQUENCE_FILE = 3,
+  AVRO = 4,
+  PARQUET = 5,
+  ORC = 6,
+
+  UNKNOWN = 100
 }
 
 
@@ -417,6 +419,16 @@ struct TIcebergSchemaField {
     100: optional list<TIcebergSchemaField> children
 }
 
+struct TPartitionMap {
+    1: optional map<i64, THdfsPartition> partitions
+}
+
+struct TCompressedPartitionMap {
+    1: optional i32 original_len
+    2: optional i32 compressed_len
+    3: optional string compressed_serialized_partitions
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -429,6 +441,12 @@ struct TIcebergTable {
 
     // partition column names
     4: optional list<string> partition_column_names
+
+    // partition map may be very big, serialize costs too much, just use serialized byte[]
+    5: optional TCompressedPartitionMap compressed_partitions
+
+    // if serialize partition info throws exception, then use unserialized partitions
+    6: optional map<i64, THdfsPartition> partitions
 }
 
 struct THudiTable {

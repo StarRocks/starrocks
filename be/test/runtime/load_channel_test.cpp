@@ -196,14 +196,6 @@ protected:
 
     void TearDown() override {
         _load_channel.reset();
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10086));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
-        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10087));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
-        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10088));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
-        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         (void)fs::remove_all(kTestGroupPath);
         _tablet_manager->prune_metacache();
     }
