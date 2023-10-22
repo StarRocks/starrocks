@@ -307,9 +307,6 @@ public class WebBaseAction extends BaseAction {
                     .append("ha")
                     .append("</a></li>");
         }
-        sb.append("<li id=\"nav_help\"><a href=\"/help\">")
-                .append("help")
-                .append("</a></li></tr>");
 
         sb.append(NAVIGATION_BAR_SUFFIX);
     }
