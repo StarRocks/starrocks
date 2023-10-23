@@ -41,7 +41,7 @@ SET time_zone = "Asia/Shanghai";
 
  ```SQL
 SET GLOBAL query_mem_limit = 137438953472;
-```
+ ```
 
 以下变量仅支持全局生效，不支持设置为会话级别生效。您必须使用 `SET GLOBAL <var_name> = xxx;`，不能使用 `SET <var_name> = xxx;`，否则返回错误。
 
@@ -214,6 +214,14 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 ### enable_query_queue_statistic (global)
 
 布尔值，用于控制是否为统计信息查询启用查询队列。默认值：`false`。
+
+### enable_query_tablet_affinity（2.5 及以后）
+
+布尔值，用于控制在多次查询同一个 tablet 时是否倾向于选择固定的同一个副本。
+
+如果待查询的表中存在大量 tablet，开启该特性会对性能有提升，因为会更快的将 tablet 的元信息以及数据缓存在内存中。但是，如果查询存在一些热点 tablet，开启该特性可能会导致性能有所退化，因为该特性倾向于将一个热点 tablet 的查询调度到相同的 BE 上，在高并发的场景下无法充分利用多台 BE 的资源。
+
+默认值：`false`，表示使用原来的机制，即每次查询会从多个副本中选择一个。自 2.5.6、3.0.8 版本起，StarRocks 支持该参数。
 
 ### enable_scan_block_cache（2.5 及以后）
 
