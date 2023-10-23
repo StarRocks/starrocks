@@ -26,7 +26,7 @@ Submit the Kafka connector into Kafka Connect:
 - Self-managed Kafka cluster:
 
   - Download and unzip [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz).
-  - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes within the Kafka connect cluster.
+  - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes within the Kafka Connect cluster.
 
 - Confluent cloud:
 
@@ -40,7 +40,7 @@ Create a table or tables in StarRocks according to Kafka Topics and data.
 
 ## Examples
 
-The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka connect (no need to restart the Kafka service) in order to load data into StarRocks.
+The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka Connect (no need to restart the Kafka service) in order to load data into StarRocks.
 
 1. Create a Kafka connector configuration file named **connect-StarRocks-sink.properties** and configure the  parameters. For detailed information about parameters, see [Parameters](#parameters).
 
@@ -104,7 +104,7 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 
 | Parameter                           | Required | Default value                                                | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| name                                | YES      |                                                              | Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka connect cluster. For example, starrocks-kafka-connector. |
+| name                                | YES      |                                                              | Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka Connect cluster. For example, starrocks-kafka-connector. |
 | connector.class                     | YES      | com.starrocks.connector.kafka.SinkConnector                  | Class used by this Kafka connector's sink.                   |
 | topics                              | YES      |                                                              | One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both.However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name. |
 | topics.regex                        |          | Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. |                                                              |
@@ -113,8 +113,8 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 | starrocks.database.name             | YES      |                                                              | The name of StarRocks database.                              |
 | starrocks.username                  | YES      |                                                      | The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table. |
 | starrocks.password                  | YES      |                                                              | The password of your StarRocks cluster account.              |
-| key.converter                       | NO      |           Key converter used by Kafka connect cluster                                                           | This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka connect cluster.|
-| value.converter                     | NO      |    Value converter used by Kafka connect cluster                             | This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka connect cluster. |
+| key.converter                       | NO      |           Key converter used by Kafka Connect cluster                                                           | This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka Connect cluster.|
+| value.converter                     | NO      |    Value converter used by Kafka Connect cluster                             | This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka Connect cluster. |
 | key.converter.schema.registry.url   | NO       |                                                              | Schema registry URL for the key converter.                   |
 | value.converter.schema.registry.url | NO       |                                                              | Schema registry URL for the value converter.                 |
 | tasks.max                           | NO       | 1                                                            | The upper limit for the number of task threads that the Kafka connector can create, which is usually the same as the number of CPU cores on the worker nodes in the Kafka Connect cluster. You can tune this parameter to control load performance. |
