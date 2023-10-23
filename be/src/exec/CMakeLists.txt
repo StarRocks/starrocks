@@ -95,6 +95,7 @@ set(EXEC_FILES
     hdfs_scanner_orc.cpp
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
+    hdfs_scanner_partition.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
