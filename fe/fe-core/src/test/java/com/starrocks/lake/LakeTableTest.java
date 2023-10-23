@@ -37,6 +37,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -153,5 +154,13 @@ public class LakeTableTest {
 
         Assert.assertNull(table.delete(true));
         Assert.assertNotNull(table.delete(false));
+    }
+
+    @Test
+    public void testDeserialize() {
+        LakeTable lakeTable = new LakeTable();
+        String jsonStr = GsonUtils.GSON.toJson(lakeTable);
+        LakeTable tableDeserialize = (LakeTable) GsonUtils.GSON.fromJson(jsonStr, Table.class);
+        Assert.assertNotNull(tableDeserialize.getIndexNameToId());
     }
 }
