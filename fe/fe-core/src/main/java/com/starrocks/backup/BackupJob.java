@@ -513,6 +513,21 @@ public class BackupJob extends AbstractJob {
             db.readUnlock();
         }
 
+        // check parittion version for backupMeta
+        Map<String, Table> tablesMapInBackupMeta = backupMeta.getTables();
+        for (Map.Entry<String, Table> entry : tablesMapInBackupMeta.entrySet()) {
+            OlapTable olapTable = (OlapTable) entry.getValue();
+            for (Partition part : olapTable.getPartitions()) {
+                if (part.getNextVersion() != part.getVisibleVersion() + 1) {
+                    status = new Status(ErrCode.COMMON_ERROR, "backuped partition in table: " + olapTable.getName() +
+                                        "has inconsistent state for parition " + part.getName() +
+                                        "please stop ingesting data into table: " + olapTable.getName() +
+                                        "when backuping table meta");
+                    return;
+                }
+            }
+        }
+
         // send tasks
         sendSnapshotRequests();
 
