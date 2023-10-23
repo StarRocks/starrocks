@@ -160,9 +160,14 @@ public:
         auto& offsets = column->offsets_column()->get_data();
         auto& elements_column = column->elements_column();
 
+        const auto* array_column = down_cast<const ArrayColumn*>(src[0].get());
+        const auto& array_offset = array_column->offsets();
+        const auto& array_ele = array_column->elements();
         for (size_t i = 0; i < chunk_size; i++) {
-            elements_column->append_datum(src[0]->get(i));
-            offsets.emplace_back(offsets.back() + 1);
+            for (size_t j = array_offset.get_data()[i]; j < array_offset.get_data()[i+1]; j++) {
+                elements_column->append_datum(array_ele.get(j));
+            }
+            offsets.emplace_back(offsets.back() + array_offset.get_data()[i+1] - array_offset.get_data()[i]);
         }
     }
 
