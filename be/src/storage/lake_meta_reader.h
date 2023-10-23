@@ -25,6 +25,12 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 
+#ifdef BE_TEST
+#define DECL_FINAL
+#else
+#define DECL_FINAL final
+#endif
+
 namespace starrocks {
 // Params for MetaReader
 // mainly include tablet
@@ -37,12 +43,12 @@ struct LakeMetaReaderParams : MetaReaderParams {
 // MetaReader will implements
 // 1. read meta info from segment footer
 // 2. read dict info from dict page if column is dict encoding type
-class LakeMetaReader final : public MetaReader {
+class LakeMetaReader DECL_FINAL : public MetaReader {
 public:
     LakeMetaReader();
     ~LakeMetaReader() override = default;
 
-    Status init(const LakeMetaReaderParams& read_params);
+    virtual Status init(const LakeMetaReaderParams& read_params);
 
     lake::Tablet tablet() { return _tablet.value(); }
 
@@ -63,3 +69,5 @@ private:
 };
 
 } // namespace starrocks
+
+#undef DECL_FINAL
