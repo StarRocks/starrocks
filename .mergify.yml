@@ -1,8 +1,20 @@
+commands_restrictions:
+  backport:
+    conditions:
+      - or:
+        - sender-permission>=read
+        - sender=github-actions[bot]
+
+  rebase:
+    conditions:
+      - or:
+        - sender-permission>=read
+        - sender=github-actions[bot]
+
 pull_request_rules:
   - name: assign PRs with the pr author
     conditions:
       - -merged
-      
     actions:
       assign:
         add_users: 
