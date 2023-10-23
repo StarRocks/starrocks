@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.cost;
 
 import com.starrocks.qe.ConnectContext;
@@ -20,6 +19,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
@@ -169,13 +169,19 @@ public class HashJoinCostModel {
                 buildMapOp = rightOp;
             }
 
+            ColumnStatistic keyStatistics;
             if (buildMapOp.isColumnRef()) {
-                keySize += rightTableStat.getColumnStatistics().get(buildMapOp).getAverageRowSize();
+                keyStatistics = rightTableStat.getColumnStatistic((ColumnRefOperator) buildMapOp);
             } else {
                 Statistics.Builder allBuilder = Statistics.builder();
                 allBuilder.addColumnStatistics(rightTableStat.getColumnStatistics());
-                ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(buildMapOp, allBuilder.build());
-                keySize += outputStatistic.getAverageRowSize();
+                keyStatistics = ExpressionStatisticCalculator.calculate(buildMapOp, allBuilder.build());
+            }
+
+            if (keyStatistics.isUnknown()) {
+                keySize += keyStatistics.getAverageRowSize();
+            } else {
+                keySize += buildMapOp.getType().getTypeSize();
             }
         }
         return keySize;

@@ -43,7 +43,7 @@ public class ColumnStatistic {
     private final StatisticType type;
 
     // TODO deal with string max, min
-    public ColumnStatistic(
+    private ColumnStatistic(
             double minValue,
             double maxValue,
             double nullsFraction,

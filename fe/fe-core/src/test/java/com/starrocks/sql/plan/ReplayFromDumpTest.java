@@ -795,4 +795,19 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "     - filter_id = 4, probe_expr = (60: mock_004)"));
 
     }
+
+    @Test
+    public void testJoinWithArray() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_with_array"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 109: mock_007 = 46: mock_007\n" +
+                "  |  equal join conjunct: 153: any_value = 86: mock_008\n" +
+                "  |  \n" +
+                "  |----3:OlapScanNode\n" +
+                "  |       TABLE: tbl_mock_024"));
+    }
 }
