@@ -76,7 +76,7 @@ jobs:
 
       - uses: actions/checkout@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.SYNC_PAT }}
           fetch-depth: 0
           ref: ${{ inputs.BRANCH }}
 
@@ -128,7 +128,7 @@ jobs:
         id: create_pr
         if: steps.previous-check.outputs.RES == 'True'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
@@ -145,7 +145,7 @@ jobs:
         id: create_pending_pr
         if: steps.previous-check.outputs.RES != 'True'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},pending"
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
@@ -167,7 +167,7 @@ jobs:
             steps.create_pr.outcome == 'failure' ||
             steps.create_pending_pr.outcome == 'failure')
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,ERROR"
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
