@@ -321,7 +321,7 @@ PLAN FRAGMENT 2
   |  join op: INNER JOIN (PARTITIONED)
   |  colocate: false, reason: 
   |  equal join conjunct: 10: L_SUPPKEY = 1: s_suppkey
-  |  other predicates: ((43: n_name = 'CANADA') AND (47: n_name = 'IRAN')) OR ((43: n_name = 'IRAN') AND (47: n_name = 'CANADA'))
+  |  other join predicates: ((43: n_name = 'CANADA') AND (47: n_name = 'IRAN')) OR ((43: n_name = 'IRAN') AND (47: n_name = 'CANADA'))
   |  
   |----21:EXCHANGE
   |    
