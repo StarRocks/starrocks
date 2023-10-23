@@ -505,6 +505,12 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     Status st;
 
     std::lock_guard lg(*tablet->updates()->get_drop_lock());
+    if (tablet->tablet_state() == TABLET_SHUTDOWN) {
+        std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread", 
+                                              tablet->tablet_id());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     if (rowset->is_column_mode_partial_update()) {
         auto state_entry = _update_column_state_cache.get_or_create(
                 strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
