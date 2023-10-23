@@ -71,12 +71,12 @@ jobs:
           source_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           destination_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
         run: |
-          curl -s -X DELETE -u username:${{secrets.SYNC_PAT}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
-          curl -s -X DELETE -u username:${{secrets.SYNC_PAT}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
+          curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
+          curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
 
       - uses: actions/checkout@v3
         with:
-          token: ${{ secrets.SYNC_PAT }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
           ref: ${{ inputs.BRANCH }}
 
@@ -128,7 +128,7 @@ jobs:
         id: create_pr
         if: steps.previous-check.outputs.RES == 'True'
         env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
@@ -145,7 +145,7 @@ jobs:
         id: create_pending_pr
         if: steps.previous-check.outputs.RES != 'True'
         env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},pending"
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
@@ -167,7 +167,7 @@ jobs:
             steps.create_pr.outcome == 'failure' ||
             steps.create_pending_pr.outcome == 'failure')
         env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,ERROR"
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
