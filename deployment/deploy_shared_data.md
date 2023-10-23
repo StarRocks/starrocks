@@ -415,12 +415,7 @@ SET def_volume AS DEFAULT STORAGE VOLUME;
 
 创建默认存储卷后，您可以使用该存储卷创建数据库和云原生表。
 
-目前，StarRocks 存算分离集群支持以下数据模型：
-
-- 明细模型（Duplicate Key）
-- 聚合模型（Aggregate Key）
-- 更新模型（Unique Key）
-- 主键模型（Primary Key）（当前暂不支持持久化主键索引）
+StarRocks 存算分离集群支持所有[数据模型](../table_design/table_types/table_types.md)。
 
 以下示例创建数据库 `cloud_db`，并基于明细模型创建表 `detail_demo`，启用本地磁盘缓存，将热数据有效期设置为一个月，并禁用异步数据导入：
 

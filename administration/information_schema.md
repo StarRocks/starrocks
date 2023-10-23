@@ -2,6 +2,8 @@
 
 `information_schema` 是 StarRocks 实例中的一个数据库。该数据库包含数张由系统定义的表，这些表中存储了关于 StarRocks 实例中所有对象的大量元数据信息。
 
+自 v3.2 起，StarRocks 支持通过 `information_schema` 查看 External Catalog 元数据。
+
 ## 通过 Information Schema 查看元数据信息
 
 您可以通过查询 `information_schema` 中的表来查看 StarRocks 实例中的元数据信息。
