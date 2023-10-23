@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Joiner;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -25,6 +26,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowStmt;
@@ -35,6 +37,8 @@ import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -279,5 +283,18 @@ public class MaterializedViewAnalyzerTest {
             analyzeFail(mvSql, "Detail message: window function row_number ’s partition expressions" +
                     " should contain the partition column k1 of materialized view");
         }
+    }
+
+    @Test
+    public void testGetQueryOutputIndices() {
+        List<Pair<Column, Integer>> mvColumnPairs = Lists.newArrayList();
+        mvColumnPairs.add(Pair.create(new Column(), 1));
+        mvColumnPairs.add(Pair.create(new Column(), 2));
+        mvColumnPairs.add(Pair.create(new Column(), 0));
+        mvColumnPairs.add(Pair.create(new Column(), 3));
+
+        List<Integer> queryOutputIndices = MaterializedViewAnalyzer.getQueryOutputIndices(mvColumnPairs);
+        Assert.assertTrue(queryOutputIndices.size() == mvColumnPairs.size());
+        Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), "2,0,1,3");
     }
 }
