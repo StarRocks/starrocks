@@ -3704,7 +3704,7 @@ public class GlobalStateMgr {
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
-        return FunctionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
+        return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
     public void replayCreateCluster(Cluster cluster) {
