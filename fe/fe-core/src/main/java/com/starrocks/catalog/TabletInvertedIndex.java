@@ -42,6 +42,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -194,7 +195,8 @@ public class TabletInvertedIndex {
                                 replica.setSchemaHash(backendTabletInfo.getSchema_hash());
                             }
 
-                            if (needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
+                            if (!isRestoreReplica(replica, this.replicaToTabletMap, this.tabletMetaMap) &&
+                                    needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
                                 LOG.warn("replica {} of tablet {} on backend {} need recovery. "
                                                 + "replica in FE: {}, report version {}, report schema hash: {},"
                                                 + " is bad: {}",
@@ -521,6 +523,32 @@ public class TabletInvertedIndex {
             return versionInFe == backendTabletInfo.getVersion() &&
                     replicaInFe.isBad();
         }
+    }
+
+    private boolean isRestoreReplica(Replica replica, Map<Long, Long> replicaToTabletMap, Map<Long, TabletMeta> tabletMetaMap) {
+        Long tabletId = replicaToTabletMap.get(replica.getId());
+        TabletMeta tabletMeta = null;
+        if (tabletId != null) {
+            tabletMeta = tabletMetaMap.get(tabletId);
+        }
+
+        if (tabletMeta != null) {
+            long dbId = tabletMeta.getDbId();
+            long tableId = tabletMeta.getTableId();
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null) {
+                // getTable is thread-safe for caller, lock free
+                com.starrocks.catalog.Table tbl = db.getTable(tableId);
+                if (tbl != null && tbl instanceof OlapTable) {
+                    OlapTable olapTable = (OlapTable) tbl;
+                    if (olapTable.getState() == OlapTable.OlapTableState.RESTORE) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     /**
