@@ -458,7 +458,8 @@ public class ExpressionStatisticCalculator {
                     || callOperator.getType().isDateType() || callOperator.getType().isBitmapType()) {
                 averageRowSize = callOperator.getType().getTypeSize();
             } else {
-                averageRowSize = Math.max(columnStatistic.getAverageRowSize(), callOperator.getType().getTypeSize());
+                averageRowSize = columnStatistic.isUnknown() ? callOperator.getType().getTypeSize() :
+                        columnStatistic.getAverageRowSize();
             }
             return new ColumnStatistic(minValue, maxValue, columnStatistic.getNullsFraction(), averageRowSize,
                     distinctValue);
