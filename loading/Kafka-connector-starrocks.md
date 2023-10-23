@@ -2,7 +2,7 @@
 
 StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafka®)，持续消费 Kafka 的消息并导入至 StarRocks 中。
 
-使用 Kafka connector 可以更好的融入 Kafka 生态，StarRocks 可以与 Kafka connect 无缝对接。为 StarRocks 准实时接入链路提供了更多的选择。相比于 Routine Load，您可以在以下场景中优先考虑使用 Kafka connector 导入数据：
+使用 Kafka connector 可以更好的融入 Kafka 生态，StarRocks 可以与 Kafka Connect 无缝对接。为 StarRocks 准实时接入链路提供了更多的选择。相比于 Routine Load，您可以在以下场景中优先考虑使用 Kafka connector 导入数据：
 
 - 需要导入除 CSV、JSON、Avro 以外的格式数据，例如 Protobuf 格式。
 - 需要对数据做自定义的 transform 操作，例如 Debezium CDC 格式的数据。
@@ -16,7 +16,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 支持自建 Apache Kafka 集群和 Confluent cloud：
 
-- 如果使用自建 Apache Kafka 集群，请确保已部署 Apache Kafka 集群和 Kafka connect 集群，并创建 Topic。
+- 如果使用自建 Apache Kafka 集群，请确保已部署 Apache Kafka 集群和 Kafka Connect 集群，并创建 Topic。
 - 如果使用 Confluent cloud，请确保已拥有 Confluent 账号，并已经创建集群和 Topic。
 
 ### 安装 Kafka connector
@@ -26,8 +26,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 - 自建 Kafka 集群
 
   - 下载并解压压缩包 [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz)。
-  - 将解压后的目录复制到 Kafka 的 libs 目录中，重新启动 Kafka connect 以读取最新的 JAR 文件。
-
+  - 将解压后的目录复制到 `plugin.path` 属性所指的路径中。`plugin.path` 属性包含在 Kafka Connect 集群 worker 节点配置文件中。
 - Confluent cloud
 
   > **说明**
@@ -40,7 +39,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 ## 使用示例
 
-本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动 Kafka connect ，导入数据至 StarRocks。
+本文以自建 Kafka 集群为例，介绍如何配置 Kafka connector 并启动 Kafka Connect 服务（无需重启 Kafka 服务），导入数据至 StarRocks。
 
 1. 创建 Kafka connector 配置文件 **connect-StarRocks-sink.properties**，并配置对应参数。参数和相关说明，参见[参数说明](#参数说明)。
 
@@ -60,7 +59,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
     >
     > 如果源端数据为 CDC 数据，例如 Debezium CDC 格式的数据，并且 StarRocks 表为主键模型的表，为了将源端的数据变更同步至主键模型的表，则您还需要[配置 `transforms` 以及相关参数](#导入-debezium-cdc-格式数据)。
 
-2. 启动 Kafka Connect。命令中的参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
+2. 启动 Kafka Connect 服务（无需重启 Kafka 服务）。命令中的参数解释，参见 [Running Kafka Connect](https://kafka.apache.org/documentation.html#connect_running)。
 
    1. Standalone 模式
 
@@ -104,7 +103,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 
 | 参数                                | 是否必填 | 默认值                                                       | 描述                                                         |
 | ----------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| name                                | 是       |                                                              | 表示当前的 Kafka connector，在 Kafka connect 集群中必须为全局唯一，例如 starrocks-kafka-connector。 |
+| name                                | 是       |                                                              | 表示当前的 Kafka connector，在 Kafka Connect 集群中必须为全局唯一，例如 starrocks-kafka-connector。 |
 | connector.class                     | 是       | com.starrocks.connector.kafka.SinkConnector                  | kafka connector 的 sink 使用的类。                           |
 | topics                              | 是       |                                                              | 一个或多个待订阅 Topic，每个 Topic 对应一个 StarRocks 表，默认情况下 Topic 的名称与 StarRocks 表名一致，导入时根据 Topic 名称确定目标 StarRocks 表。`topics` 和 `topics.regex`（如下） 两者二选一填写。如果两者不一致，则还需要配置 `starrocks.topic2table.map`。 |
 | topics.regex                        |          | 与待订阅 Topic 匹配的正则表达式。更多解释，同 `topics`。`topics` 和 `topics.regex` 和 `topics`（如上）两者二选一填写。 |                                                              |
@@ -113,8 +112,8 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
 | starrocks.database.name             | 是       |                                                              | StarRocks 目标库名。                                         |
 | starrocks.username                  | 是       |                                                              | StarRocks 用户名。用户需要具有目标表的 INSERT 权限。         |
 | starrocks.password                  | 是       |                                                              | StarRocks 用户密码。                                         |
-| key.converter                       | 否       | Kafka connect 集群的 key converter                            | sink connector (在本场景中即 Kafka-connector-starrocks) 的 key converter，用于反序列化 Kafka 数据的 key。默认为 Kafka connect 集群的 key converter, 您也可以自定义配置。      |
-| value.converter                     | 否       | Kafka connect 集群的 value converter                          | sink connector 的 value converter，用于反序列化 Kafka 数据的 value。默认为 Kafka connect 集群的 value converter, 您也可以自定义配置。    |
+| key.converter                       | 否       | Kafka Connect 集群的 key converter                            | sink connector (在本场景中即 Kafka-connector-starrocks) 的 key converter，用于反序列化 Kafka 数据的 key。默认为 Kafka Connect 集群的 key converter, 您也可以自定义配置。      |
+| value.converter                     | 否       | Kafka Connect 集群的 value converter                          | sink connector 的 value converter，用于反序列化 Kafka 数据的 value。默认为 Kafka Connect 集群的 value converter, 您也可以自定义配置。    |
 | key.converter.schema.registry.url   | 否       |                                                              | key converter 对应的 schema registry 地址。                  |
 | value.converter.schema.registry.url | 否       |                                                              | value converter 对应的 schema registry 地址。                |
 | tasks.max                           | 否       | 1                                                            | Kafka connector 要创建的 task 线程数量上限，通常与 Kafka Connect 集群中的 worker 节点上的 CPU 核数量相同。如果需要增加导入性能的时候可以调整该参数。 |
