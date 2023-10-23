@@ -51,9 +51,9 @@ import java.util.List;
 
 public class PartitionColumnFilter {
     private static final Logger LOG = LogManager.getLogger(PartitionColumnFilter.class);
-    public LiteralExpr lowerBound;
+    private LiteralExpr lowerBound;
+    private LiteralExpr upperBound;
     public boolean lowerBoundInclusive;
-    public LiteralExpr upperBound;
     public boolean upperBoundInclusive;
     // InPredicate
     // planner and TestUT use
@@ -120,6 +120,14 @@ public class PartitionColumnFilter {
                 upperBoundInclusive = newUpperBoundInclusive;
             }
         }
+    }
+
+    public LiteralExpr getLowerBound() {
+        return lowerBound;
+    }
+
+    public LiteralExpr getUpperBound() {
+        return upperBound;
     }
 
     public LiteralExpr getLowerBound(boolean isConvertToDate) throws AnalysisException {

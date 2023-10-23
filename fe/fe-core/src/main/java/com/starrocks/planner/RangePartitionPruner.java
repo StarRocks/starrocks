@@ -115,15 +115,17 @@ public class RangePartitionPruner implements PartitionPruner {
 
         boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn, filter);
         if (null == inPredicateLiterals || inPredicateLiterals.size() * complex > inPredicateMaxLen) {
+            LiteralExpr lowerBound = filter.getLowerBound();
+            LiteralExpr upperBound = filter.getUpperBound();
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
-                    && filter.lowerBound != null && filter.upperBound != null
-                    && 0 == filter.lowerBound.compareLiteral(filter.upperBound)) {
+                    && lowerBound != null && upperBound != null
+                    && 0 == lowerBound.compareLiteral(upperBound)) {
 
                 LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
                 LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
 
                 // eg: [10, 10], [null, null]
-                if (filter.lowerBound instanceof NullLiteral && filter.upperBound instanceof NullLiteral) {
+                if (lowerBoundExpr instanceof NullLiteral && upperBoundExpr instanceof NullLiteral) {
                     // replace Null with min value
                     LiteralExpr minKeyValue = LiteralExpr.createInfinity(
                             Type.fromPrimitiveType(keyColumn.getPrimitiveType()), false);
@@ -145,7 +147,7 @@ public class RangePartitionPruner implements PartitionPruner {
             int pushMinCount = 0;
             int pushMaxCount = 0;
             int lastColumnId = partitionColumns.size() - 1;
-            if (filter.lowerBound != null) {
+            if (lowerBound != null) {
                 minKey.pushColumn(filter.getLowerBound(isConvertToDate), keyColumn.getPrimitiveType());
                 pushMinCount++;
                 if (filter.lowerBoundInclusive && columnIdx != lastColumnId) {
@@ -159,7 +161,7 @@ public class RangePartitionPruner implements PartitionPruner {
                 minKey.pushColumn(LiteralExpr.createInfinity(type, false), keyColumn.getPrimitiveType());
                 pushMinCount++;
             }
-            if (filter.upperBound != null) {
+            if (upperBound != null) {
                 maxKey.pushColumn(filter.getUpperBound(isConvertToDate), keyColumn.getPrimitiveType());
                 pushMaxCount++;
                 if (filter.upperBoundInclusive && columnIdx != lastColumnId) {

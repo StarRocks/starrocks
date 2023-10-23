@@ -550,8 +550,12 @@ public class PartitionUtil {
     }
 
     public static boolean isConvertToDate(Column partitionColumn, PartitionColumnFilter partitionColumnFilter) {
-        LiteralExpr literalExpr = (partitionColumnFilter.lowerBound == null) ? partitionColumnFilter.upperBound :
-                partitionColumnFilter.lowerBound;
+        if (partitionColumnFilter == null || partitionColumn == null) {
+            return false;
+        }
+        LiteralExpr lowerBound = partitionColumnFilter.getLowerBound();
+        LiteralExpr upperBound = partitionColumnFilter.getUpperBound();
+        LiteralExpr literalExpr = (lowerBound == null) ? upperBound : lowerBound;
         if (literalExpr == null) {
             return false;
         }
@@ -562,23 +566,23 @@ public class PartitionUtil {
         if (stringLiteral == null) {
             return null;
         }
-        String dateLiteral = stringLiteral.getStringValue();
-        LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
         try {
+            String dateLiteral = stringLiteral.getStringValue();
+            LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
             return new DateLiteral(dateValue, Type.DATE);
-        } catch (AnalysisException e) {
-            throw new SemanticException("create date string:{} failed:", stringLiteral.getStringValue(), e);
+        } catch (Exception e) {
+            throw new AnalysisException("create date string failed:" +  stringLiteral.getStringValue(), e);
         }
     }
 
-    private static PartitionKey convertToDate(PartitionKey partitionKey) {
+    private static PartitionKey convertToDate(PartitionKey partitionKey) throws AnalysisException {
         PartitionKey newPartitionKey = new PartitionKey();
         try {
             DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
             newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
-        } catch (AnalysisException e) {
-            throw new SemanticException("create date string:{} failed:", partitionKey.getKeys().get(0).getStringValue(),
+        } catch (Exception e) {
+            throw new AnalysisException("create date string failed:" + partitionKey.getKeys().get(0).getStringValue(),
                     e);
         }
     }
