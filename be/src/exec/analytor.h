@@ -36,6 +36,7 @@ struct FunctionTypes {
     bool is_nullable; // window function result whether is nullable
 };
 
+// [start, end)
 struct FrameRange {
     int64_t start;
     int64_t end;
@@ -140,7 +141,7 @@ public:
     const std::vector<ExprContext*>& order_ctxs() { return _order_ctxs; }
     const Columns& order_columns() { return _order_columns; }
 
-    FrameRange get_sliding_frame_range();
+    FrameRange get_sliding_frame_range() const;
 
     Status add_chunk(const ChunkPtr& chunk);
 

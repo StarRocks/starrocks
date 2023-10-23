@@ -29,6 +29,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     TAnalyticWindow window = _tnode.analytic_node.window;
 
     _process_by_partition_if_necessary = &AnalyticSinkOperator::_process_by_partition_if_necessary_materializing;
+    _unique_metrics->add_info_string("ProcessMode", "Materializing");
     if (!_tnode.analytic_node.__isset.window) {
         _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
     } else if (window.type == TAnalyticWindowType::RANGE) {
@@ -43,6 +44,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
             // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
             DCHECK_EQ(window.window_end.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
             if (!_analytor->need_partition_materializing()) {
+                _unique_metrics->add_info_string("ProcessMode", "Streaming");
                 _process_by_partition_if_necessary =
                         &AnalyticSinkOperator::
                                 _process_by_partition_if_necessary_for_unbounded_preceding_range_frame_streaming;
@@ -56,9 +58,12 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
         if (!window.__isset.window_start && !window.__isset.window_end) {
             // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
             _process_by_partition = &AnalyticSinkOperator::_process_by_partition_for_unbounded_frame;
-        } else if (!window.__isset.window_start && window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW) {
-            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        } else if (!window.__isset.window_start) {
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW or
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND N PRECEDING or
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING
             if (!_analytor->need_partition_materializing()) {
+                _unique_metrics->add_info_string("ProcessMode", "Streaming");
                 _process_by_partition_if_necessary =
                         &AnalyticSinkOperator::
                                 _process_by_partition_if_necessary_for_unbounded_preceding_rows_frame_streaming;
@@ -148,42 +153,62 @@ Status AnalyticSinkOperator::_process_by_partition_if_necessary_for_unbounded_pr
         return Status::OK();
     }
 
-    if (_analytor->reached_limit() || state->is_cancelled()) {
-        return Status::OK();
-    }
-
     // reset state for the first partition
     if (_analytor->current_row_position() == 0) {
         _analytor->reset_window_state();
     }
 
-    const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
-    _analytor->create_agg_result_columns(chunk_size);
-
     do {
+        if (_analytor->reached_limit() || state->is_cancelled()) {
+            return Status::OK();
+        }
+
+        // One iteration process one chunk, and a chunk may be processed more than once for window clause like
+        // `ROWS BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING`
+        const auto chunk_size = static_cast<int64_t>(_analytor->current_chunk_size());
+        auto remain_size = chunk_size - _analytor->window_result_position();
+        _analytor->create_agg_result_columns(chunk_size);
         _analytor->find_partition_end();
 
-        while (_analytor->current_row_position() < _analytor->found_partition_end().second) {
-            _analytor->update_window_batch(_analytor->partition_start(), _analytor->found_partition_end().second,
-                                           _analytor->current_row_position(), _analytor->current_row_position() + 1);
+        const auto& found_partition_end = _analytor->found_partition_end();
+        while (_analytor->current_row_position() < found_partition_end.second && remain_size > 0) {
+            FrameRange frame = _analytor->get_sliding_frame_range();
+            if (!found_partition_end.first && frame.end > found_partition_end.second) {
+                // Current chunk has not reach the partition boundary, and window like
+                // `ROWS BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING` may require more data
+                return Status::OK();
+            }
+
+            if (_analytor->current_row_position() == _analytor->partition_start() &&
+                frame.end > _analytor->current_row_position() + 1) {
+                // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING`,
+                // extra update is needed for the first row
+                _analytor->update_window_batch(_analytor->partition_start(), found_partition_end.second,
+                                               _analytor->partition_start(), frame.end - 1);
+            }
+
+            // The real frame is [frame.start, frame.end), but in streaming mode, we only need to update
+            // the latest row, so the frame for current evaluation is [frame.end-1, frame.end)
+            _analytor->update_window_batch(_analytor->partition_start(), found_partition_end.second, frame.end - 1,
+                                           frame.end);
 
             _analytor->update_window_result_position(1);
-            int64_t frame_start = _analytor->get_total_position(_analytor->current_row_position()) -
-                                  _analytor->first_total_position_of_current_chunk();
-
-            DCHECK_GE(frame_start, 0);
-            _analytor->get_window_function_result(frame_start, _analytor->window_result_position());
+            remain_size--;
+            _analytor->get_window_function_result(_analytor->window_result_position() - 1,
+                                                  _analytor->window_result_position());
             _analytor->update_current_row_position(1);
         }
 
-        if (_analytor->found_partition_end().first) {
+        if (found_partition_end.first && _analytor->current_row_position() == found_partition_end.second) {
             _analytor->reset_state_for_next_partition();
         }
-    } while (!_analytor->is_current_chunk_finished_eval(chunk_size));
 
-    ChunkPtr chunk;
-    RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
-    _analytor->offer_chunk_to_buffer(chunk);
+        if (_analytor->is_current_chunk_finished_eval(chunk_size)) {
+            ChunkPtr chunk;
+            RETURN_IF_ERROR(_analytor->output_result_chunk(&chunk));
+            _analytor->offer_chunk_to_buffer(chunk);
+        }
+    } while (_analytor->has_output());
 
     return Status::OK();
 }

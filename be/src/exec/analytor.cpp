@@ -397,7 +397,7 @@ void Analytor::offer_chunk_to_buffer(const ChunkPtr& chunk) {
     _buffer.push(chunk);
 }
 
-FrameRange Analytor::get_sliding_frame_range() {
+FrameRange Analytor::get_sliding_frame_range() const {
     if (!_is_unbounded_preceding) {
         return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
     } else {
@@ -461,23 +461,24 @@ Status Analytor::output_result_chunk(ChunkPtr* chunk) {
 }
 
 void Analytor::create_agg_result_columns(int64_t chunk_size) {
-    if (_window_result_position == 0) {
-        _result_window_columns.resize(_agg_fn_types.size());
-        for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-            _result_window_columns[i] =
-                    ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
-            // binary column cound't call resize method like Numeric Column,
-            // so we only reserve it.
-            if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
-                _result_window_columns[i]->reserve(chunk_size);
-            } else {
-                _result_window_columns[i]->resize(chunk_size);
-            }
+    if (_window_result_position != 0) {
+        return;
+    }
+    _result_window_columns.resize(_agg_fn_types.size());
+    for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
+        _result_window_columns[i] =
+                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
+        // binary column cound't call resize method like Numeric Column,
+        // so we only reserve it.
+        if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+            _result_window_columns[i]->reserve(chunk_size);
+        } else {
+            _result_window_columns[i]->resize(chunk_size);
         }
     }
 }
@@ -761,12 +762,13 @@ std::string Analytor::debug_string() const {
     std::stringstream ss;
     ss << std::boolalpha;
 
+    FrameRange frame = get_sliding_frame_range();
     ss << "current_row_position=" << get_total_position(_current_row_position) << ", partition=("
        << get_total_position(_partition_start) << ", " << get_total_position(_partition_end) << ", "
        << get_total_position(_found_partition_end.second) << "/" << _found_partition_end.first << "), peer_group=("
        << get_total_position(_peer_group_start) << ", " << get_total_position(_peer_group_end) << ", "
        << get_total_position(_found_peer_group_end.second) << "/" << _found_peer_group_end.first << ")"
-       << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")"
+       << ", frame=[" << frame.start << ", " << frame.end << ")"
        << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
        << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
        << ", removed_chunk_index=" << _removed_chunk_index;
@@ -805,8 +807,9 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
         }
 
         frame_start = std::max<int64_t>(frame_start, _partition_start);
-        // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
-        // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
+        // For half unounded window, we have not found the partition end, _found_partition_end.second refers to the next position.
+        // And for others,  _found_partition_end.second is identical to _partition_end, so we can always use _found_partition_end
+        // instead of _partition_end to refer to the current right boundary.
         frame_end = std::min<int64_t>(frame_end, _found_partition_end.second);
         _agg_functions[i]->update_batch_single_state_with_frame(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,

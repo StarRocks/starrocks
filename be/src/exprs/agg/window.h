@@ -550,9 +550,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        // frame_end <= frame_start is for lag function
+        // frame_start < peer_group_start is for lag function
         // frame_end > peer_group_end is for lead function
-        if ((frame_end <= frame_start) | (frame_end > peer_group_end)) {
+        if ((frame_start < peer_group_start) | (frame_end > peer_group_end)) {
             if (this->data(state).default_is_null) {
                 this->data(state).is_null = true;
             } else {
