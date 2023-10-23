@@ -181,7 +181,7 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return tablet;
 }
 
-Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
+Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
     auto t0 = butil::gettimeofday_us();
