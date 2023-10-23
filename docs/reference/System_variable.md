@@ -234,7 +234,7 @@ In scenarios where the table to query has a large number of tablets, this featur
 
 However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
 
-Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, 3.1.4, and 3.2.0.
+Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, and 3.1.4.
 
 ### enable_scan_block_cache (2.5 and later)
 
