@@ -105,6 +105,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
                 b.CreateLoad(column.value_type, b.CreateInBoundsGEP(column.value_type, column.values, counter_phi));
 
         if (!expr->is_nullable()) {
+            datums.emplace_back(datum);
             continue;
         }
         if (input_exprs[i]->is_nullable()) {
