@@ -265,3 +265,95 @@ from emps right anti join depts using (deptno);
 
 select depts.deptno 
 from emps right anti join depts using (deptno);
+
+-- name: test_single_table_mv_rewrite
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+insert into user_tags values('2023-04-13', 1, 'a', 1);
+insert into user_tags values('2023-04-13', 1, 'b', 2);
+insert into user_tags values('2023-04-13', 1, 'c', 3);
+insert into user_tags values('2023-04-13', 1, 'd', 4);
+insert into user_tags values('2023-04-13', 1, 'e', 5);
+
+create materialized view agg_count_mv1
+distributed by hash(user_id)
+as
+select user_id, count(1) as cnt
+from user_tags
+group by user_id;
+
+refresh materialized view agg_count_mv1 with sync mode;
+
+create materialized view agg_count_mv2
+distributed by hash(user_id)
+as
+select user_id, user_name, count(1) as cnt
+from user_tags
+group by user_id, user_name;
+
+refresh materialized view agg_count_mv2 with sync mode;
+
+explain select user_id, count(1) as cnt
+from user_tags
+group by user_id;
+
+CREATE TABLE `user_tags_2` (
+  `time` date NULL COMMENT "",
+  `user_id` int(11) NULL COMMENT "",
+  `user_name` varchar(20) NULL COMMENT "",
+  `tag_id` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`time`, `user_id`, `user_name`)
+PARTITION BY RANGE(`time`)
+(PARTITION p1 VALUES [("0000-01-01"), (MAXVALUE)))
+DISTRIBUTED BY HASH(`time`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+
+insert into user_tags_2 values('2023-04-13', 1, 'a', 1);
+insert into user_tags_2 values('2023-04-13', 2, 'b', 2);
+insert into user_tags_2 values('2023-04-13', 3, 'c', 3);
+insert into user_tags_2 values('2023-04-13', 4, 'd', 4);
+insert into user_tags_2 values('2023-04-13', 5, 'e', 5);
+
+create materialized view agg_count_mv3
+distributed by hash(user_id)
+as
+select user_id, count(1) as cnt
+from user_tags_2
+group by user_id;
+
+refresh materialized view agg_count_mv3 with sync mode;
+
+create materialized view agg_count_mv4
+distributed by hash(user_id)
+as
+select user_id, user_name, count(1) as cnt
+from user_tags_2
+group by user_id, user_name;
+
+refresh materialized view agg_count_mv4 with sync mode;
+
+
+explain select user_id, count(1) as cnt
+from user_tags_2
+group by user_id;
+
+
+create materialized view agg_count_mv5
+distributed by hash(user_id)
+as
+select user_id, user_name, count(1) as cnt, sum(tag_id) as total
+from user_tags_2
+group by user_id, user_name;
+
+refresh materialized view agg_count_mv5 with sync mode;
+
+explain select user_id, user_name, count(1) as cnt
+from user_tags_2
+group by user_id, user_name;
