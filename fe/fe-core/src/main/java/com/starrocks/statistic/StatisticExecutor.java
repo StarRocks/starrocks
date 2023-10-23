@@ -210,6 +210,7 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
+            statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
@@ -225,6 +226,12 @@ public class StatisticExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+<<<<<<< HEAD
+=======
+
+        // update StatisticsCache
+        statsConnectCtx.setStatisticsConnection(false);
+>>>>>>> 229b39d2d3 ([BugFix] Fix statistic collector can't refresh statistic cache (#33037))
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),

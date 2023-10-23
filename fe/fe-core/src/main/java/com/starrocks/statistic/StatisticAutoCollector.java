@@ -70,7 +70,6 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                statsConnectCtx.setStatisticsConnection(true);
                 statsConnectCtx.setThreadLocalInfo();
                 STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
             }
@@ -83,12 +82,29 @@ public class StatisticAutoCollector extends LeaderDaemon {
             LOG.info("auto collect statistic on analyze job[{}] start", jobIds);
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-                statsConnectCtx.setStatisticsConnection(true);
                 statsConnectCtx.setThreadLocalInfo();
                 analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
             LOG.info("auto collect statistic on analyze job[{}] end", jobIds);
         }
+<<<<<<< HEAD
+=======
+
+        // collect external table statistic
+        List<ExternalAnalyzeJob> allExternalAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllExternalAnalyzeJobList();
+        if (!allExternalAnalyzeJobs.isEmpty()) {
+            allExternalAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
+            String jobIds = allExternalAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
+                    .collect(Collectors.joining(", "));
+            LOG.info("auto collect external statistic on analyze job[{}] start", jobIds);
+            for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
+            }
+            LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
+        }
+>>>>>>> 229b39d2d3 ([BugFix] Fix statistic collector can't refresh statistic cache (#33037))
     }
 
     private void initDefaultJob() {
