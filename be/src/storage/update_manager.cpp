@@ -506,8 +506,8 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
 
     std::lock_guard lg(*tablet->updates()->get_drop_lock());
     if (tablet->tablet_state() == TABLET_SHUTDOWN) {
-        std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread", 
-                                              tablet->tablet_id());
+        std::string msg =
+                strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread", tablet->tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
