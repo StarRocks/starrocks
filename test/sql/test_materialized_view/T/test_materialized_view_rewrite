@@ -282,6 +282,7 @@ from user_tags
 group by user_id;
 
 refresh materialized view agg_count_mv1 with sync mode;
+analyze table agg_count_mv1 with sync mode;
 
 create materialized view agg_count_mv2
 distributed by hash(user_id)
@@ -291,6 +292,7 @@ from user_tags
 group by user_id, user_name;
 
 refresh materialized view agg_count_mv2 with sync mode;
+analyze table agg_count_mv2 with sync mode;
 
 explain select user_id, count(1) as cnt
 from user_tags

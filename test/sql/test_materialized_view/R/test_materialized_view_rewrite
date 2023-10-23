@@ -584,3 +584,38 @@ from emps right anti join depts using (deptno);
 -- result:
 2
 -- !result
+
+
+-- name: test_single_table_mv_rewrite
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+insert into user_tags values('2023-04-13', 1, 'a', 1);
+insert into user_tags values('2023-04-13', 1, 'b', 2);
+insert into user_tags values('2023-04-13', 1, 'c', 3);
+insert into user_tags values('2023-04-13', 1, 'd', 4);
+insert into user_tags values('2023-04-13', 1, 'e', 5);
+
+create materialized view agg_count_mv1
+distributed by hash(user_id)
+as
+select user_id, count(1) as cnt
+from user_tags
+group by user_id;
+
+refresh materialized view agg_count_mv1 with sync mode;
+analyze table agg_count_mv1 with sync mode;
+
+create materialized view agg_count_mv2
+distributed by hash(user_id)
+as
+select user_id, user_name, count(1) as cnt
+from user_tags
+group by user_id, user_name;
+
+refresh materialized view agg_count_mv2 with sync mode;
+analyze table agg_count_mv2 with sync mode;
+
+explain select user_id, count(1) as cnt
+from user_tags
+group by user_id;
+-- result:
+[REGEX]agg_count_mv1
