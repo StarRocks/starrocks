@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -59,6 +60,7 @@ import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -756,7 +758,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs, Function<Expr, Boolean> couldBound) {
         if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr, couldBound).isPresent())) {
-            return Optional.empty();
+            // NOTE: This is necessary, when expr is partition_by_epxr because
+            // partition_by_exprs may exist in JoinNode below the ProjectNode.
+            return Optional.of(ImmutableList.of(exprs));
         }
         List<List<Expr>> candidatesOfSlotExprs =
                 exprs.stream().map(expr -> candidatesOfSlotExpr(expr, couldBound).get()).collect(Collectors.toList());
@@ -843,6 +847,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
     }
 
+    private RoaringBitmap cachedSlotIds = null;
+
+    public RoaringBitmap getSlotIds(DescriptorTable descTbl) {
+        if (cachedSlotIds == null) {
+            cachedSlotIds = new RoaringBitmap();
+            getTupleIds().stream().map(descTbl::getTupleDesc)
+                    .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
+                    .map(SlotId::asInt).forEach(cachedSlotIds::add);
+        }
+        return cachedSlotIds;
+    }
+
     protected boolean couldBound(Expr probeExpr, RuntimeFilterDescription rfDesc, DescriptorTable descTbl) {
         if (probeExpr instanceof SlotRef &&
                 rfDesc.runtimeFilterType().equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
@@ -857,7 +873,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             return false;
         } else {
-            return probeExpr.isBoundByTupleIds(getTupleIds());
+            return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
         }
     }
 
