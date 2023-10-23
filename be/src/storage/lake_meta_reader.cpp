@@ -36,8 +36,8 @@ LakeMetaReader::~LakeMetaReader() = default;
 Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     _params = read_params;
 
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(read_params.tablet_id,
-                                                                                            read_params.version.second));
+    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(
+                                          read_params.tablet_id, read_params.version.second));
 
     RETURN_IF_ERROR(_build_collect_context(tablet, read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(tablet, read_params));
@@ -48,7 +48,8 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     return Status::OK();
 }
 
-Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& read_params) {
+Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& tablet,
+                                              const LakeMetaReaderParams& read_params) {
     auto tablet_schema = tablet.get_schema();
     _collect_context.seg_collecter_params.max_cid = 0;
     for (const auto& it : *(read_params.id_to_names)) {
@@ -90,7 +91,8 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
     return Status::OK();
 }
 
-Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& params) {
+Status LakeMetaReader::_init_seg_meta_collecters(const lake::VersionedTablet& tablet,
+                                                 const LakeMetaReaderParams& params) {
     std::vector<SegmentSharedPtr> segments;
     RETURN_IF_ERROR(_get_segments(tablet, &segments));
     for (auto& segment : segments) {

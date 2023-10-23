@@ -19,7 +19,7 @@
 
 namespace starrocks {
 
-LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent)  {}
+LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
 Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     return _lazy_init(runtime_state, params);

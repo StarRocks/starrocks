@@ -48,9 +48,7 @@ struct MetaReaderParams {
 
     int chunk_size = config::vector_chunk_size;
 
-    void check_validation() const {
-        LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id;
-    }
+    void check_validation() const { LOG_IF(FATAL, version.first == -1) << "version is not set. tablet=" << tablet_id; }
 };
 
 struct SegmentMetaCollecterParams {

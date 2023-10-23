@@ -14,10 +14,10 @@
 
 #include "storage/lake/versioned_tablet.h"
 
-#include "storage/lake/tablet_metadata.h"
-#include "storage/tablet_schema_map.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/tablet_schema_map.h"
 
 namespace starrocks::lake {
 
