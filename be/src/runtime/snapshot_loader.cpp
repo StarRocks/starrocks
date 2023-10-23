@@ -682,6 +682,8 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
     // reload header
     {
         std::unique_lock l(tablet->get_meta_store_lock());
+        // prevet the concurrent issue with tablet meta checkpoint
+        tablet->set_will_be_force_replaced();
         status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
                                                                                    tablet_path, true);
     }
