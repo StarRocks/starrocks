@@ -156,7 +156,6 @@ public class StatisticUtils {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         statsConnectCtx.setThreadLocalInfo();
-                        statsConnectCtx.setStatisticsConnection(true);
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
