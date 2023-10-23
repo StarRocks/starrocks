@@ -17,9 +17,10 @@ package com.starrocks.sql.optimizer.rule.join;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -287,10 +289,17 @@ public abstract class JoinOrder {
 
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
             if (joinOperator.getJoinType().isCrossJoin()) {
-                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST /
-                        StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY) ?
+                // punish cross join
+                long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
+                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST / crossJoinCostPenalty) ?
                         StatisticsEstimateCoefficient.MAXIMUM_COST :
-                        cost * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
+                        cost * crossJoinCostPenalty;
+            } else if (!existsEqOnPredicate(exprInfo.expr)) {
+                // punish nestloop join
+                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST /
+                        StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY) ?
+                        StatisticsEstimateCoefficient.MAXIMUM_COST :
+                        cost * StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;
@@ -299,31 +308,20 @@ public abstract class JoinOrder {
     protected Optional<ExpressionInfo> buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
         ExpressionInfo leftExprInfo = leftGroup.bestExprInfo;
         ExpressionInfo rightExprInfo = rightGroup.bestExprInfo;
-        Pair<ScalarOperator, ScalarOperator> predicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
-
-        ScalarOperator eqPredicate = predicates.first;
-        ScalarOperator otherPredicate = predicates.second;
+        ScalarOperator onPredicates = buildInnerJoinPredicate(leftGroup.atoms, rightGroup.atoms);
 
         LogicalJoinOperator newJoin;
-        if (eqPredicate != null) {
-            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, eqPredicate);
+
+        if (onPredicates != null) {
+            newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN, onPredicates);
         } else {
             newJoin = new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null);
         }
-        newJoin.setPredicate(otherPredicate);
 
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
-        if (eqPredicate != null || otherPredicate != null) {
-            ColumnRefSet useColumns = new ColumnRefSet();
-
-            if (eqPredicate != null) {
-                useColumns.union(eqPredicate.getUsedColumns());
-            }
-
-            if (otherPredicate != null) {
-                useColumns.union(otherPredicate.getUsedColumns());
-            }
+        if (onPredicates != null) {
+            ColumnRefSet useColumns = onPredicates.getUsedColumns();
 
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
                 if (!useColumns.contains(entry.getKey())) {
@@ -348,8 +346,7 @@ public abstract class JoinOrder {
         pushRequiredColumns(leftExprInfo, leftExpression);
         pushRequiredColumns(rightExprInfo, rightExpression);
 
-        // In StarRocks, we only support hash join.
-        // So we always use small table as right child
+        // use small table as right child
         OptExpression joinExpr;
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
             joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
@@ -402,12 +399,8 @@ public abstract class JoinOrder {
         exprInfo.expr.deriveLogicalPropertyItself();
     }
 
-    /*
-     * Pair<Equal-On-Predicate, Other-Predicate>
-     */
-    private Pair<ScalarOperator, ScalarOperator> buildInnerJoinPredicate(BitSet left, BitSet right) {
-        List<ScalarOperator> equalOnPredicates = Lists.newArrayList();
-        List<ScalarOperator> otherPredicates = Lists.newArrayList();
+    private ScalarOperator buildInnerJoinPredicate(BitSet left, BitSet right) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
         BitSet joinBitSet = new BitSet();
         joinBitSet.or(left);
         joinBitSet.or(right);
@@ -416,14 +409,10 @@ public abstract class JoinOrder {
             if (contains(joinBitSet, edge.vertexes) &&
                     left.intersects(edge.vertexes) &&
                     right.intersects(edge.vertexes)) {
-                if (Utils.isEqualBinaryPredicate(edge.predicate)) {
-                    equalOnPredicates.add(edge.predicate);
-                } else {
-                    otherPredicates.add(edge.predicate);
-                }
+                onPredicates.add(edge.predicate);
             }
         }
-        return new Pair<>(Utils.compoundAnd(equalOnPredicates), Utils.compoundAnd(otherPredicates));
+        return Utils.compoundAnd(onPredicates);
     }
 
     public boolean canBuildInnerJoinPredicate(GroupInfo leftGroup, GroupInfo rightGroup) {
@@ -449,5 +438,17 @@ public abstract class JoinOrder {
 
     private boolean contains(BitSet left, BitSet right) {
         return right.stream().allMatch(left::get);
+    }
+
+    private boolean existsEqOnPredicate(OptExpression optExpression) {
+        LogicalJoinOperator joinOp = optExpression.getOp().cast();
+        List<ScalarOperator> onPredicates = Utils.extractConjuncts(joinOp.getOnPredicate());
+
+        ColumnRefSet leftChildColumns = optExpression.inputAt(0).getOutputColumns();
+        ColumnRefSet rightChildColumns = optExpression.inputAt(1).getOutputColumns();
+
+        List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                leftChildColumns, rightChildColumns, onPredicates);
+        return !eqOnPredicates.isEmpty();
     }
 }
