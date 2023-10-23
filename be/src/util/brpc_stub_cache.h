@@ -38,6 +38,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -92,7 +93,7 @@ public:
         }
         // create
         brpc::ChannelOptions options;
-        options.connect_timeout_ms = 3000;
+        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
         options.protocol = "http";
         // Explicitly set the max_retry
         // TODO(meegoo): The retry strategy can be customized in the future
@@ -142,7 +143,7 @@ private:
         doris::PBackendService_Stub* get_or_create(const butil::EndPoint& endpoint) {
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
                 brpc::ChannelOptions options;
-                options.connect_timeout_ms = 3000;
+                options.connect_timeout_ms = config::rpc_connect_timeout_ms;
                 // Explicitly set the max_retry
                 // TODO(meegoo): The retry strategy can be customized in the future
                 options.max_retry = 3;
