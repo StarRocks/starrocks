@@ -102,6 +102,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private boolean prevQueueEnableSelect;
     private boolean prevQueueEnableStatistic;
     private boolean prevQueueEnableLoad;
+    private boolean prevEnableGroupLevelQueue;
     private int prevQueueConcurrencyHardLimit;
     private double prevQueueMemUsedPctHardLimit;
     private int prevQueuePendingTimeoutSecond;
@@ -120,11 +121,14 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         prevQueueEnableSelect = GlobalVariable.isEnableQueryQueueSelect();
         prevQueueEnableStatistic = GlobalVariable.isEnableQueryQueueStatistic();
         prevQueueEnableLoad = GlobalVariable.isEnableQueryQueueLoad();
+        prevEnableGroupLevelQueue = GlobalVariable.isEnableGroupLevelQueryQueue();
         prevQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         prevQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         prevQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
         prevQueueTimeoutSecond = connectContext.getSessionVariable().getQueryTimeoutS();
         prevQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
+
+        GlobalVariable.setEnableGroupLevelQueryQueue(true);
 
         GlobalVariable.setQueryQueuePendingTimeoutSecond(1000_000);
         connectContext.getSessionVariable().setQueryTimeoutS(1000_000);
@@ -156,6 +160,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         GlobalVariable.setEnableQueryQueueSelect(prevQueueEnableSelect);
         GlobalVariable.setEnableQueryQueueStatistic(prevQueueEnableStatistic);
         GlobalVariable.setEnableQueryQueueLoad(prevQueueEnableLoad);
+        GlobalVariable.setEnableGroupLevelQueryQueue(prevEnableGroupLevelQueue);
         GlobalVariable.setQueryQueueConcurrencyLimit(prevQueueConcurrencyHardLimit);
         GlobalVariable.setQueryQueueMemUsedPctLimit(prevQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(prevQueuePendingTimeoutSecond);
@@ -349,6 +354,32 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             allocatedCoords.forEach(DefaultCoordinator::onFinished);
             allocatedCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
         }
+    }
+
+    @Test
+    public void testDisableGroupLevelQueue() throws Exception {
+        final int concurrencyLimit = 100;
+        final int groupConcurrencyLimit = 1;
+
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setEnableGroupLevelQueryQueue(false);
+        GlobalVariable.setQueryQueueConcurrencyLimit(concurrencyLimit);
+
+        TWorkGroup group10 = new TWorkGroup().setId(10L).setConcurrency_limit(groupConcurrencyLimit);
+
+        List<DefaultCoordinator> runningCoords = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            mockResourceGroup(group10);
+            DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+            manager.maybeWait(connectContext, coord);
+            Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
+            Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
+
+            runningCoords.add(coord);
+        }
+
+        runningCoords.forEach(DefaultCoordinator::onFinished);
+        runningCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
     }
 
     /**
