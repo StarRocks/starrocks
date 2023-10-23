@@ -297,7 +297,6 @@ public class FunctionSet {
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
-    public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_INTERSECT = "array_intersect";
     public static final String ARRAY_SLICE = "array_slice";
     public static final String ARRAYS_OVERLAP = "arrays_overlap";
