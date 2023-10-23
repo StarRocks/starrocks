@@ -3986,4 +3986,33 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
     }
+
+    @Test
+    public void testCreateMvWithUnsupportedStr2date() {
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by ss " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select str2date(d, '%m-%d-%Y') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
+            Assert.assertThrows("Materialized view partition function date_trunc check failed",
+                    AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+        }
+
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by date_trunc('month', ss) " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select str2date(d, '%m-%d-%Y') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
+            Assert.assertThrows("Materialized view partition function date_trunc check failed",
+                    AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+        }
+    }
 }

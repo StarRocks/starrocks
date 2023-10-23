@@ -17,11 +17,11 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class Authorizer {
@@ -276,10 +277,11 @@ public class Authorizer {
                 withGrantOption(currentUser, roleIds, type, wants, objects);
     }
 
-    public static Expr getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName, String columnName, Type type) {
+    public static Map<String, Expr> getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName,
+                                                           List<Column> columns) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         return getInstance().getAccessControlOrDefault(catalog)
-                .getColumnMaskingPolicy(currentUser, tableName, columnName, type);
+                .getColumnMaskingPolicy(currentUser, tableName, columns);
     }
 
     public static Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {

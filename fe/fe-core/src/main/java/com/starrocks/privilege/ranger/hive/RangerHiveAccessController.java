@@ -64,8 +64,6 @@ public class RangerHiveAccessController extends RangerAccessController {
         hasPermission(resource, currentUser, PrivilegeType.ANY);
     }
 
-
-
     public HiveAccessType convertToAccessType(PrivilegeType privilegeType) {
         if (privilegeType == PrivilegeType.SELECT) {
             return HiveAccessType.SELECT;
