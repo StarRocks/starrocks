@@ -1699,15 +1699,11 @@ public class MaterializedViewRewriter {
                 return optExpression;
             }
         }
+
         OptExpression newJoin = doPushdownPredicate(optExpression, predicate);
-        // pushdown predicates in children
         List<OptExpression> children = Lists.newArrayList();
-        for (int i = 0; i < 2; i++) {
-            if (optExpression.inputAt(i).getOp() instanceof LogicalJoinOperator) {
-                children.add(pushdownPredicatesForJoin(newJoin.inputAt(i), null));
-            } else {
-                children.add(newJoin.inputAt(i));
-            }
+        for (OptExpression child : newJoin.getInputs()) {
+            children.add(pushdownPredicatesForJoin(child, null));
         }
         return OptExpression.create(newJoin.getOp(), children);
     }
