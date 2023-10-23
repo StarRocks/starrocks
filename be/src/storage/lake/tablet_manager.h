@@ -157,9 +157,11 @@ public:
     // The return value will never be null.
     Cache* metacache() { return _metacache.get(); }
 
+    StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
+
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
 
     void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
 

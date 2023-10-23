@@ -86,6 +86,7 @@ public class PhysicalPartitionImplTest {
         Assert.assertEquals(0, p.storageDataSize());
         Assert.assertEquals(0, p.storageRowCount());
         Assert.assertEquals(0, p.storageReplicaCount());
+        Assert.assertEquals(0, p.getTabletMaxDataSize());
 
         p.toString();
 

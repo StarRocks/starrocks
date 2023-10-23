@@ -38,10 +38,10 @@ Status HorizontalGeneralTabletWriter::open() {
     return Status::OK();
 }
 
-Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data) {
+Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data, SegmentPB* segment) {
     if (_seg_writer == nullptr || _seg_writer->estimate_segment_size() >= config::max_segment_file_size ||
         _seg_writer->num_rows_written() + data.num_rows() >= INT32_MAX /*TODO: configurable*/) {
-        RETURN_IF_ERROR(flush_segment_writer());
+        RETURN_IF_ERROR(flush_segment_writer(segment));
         RETURN_IF_ERROR(reset_segment_writer());
     }
     RETURN_IF_ERROR(_seg_writer->append_chunk(data));
@@ -49,12 +49,12 @@ Status HorizontalGeneralTabletWriter::write(const starrocks::Chunk& data) {
     return Status::OK();
 }
 
-Status HorizontalGeneralTabletWriter::flush() {
-    return flush_segment_writer();
+Status HorizontalGeneralTabletWriter::flush(SegmentPB* segment) {
+    return flush_segment_writer(segment);
 }
 
-Status HorizontalGeneralTabletWriter::finish() {
-    RETURN_IF_ERROR(flush_segment_writer());
+Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
+    RETURN_IF_ERROR(flush_segment_writer(segment));
     _finished = true;
     return Status::OK();
 }
@@ -83,13 +83,18 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     return Status::OK();
 }
 
-Status HorizontalGeneralTabletWriter::flush_segment_writer() {
+Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
     if (_seg_writer != nullptr) {
         uint64_t segment_size = 0;
         uint64_t index_size = 0;
         uint64_t footer_position = 0;
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
         _data_size += segment_size;
+        if (segment) {
+            segment->set_data_size(segment_size);
+            segment->set_index_size(index_size);
+            segment->set_path(_seg_writer->segment_path());
+        }
         _seg_writer.reset();
     }
     return Status::OK();
@@ -175,7 +180,7 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
     return Status::OK();
 }
 
-Status VerticalGeneralTabletWriter::flush() {
+Status VerticalGeneralTabletWriter::flush(SegmentPB* segment) {
     return Status::OK();
 }
 
@@ -190,7 +195,7 @@ Status VerticalGeneralTabletWriter::flush_columns() {
     return Status::OK();
 }
 
-Status VerticalGeneralTabletWriter::finish() {
+Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;

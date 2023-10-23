@@ -592,6 +592,35 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     return TxnLogIter{this, std::move(objects)};
 }
 
+StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
+    int64_t size = 0;
+    TabletMetadataPtr metadata;
+    if (version_hint != nullptr && *version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, get_tablet_metadata(tablet_id, *version_hint));
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " data size from version hint: " << *version_hint
+                << ", size: " << size;
+    } else {
+        ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
+        if (!metadata_iter.has_next()) {
+            return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+        }
+        ASSIGN_OR_RETURN(metadata, metadata_iter.next());
+        if (version_hint != nullptr) {
+            *version_hint = metadata->version();
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " data size from version : " << metadata->version()
+                << ", size: " << size;
+    }
+
+    return size;
+}
+
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
     // 1. direct lookup in cache, if there is schema info for the tablet
     auto cache_key = tablet_schema_cache_key(tablet_id);
@@ -960,11 +989,11 @@ int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
     return size;
 }
 
-void TabletManager::set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
+void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
     std::unique_lock wrlock(_meta_lock);
+    _tablet_in_writing_txn_size[tablet_id][txn_id] += size;
     VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id]
             << " size: " << size << " txn_id: " << txn_id;
-    _tablet_in_writing_txn_size[tablet_id][txn_id] = size;
 }
 
 void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id) {
