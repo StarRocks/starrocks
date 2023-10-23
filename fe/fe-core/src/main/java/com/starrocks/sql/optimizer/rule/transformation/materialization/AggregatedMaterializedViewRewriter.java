@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,7 +56,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 /**
  * SPJG materialized view rewriter, based on
@@ -657,7 +657,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         String mappedFn = ROLLUP_FUNCTION_MAP.get(aggCall.getFnName());
         if (mappedFn != null) {
             Type[] argTypes = {targetColumn.getType()};
-            Function fn = findArithmeticFunction(argTypes, mappedFn);
+            Function fn = ScalarOperatorUtil.findRolluFunction(argTypes, mappedFn);
             if (fn == null) {
                 LOG.warn("get rollup function {}({})) failed", mappedFn, argTypes);
                 return null;
