@@ -83,6 +83,91 @@ public class StatisticUtils {
         return context;
     }
 
+<<<<<<< HEAD
+=======
+    private static StatsConstants.AnalyzeType parseAnalyzeType(TransactionState txnState, Table table) {
+        Long loadRows = null;
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        if (attachment instanceof LoadJobFinalOperation) {
+            EtlStatus loadingStatus = ((LoadJobFinalOperation) attachment).getLoadingStatus();
+            loadRows = loadingStatus.getLoadedRows(table.getId());
+        } else if (attachment instanceof InsertTxnCommitAttachment) {
+            loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
+        } else if (attachment instanceof StreamLoadTxnCommitAttachment) {
+            loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
+        }
+        if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
+            return StatsConstants.AnalyzeType.SAMPLE;
+        }
+        return StatsConstants.AnalyzeType.FULL;
+    }
+
+    public static void triggerCollectionOnFirstLoad(TransactionState txnState, Database db, Table table, boolean sync) {
+        if (!Config.enable_statistic_collect_on_first_load) {
+            return;
+        }
+        if (statisticDatabaseBlackListCheck(db.getFullName())) {
+            return;
+        }
+
+        // check if it's first load.
+        if (txnState.getIdToTableCommitInfos() == null) {
+            return;
+        }
+        TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
+        if (tableCommitInfo == null) {
+            return;
+        }
+        // collectPartitionIds contains partition that is first loaded.
+        List<Long> collectPartitionIds = Lists.newArrayList();
+        for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+            if (table.getPhysicalPartition(partitionId).isFirstLoad()) {
+                collectPartitionIds.add(partitionId);
+            }
+        }
+        if (collectPartitionIds.isEmpty()) {
+            return;
+        }
+
+        StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), table.getId(), null, analyzeType,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        Future<?> future;
+        try {
+            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                    .submit(() -> {
+                        StatisticExecutor statisticExecutor = new StatisticExecutor();
+                        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                        statsConnectCtx.setThreadLocalInfo();
+
+                        statisticExecutor.collectStatistics(statsConnectCtx,
+                                StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
+                                        collectPartitionIds, null, analyzeType,
+                                        StatsConstants.ScheduleType.ONCE,
+                                        analyzeStatus.getProperties()), analyzeStatus, false);
+                    });
+        } catch (Throwable e) {
+            LOG.error("failed to submit statistic collect job", e);
+            return;
+        }
+
+        if (sync) {
+            long await = Config.semi_sync_collect_statistic_await_seconds;
+            try {
+                future.get(await, TimeUnit.SECONDS);
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.error("failed to execute statistic collect job", e);
+            } catch (TimeoutException e) {
+                LOG.warn("await collect statistic failed after {} seconds", await);
+            }
+        }
+    }
+
+>>>>>>> 229b39d2d3 ([BugFix] Fix statistic collector can't refresh statistic cache (#33037))
     // check database in black list
     public static boolean statisticDatabaseBlackListCheck(String databaseName) {
         if (null == databaseName) {
