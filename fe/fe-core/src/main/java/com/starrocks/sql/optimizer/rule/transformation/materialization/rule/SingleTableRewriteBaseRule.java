@@ -78,8 +78,13 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         private int index;
 
         public CandidateContext(Statistics mvStatistics, int schemaColumnNum) {
+            this(mvStatistics, schemaColumnNum, 0);
+        }
+
+        public CandidateContext(Statistics mvStatistics, int schemaColumnNum, int index) {
             this.mvStatistics = mvStatistics;
             this.schemaColumnNum = schemaColumnNum;
+            this.index = index;
             this.groupbyColumnNum = Integer.MAX_VALUE;
         }
 
