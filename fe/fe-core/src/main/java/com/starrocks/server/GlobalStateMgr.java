@@ -1321,14 +1321,9 @@ public class GlobalStateMgr {
         }
     }
 
-<<<<<<< HEAD
     // start threads that should running on all FE
     private void startNonLeaderDaemonThreads() {
-=======
-    // start threads that should run on all FE
-    private void startAllNodeTypeDaemonThreads() {
         portConnectivityChecker.start();
->>>>>>> a9c20aebec ([Enhancement] Support detect edit log port connectivity (#33117) (#33235))
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
