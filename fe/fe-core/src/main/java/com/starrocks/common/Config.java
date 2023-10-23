@@ -2459,6 +2459,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
 
+    @ConfField(mutable = true)
+    public static int adaptive_choose_instances_threshold = 32;
+
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.
