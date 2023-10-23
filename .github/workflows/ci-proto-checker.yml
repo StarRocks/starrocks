@@ -45,12 +45,12 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         if: needs.proto-checker.outputs.output1 == 'true'
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: PROTO-REVIEW
 
       - name: remove label
         uses: actions-ecosystem/action-remove-labels@v1
         if: needs.proto-checker.outputs.output1 != 'true'
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: PROTO-REVIEW
