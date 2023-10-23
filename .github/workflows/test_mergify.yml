@@ -1,0 +1,31 @@
+name: NOTIFICATION
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+jobs:
+  checker:
+    runs-on: ubuntu-latest
+    name: RUN
+
+    steps:
+      - uses: hmarr/auto-approve-action@v3
+        with:
+          review-message: "Auto approved sync PR"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          
