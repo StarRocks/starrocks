@@ -2586,10 +2586,30 @@ public class LocalMetastore implements ConnectorMetadata {
     private void unprotectAddReplica(ReplicaPersistInfo info) {
         LOG.debug("replay add a replica {}", info);
         Database db = getDbIncludeRecycleBin(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay add replica failed, db is null, info: {}", info);
+            return;
+        }
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
+        if (olapTable == null) {
+            LOG.warn("replay add replica failed, table is null, info: {}", info);
+            return;
+        }
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+        if (partition == null) {
+            LOG.warn("replay add replica failed, partition is null, info: {}", info);
+            return;
+        }
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
+        if (materializedIndex == null) {
+            LOG.warn("replay add replica failed, materializedIndex is null, info: {}", info);
+            return;
+        }
         LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
+        if (tablet == null) {
+            LOG.warn("replay add replica failed, tablet is null, info: {}", info);
+            return;
+        }
 
         // for compatibility
         int schemaHash = info.getSchemaHash();
@@ -2609,12 +2629,35 @@ public class LocalMetastore implements ConnectorMetadata {
     private void unprotectUpdateReplica(ReplicaPersistInfo info) {
         LOG.debug("replay update a replica {}", info);
         Database db = getDbIncludeRecycleBin(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay update replica failed, db is null, info: {}", info);
+            return;
+        }
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
+        if (olapTable == null) {
+            LOG.warn("replay update replica failed, table is null, info: {}", info);
+            return;
+        }
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+        if (partition == null) {
+            LOG.warn("replay update replica failed, partition is null, info: {}", info);
+            return;
+        }
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
+        if (materializedIndex == null) {
+            LOG.warn("replay update replica failed, materializedIndex is null, info: {}", info);
+            return;
+        }
         LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
+        if (tablet == null) {
+            LOG.warn("replay update replica failed, tablet is null, info: {}", info);
+            return;
+        }
         Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
-        Preconditions.checkNotNull(replica, info);
+        if (replica == null) {
+            LOG.warn("replay update replica failed, replica is null, info: {}", info);
+            return;
+        }
         replica.updateRowCount(info.getVersion(), info.getMinReadableVersion(), info.getDataSize(), info.getRowCount());
         replica.setBad(false);
     }
@@ -2641,10 +2684,30 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void unprotectDeleteReplica(ReplicaPersistInfo info) {
         Database db = getDbIncludeRecycleBin(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay delete replica failed, db is null, info: {}", info);
+            return;
+        }
         OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
+        if (olapTable == null) {
+            LOG.warn("replay delete replica failed, table is null, info: {}", info);
+            return;
+        }
         Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+        if (partition == null) {
+            LOG.warn("replay delete replica failed, partition is null, info: {}", info);
+            return;
+        }
         MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
+        if (materializedIndex == null) {
+            LOG.warn("replay delete replica failed, materializedIndex is null, info: {}", info);
+            return;
+        }
         LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
+        if (tablet == null) {
+            LOG.warn("replay delete replica failed, tablet is null, info: {}", info);
+            return;
+        }
         tablet.deleteReplicaByBackendId(info.getBackendId());
     }
 
