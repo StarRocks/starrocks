@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
@@ -118,6 +119,22 @@ public class PartitionColumnFilter {
                 upperBound = newUpperBound;
                 upperBoundInclusive = newUpperBoundInclusive;
             }
+        }
+    }
+
+    public LiteralExpr getLowerBound(boolean isConvertToDate) throws AnalysisException {
+        if (isConvertToDate) {
+            return PartitionUtil.convertToDateLiteral(lowerBound);
+        } else {
+            return lowerBound;
+        }
+    }
+
+    public LiteralExpr getUpperBound(boolean isConvertToDate) throws AnalysisException {
+        if (isConvertToDate) {
+            return PartitionUtil.convertToDateLiteral(upperBound);
+        } else {
+            return upperBound;
         }
     }
 

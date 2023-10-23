@@ -52,6 +52,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.DmlException;
@@ -538,12 +539,35 @@ public class PartitionUtil {
         return partitionType.isDateType() && !columnType.isDateType();
     }
 
-    private static PartitionKey convertToDate(PartitionKey partitionKey) {
-        PartitionKey newPartitionKey = new PartitionKey();
-        String dateLiteral = partitionKey.getKeys().get(0).getStringValue();
+    public static boolean isConvertToDate(Column partitionColumn, PartitionColumnFilter partitionColumnFilter) {
+        LiteralExpr literalExpr = (partitionColumnFilter.lowerBound == null) ? partitionColumnFilter.upperBound :
+                partitionColumnFilter.lowerBound;
+        if (literalExpr == null) {
+            return false;
+        }
+        PrimitiveType filterType = literalExpr.getType().getPrimitiveType();
+        PrimitiveType partitionType = partitionColumn.getPrimitiveType();
+        return partitionType.isDateType() && !filterType.isDateType();
+    }
+
+    public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws AnalysisException {
+        if (stringLiteral == null) {
+            return null;
+        }
+        String dateLiteral = stringLiteral.getStringValue();
         LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
         try {
-            newPartitionKey.pushColumn(new DateLiteral(dateValue, Type.DATE), PrimitiveType.DATE);
+            return new DateLiteral(dateValue, Type.DATE);
+        } catch (AnalysisException e) {
+            throw new SemanticException("create date string:{} failed:", stringLiteral.getStringValue(), e);
+        }
+    }
+
+    private static PartitionKey convertToDate(PartitionKey partitionKey) {
+        PartitionKey newPartitionKey = new PartitionKey();
+        try {
+            DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
+            newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
         } catch (AnalysisException e) {
             throw new SemanticException("create date string:{} failed:", partitionKey.getKeys().get(0).getStringValue(),
