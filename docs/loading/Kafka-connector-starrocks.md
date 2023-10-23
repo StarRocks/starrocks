@@ -26,7 +26,7 @@ Submit the Kafka connector into Kafka Connect:
 - Self-managed Kafka cluster:
 
   - Download and unzip [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz).
-  - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes with the Kafka connect cluster.
+  - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes within the Kafka connect cluster.
 
 - Confluent cloud:
 
