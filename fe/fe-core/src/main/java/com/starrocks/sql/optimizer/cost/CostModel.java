@@ -63,6 +63,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
+
 public class CostModel {
 
     private static final Logger LOG = LogManager.getLogger(CostModel.class);
@@ -443,7 +445,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D, 0);
+                                * EXECUTE_COST_PENALTY * 100D, 0);
             } else {
                 return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
@@ -459,18 +461,24 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
-                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY);
-            double memCost = StatisticUtils.multiplyOutputSize(rightSize,
-                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D);
 
+            long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
+
+            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
+                    EXECUTE_COST_PENALTY);
+            double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
+
+
+            if (join.getJoinType().isCrossJoin()) {
+                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
+            }
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
                 // Add more punishment when right size is 10x greater than left size.
                 if (rightSize > 10 * leftSize) {
-                    cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                    cpuCost *= EXECUTE_COST_PENALTY;
                 } else {
-                    cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                    cpuCost += EXECUTE_COST_PENALTY;
                 }
                 memCost += rightSize;
             }

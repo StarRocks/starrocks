@@ -630,7 +630,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 40:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 39:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
@@ -639,7 +639,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  206:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  207:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
 
