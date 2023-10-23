@@ -1285,6 +1285,10 @@ public class GlobalStateMgr {
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
+            if (nodeMgr.isFirstTimeStartUp()) {
+                // When the cluster is initially deployed, we use persistent index by default
+                Config.enable_persistent_index_by_default = true;
+            }
         } catch (UserException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
