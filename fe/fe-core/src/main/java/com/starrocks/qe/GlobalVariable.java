@@ -63,6 +63,7 @@ public final class GlobalVariable {
     public static final String ENABLE_QUERY_QUEUE_SELECT = "enable_query_queue_select";
     public static final String ENABLE_QUERY_QUEUE_STATISTIC = "enable_query_queue_statistic";
     public static final String ENABLE_QUERY_QUEUE_LOAD = "enable_query_queue_load";
+    public static final String ENABLE_GROUP_LEVEL_QUERY_QUEUE = "enable_group_level_query_queue";
     public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
             "query_queue_fresh_resource_usage_interval_ms";
     public static final String QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
@@ -139,6 +140,8 @@ public final class GlobalVariable {
     private static boolean enableQueryQueueStatistic = false;
     @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_LOAD, flag = VariableMgr.GLOBAL)
     private static boolean enableQueryQueueLoad = false;
+    @VariableMgr.VarAttr(name = ENABLE_GROUP_LEVEL_QUERY_QUEUE, flag = VariableMgr.GLOBAL)
+    private static boolean enableGroupLevelQueryQueue = false;
     // Use the resource usage, only when the duration from the last report is within this interval.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS, flag = VariableMgr.GLOBAL)
     private static long queryQueueResourceUsageIntervalMs = 5000;
@@ -146,11 +149,13 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_LIMIT, flag = VariableMgr.GLOBAL)
     private static int queryQueueConcurrencyLimit = 0;
 
+    // Effective iff it is non-negative.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_HIGH_WATER, flag = VariableMgr.GLOBAL)
-    private static int queryQueueDriverHighWater = 0;
+    private static int queryQueueDriverHighWater = -1;
 
+    // Effective iff it is non-negative.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_LOW_WATER, flag = VariableMgr.GLOBAL)
-    private static int queryQueueDriverLowWater = 0;
+    private static int queryQueueDriverLowWater = -1;
 
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_LIMIT, flag = VariableMgr.GLOBAL)
@@ -190,6 +195,14 @@ public final class GlobalVariable {
 
     public static void setEnableQueryQueueLoad(boolean enableQueryQueueLoad) {
         GlobalVariable.enableQueryQueueLoad = enableQueryQueueLoad;
+    }
+
+    public static boolean isEnableGroupLevelQueryQueue() {
+        return enableGroupLevelQueryQueue;
+    }
+
+    public static void setEnableGroupLevelQueryQueue(boolean enableGroupLevelQueryQueue) {
+        GlobalVariable.enableGroupLevelQueryQueue = enableGroupLevelQueryQueue;
     }
 
     public static long getQueryQueueResourceUsageIntervalMs() {

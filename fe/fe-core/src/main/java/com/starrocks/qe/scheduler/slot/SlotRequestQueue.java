@@ -152,6 +152,10 @@ public class SlotRequestQueue {
             return true;
         }
 
+        if (!GlobalVariable.isEnableGroupLevelQueryQueue()) {
+            return true;
+        }
+
         if (group.isConcurrencyLimitEffective() && numAllocatedSlotsOfGroup >= group.getConcurrencyLimit()) {
             return false;
         }
