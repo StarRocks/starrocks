@@ -335,6 +335,7 @@ private:
     friend class Tablet;
     friend class PrimaryIndex;
     friend class PersistentIndex;
+    friend class UpdateManager;
     friend class RowsetUpdateState;
 
     template <typename K, typename V>
@@ -442,12 +443,22 @@ private:
     void check_for_apply() { _check_for_apply(); }
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
+    std::mutex* get_drop_lock() { return &_drop_lock; }
 
 private:
     Tablet& _tablet;
 
     // |_lock| protects |_edit_version_infos|, |_next_rowset_id|, |_next_log_id|, |_apply_version_idx|, |_pending_commits|.
     mutable std::mutex _lock;
+    // |_drop_lock| prevents meta read/write conflicts when importing and dropping concurrently between function
+    // `UpdateManager::on_rowset_finished` and `TabletUpdates::clear_meta`
+    // In function `UpdateManager::on_rowset_finished`, we will preload rowset_updates and primary index to speed apply.
+    // But in function `TabletUpdates::clear_meta`, we will clear tablet meta. So the import task maybe get `no del vector found`
+    // exception and the primary index maybe referenced by ingestion thread, and the drop_tablet thread will cause BE crash whe it
+    // try to remove the primary index from cache in ASAN mode.
+    // Actually |_lock| also can prevent the read/write conflicts, but preload may take a long time and using |_lock| may stuck apply
+    // thread.
+    mutable std::mutex _drop_lock;
     std::vector<std::unique_ptr<EditVersionInfo>> _edit_version_infos;
     uint32_t _next_rowset_id = 0;
     uint64_t _next_log_id = 0;

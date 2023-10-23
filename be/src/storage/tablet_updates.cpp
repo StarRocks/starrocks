@@ -4245,6 +4245,7 @@ Status TabletUpdates::clear_meta() {
     std::lock_guard l1(_lock);
     std::lock_guard l2(_rowsets_lock);
     std::lock_guard l3(_rowset_stats_lock);
+    std::lock_guard l4(_drop_lock);
     // TODO: tablet is already marked to be deleted, so maybe don't need to clear unused rowsets here
     _remove_unused_rowsets();
     if (_unused_rowsets.get_size() != 0) {

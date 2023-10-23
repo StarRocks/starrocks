@@ -504,6 +504,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
 
     Status st;
 
+    std::lock_guard lg(*tablet->updates()->get_drop_lock());
     if (rowset->is_column_mode_partial_update()) {
         auto state_entry = _update_column_state_cache.get_or_create(
                 strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
