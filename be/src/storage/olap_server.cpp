@@ -407,7 +407,9 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
         } else {
             status = Status::InternalError("data dir out of capacity");
         }
-        if (status.ok()) {
+        if (status.ok() && !_options.compaction_mem_tracker->any_limit_exceeded() &&
+            !_options.update_mem_tracker->any_limit_exceeded()) {
+            // keep schedule compaction if memory is fine.
             continue;
         }
 
@@ -418,7 +420,8 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
         }
         do {
             SLEEP_IN_BG_WORKER(interval);
-            if (!_options.compaction_mem_tracker->any_limit_exceeded()) {
+            if (!_options.compaction_mem_tracker->any_limit_exceeded() &&
+                !_options.update_mem_tracker->any_limit_exceeded()) {
                 break;
             }
         } while (true);
