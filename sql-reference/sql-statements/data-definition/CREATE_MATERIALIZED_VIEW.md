@@ -70,7 +70,7 @@ SELECT select_expr[, select_expr ...]
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图。
   >   - 每个复杂表达式只能引用一列。不支持形如 `a + b as col1` 形式的查询语句。
-  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图重写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
+  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
 
 - GROUP BY（选填）
 
@@ -247,14 +247,25 @@ AS
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并从最近分区开始刷新 N 个分区。如果分区数不足 N，则刷新所有已存在的分区。如果您的动态分区物化视图中存在预创建的未来时段动态分区，StarRocks 会优先刷新这些未来时段的分区，然后刷新已有的分区。因此设定此参数时请确保已为预创建的未来时段动态分区保留余量。
-- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询重写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询重写。单位：秒。该属性自 v3.0 起支持。
+- `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
 - `resource_group`: 为物化视图刷新任务设置资源组。更多关于资源组信息，请参考[资源隔离](../../../administration/resource_group.md)。
+- `query_rewrite_consistency`: 指定当前异步物化视图的查询改写规则。该属性自 v3.2 起支持。有效值：
+  - `disable`：禁用基于该异步物化视图进行自动查询改写。
+  - `checked`（默认值）：仅在物化视图满足时效性要求时启用自动查询改写，即：
+    - 如果未指定 `mv_rewrite_staleness_second`，则只有当物化视图的数据与所有基表中的数据一致时，才可以将其用于查询改写。
+    - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最后刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
+  - `loose`：直接启用自动查询改写，无需进行一致性检查。
+- `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
+  - `true`：启用基于 External Catalog 的物化视图的查询改写。
+  - `false`（默认值）：禁用基于 External Catalog 的物化视图的查询改写。
+
+  由于无法保证基表和基于 External Catalog 的物化视图之间的数据强一致，因此默认情况下禁用此功能。启用此功能时，物化视图将根据 `query_rewrite_consistency` 中指定的规则改写查询。
 
   > **注意**
   >
-  > Unique Key 约束和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+  > Unique Key 约束和外键约束仅用于查询改写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 
 **query_statement**（必填）
 
