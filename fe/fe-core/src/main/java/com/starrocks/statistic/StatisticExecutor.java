@@ -266,6 +266,7 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
+            statsConnectCtx.setStatisticsConnection(true);
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
@@ -283,6 +284,7 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         // update StatisticsCache
+        statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),

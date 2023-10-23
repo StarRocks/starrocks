@@ -5,12 +5,7 @@ For more information on how to create a storage volume for other object storages
 
 After you create a default storage volume, you can then create a database and a cloud-native table using this storage volume.
 
-Currently, shared-data StarRocks clusters support the following table types:
-
-- Duplicate Key table
-- Aggregate table
-- Unique Key table
-- Primary Key table (Currently, the primary key persistent index is not supported.)
+Shared-data StarRocks clusters support all [StarRocks table types](../../table_design/table_types/table_types.md).
 
 The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the hot data validity duration to one month, and disables asynchronous data ingestion into object storage:
 
