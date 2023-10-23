@@ -357,6 +357,16 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
 
 Used for MySQL client compatibility. No practical usage. Table names in StarRocks are case-sensitive.
 
+### materialized_view_rewrite_mode (v3.2 and later)
+
+Specifies the query rewrite mode of asynchronous materialized views. Valid values:
+
+* `disable`: Disable automatic query rewrite of asynchronous materialized views.
+* `default` (Default value): Enable automatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, it directly scans the data in the base table.
+* `default_or_error`: Enable automatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, an error is returned.
+* `force`: Enable automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, it directly scans the data in the base table.
+* `force_or_error`: Enable automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, an error is returned.
+
 ### max_allowed_packet
 
 Used for compatibility with the JDBC connection pool C3P0. This variable specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. Unit: Byte. You can raise this value if the client reports "PacketTooBigException".
