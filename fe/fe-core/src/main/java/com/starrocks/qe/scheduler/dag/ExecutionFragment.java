@@ -366,6 +366,10 @@ public class ExecutionFragment {
         }
     }
 
+    public boolean isRuntimeFilterCoordinator() {
+        return runtimeFilterParams.isSetRuntime_filter_builder_number();
+    }
+
     private boolean isReplicated(PlanNode root) {
         if (root instanceof ExchangeNode) {
             return false;
