@@ -2347,11 +2347,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
-<<<<<<< HEAD
-=======
-
-    @ConfField(mutable = true)
-    public static boolean replan_on_insert = false;
 
     /**
      * Checking the connectivity of port opened by FE,
@@ -2365,5 +2360,4 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
->>>>>>> a9c20aebec ([Enhancement] Support detect edit log port connectivity (#33117) (#33235))
 }
