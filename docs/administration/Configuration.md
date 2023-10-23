@@ -42,7 +42,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Logging
 
-#### qe_slow_log_ms
+##### qe_slow_log_ms
 
 - Unit: ms
 - Default: 5000
