@@ -412,6 +412,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
 
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -1021,6 +1023,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see more details: https://github.com/StarRocks/starrocks/pull/29678
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
+
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
 
     private int exprChildrenLimit = -1;
 
@@ -1918,6 +1923,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSimplifyCaseWhen(boolean enableSimplifyCaseWhen) {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
+    }
+
+    public long getCrossJoinCostPenalty() {
+        return crossJoinCostPenalty;
+    }
+
+    public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
+        this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
     // Serialize to thrift object
