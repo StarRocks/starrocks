@@ -215,8 +215,8 @@ Status DeltaWriter::_init() {
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
 
-        auto partial_update_schema = 
-                        TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
+        auto partial_update_schema =
+                TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
