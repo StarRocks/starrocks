@@ -215,8 +215,8 @@ Status DeltaWriter::_init() {
             _memtable_buffer_row = config::write_buffer_size / average_row_size;
         }
 
-        writer_context.partial_update_tablet_schema =
-                TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
+        auto partial_update_schema = 
+                        TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
@@ -236,9 +236,9 @@ Status DeltaWriter::_init() {
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
         }
 
+        writer_context.partial_update_tablet_schema = partial_update_schema;
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
         writer_context.partial_update_mode = _opt.partial_update_mode;
-        _tablet_schema = partial_update_schema;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
