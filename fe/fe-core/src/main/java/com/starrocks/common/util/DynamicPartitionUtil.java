@@ -267,8 +267,9 @@ public class DynamicPartitionUtil {
     }
 
     public static void registerOrRemovePartitionTTLTable(long dbId, OlapTable olapTable) {
-        if (olapTable.getTableProperty() != null
-                && olapTable.getTableProperty().getPartitionTTLNumber() > 0) {
+        TableProperty tableProperty = olapTable.getTableProperty();
+        if (tableProperty != null &&
+                (tableProperty.getPartitionTTLNumber() > 0 || !tableProperty.getPartitionTTL().isZero())) {
             GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
                     .registerTtlPartitionTable(dbId, olapTable.getId());
         } else {
