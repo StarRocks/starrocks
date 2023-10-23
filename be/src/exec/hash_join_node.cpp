@@ -522,8 +522,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
-    if (_distribution_mode == TJoinDistributionMode::PARTITIONED &&
-        _tnode.hash_join_node.__isset.interpolate_passthrough && _tnode.hash_join_node.interpolate_passthrough) {
+    if (_distribution_mode == TJoinDistributionMode::PARTITIONED && _hash_join_node.__isset.interpolate_passthrough &&
+        _hash_join_node.interpolate_passthrough) {
         lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
                                                                               context->degree_of_parallelism(), true);
     }
