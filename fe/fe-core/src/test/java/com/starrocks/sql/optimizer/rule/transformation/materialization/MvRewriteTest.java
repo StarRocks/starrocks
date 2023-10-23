@@ -18,6 +18,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
@@ -1928,23 +1929,23 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "GROUP BY region, `gender`");
         starRocksAssert.query("select array_agg(d_user) from json_tbl " +
                         "where cast(d_user->'gender' as string) = 'male'")
-                .explainContains(mvName);
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
         starRocksAssert.query("select array_sort(array_distinct(array_agg(d_user))) from json_tbl " +
                         "where cast(d_user->'gender' as string) = 'male'")
-                .explainContains(mvName);
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
         starRocksAssert.query("select " +
                         " cast(d_user->'region' as string) as region, " +
                         " array_sort(array_distinct(array_agg(d_user))) " +
                         "from json_tbl " +
                         "where cast(d_user->'gender' as string) = 'male' " +
                         "group by region")
-                .explainContains(mvName);
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
         starRocksAssert.query("select " +
                         " cast(d_user->'region' as string) as region, " +
                         " array_sort(array_distinct(array_agg(d_user))) " +
                         "from json_tbl " +
                         "group by region")
-                .explainContains(mvName);
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
     }
 
     @Test
