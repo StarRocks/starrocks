@@ -1253,6 +1253,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
                 .add(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME)
                 .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)
                 .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
                 .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
                 .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
