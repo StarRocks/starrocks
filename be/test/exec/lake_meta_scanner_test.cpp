@@ -56,9 +56,6 @@ public:
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
 
-        auto st = _tablet_mgr->delete_tablet(_tablet_id);
-        EXPECT_TRUE(st.ok());
-
         {
             // create the tablet with its schema prepared
             lake::TabletMetadata metadata;
@@ -115,8 +112,6 @@ public:
         EXPECT_TRUE(st.ok());
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
     }
-
-    void TearDown() override { (void)_tablet_mgr->delete_tablet(_tablet_id); }
 
 public:
     constexpr static const char* const kRootLocation = "./LakeMetaScannerTest";
