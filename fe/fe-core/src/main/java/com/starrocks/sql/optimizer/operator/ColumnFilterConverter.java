@@ -426,7 +426,6 @@ public class ColumnFilterConverter {
         }
 
         LiteralExpr literalExpr;
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionType, operator.getType());
         switch (operator.getType().getPrimitiveType()) {
             case NULL_TYPE:
                 literalExpr = new NullLiteral();
@@ -462,10 +461,10 @@ public class ColumnFilterConverter {
             case CHAR:
             case VARCHAR:
             case HLL:
+                boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionType, operator.getType());
+                literalExpr = new StringLiteral(operator.getVarchar());
                 if (isConvertToDate) {
-                    literalExpr = new StringLiteral(operator.getVarchar());
-                } else {
-                    literalExpr = PartitionUtil.convertToDateLiteral(new StringLiteral(operator.getVarchar()));
+                    literalExpr = PartitionUtil.convertToDateLiteral(literalExpr);
                 }
                 break;
             case DATE:
