@@ -74,7 +74,7 @@ struct ArrayAggDistinctDispatcher {
             }
         }
     }
-}
+};
 
 struct ArrayFlattenDispatcher {
     template <LogicalType lt>
