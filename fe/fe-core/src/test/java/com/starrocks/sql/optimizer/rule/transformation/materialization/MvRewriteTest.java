@@ -1984,7 +1984,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "SELECT \n" +
                 "    CAST((`d_user`->'region') AS string) AS `region`, \n" +
                 "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
-                "    array_agg(d_user) AS `cnt`\n" +
+                "    array_agg(d_user) AS `cnt`, \n" +
+                "    array_agg_distinct(d_user) AS `distinct_cnt`\n" +
                 "FROM `json_tbl`\n" +
                 "GROUP BY region, `gender`");
         starRocksAssert.query("select array_agg(d_user) from json_tbl " +
@@ -2003,6 +2004,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.query("select " +
                         " cast(d_user->'region' as string) as region, " +
                         " array_sort(array_distinct(array_agg(d_user))) " +
+                        "from json_tbl " +
+                        "group by region")
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
+        starRocksAssert.query("select " +
+                        " cast(d_user->'region' as string) as region, " +
+                        " array_length(array_agg_distinct(d_user)) " +
                         "from json_tbl " +
                         "group by region")
                 .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);

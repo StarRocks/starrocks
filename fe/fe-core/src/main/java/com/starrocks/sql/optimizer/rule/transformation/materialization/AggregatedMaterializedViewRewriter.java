@@ -69,6 +69,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     private static final Map<String, String> ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
             .put(FunctionSet.COUNT, FunctionSet.SUM)
             .put(FunctionSet.ARRAY_AGG, FunctionSet.ARRAY_FLATTEN)
+            .put(FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_FLATTEN)
             .build();
 
     private static final Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
@@ -80,6 +81,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .add(FunctionSet.BITMAP_UNION)
             .add(FunctionSet.HLL_UNION)
             .add(FunctionSet.PERCENTILE_UNION)
+            .add(FunctionSet.ARRAY_AGG_DISTINCT)
+            .add(FunctionSet.ARRAY_AGG)
             .build();
 
     public AggregatedMaterializedViewRewriter(MvRewriteContext mvRewriteContext) {
@@ -662,6 +665,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 LOG.warn("get rollup function {}({})) failed", mappedFn, argTypes);
                 return null;
             }
+            // TODO: ARRAY_FLATTEN does not support distinct, use array_distinct(array_flatten()) instead
             return new CallOperator(mappedFn, aggCall.getFunction().getReturnType(),
                     Lists.newArrayList(targetColumn), fn);
         } else {
