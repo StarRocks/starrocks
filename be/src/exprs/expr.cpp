@@ -213,9 +213,9 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
 
     // Enable JIT based on the "enable_jit" parameters.
-    // if (!state->query_options().__isset.enable_jit || !state->query_options().enable_jit) {
-    //     return status;
-    // }
+    if (state == nullptr || !state->query_options().__isset.enable_jit || !state->query_options().enable_jit) {
+        return status;
+    }
 
     // Check if JIT compilation is feasible on this platform.
     auto* jit_wrapper = JITWapper::get_instance();
