@@ -384,12 +384,32 @@ public class ConsistencyChecker extends LeaderDaemon {
 
     public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
+            return;
+        }
         db.writeLock();
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
+            if (table == null) {
+                LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
+                return;
+            }
             Partition partition = table.getPartition(info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
+                return;
+            }
             MaterializedIndex index = partition.getIndex(info.getIndexId());
+            if (index == null) {
+                LOG.warn("replay finish consistency check failed, index is null, info: {}", info);
+                return;
+            }
             LocalTablet tablet = (LocalTablet) index.getTablet(info.getTabletId());
+            if (tablet == null) {
+                LOG.warn("replay finish consistency check failed, tablet is null, info: {}", info);
+                return;
+            }
 
             long lastCheckTime = info.getLastCheckTime();
             db.setLastCheckTime(lastCheckTime);
