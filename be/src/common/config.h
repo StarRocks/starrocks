@@ -840,7 +840,7 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 
-CONF_Int64(rpc_connect_timeout_ms, "3000");
+CONF_Int64(rpc_connect_timeout_ms, "30000");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
