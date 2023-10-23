@@ -963,7 +963,9 @@ public class DefaultCoordinator extends Coordinator {
         }
 
         if (!enableAsyncProfile || !queryProfile.addListener(task)) {
-            LOG.warn("Profile task is full, execute in sync mode, query id = {}", DebugUtil.printId(queryId));
+            if (enableAsyncProfile) {
+                LOG.info("Profile task is full, execute in sync mode, query id = {}", DebugUtil.printId(queryId));
+            }
             collectProfileSync();
             task.accept(false);
             return false;
