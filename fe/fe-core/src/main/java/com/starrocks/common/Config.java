@@ -2459,6 +2459,21 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
 
+<<<<<<< HEAD
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
+=======
+    /**
+     * Checking the connectivity of port opened by FE,
+     * mainly used for checking edit log port currently.
+     */
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_interval_sec = 60;
+
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int port_connectivity_check_timeout_ms = 10000;
+>>>>>>> a9c20aebec ([Enhancement] Support detect edit log port connectivity (#33117) (#33235))
 }
