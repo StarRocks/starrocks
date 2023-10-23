@@ -226,6 +226,16 @@ Boolean value to enable query queues for SELECT queries. Default: `false`.
 
 Boolean value to enable query queues for statistics queries.
 
+### enable_query_tablet_affinity（2.5 and later）
+
+Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
+
+In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
+
+However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
+
+Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, 3.1.4, and 3.2.0.
+
 ### enable_scan_block_cache (2.5 and later)
 
 Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md).
