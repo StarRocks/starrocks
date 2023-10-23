@@ -26,7 +26,7 @@ Submit the Kafka connector into Kafka Connect:
 - Self-managed Kafka cluster:
 
   - Download and unzip [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz).
-  - Copy the extracted directory to the libs directory of Kafka. Restart Kafka Connect to read the latest JAR files.
+  - Copy the extracted directory to the `<kafka_dir>/libs` directory. Add the directory path containing the JAR files into the `plugin.path` worker configuration property in the Kafka connect cluster.
 
 - Confluent cloud:
 
@@ -40,7 +40,7 @@ Create a table or tables in StarRocks according to Kafka Topics and data.
 
 ## Examples
 
-The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka connect in order to load data into StarRocks.
+The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka connect (no need to restart the Kafka service) in order to load data into StarRocks.
 
 1. Create a Kafka connector configuration file named **connect-StarRocks-sink.properties** and configure the  parameters. For detailed information about parameters, see [Parameters](#parameters).
 
@@ -60,7 +60,7 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
     >
     > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
-2. Run the Kafka Connector. For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
+2. Run the Kafka Connector (no need to restart the Kafka service). For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
 
     - Standalone mode
 
