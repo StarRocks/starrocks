@@ -398,6 +398,9 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
 
     // return: ("100", "200", "300")
     public String toSql() {
+        if (keys.size() == 1) {
+            return keys.get(0).toSql();
+        }
         StringBuilder sb = new StringBuilder("(");
         int i = 0;
         for (LiteralExpr expr : keys) {

@@ -14,6 +14,8 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -21,20 +23,29 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -45,10 +56,13 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.time.LocalDate;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 public class RefreshMaterializedViewTest {
     private static ConnectContext connectContext;
@@ -308,7 +322,7 @@ public class RefreshMaterializedViewTest {
             Assert.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
 
             long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-            Assert.assertTrue(mvRefreshTimeStamp ==  maxPartitionRefreshTimestamp.get());
+            Assert.assertEquals(mvRefreshTimeStamp, (long) maxPartitionRefreshTimestamp.get());
             Assert.assertTrue(mv1.isStalenessSatisfied());
         }
 
@@ -391,7 +405,7 @@ public class RefreshMaterializedViewTest {
                 Assert.assertEquals(mv1.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
 
                 long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-                Assert.assertTrue(mvRefreshTimeStamp ==  maxPartitionRefreshTimestamp.get());
+                Assert.assertEquals(mvRefreshTimeStamp, (long) maxPartitionRefreshTimestamp.get());
                 Assert.assertTrue(mv1.isStalenessSatisfied());
             }
 
@@ -406,7 +420,7 @@ public class RefreshMaterializedViewTest {
                 Assert.assertEquals(mv2.maxBaseTableRefreshTimestamp().get(), maxPartitionRefreshTimestamp.get());
 
                 long mvRefreshTimeStamp = mv2.getLastRefreshTime();
-                Assert.assertTrue(mvRefreshTimeStamp ==  maxPartitionRefreshTimestamp.get());
+                Assert.assertEquals(mvRefreshTimeStamp, (long) maxPartitionRefreshTimestamp.get());
                 Assert.assertTrue(mv2.isStalenessSatisfied());
             }
         }
@@ -669,5 +683,113 @@ public class RefreshMaterializedViewTest {
             .useDatabase("test")
             .dropMaterializedView("mv_with_partition")
             .dropTable("tbl_with_partition");
+    }
+
+    private void buildTimePartitions(String tableName, int offset, int count) throws Exception {
+        LocalDate currentDate = LocalDate.now();
+        for (int i = 0; i < count; i++) {
+            LocalDate lowerBound = currentDate.plusMonths(offset + i - 1);
+            LocalDate upperBound = currentDate.plusMonths(offset + i);
+            String partitionName = String.format("p_%d_%d", lowerBound.getYear(), lowerBound.getMonthValue());
+            String addPartition = String.format("alter table %s add partition p%s values [('%s'), ('%s')) ",
+                    tableName, partitionName, lowerBound, upperBound);
+            cluster.runSql("test", addPartition);
+        }
+    }
+
+    private static void mockCreateTabletFailure() throws DdlException, AnalysisException {
+        PlanTestBase.mockDml();
+
+        new MockUp<PartitionBasedMvRefreshProcessor>() {
+
+            @Mock
+            void addRangePartitions(Database database, MaterializedView materializedView,
+                                    Map<String, Range<PartitionKey>> adds, Map<String, String> partitionProperties,
+                                    DistributionDesc distributionDesc) {
+                throw new RuntimeException("add partition failed");
+            }
+        };
+    }
+
+    /**
+     * If some partitions refresh failed, the query rewrite should work well
+     */
+    @Test
+    public void testPartitionRefreshFailure() throws Exception {
+        String baseTableName = "tbl_with_exception";
+        String mvName = "mv_with_exception";
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE " + baseTableName +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int \n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view " + mvName +
+                        " distributed by hash(k1) buckets 3\n" +
+                        " partition by k1 " +
+                        " refresh manual\n" +
+                        " properties('partition_ttl_number'='2') " +
+                        "as select k1, k2 from " + baseTableName);
+        cluster.runSql("test", String.format("insert into %s values('2022-02-01', 1, 1)", baseTableName));
+        cluster.runSql("test", String.format("insert into %s values('2022-02-16', 1, 1)", baseTableName));
+
+        Table baseTable = starRocksAssert.getTable("test", baseTableName);
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        DynamicPartitionScheduler scheduler = GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler();
+
+        Function<Void, String> queryLastPartition = (non) -> {
+            Range<PartitionKey> lastPartition = ((OlapTable) baseTable).getRangePartitionMap().values().stream()
+                    .max(Comparator.comparing(Range<PartitionKey>::upperEndpoint)).get();
+            String lowerBound = lastPartition.lowerEndpoint().toSql();
+            String upperBound = lastPartition.upperEndpoint().toSql();
+            return String.format("select k1, k2 from %s where k1 >= '%s' and k1 < '%s",
+                    baseTableName, lowerBound, upperBound);
+        };
+
+        // first query
+        // the query rewrite should work well
+        refreshMaterializedView("test", mvName);
+        starRocksAssert.query(queryLastPartition.apply(null)).explainContains(mvName);
+
+        // add more partition
+        buildTimePartitions(baseTableName, -3, 2);
+        refreshMaterializedView("test", mvName);
+        scheduler.runOnceForTest();
+        Assert.assertEquals(2, mv.getPartitions().size());
+        starRocksAssert.query(queryLastPartition.apply(null)).explainContains(mvName);
+
+        GlobalStateMgr mgr = GlobalStateMgr.getCurrentState();
+        Assert.assertEquals(2, baseTable.getPartitions().size());
+
+        // add partitions to base table, rewrite should fail
+        buildTimePartitions(baseTableName, 0, 2);
+        Assert.assertEquals(6, baseTable.getPartitions().size());
+        cluster.runSql("test", String.format("insert into %s values(current_date(), 2, 2)", baseTableName));
+        starRocksAssert.query(queryLastPartition.apply(null)).explainWithout(mvName);
+
+        // mock a createTablet failure, and refresh mv
+        mockCreateTabletFailure();
+        Assert.assertThrows(Exception.class, () -> refreshMaterializedView("test", mvName));
+        Assert.assertEquals(2, mv.getPartitions().size());
+        Assert.assertTrue(mv.isActive());
+
+        // check state and verify the query rewrite
+        starRocksAssert.query(queryLastPartition.apply(null)).explainWithout(mvName);
+        List<ShowMaterializedViewStatus> mvStatuses =
+                ShowExecutor.listMaterializedViewStatus("test", Lists.newArrayList(mv), Lists.newArrayList());
+        ShowMaterializedViewStatus mvStatus =
+                mvStatuses.stream().filter(x -> x.getName().equals(mvName)).findFirst().get();
+        Assert.assertEquals(Constants.TaskRunState.FAILED, mvStatus.getLastTaskRunStatus().getState());
+
+        starRocksAssert.dropTable(baseTableName);
+        starRocksAssert.dropMaterializedView(mvName);
     }
 }

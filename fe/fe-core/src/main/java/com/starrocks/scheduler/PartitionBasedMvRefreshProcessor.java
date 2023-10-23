@@ -1518,7 +1518,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private void addRangePartitions(Database database, MaterializedView materializedView,
+    protected void addRangePartitions(Database database, MaterializedView materializedView,
                                     Map<String, Range<PartitionKey>> adds, Map<String, String> partitionProperties,
                                     DistributionDesc distributionDesc) {
         if (adds.isEmpty()) {
