@@ -539,15 +539,23 @@ public class PartitionUtil {
         return partitionType.isDateType() && !columnType.isDateType();
     }
 
+    public static boolean isConvertToDate(Type partitionType, Type filterType) {
+        if (partitionType == null || filterType == null) {
+            return false;
+        }
+
+        PrimitiveType filterPrimitiveType = filterType.getPrimitiveType();
+        PrimitiveType partitionPrimitiveType = partitionType.getPrimitiveType();
+        return partitionPrimitiveType.isDateType() && !filterPrimitiveType.isDateType();
+    }
+
     public static boolean isConvertToDate(Column partitionColumn, PartitionColumnFilter partitionColumnFilter) {
         LiteralExpr literalExpr = (partitionColumnFilter.lowerBound == null) ? partitionColumnFilter.upperBound :
                 partitionColumnFilter.lowerBound;
         if (literalExpr == null) {
             return false;
         }
-        PrimitiveType filterType = literalExpr.getType().getPrimitiveType();
-        PrimitiveType partitionType = partitionColumn.getPrimitiveType();
-        return partitionType.isDateType() && !filterType.isDateType();
+        return isConvertToDate(partitionColumn.getType(), literalExpr.getType());
     }
 
     public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws AnalysisException {

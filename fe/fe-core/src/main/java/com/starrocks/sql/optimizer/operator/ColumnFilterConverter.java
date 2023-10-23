@@ -32,6 +32,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
@@ -40,6 +41,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AstVisitor;
@@ -328,22 +330,22 @@ public class ColumnFilterConverter {
             try {
                 switch (predicate.getBinaryType()) {
                     case EQ:
-                        filter.setLowerBound(convertLiteral(child), true);
-                        filter.setUpperBound(convertLiteral(child), true);
+                        filter.setLowerBound(convertLiteral(column.getType(), child), true);
+                        filter.setUpperBound(convertLiteral(column.getType(), child), true);
                         break;
                     case LE:
-                        filter.setUpperBound(convertLiteral(child), true);
+                        filter.setUpperBound(convertLiteral(column.getType(), child), true);
                         filter.lowerBoundInclusive = true;
                         break;
                     case LT:
-                        filter.setUpperBound(convertLiteral(child), false);
+                        filter.setUpperBound(convertLiteral(column.getType(), child), false);
                         filter.lowerBoundInclusive = true;
                         break;
                     case GE:
-                        filter.setLowerBound(convertLiteral(child), true);
+                        filter.setLowerBound(convertLiteral(column.getType(), child), true);
                         break;
                     case GT:
-                        filter.setLowerBound(convertLiteral(child), false);
+                        filter.setLowerBound(convertLiteral(column.getType(), child), false);
                         break;
                     default:
                         break;
@@ -367,7 +369,7 @@ public class ColumnFilterConverter {
             List<LiteralExpr> list = Lists.newArrayList();
             try {
                 for (int i = 1; i < predicate.getChildren().size(); i++) {
-                    list.add(convertLiteral((ConstantOperator) predicate.getChild(i)));
+                    list.add(convertLiteral(column.getType(), (ConstantOperator) predicate.getChild(i)));
                 }
 
                 PartitionColumnFilter filter = context.getOrDefault(column.getName(), new PartitionColumnFilter());
@@ -412,7 +414,11 @@ public class ColumnFilterConverter {
         }
     }
 
-    public static LiteralExpr convertLiteral(ConstantOperator operator) throws AnalysisException {
+    public static LiteralExpr convertLiteral(Column partitionColumn, ConstantOperator operator) throws AnalysisException {
+        return convertLiteral(partitionColumn.getType(), operator);
+    }
+
+    public static LiteralExpr convertLiteral(Type partitionType, ConstantOperator operator) throws AnalysisException {
         Preconditions.checkArgument(!operator.getType().isInvalid());
 
         if (operator.isNull()) {
@@ -420,6 +426,7 @@ public class ColumnFilterConverter {
         }
 
         LiteralExpr literalExpr;
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionType, operator.getType());
         switch (operator.getType().getPrimitiveType()) {
             case NULL_TYPE:
                 literalExpr = new NullLiteral();
@@ -455,7 +462,11 @@ public class ColumnFilterConverter {
             case CHAR:
             case VARCHAR:
             case HLL:
-                literalExpr = new StringLiteral(operator.getVarchar());
+                if (isConvertToDate) {
+                    literalExpr = new StringLiteral(operator.getVarchar());
+                } else {
+                    literalExpr = PartitionUtil.convertToDateLiteral(new StringLiteral(operator.getVarchar()));
+                }
                 break;
             case DATE:
                 LocalDateTime date = operator.getDate();
