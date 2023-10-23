@@ -20,7 +20,6 @@ import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ForeignKeyConstraint;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
@@ -38,9 +37,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
@@ -48,11 +51,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteTest extends MvRewriteTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
 
@@ -69,6 +73,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "test11");
 
         prepareDatas();
+    }
+
+    @AfterAll
+    public static void afterClass() throws Exception {
+        MvRewriteTestBase.tearDown();
+        ;
     }
 
     public static void prepareDatas() throws Exception {
@@ -1743,38 +1753,85 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
     }
 
-    @Test
-    public void testRollup_ArrayAgg() throws Exception {
+    @ParameterizedTest(name = "{index}-{0}-{1}-{2}")
+    @MethodSource("generateArguments_ArrayAgg")
+    public void testRollup_ArrayAgg(String select, String predicate, String groupBy) throws Exception {
         String mvName = "mv_array";
-        createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_array`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW IF NOT EXISTS `mv_array`\n" +
                 "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
                 "REFRESH ASYNC\n" +
                 "AS \n" +
                 "SELECT \n" +
-                "    CAST((`d_user`->'region') AS string) AS `region`, \n" +
-                "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
-                "    array_agg(d_user) AS `cnt`\n" +
+                "    get_json_string(`d_user`, 'region') AS `region`, \n" +
+                "    get_json_string(`d_user`, 'gender') AS `gender`, \n" +
+                "    array_agg_distinct(get_json_string(d_user, 'gender') ) AS `distinct_gender`\n" +
                 "FROM `json_tbl`\n" +
                 "GROUP BY region, `gender`");
-        starRocksAssert.query("select array_agg(d_user) from json_tbl " +
-                        "where cast(d_user->'gender' as string) = 'male'")
-                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
-        starRocksAssert.query("select array_sort(array_distinct(array_agg(d_user))) from json_tbl " +
-                        "where cast(d_user->'gender' as string) = 'male'")
-                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
-        starRocksAssert.query("select " +
-                        " cast(d_user->'region' as string) as region, " +
-                        " array_sort(array_distinct(array_agg(d_user))) " +
-                        "from json_tbl " +
-                        "where cast(d_user->'gender' as string) = 'male' " +
-                        "group by region")
-                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
-        starRocksAssert.query("select " +
-                        " cast(d_user->'region' as string) as region, " +
-                        " array_sort(array_distinct(array_agg(d_user))) " +
-                        "from json_tbl " +
-                        "group by region")
-                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
+
+        String query = String.format("select %s from json_tbl  %s  %s", select, predicate, groupBy);
+        starRocksAssert.query(query).explainContains(mvName);
+    }
+
+    private static Stream<Arguments> generateArguments_ArrayAgg() {
+        List<String> selectList = List.of(
+                "array_agg_distinct(get_json_string(d_user, 'gender'))",
+                "array_sort(array_agg_distinct(get_json_string(d_user, 'gender') ))",
+                "array_length(array_agg_distinct(get_json_string(d_user, 'gender') ))",
+                "count(distinct get_json_string(d_user, 'gender') )",
+                "sum(distinct get_json_string(d_user, 'gender') )"
+        );
+        List<String> predicatelist = List.of("", "where get_json_string(d_user, 'gender') = 'male'");
+        List<String> groupList = List.of("",
+                "group by get_json_string(d_user, 'region')",
+                "group by get_json_string(d_user, 'gender')",
+                "group by get_json_string(d_user, 'region'), get_json_string(d_user, 'gender') "
+        );
+
+        var enumerator = new TestCaseEnumerator(List.of(selectList.size(), predicatelist.size(), groupList.size()));
+        return enumerator.enumerate().map(argList ->
+                TestCaseEnumerator.ofArguments(argList, selectList, predicatelist, groupList));
+    }
+
+    /**
+     * Enumerate all test cases from combinations
+     */
+    static class TestCaseEnumerator {
+
+        private List<List<Integer>> testCases;
+
+        public TestCaseEnumerator(List<Integer> space) {
+            this.testCases = Lists.newArrayList();
+            List<Integer> testCase = Lists.newArrayList();
+            search(space, testCase, 0);
+        }
+
+        private void search(List<Integer> space, List<Integer> testCase, int k) {
+            if (k >= space.size()) {
+                testCases.add(Lists.newArrayList(testCase));
+                return;
+            }
+
+            int n = space.get(k);
+            for (int i = 0; i < n; i++) {
+                testCase.add(i);
+                search(space, testCase, k + 1);
+                testCase.remove(testCase.size() - 1);
+            }
+        }
+
+        public Stream<List<Integer>> enumerate() {
+            return testCases.stream();
+        }
+
+        @SafeVarargs
+        public static <T> Arguments ofArguments(List<Integer> permutation, List<T>... args) {
+            Object[] objects = new Object[args.length];
+            for (int i = 0; i < args.length; i++) {
+                int index = permutation.get(i);
+                objects[i] = args[i].get(index);
+            }
+            return Arguments.of(objects);
+        }
     }
 
     @Test
@@ -2149,20 +2206,21 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testOuterJoinRewrite() throws Exception {
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
-                "PARTITION BY (`event_time`)\n" +
-                "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
-                "REFRESH ASYNC\n" +
-                "PROPERTIES (\n" +
-                "\"replicated_storage\" = \"true\",\n" +
-                "\"partition_refresh_number\" = \"2\",\n" +
-                "\"force_external_table_query_rewrite\" = \"CHECKED\",\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
-                ")\n" +
-                "AS SELECT `a`.`event_id`, `a`.`event_time`, `b`.`event_time1`\n" +
-                "FROM `test`.`test10` AS `a` LEFT OUTER JOIN `test`.`test11` AS `b`" +
-                " ON (`a`.`event_id` = `b`.`event_id1`) AND (`a`.`event_time` = `b`.`event_time1`);");
+        starRocksAssert.withMaterializedView(
+                "CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
+                        "PARTITION BY (`event_time`)\n" +
+                        "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
+                        "REFRESH ASYNC\n" +
+                        "PROPERTIES (\n" +
+                        "\"replicated_storage\" = \"true\",\n" +
+                        "\"partition_refresh_number\" = \"2\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"CHECKED\",\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `a`.`event_id`, `a`.`event_time`, `b`.`event_time1`\n" +
+                        "FROM `test`.`test10` AS `a` LEFT OUTER JOIN `test`.`test11` AS `b`" +
+                        " ON (`a`.`event_id` = `b`.`event_id1`) AND (`a`.`event_time` = `b`.`event_time1`);");
 
         connectContext.executeSql("refresh materialized view mv1 with sync mode");
         {

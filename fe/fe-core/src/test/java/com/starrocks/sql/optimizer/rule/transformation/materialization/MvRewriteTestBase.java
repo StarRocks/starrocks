@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -52,9 +53,11 @@ import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
+import org.junit.Rule;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
@@ -65,8 +68,14 @@ public class MvRewriteTestBase {
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+
+    // For Junit5
+    @TempDir
+    public static File temp;
+
+    // For Junit4
+    @Rule
+    public static TemporaryFolder tempFolder;
 
     protected static long startSuiteTime = 0;
     protected long startCaseTime = 0;
@@ -83,6 +92,16 @@ public class MvRewriteTestBase {
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
+
+        if (temp != null) {
+            String tempPath = temp.getPath();
+            ConnectorPlanTestBase.mockCatalog(connectContext, tempPath);
+        } else {
+            ConnectorPlanTestBase.mockCatalog(connectContext, tempFolder.newFolder().toURI().toString());
+        }
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
