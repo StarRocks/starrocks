@@ -288,7 +288,8 @@ public class LakeTableAlterMetaJobTest {
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) throws
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                       long commitTime) throws
                     RpcException {
             }
         };
@@ -322,7 +323,8 @@ public class LakeTableAlterMetaJobTest {
             }
 
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion) throws
+            public void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion,
+                                       long commitTime) throws
                     RpcException {
             }
         };

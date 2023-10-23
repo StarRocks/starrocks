@@ -256,7 +256,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = partitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
-                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion);
+                    Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
+                            finishedTimeMs / 1000);
                 }
             }
             return true;
