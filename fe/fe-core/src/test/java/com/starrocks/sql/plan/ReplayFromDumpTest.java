@@ -464,7 +464,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 40:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 39:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
@@ -626,11 +626,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [52: n_regionkey, INT, true] = [58: r_regionkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (58: r_regionkey), remote = false\n" +
+                "  |  - filter_id = 0, build_expr = (58: r_regionkey), remote = false\n" +
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
         FeConstants.isReplayFromQueryDump = false;

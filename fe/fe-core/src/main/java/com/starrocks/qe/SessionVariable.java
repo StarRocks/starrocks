@@ -543,6 +543,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1381,6 +1383,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
     private boolean cboPredicateSubfieldPath = true;
+
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
 
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
@@ -2689,6 +2694,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getEnablePlanSerializeConcurrently() {
         return enablePlanSerializeConcurrently;
+    }
+
+    public long getCrossJoinCostPenalty() {
+        return crossJoinCostPenalty;
+    }
+
+    public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
+        this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
     // Serialize to thrift object
