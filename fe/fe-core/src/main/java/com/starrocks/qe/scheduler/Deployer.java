@@ -38,7 +38,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
 
@@ -80,21 +82,41 @@ public class Deployer {
 
     public void deployFragments(List<ExecutionFragment> concurrentFragments, boolean needDeploy)
             throws RpcException, UserException {
-        // Divide requests of fragments in the current group to two stages.
-        // - stage 1, the first request to a host, which need send descTable.
-        // - stage 2, the non-first requests to a host, which needn't send descTable.
-        List<List<FragmentInstanceExecState>> twoStageExecutionsToDeploy = ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+        // Divide requests of fragments in the current group to three stages.
+        // - stage 1, the request with RF coordinator + descTable.
+        // - stage 2, the first request to a host, which need send descTable.
+        // - stage 3, the non-first requests to a host, which needn't send descTable.
+        List<List<FragmentInstanceExecState>> threeStageExecutionsToDeploy =
+                ImmutableList.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
 
-        concurrentFragments.forEach(fragment -> this.createFragmentInstanceExecStates(fragment, twoStageExecutionsToDeploy));
+        concurrentFragments.forEach(fragment -> this.createFragmentInstanceExecStates(fragment, threeStageExecutionsToDeploy));
 
         if (!needDeploy) {
             return;
         }
 
+<<<<<<< HEAD
         for (List<FragmentInstanceExecState> executions : twoStageExecutionsToDeploy) {
             executions.forEach(FragmentInstanceExecState::deployAsync);
 
             waitForDeploymentCompletion(executions);
+=======
+        if (enablePlanSerializeConcurrently) {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeConcurrencyTime")) {
+                threeStageExecutionsToDeploy.stream().parallel().forEach(
+                        executions -> executions.stream().parallel()
+                                .forEach(FragmentInstanceExecState::serializeRequest));
+            }
+        }
+
+        for (List<FragmentInstanceExecState> executions : threeStageExecutionsToDeploy) {
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
+                executions.forEach(FragmentInstanceExecState::deployAsync);
+            }
+            try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
+                waitForDeploymentCompletion(executions);
+            }
+>>>>>>> 88b289aa80 ([Enhancement] Add GRF coordinator for OlapTableSink (#33292))
         }
     }
 
@@ -103,7 +125,7 @@ public class Deployer {
     }
 
     private void createFragmentInstanceExecStates(ExecutionFragment fragment,
-                                                  List<List<FragmentInstanceExecState>> twoStageExecutionsToDeploy) {
+                                                  List<List<FragmentInstanceExecState>> threeStageExecutionsToDeploy) {
         Preconditions.checkState(!fragment.getInstances().isEmpty());
 
         // This is a load process, and it is the first fragment.
@@ -115,23 +137,36 @@ public class Deployer {
         // calculate the number of all tablet sinks in advance and assign them to each fragment instance
         boolean enablePipelineTableSinkDop = isEnablePipeline && fragment.getPlanFragment().hasTableSink();
 
-        List<List<FragmentInstance>> twoStageInstancesToDeploy = ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+        List<List<FragmentInstance>> threeStageInstancesToDeploy = ImmutableList.of(
+                new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+
+        // Fragment Instance carrying runtime filter params for runtime filter coordinator
+        // must be delivered at first.
+        Map<Boolean, List<FragmentInstance>> instanceSplits =
+                fragment.getInstances().stream().collect(
+                        Collectors.partitioningBy(instance -> instance.getExecFragment().isRuntimeFilterCoordinator()));
+        // stage 0 holds the instance carrying runtime filter params that used to initialize
+        // global runtime filter coordinator if exists.
+        threeStageInstancesToDeploy.get(0).addAll(instanceSplits.get(true));
+
+        List<FragmentInstance> restInstances = instanceSplits.get(false);
         if (!isEnablePipeline) {
-            twoStageInstancesToDeploy.get(0).addAll(fragment.getInstances());
+            threeStageInstancesToDeploy.get(1).addAll(restInstances);
         } else {
-            fragment.getInstances().forEach(instance -> {
+            threeStageInstancesToDeploy.get(0).forEach(instance -> deployedWorkerIds.add(instance.getWorkerId()));
+            restInstances.forEach(instance -> {
                 if (deployedWorkerIds.contains(instance.getWorkerId())) {
-                    twoStageInstancesToDeploy.get(1).add(instance);
+                    threeStageInstancesToDeploy.get(2).add(instance);
                 } else {
                     deployedWorkerIds.add(instance.getWorkerId());
-                    twoStageInstancesToDeploy.get(0).add(instance);
+                    threeStageInstancesToDeploy.get(1).add(instance);
                 }
             });
         }
 
         int totalTableSinkDop = 0;
         if (enablePipelineTableSinkDop) {
-            totalTableSinkDop = twoStageInstancesToDeploy.stream()
+            totalTableSinkDop = threeStageInstancesToDeploy.stream()
                     .flatMap(Collection::stream)
                     .mapToInt(FragmentInstance::getTableSinkDop)
                     .sum();
@@ -140,14 +175,14 @@ public class Deployer {
                 "tableSinkTotalDop = %d should be >= 0", totalTableSinkDop);
 
         int accTabletSinkDop = 0;
-        for (int stageIndex = 0; stageIndex < twoStageInstancesToDeploy.size(); stageIndex++) {
-            List<FragmentInstance> stageInstances = twoStageInstancesToDeploy.get(stageIndex);
+        for (int stageIndex = 0; stageIndex < threeStageInstancesToDeploy.size(); stageIndex++) {
+            List<FragmentInstance> stageInstances = threeStageInstancesToDeploy.get(stageIndex);
             if (stageInstances.isEmpty()) {
                 continue;
             }
 
             TDescriptorTable curDescTable;
-            if (stageIndex == 0) {
+            if (stageIndex < 2) {
                 curDescTable = jobSpec.getDescTable();
             } else {
                 curDescTable = emptyDescTable;
@@ -167,7 +202,7 @@ public class Deployer {
                         request,
                         instance.getWorker());
 
-                twoStageExecutionsToDeploy.get(stageIndex).add(execution);
+                threeStageExecutionsToDeploy.get(stageIndex).add(execution);
                 executionDAG.addExecution(execution);
 
                 if (needCheckExecutionState) {
@@ -183,6 +218,9 @@ public class Deployer {
     }
 
     private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException, UserException {
+        if (executions.isEmpty()) {
+            return;
+        }
         DeploymentResult firstErrResult = null;
         FragmentInstanceExecState firstErrExecution = null;
         for (FragmentInstanceExecState execution : executions) {
