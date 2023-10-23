@@ -453,11 +453,11 @@ private:
     // |_drop_lock| prevents meta read/write conflicts when importing and dropping concurrently between function
     // `UpdateManager::on_rowset_finished` and `TabletUpdates::clear_meta`
     // In function `UpdateManager::on_rowset_finished`, we will preload rowset_updates and primary index to speed apply.
-    // But in function `TabletUpdates::clear_meta`, we will clear tablet meta. So the import task maybe get `no del vector found`
-    // exception and the primary index maybe referenced by ingestion thread, and the drop_tablet thread will cause BE crash whe it
-    // try to remove the primary index from cache in ASAN mode.
-    // Actually |_lock| also can prevent the read/write conflicts, but preload may take a long time and using |_lock| may stuck apply
-    // thread.
+    // But in function `TabletUpdates::clear_meta`, we will clear tablet meta. So the import task maybe get
+    // `no del vector found` exception and the primary index maybe referenced by ingestion thread, and the drop_tablet
+    // thread will cause BE crash when it try to remove the primary index from cache in ASAN mode.
+    // Actually |_lock| also can prevent the read/write conflicts, but preload may take a long time and using |_lock| may
+    // stuck apply thread.
     mutable std::mutex _drop_lock;
     std::vector<std::unique_ptr<EditVersionInfo>> _edit_version_infos;
     uint32_t _next_rowset_id = 0;
