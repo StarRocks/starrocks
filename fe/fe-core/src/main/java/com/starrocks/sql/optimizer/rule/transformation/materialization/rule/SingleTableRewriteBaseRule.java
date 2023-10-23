@@ -18,9 +18,13 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -51,9 +55,11 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
             }
             List<CandidateContext> contexts = Lists.newArrayList();
             for (int i = 0; i < expressions.size(); i++) {
-                Statistics mvStatistics = collectMVStatistics(expressions.get(i));
-                Preconditions.checkState(mvStatistics != null);
-                contexts.add(new CandidateContext(mvStatistics, i));
+                CandidateContext mvContext = getMVContext(
+                        expressions.get(i), queryExpression.getOp() instanceof LogicalAggregationOperator, context);
+                Preconditions.checkState(mvContext != null);
+                mvContext.setIndex(i);
+                contexts.add(mvContext);
             }
             // sort expressions based on statistics output row count and compute size
             contexts.sort(new CandidateContextComparator());
@@ -64,11 +70,29 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
     @VisibleForTesting
     public static class CandidateContext {
         private Statistics mvStatistics;
+        private int schemaColumnNum;
+
+        // if mv is aggregated, set it to number of group by key,
+        // else set it to Integer.MAX_VALUE
+        private int groupbyColumnNum;
         private int index;
 
-        public CandidateContext(Statistics mvStatistics, int index) {
+        public CandidateContext(Statistics mvStatistics, int schemaColumnNum) {
             this.mvStatistics = mvStatistics;
-            this.index = index;
+            this.schemaColumnNum = schemaColumnNum;
+            this.groupbyColumnNum = Integer.MAX_VALUE;
+        }
+
+        public int getSchemaColumnNum() {
+            return schemaColumnNum;
+        }
+
+        public int getGroupbyColumnNum() {
+            return groupbyColumnNum;
+        }
+
+        public void setGroupbyColumnNum(int groupbyColumnNum) {
+            this.groupbyColumnNum = groupbyColumnNum;
         }
 
         public Statistics getMvStatistics() {
@@ -78,17 +102,33 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         public int getIndex() {
             return index;
         }
+
+        public void setIndex(int index) {
+            this.index = index;
+        }
     }
 
     @VisibleForTesting
     public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
-            int ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
+            // compare group by key num
+            int ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
+            if (ret != 0) {
+                return ret;
+            }
+            // compare by row number
+            ret = Double.compare(context1.getMvStatistics().getOutputRowCount(),
                     context2.getMvStatistics().getOutputRowCount());
             if (ret != 0) {
                 return ret;
             }
+            // compare by schema column num
+            ret = Integer.compare(context1.getSchemaColumnNum(), context2.getSchemaColumnNum());
+            if (ret != 0) {
+                return ret;
+            }
+
             ret = Double.compare(context1.getMvStatistics().getComputeSize(), context2.getMvStatistics().getComputeSize());
             return ret != 0 ? ret : Integer.compare(context1.getIndex(), context2.getIndex());
         }
@@ -111,17 +151,29 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         expr.setStatistics(expressionContext.getStatistics());
     }
 
-    private Statistics collectMVStatistics(OptExpression expression) {
+    private CandidateContext getMVContext(
+            OptExpression expression, boolean isAggregate, OptimizerContext optimizerContext) {
         if (expression.getOp() instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scanOperator = expression.getOp().cast();
             if (scanOperator.getTable().isMaterializedView()) {
-                return expression.getStatistics();
+                CandidateContext candidateContext =
+                        new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
+                if (isAggregate) {
+                    MaterializedView mv = (MaterializedView) scanOperator.getTable();
+                    MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                            mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
+                    if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
+                        LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
+                        candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
+                    }
+                }
+                return candidateContext;
             }
         }
         for (OptExpression child : expression.getInputs()) {
-            Statistics statistics = collectMVStatistics(child);
-            if (statistics != null) {
-                return statistics;
+            CandidateContext context = getMVContext(child, isAggregate, optimizerContext);
+            if (context != null) {
+                return context;
             }
         }
         return null;
