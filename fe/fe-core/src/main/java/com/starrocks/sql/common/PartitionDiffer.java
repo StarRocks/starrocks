@@ -30,9 +30,11 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunContext;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -58,12 +60,15 @@ public class PartitionDiffer {
 
     private Range<PartitionKey> rangeToInclude;
     private int partitionTTLNumber;
+    private PeriodDuration partitionTTL;
     private PartitionInfo partitionInfo;
 
-    public PartitionDiffer(Range<PartitionKey> rangeToInclude, int partitionTTLNumber, PartitionInfo partitionInfo) {
+    public PartitionDiffer(Range<PartitionKey> rangeToInclude, int partitionTTLNumber, PeriodDuration partitionTTL,
+                           PartitionInfo partitionInfo) {
         this.rangeToInclude = rangeToInclude;
         this.partitionTTLNumber = partitionTTLNumber;
         this.partitionInfo = partitionInfo;
+        this.partitionTTL = partitionTTL;
     }
 
     public PartitionDiffer() {
@@ -80,7 +85,9 @@ public class PartitionDiffer {
             rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         }
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
-        return new PartitionDiffer(rangeToInclude, partitionTTLNumber, materializedView.getPartitionInfo());
+        PeriodDuration partitionTTL = materializedView.getTableProperty().getPartitionTTL();
+        return new PartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL,
+                materializedView.getPartitionInfo());
     }
 
     /**
@@ -108,6 +115,24 @@ public class PartitionDiffer {
         Map<String, Range<PartitionKey>> res = new HashMap<>(addPartitions);
         if (rangeToInclude != null) {
             res.entrySet().removeIf(entry -> !isRangeIncluded(entry.getValue(), rangeToInclude));
+        }
+
+        if (partitionTTL != null && !partitionTTL.isZero() && partitionInfo instanceof RangePartitionInfo) {
+            List<Column> partitionColumns = partitionInfo.getPartitionColumns();
+            Type partitionType = partitionColumns.get(0).getType();
+            LocalDateTime ttlTime = LocalDateTime.now().minus(partitionTTL);
+            PartitionKey ttlLowerBound;
+            if (partitionType.isDatetime()) {
+                ttlLowerBound = PartitionKey.ofDateTime(ttlTime);
+            } else if (partitionType.isDate()) {
+                ttlLowerBound = PartitionKey.ofDate(ttlTime.toLocalDate());
+            } else {
+                throw new SemanticException("partition_ttl not support partition type: " + partitionType);
+            }
+            Predicate<Range<PartitionKey>> isOutdated = (p) -> p.upperEndpoint().compareTo(ttlLowerBound) <= 0;
+
+            // filter partitions with ttl
+            res.values().removeIf(isOutdated);
         }
         if (partitionTTLNumber > 0 && partitionInfo instanceof RangePartitionInfo) {
             List<PartitionRange> sorted =

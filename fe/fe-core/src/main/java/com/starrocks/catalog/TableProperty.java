@@ -122,6 +122,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // partition time to live number, -1 means no ttl
     private int partitionTTLNumber = INVALID;
 
+    private PeriodDuration partitionTTL = PeriodDuration.ZERO;
+
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = INVALID;
@@ -577,6 +579,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public int getPartitionTTLNumber() {
         return partitionTTLNumber;
+    }
+
+    public void setPartitionTTL(PeriodDuration ttlDuration) {
+        this.partitionTTL = ttlDuration;
+    }
+
+    public PeriodDuration getPartitionTTL() {
+        return partitionTTL;
     }
 
     public int getAutoRefreshPartitionsLimit() {
