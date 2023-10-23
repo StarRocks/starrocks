@@ -561,10 +561,14 @@ size_t ColumnReader::mem_usage() {
     size_t size = sizeof(ColumnReader);
 
     size += _segment_zone_map != nullptr ? _segment_zone_map->SpaceUsedLong() : 0;
-    size += _ordinal_index_meta != nullptr ? _ordinal_index_meta->SpaceUsedLong() : 0;
-    size += _zonemap_index_meta != nullptr ? _zonemap_index_meta->SpaceUsedLong() : 0;
-    size += _bitmap_index_meta != nullptr ? _bitmap_index_meta->SpaceUsedLong() : 0;
-    size += _bloom_filter_index_meta != nullptr ? _bloom_filter_index_meta->SpaceUsedLong() : 0;
+    // NOTE: intended to skip the following *_index_meta size collection due to
+    // they are all for one-time usage and are freed after first load.
+    // The size is trivial to the final mem usage statistic, but will introduce unnecessary read-write
+    // unique_ptr race condition here
+    // - _ordinal_index_meta
+    // - _zonemap_index_meta
+    // - _bitmap_index_meta
+    // - _bloom_filter_index_meta
 
     size += _zonemap_index != nullptr ? _zonemap_index->mem_usage() : 0;
     size += _ordinal_index != nullptr ? _ordinal_index->mem_usage() : 0;
