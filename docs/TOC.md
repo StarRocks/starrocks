@@ -129,7 +129,7 @@
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
-    + [Dataphin.md](./integrations/IDE_integrations/Dataphin.md)
+    + [Dataphin](./integrations/IDE_integrations/Dataphin.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
