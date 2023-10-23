@@ -496,7 +496,7 @@ public class DefaultCoordinator extends Coordinator {
         long workerId = rootExecFragment.getInstances().get(0).getWorkerId();
         ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
         // Select top fragment as global runtime filter merge address
-        setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcAddress());
+        setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcIpAddress());
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
             return;
