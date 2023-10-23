@@ -67,6 +67,7 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -207,6 +208,8 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     private List<String> hints = Collections.emptyList();
 
+    private RoaringBitmap cachedUsedSlotIds = null;
+
     protected Expr() {
         pos = NodePosition.ZERO;
         type = Type.INVALID;
@@ -342,6 +345,16 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         // the result, e.g. by resolving function.
         isConstant_ = isConstantImpl();
         isAnalyzed = true;
+    }
+
+    public RoaringBitmap getUsedSlotIds() {
+        if (cachedUsedSlotIds == null) {
+            cachedUsedSlotIds = new RoaringBitmap();
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            this.collect(SlotRef.class, slotRefs);
+            slotRefs.stream().map(SlotRef::getSlotId).map(SlotId::asInt).forEach(cachedUsedSlotIds::add);
+        }
+        return cachedUsedSlotIds;
     }
 
     /**
