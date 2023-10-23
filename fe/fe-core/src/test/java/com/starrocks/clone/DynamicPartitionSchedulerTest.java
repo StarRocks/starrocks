@@ -172,4 +172,51 @@ public class DynamicPartitionSchedulerTest {
 
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testAutoRandomPartitionFPartitionLiveNumber() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE site_access(\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)(\n" +
+                        " START (\"2023-03-27\") END (\"2023-03-31\") EVERY (INTERVAL 1 day),\n" +
+                        " START (\"9999-12-30\") END (\"9999-12-31\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("site_access");
+        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
+        dynamicPartitionScheduler.runOnceForTest();
+
+        Map<String, Range<PartitionKey>> rangePartitionMap = tbl.getRangePartitionMap();
+
+        Assert.assertFalse(rangePartitionMap.containsKey("p20230327"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230328"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
+        Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+    }
+
+>>>>>>> 8bd490a9fe ([Feature] add support for partition_ttl  on materialized view (#31479))
 }

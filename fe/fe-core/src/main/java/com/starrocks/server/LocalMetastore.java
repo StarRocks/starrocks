@@ -240,6 +240,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -3041,9 +3042,22 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
             }
+            // partition ttl
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL
+                            + " is only supported by partitioned materialized-view");
+                }
+
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+                materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+
             // partition ttl number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-                int number = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+                int number = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
