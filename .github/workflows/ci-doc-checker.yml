@@ -44,7 +44,7 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -78,7 +78,7 @@ jobs:
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - uses: articulate/actions-markdownlint@v1.1.0
         with:
@@ -105,7 +105,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ secrets.PAT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Set Body
         run: |
