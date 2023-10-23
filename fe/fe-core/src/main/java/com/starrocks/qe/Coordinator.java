@@ -108,7 +108,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -503,16 +502,17 @@ public class Coordinator {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
         CoordinatorPreprocessor.FragmentExecParams topParams =
                 coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
+        CoordinatorPreprocessor.FInstanceExecParam firstInstance = topParams.instanceExecParams.get(0);
+        TNetworkAddress execBeAddr = firstInstance.getHost();
+        // Select top fragment as global runtime filter merge address
+        setGlobalRuntimeFilterParams(firstInstance, SystemInfoService.toBrpcHost(execBeAddr));
+
         if (topParams.fragment.getSink() instanceof ResultSink) {
-            TNetworkAddress execBeAddr = topParams.instanceExecParams.get(0).host;
             receiver = new ResultReceiver(
                     topParams.instanceExecParams.get(0).instanceId,
                     coordinatorPreprocessor.getAddressToBackendID().get(execBeAddr),
                     SystemInfoService.toBrpcHost(execBeAddr),
                     queryOptions.query_timeout * 1000);
-
-            // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, SystemInfoService.toBrpcHost(execBeAddr));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -580,7 +580,7 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
+            Set<TNetworkAddress> descTblDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 CoordinatorPreprocessor.FragmentExecParams params =
                         coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
@@ -588,7 +588,8 @@ public class Coordinator {
                 // set up exec states
                 int instanceNum = params.instanceExecParams.size();
                 Preconditions.checkState(instanceNum > 0);
-                List<List<CoordinatorPreprocessor.FInstanceExecParam>> infightExecParamList = new LinkedList<>();
+                List<List<CoordinatorPreprocessor.FInstanceExecParam>> threeStageExecParamList =
+                        ImmutableList.of(Lists.newArrayList(), Lists.newArrayList(), Lists.newArrayList());
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                 // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
@@ -600,22 +601,24 @@ public class Coordinator {
                 for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                     fInstanceExecParam.backendNum = backendId++;
                 }
+                Map<Boolean, List<CoordinatorPreprocessor.FInstanceExecParam>> instanceSplits = 
+                        params.instanceExecParams.stream()
+                                .collect(Collectors.partitioningBy(
+                                        CoordinatorPreprocessor.FInstanceExecParam::isRuntimeFilterCoordinator));
+                threeStageExecParamList.get(0).addAll(instanceSplits.get(true));
+                List<CoordinatorPreprocessor.FInstanceExecParam> restInstances = instanceSplits.get(false);
                 if (enablePipelineEngine) {
-                    List<CoordinatorPreprocessor.FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
-                    List<CoordinatorPreprocessor.FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
-
-                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
-                        if (!firstDeliveryAddresses.contains(fInstanceExecParam.host)) {
-                            firstDeliveryAddresses.add(fInstanceExecParam.host);
-                            firstFInstanceParamList.add(fInstanceExecParam);
+                    threeStageExecParamList.get(0).forEach(instance -> descTblDeliveryAddresses.add(instance.host));
+                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : restInstances) {
+                        if (!descTblDeliveryAddresses.contains(fInstanceExecParam.host)) {
+                            descTblDeliveryAddresses.add(fInstanceExecParam.host);
+                            threeStageExecParamList.get(1).add(fInstanceExecParam);
                         } else {
-                            remainingFInstanceParamList.add(fInstanceExecParam);
+                            threeStageExecParamList.get(2).add(fInstanceExecParam);
                         }
                     }
-                    infightExecParamList.add(firstFInstanceParamList);
-                    infightExecParamList.add(remainingFInstanceParamList);
                 } else {
-                    infightExecParamList.add(params.instanceExecParams);
+                    threeStageExecParamList.get(1).addAll(restInstances);
                 }
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
@@ -625,7 +628,7 @@ public class Coordinator {
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
                 if (enablePipelineTableSinkDop) {
-                    for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
+                    for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : threeStageExecParamList) {
                         for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {
                                 tabletSinkTotalDop += instanceExecParam.getPipelineDop();
@@ -641,17 +644,16 @@ public class Coordinator {
                             "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
                 }
 
-                boolean isFirst = true;
-                for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
+                for (int stage = 0; stage < threeStageExecParamList.size(); ++stage) {
+                    List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList = threeStageExecParamList.get(stage);
                     TDescriptorTable descTable = new TDescriptorTable();
-                    descTable.setIs_cached(true);
-                    descTable.setTupleDescriptors(Collections.emptyList());
-                    if (isFirst) {
+                    if (stage < 2) {
                         descTable = this.descTable;
                         descTable.setIs_cached(false);
-                        isFirst = false;
+                    } else {
+                        descTable.setIs_cached(true);
+                        descTable.setTupleDescriptors(Collections.emptyList());
                     }
-
                     if (fInstanceExecParamList.isEmpty()) {
                         continue;
                     }
@@ -868,13 +870,12 @@ public class Coordinator {
             for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
                 List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
 
-                // Divide requests of fragments in the current group to two stages.
-                // If a request need send descTable, the other requests to the same host will be in the second stage.
-                // Otherwise, the request will be in the first stage, including
-                // - the request need send descTable.
-                // - the request to the host, where some request in the previous group has already sent descTable.
+                // Divide requests of fragments in the current group to three stages.
+                // - stage 1, the request with RF coordinator + descTable.
+                // - stage 2, the first request to a host, which need send descTable.
+                // - stage 3, the non-first requests to a host, which needn't send descTable.
                 List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
-                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
+                        ImmutableList.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     CoordinatorPreprocessor.FragmentExecParams params =
                             coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
@@ -890,12 +891,26 @@ public class Coordinator {
                     for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                         fInstanceExecParam.backendNum = backendNum++;
                     }
+                    Map<Boolean, List<CoordinatorPreprocessor.FInstanceExecParam>> instanceSplits =
+                            params.instanceExecParams.stream().collect(Collectors.partitioningBy(
+                                    CoordinatorPreprocessor.FInstanceExecParam::isRuntimeFilterCoordinator));
+                    List<CoordinatorPreprocessor.FInstanceExecParam> instanceCarryingGRF = instanceSplits.get(true);
+                    List<CoordinatorPreprocessor.FInstanceExecParam> restInstances = instanceSplits.get(false);
 
                     Map<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> requestsPerHost =
-                            params.instanceExecParams.stream()
+                            restInstances.stream()
                                     .collect(Collectors.groupingBy(CoordinatorPreprocessor.FInstanceExecParam::getHost,
                                             HashMap::new,
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
+                    List<Pair<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>>>
+                            hostAndRequestsList = Lists.newArrayList();
+                    Preconditions.checkArgument(instanceCarryingGRF.size() <= 1,
+                            "At most one instance carries GRF parameters");
+                    if (!instanceCarryingGRF.isEmpty()) {
+                        hostAndRequestsList.add(Pair.create(instanceCarryingGRF.get(0).getHost(), instanceCarryingGRF));
+                    }
+                    requestsPerHost.forEach((host, instances) -> hostAndRequestsList.add(Pair.create(host, instances)));
+
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
                     boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
@@ -903,9 +918,9 @@ public class Coordinator {
                     int tabletSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
-                        for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
-                                requestsPerHost.entrySet()) {
-                            List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
+                        for (Pair<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
+                                hostAndRequestsList) {
+                            List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.second;
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
                                     tabletSinkTotalDop += request.getPipelineDop();
@@ -921,19 +936,26 @@ public class Coordinator {
                                 "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
                     }
 
-                    for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
-                            requestsPerHost.entrySet()) {
-                        TNetworkAddress host = hostAndRequests.getKey();
-                        List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
+                    for (Pair<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
+                            hostAndRequestsList) {
+                        TNetworkAddress host = hostAndRequests.first;
+                        List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.second;
                         if (requests.isEmpty()) {
                             continue;
                         }
 
-                        int inflightIndex = 0;
+                        int inflightIndex = 1;
                         TDescriptorTable curDescTable = this.descTable;
                         if (enablePipelineEngine) {
                             Integer firstGroupIndex = host2firstGroupIndex.get(host);
-                            if (firstGroupIndex == null) {
+                            if (requests.get(0).isRuntimeFilterCoordinator()) {
+                                Preconditions.checkArgument(requests.size() == 1,
+                                        "There must be exactly one instance carrying GRF parameters if exists");
+                                Preconditions.checkArgument(firstGroupIndex == null,
+                                        "Instance carrying GRF parameters must be the first instance of the root Fragment");
+                                inflightIndex = 0;
+                                host2firstGroupIndex.put(host, groupIndex);
+                            } else if (firstGroupIndex == null) {
                                 // Hasn't sent descTable for this host,
                                 // so send descTable this time.
                                 host2firstGroupIndex.put(host, groupIndex);
@@ -944,7 +966,7 @@ public class Coordinator {
                             } else {
                                 // The previous fragment for this host int the current fragment group will send descTable,
                                 // so this fragment need wait until the previous one finishes delivering.
-                                inflightIndex = 1;
+                                inflightIndex = 2;
                                 curDescTable = emptyDescTable;
                             }
                         }
@@ -1063,7 +1085,6 @@ public class Coordinator {
                     handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
             }
-
             attachInstanceProfileToFragmentProfile();
         } finally {
             unlock();
@@ -1105,7 +1126,7 @@ public class Coordinator {
         ).collect(Collectors.toList());
     }
 
-    private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FragmentExecParams topParams,
+    private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FInstanceExecParam topParams,
                                               TNetworkAddress mergeHost)
             throws Exception {
 
