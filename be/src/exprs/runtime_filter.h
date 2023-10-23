@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/column_hash.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
@@ -162,7 +163,9 @@ public:
     size_t deserialize(const uint8_t* data);
     void merge(const SimdBlockFilter& bf);
     bool check_equal(const SimdBlockFilter& bf) const;
-    uint32_t directory_mask() const { return _directory_mask; }
+    uint32_t directory_mask() const {
+        return _directory_mask;
+    }
 
 private:
     // The number of bits to set in a tiny Bloom filter block
@@ -206,7 +209,9 @@ private:
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
-    size_t get_alloc_size() const { return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE); }
+    size_t get_alloc_size() const {
+        return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE);
+    }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
@@ -344,6 +349,7 @@ class RuntimeBloomFilter final : public JoinRuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
+    using ContainerType = RunTimeProxyContainerType<Type>;
 
     RuntimeBloomFilter() { _init_min_max(); }
     ~RuntimeBloomFilter() override = default;
@@ -688,10 +694,11 @@ private:
         }
     }
 
-    void _evaluate_min_max(const CppType* values, uint8_t* selection, size_t size) const {
+    void _evaluate_min_max(const ContainerType& values, uint8_t* selection, size_t size) const {
         if constexpr (!IsSlice<CppType>) {
+            const auto* data = values.data();
             for (size_t i = 0; i < size; i++) {
-                selection[i] = (values[i] >= _min && values[i] <= _max);
+                selection[i] = (data[i] >= _min && data[i] <= _max);
             }
         } else {
             memset(selection, 0x1, size);
@@ -784,8 +791,9 @@ private:
     }
 
     using HashValues = std::vector<uint32_t>;
-    template <bool hash_partition, class DataType>
-    void _rf_test_data(uint8_t* selection, const DataType* input_data, const HashValues& hash_values, int idx) const {
+    template <bool hash_partition>
+    void _rf_test_data(uint8_t* selection, const ContainerType& input_data, const HashValues& hash_values,
+                       int idx) const {
         if (selection[idx]) {
             if constexpr (hash_partition) {
                 selection[idx] = _test_data_with_hash(input_data[idx], hash_values[idx]);
@@ -817,7 +825,7 @@ private:
             if (const_column->only_null()) {
                 _selection[0] = _has_null;
             } else {
-                auto* input_data = down_cast<const ColumnType*>(const_column->data_column().get())->get_data().data();
+                const auto& input_data = GetContainer<Type>().get_data(const_column->data_column());
                 _evaluate_min_max(input_data, _selection, 1);
                 _rf_test_data<hash_partition>(_selection, input_data, _hash_values, 0);
             }
@@ -825,7 +833,7 @@ private:
             memset(_selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            auto* input_data = down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data().data();
+            const auto& input_data = GetContainer<Type>().get_data(nullable_column->data_column());
             _evaluate_min_max(input_data, _selection, size);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
@@ -842,7 +850,7 @@ private:
                 }
             }
         } else {
-            auto* input_data = down_cast<const ColumnType*>(input_column)->get_data().data();
+            const auto& input_data = GetContainer<Type>().get_data(input_column);
             _evaluate_min_max(input_data, _selection, size);
             for (int i = 0; i < size; ++i) {
                 _rf_test_data<hash_partition>(_selection, input_data, _hash_values, i);
