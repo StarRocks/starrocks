@@ -818,16 +818,22 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // progress
             switch (state) {
                 case PENDING:
-                    info.setProgress("ETL:0%; LOAD:0%");
+                    info.setProgress("ETL:0%; LOAD:0%; PUBLISH:0%");
                     break;
                 case CANCELLED:
-                    info.setProgress("ETL:N/A; LOAD:N/A");
+                    info.setProgress("ETL:N/A; LOAD:N/A; PUBLISH:N/A");
                     break;
                 case ETL:
-                    info.setProgress("ETL:" + progress + "%; LOAD:0%");
+                    info.setProgress("ETL:" + progress + "%; LOAD:0%; PUBLISH:0%");
                     break;
+                case COMMITTED:
+                    info.setProgress("ETL:100%; LOAD:100%; PUBLISH:0%");
+                    break
+                case FINISHED:
+                    info.setProgress("ETL:100%; LOAD:100%; PUBLISH:100%");
+                    break
                 default:
-                    info.setProgress("ETL:100%; LOAD:" + progress + "%");
+                    info.setProgress("ETL:100%; LOAD:" + progress + "%; PUBLISH:0%");
                     break;
             }
 
