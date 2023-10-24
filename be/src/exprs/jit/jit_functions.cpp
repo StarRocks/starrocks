@@ -110,9 +110,26 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
         }
         if (input_exprs[i]->is_nullable()) {
             // TODO(Yueyang): check if need to trans null to Int1Ty.
-            // TODO(Yueyang): nullable expr will evaluate non-nullable result column.
-            datum.null_flag =
+            auto* null_bb = llvm::BasicBlock::Create(b.getContext(), "null", func);
+            auto* non_null_bb = llvm::BasicBlock::Create(b.getContext(), "non_null", func);
+            auto* end_bb = llvm::BasicBlock::Create(b.getContext(), "end_bb", func);
+
+            b.CreateCondBr(column.nullable, null_bb, non_null_bb);
+
+            b.SetInsertPoint(null_bb);
+            auto null_flag =
                     b.CreateLoad(b.getInt8Ty(), b.CreateInBoundsGEP(b.getInt8Ty(), column.null_flags, counter_phi));
+            b.CreateBr(end_bb);
+
+            b.SetInsertPoint(non_null_bb);
+            b.CreateBr(end_bb);
+
+            b.SetInsertPoint(end_bb);
+            auto* phi = b.CreatePHI(b.getInt8Ty(), 2, "if_null");
+            phi->addIncoming(null_flag, null_bb);
+            phi->addIncoming(b.getInt8(0), non_null_bb);
+
+            datum.null_flag = phi;
         }
 
         datums.emplace_back(datum);
@@ -198,7 +215,6 @@ Status JITFunction::llvm_function(FunctionContext* context, const Columns& colum
     // Get compiled function.
     auto state = reinterpret_cast<JITFunctionState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     // Evaluate.
-    LOG(INFO) << "JIT Eval" << columns.back()->size();
     state->_function(columns.back()->size(), jit_columns.data());
     return Status::OK();
 }
