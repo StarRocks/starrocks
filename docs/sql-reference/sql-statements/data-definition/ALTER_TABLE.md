@@ -331,20 +331,6 @@ Note:
 1. All columns in the index must be written.
 2. The value column is listed after the key column.
 
-<<<<<<< HEAD
-=======
-#### Add a generated column (from v3.1)
-
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD col_name data_type [NULL] AS generation_expr [COMMENT 'string']
-```
-
-You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
-
->>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 #### Modify table properties
 
 Currently, StarRocks supports modifying `bloom_filter_columns` property,`colocate_with` property, dynamic partitioning related properties, `enable_persistent_index` property, `replication_num` property and `default.replication_num` property, `storage_cooldown_ttl` property and `storage_cooldown_time` property.
