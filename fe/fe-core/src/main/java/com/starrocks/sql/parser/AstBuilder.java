@@ -5146,8 +5146,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2);
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
-            return new InformationFunction("CONNECTION_ID");
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+            return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
         if (functionName.equals(FunctionSet.SUBSTR) || functionName.equals(FunctionSet.SUBSTRING)) {
