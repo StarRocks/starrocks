@@ -160,7 +160,8 @@ enum TSchemaTableType {
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
-    SCH_PIPES
+    SCH_PIPES,
+    SCH_FE_METRICS
 }
 
 enum THdfsCompression {

@@ -17,29 +17,23 @@
 #include <cstdint>
 
 #include "exec/schema_scanner.h"
+#include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
-struct MetricsInfo {
-    std::string name;
-    std::string labels;
-    int64_t value{0};
-    std::string id;
-};
-
-class SchemaBeMetricsScanner : public SchemaScanner {
+class SchemaFeMetricsScanner : public SchemaScanner {
 public:
-    SchemaBeMetricsScanner();
-    ~SchemaBeMetricsScanner() override;
+    SchemaFeMetricsScanner();
+    ~SchemaFeMetricsScanner() override;
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     Status fill_chunk(ChunkPtr* chunk);
+    Status _get_fe_metrics(RuntimeState* state);
 
-    int64_t _be_id{0};
     std::vector<MetricsInfo> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
