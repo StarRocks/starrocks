@@ -1089,7 +1089,8 @@ Status OlapTableSink::open_wait() {
             }
         });
 
-        if (has_intolerable_failure()) {
+        // when enable replicated storage, we only send to primary replica, one node channel fail lead to indicate whole load fail
+        if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -1106,7 +1107,7 @@ Status OlapTableSink::open_wait() {
                 }
             });
 
-            if (index_channel->has_intolerable_failure()) {
+            if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                 LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
                 return err_st;
             }
@@ -1128,7 +1129,105 @@ bool OlapTableSink::is_full() {
     return full;
 }
 
+<<<<<<< HEAD
 Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+=======
+Status OlapTableSink::_automatic_create_partition() {
+    TCreatePartitionRequest request;
+    TCreatePartitionResult result;
+    request.__set_txn_id(_txn_id);
+    request.__set_db_id(_vectorized_partition->db_id());
+    request.__set_table_id(_vectorized_partition->table_id());
+    request.__set_partition_values(_partition_not_exist_row_values);
+
+    VLOG(1) << "automatic partition rpc begin request " << request;
+    TNetworkAddress master_addr = get_master_address();
+    auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); },
+            timeout_ms));
+    VLOG(1) << "automatic partition rpc end response " << result;
+    if (result.status.status_code == TStatusCode::OK) {
+        // add new created partitions
+        RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
+
+        // add new tablet locations
+        _location->add_locations(result.tablets);
+
+        // update new node info
+        _nodes_info->add_nodes(result.nodes);
+
+        // incremental open node channel
+        RETURN_IF_ERROR(_incremental_open_node_channel(result.partitions));
+    }
+
+    return Status(result.status);
+}
+
+Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTablePartition>& partitions) {
+    std::map<int64_t, std::vector<PTabletWithPartition>> index_tablets_map;
+    for (auto& t_part : partitions) {
+        for (auto& index : t_part.indexes) {
+            std::vector<PTabletWithPartition> tablets;
+            // setup new partitions's tablets
+            for (auto tablet : index.tablets) {
+                PTabletWithPartition tablet_info;
+                tablet_info.set_tablet_id(tablet);
+                tablet_info.set_partition_id(t_part.id);
+
+                auto* location = _location->find_tablet(tablet);
+                if (location == nullptr) {
+                    auto msg = fmt::format("Failed to find tablet {} location info", tablet);
+                    return Status::NotFound(msg);
+                }
+
+                for (auto& node_id : location->node_ids) {
+                    auto node_info = _nodes_info->find_node(node_id);
+                    if (node_info == nullptr) {
+                        return Status::InvalidArgument(fmt::format("Unknown node_id: {}", node_id));
+                    }
+                    auto* replica = tablet_info.add_replicas();
+                    replica->set_host(node_info->host);
+                    replica->set_port(node_info->brpc_port);
+                    replica->set_node_id(node_id);
+                }
+
+                index_tablets_map[index.index_id].emplace_back(std::move(tablet_info));
+            }
+        }
+    }
+
+    for (auto& channel : _channels) {
+        // initialize index channel
+        RETURN_IF_ERROR(channel->init(_runtime_state, index_tablets_map[channel->_index_id], true));
+
+        // incremental open new partition's tablet on storage side
+        channel->for_each_node_channel([](NodeChannel* ch) { ch->try_incremental_open(); });
+
+        Status err_st = Status::OK();
+        channel->for_each_node_channel([&channel, &err_st](NodeChannel* ch) {
+            auto st = ch->open_wait();
+            if (!st.ok()) {
+                LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
+                             << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
+                             << ", errmsg=" << st.get_error_msg();
+                err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
+                channel->mark_as_failed(ch);
+            }
+        });
+
+        if (channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+            LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
+            return err_st;
+        }
+    }
+
+    return Status::OK();
+}
+
+Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
+>>>>>>> e190abc540 ([BugFix] Fix replicated storage not fail directly when sink fail (#33507))
     SCOPED_TIMER(_profile->total_time_counter());
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
@@ -1380,7 +1479,7 @@ Status OlapTableSink::try_close(RuntimeState* state) {
         }
     }
 
-    if (intolerable_failure) {
+    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
         return err_st;
     } else {
         return Status::OK();
@@ -1444,7 +1543,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
-                if (has_intolerable_failure()) {
+                if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                     status = err_st;
                     for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }
@@ -1463,7 +1562,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         }
                         ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                     });
-                    if (index_channel->has_intolerable_failure()) {
+                    if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                         status = err_st;
                         index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                     }
