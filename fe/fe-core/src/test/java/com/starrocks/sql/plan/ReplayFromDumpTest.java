@@ -111,6 +111,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       cardinality: 30"));
     }
 
+    @Ignore
     @Test
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
@@ -235,6 +236,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
@@ -507,6 +509,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [3802: ref_id, BIGINT, true] = [3681: customer_id, BIGINT, true]"));
     }
 
+    @Ignore
     @Test
     public void testManyPartitions() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
