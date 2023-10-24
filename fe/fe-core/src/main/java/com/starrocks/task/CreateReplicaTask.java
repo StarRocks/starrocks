@@ -64,6 +64,11 @@ import java.util.Set;
 public class CreateReplicaTask extends AgentTask {
     private static final Logger LOG = LogManager.getLogger(CreateReplicaTask.class);
 
+    public enum RecoverySource {
+        SCHEDULER,
+        REPORT
+    }
+
     private short shortKeyColumnCount;
     private int schemaHash;
     private int schemaVersion;
