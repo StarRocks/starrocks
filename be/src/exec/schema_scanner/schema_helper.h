@@ -93,6 +93,15 @@ public:
     static Status get_grants_to(const std::string& ip, const int32_t port,
                                 const TGetGrantsToRolesOrUserRequest& request,
                                 TGetGrantsToRolesOrUserResponse* response, int timeout_ms);
+    static Status get_iceberg_snapshots(const std::string& ip, const int32_t port,
+                                        const TGetIcebergSnapshotRequest& request,
+                                        TGetIcebergSnapshotsResponse* response);
+
+    static Status get_iceberg_manifests(const std::string& ip, const int32_t port,
+                                        const TGetIcebergManifestsRequest& request,
+                                        TGetIcebergManifestsResponse* response);
+    static Status get_iceberg_files(const std::string& ip, const int32_t port, const TGetIcebergFilesRequest& request,
+                                    TGetIcebergFilesResponse* response);
 };
 
 template <LogicalType SlotType>

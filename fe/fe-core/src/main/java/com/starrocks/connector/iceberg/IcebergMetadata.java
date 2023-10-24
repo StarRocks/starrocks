@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -103,6 +104,7 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSc
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
+import static com.starrocks.connector.iceberg.IcebergTableType.DATA;
 import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 
 public class IcebergMetadata implements ConnectorMetadata {
@@ -201,17 +203,52 @@ public class IcebergMetadata implements ConnectorMetadata {
             return tables.get(identifier);
         }
 
+        Table table = getSystemTable(dbName, tblName, null);
+        if (table != null) {
+            return table;
+        }
+
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
-            Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+            table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             tables.put(identifier, table);
             return table;
-
         } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         }
+    }
+
+    @Override
+    public Table getSystemTable(String dbName, String tblName, String typeString) {
+        IcebergTableName name;
+        if (!Strings.isNullOrEmpty(typeString)) {
+            name = IcebergTableName.of(tblName, typeString);
+        } else {
+            name = IcebergTableName.from(tblName);
+        }
+
+        if (name.getTableType() == DATA) {
+            return null;
+        }
+
+        String realTableName = name.getTableName();
+        Table table = getTable(dbName, realTableName);
+        if (table == null) {
+            return null;
+        }
+
+        IcebergTable icebergTable = (IcebergTable) table;
+        switch (name.getTableType()) {
+            case SNAPSHOTS:
+                return new SnapshotsTable(catalogName, icebergTable);
+            case MANIFESTS:
+                return new ManifestsTable(catalogName, icebergTable);
+            case FILES:
+                return new FilesTable(catalogName, icebergTable);
+        }
+        return null;
     }
 
     @Override

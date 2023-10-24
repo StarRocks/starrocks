@@ -84,6 +84,8 @@ public class SchemaScanNode extends ScanNode {
     private String logLevel = null;
     private String logPattern = null;
     private Long logLimit = null;
+    private String originDbName = null;
+    private String originTableName = null;
 
     private List<TScanRangeLocations> beScanRanges = null;
 
@@ -135,6 +137,22 @@ public class SchemaScanNode extends ScanNode {
 
     public String getTableName() {
         return tableName;
+    }
+
+    public String getOriginDbName() {
+        return originDbName;
+    }
+
+    public void setOriginDbName(String originDbName) {
+        this.originDbName = originDbName;
+    }
+
+    public String getOriginTableName() {
+        return originTableName;
+    }
+
+    public void setOriginTableName(String originTableName) {
+        this.originTableName = originTableName;
     }
 
     /**
@@ -240,6 +258,12 @@ public class SchemaScanNode extends ScanNode {
         // but this is for the purpose of protect FE resource usage, so it's acceptable
         if (getLimit() > 0) {
             msg.schema_scan_node.setLimit(getLimit());
+        }
+        if (originDbName != null) {
+            msg.schema_scan_node.setOrigin_db_name(originDbName);
+        }
+        if (originTableName != null) {
+            msg.schema_scan_node.setOrigin_table_name(originTableName);
         }
     }
 

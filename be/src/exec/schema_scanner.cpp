@@ -29,6 +29,9 @@
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
+#include "exec/schema_scanner/schema_iceberg_files_scanner.h"
+#include "exec/schema_scanner/schema_iceberg_manifests_scanner.h"
+#include "exec/schema_scanner/schema_iceberg_snapshots_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
@@ -169,6 +172,12 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipeFiles>();
     case TSchemaTableType::SCH_PIPES:
         return std::make_unique<SchemaTablePipes>();
+    case TSchemaTableType::SCH_ICEBERG_SNAPSHOTS:
+        return std::make_unique<SchemaIcebergSnapshotsScanner>();
+    case TSchemaTableType::SCH_ICEBERG_MANIFESTS:
+        return std::make_unique<SchemaIcebergManifestsScanner>();
+    case TSchemaTableType::SCH_ICEBERG_FILES:
+        return std::make_unique<SchemaIcebergFilesScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

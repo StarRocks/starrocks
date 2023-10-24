@@ -115,7 +115,12 @@ Status SchemaScanContext::_prepare_params(RuntimeState* state) {
     if (_tnode.schema_scan_node.__isset.log_limit) {
         _param->log_limit = _tnode.schema_scan_node.log_limit;
     }
-
+    if (_tnode.schema_scan_node.__isset.origin_db_name) {
+        _param->origin_db = _obj_pool.add(new std::string(_tnode.schema_scan_node.origin_db_name));
+    }
+    if (_tnode.schema_scan_node.__isset.origin_table_name) {
+        _param->origin_table = _obj_pool.add(new std::string(_tnode.schema_scan_node.origin_table_name));
+    }
     return Status::OK();
 }
 
