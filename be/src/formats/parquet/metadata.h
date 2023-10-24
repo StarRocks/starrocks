@@ -87,12 +87,6 @@ public:
 
     const ApplicationVersion& writer_version() const { return _writer_version; }
 
-    size_t estimate_memory() const {
-        // An approximate memory statistics, not accurate
-        size_t version_size = _writer_version.application_.length() + _writer_version.build_.length();
-        return sizeof(tparquet::FileMetaData) + sizeof(uint64_t) + _schema.estimate_memory() + version_size;
-    }
-
 private:
     tparquet::FileMetaData _t_metadata;
     uint64_t _num_rows{0};
