@@ -1110,6 +1110,18 @@ public class PlanFragmentBuilder {
                 }
             }
 
+<<<<<<< HEAD
+=======
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
+                    && scanNode.getJobId() == null) {
+                throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
+            if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
+                scanNode.computeFeNodes();
+            }
+
+>>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
             if (scanNode.isBeSchemaTable()) {
                 scanNode.computeBeScanRanges();
             }

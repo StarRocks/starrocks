@@ -122,6 +122,11 @@ public class Frontend implements Writable {
         this.rpcPort = rpcPort;
     }
 
+    @VisibleForTesting
+    public void setAlive(boolean isAlive) {
+        this.isAlive = isAlive;
+    }
+
     /**
      * handle Frontend's heartbeat response.
      * Because the replayed journal id is very likely to be changed at each heartbeat response,

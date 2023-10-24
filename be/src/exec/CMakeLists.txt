@@ -47,6 +47,7 @@ set(EXEC_FILES
     local_file_writer.cpp
     broker_writer.cpp
     plain_text_builder.cpp
+<<<<<<< HEAD
     vectorized/aggregator.cpp
     vectorized/sorted_streaming_aggregator.cpp
     vectorized/aggregate/agg_hash_variant.cpp
@@ -134,6 +135,119 @@ set(EXEC_FILES
     vectorized/sorting/sort_column.cpp
     vectorized/sorting/sort_permute.cpp
     vectorized/connector_scan_node.cpp
+=======
+    aggregator.cpp
+    sorted_streaming_aggregator.cpp
+    aggregate/agg_hash_variant.cpp
+    aggregate/aggregate_base_node.cpp
+    aggregate/aggregate_blocking_node.cpp
+    aggregate/distinct_blocking_node.cpp
+    aggregate/aggregate_streaming_node.cpp
+    aggregate/distinct_streaming_node.cpp
+    partition/chunks_partitioner.cpp
+    partition/partition_hash_variant.cpp
+    analytic_node.cpp
+    analytor.cpp
+    csv_scanner.cpp
+    tablet_scanner.cpp
+    olap_scan_node.cpp
+    olap_scan_prepare.cpp
+    meta_scan_node.cpp
+    olap_meta_scanner.cpp
+    olap_meta_scan_node.cpp
+    lake_meta_scanner.cpp
+    lake_meta_scan_node.cpp
+    hash_joiner.cpp
+    hash_join_node.cpp
+    hash_join_components.cpp
+    join_hash_map.cpp
+    topn_node.cpp
+    chunks_sorter.cpp
+    chunks_sorter_heap_sort.cpp
+    chunks_sorter_topn.cpp
+    chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter_full_sort.cpp
+    cross_join_node.cpp
+    union_node.cpp
+    except_hash_set.cpp
+    except_node.cpp
+    file_scanner.cpp
+    orc_scanner.cpp
+    jni_scanner.cpp
+    arrow_to_starrocks_converter.cpp
+    arrow_to_json_converter.cpp
+    parquet_scanner.cpp
+    parquet_schema_builder.cpp
+    parquet_reader.cpp
+    parquet_writer.cpp
+    parquet_builder.cpp
+    file_scan_node.cpp
+    assert_num_rows_node.cpp
+    intersect_hash_set.cpp
+    intersect_node.cpp
+    hdfs_scanner.cpp
+    hdfs_scanner_orc.cpp
+    hdfs_scanner_parquet.cpp
+    hdfs_scanner_text.cpp
+    hdfs_scanner_partition.cpp
+    json_scanner.cpp
+    json_parser.cpp
+    avro_scanner.cpp
+    project_node.cpp
+    dict_decode_node.cpp
+    repeat_node.cpp
+    table_function_node.cpp
+    schema_scanner.cpp
+    schema_scan_node.cpp
+    iceberg/iceberg_delete_builder.cpp
+    iceberg/iceberg_delete_file_iterator.cpp
+    schema_scanner/schema_tables_scanner.cpp
+    schema_scanner/schema_dummy_scanner.cpp
+    schema_scanner/schema_schemata_scanner.cpp
+    schema_scanner/schema_variables_scanner.cpp
+    schema_scanner/schema_columns_scanner.cpp
+    schema_scanner/schema_charsets_scanner.cpp
+    schema_scanner/schema_collations_scanner.cpp
+    schema_scanner/schema_statistics_scanner.cpp
+    schema_scanner/schema_triggers_scanner.cpp
+    schema_scanner/schema_events_scanner.cpp
+    schema_scanner/schema_views_scanner.cpp
+    schema_scanner/schema_materialized_views_scanner.cpp
+    schema_scanner/schema_tasks_scanner.cpp
+    schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_loads_scanner.cpp
+    schema_scanner/schema_load_tracking_logs_scanner.cpp
+    schema_scanner/schema_user_privileges_scanner.cpp
+    schema_scanner/schema_schema_privileges_scanner.cpp
+    schema_scanner/schema_table_privileges_scanner.cpp
+    schema_scanner/schema_tables_config_scanner.cpp
+    schema_scanner/schema_be_metrics_scanner.cpp
+    schema_scanner/schema_be_tablets_scanner.cpp
+    schema_scanner/schema_be_txns_scanner.cpp
+    schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_be_threads_scanner.cpp
+    schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_fe_metrics_scanner.cpp
+    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
+    schema_scanner/schema_be_compactions_scanner.cpp
+    schema_scanner/schema_be_bvars_scanner.cpp
+    schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/schema_pipe_files.cpp
+    schema_scanner/schema_pipes.cpp
+    schema_scanner/starrocks_role_edges_scanner.cpp
+    schema_scanner/starrocks_grants_to_scanner.cpp
+    schema_scanner/schema_helper.cpp
+    schema_scanner/schema_routine_load_jobs_scanner.cpp
+    schema_scanner/schema_stream_loads_scanner.cpp
+    jdbc_scanner.cpp
+    sorting/compare_column.cpp
+    sorting/merge_column.cpp
+    sorting/merge_path.cpp
+    sorting/merge_cascade.cpp
+    sorting/sort_column.cpp
+    sorting/sort_permute.cpp
+    connector_scan_node.cpp
+>>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
