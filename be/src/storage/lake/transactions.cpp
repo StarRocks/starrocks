@@ -44,7 +44,7 @@ Status get_base_tablet_metadat_index(TabletManager* tablet_mgr, int64_t tablet_i
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
         if (txn_log_st.status().is_not_found()) {
-            auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata()(tablet_id, base_version + i + 1);
+            auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_id, base_version + i + 1);
             if (missig_txn_log_meta.status().is_not_found()) {
                 // this should't happen
                 LOG(WARNING) << "txn_log of txn: " << txn_id << " not found, and can not find the tablet_meta";
@@ -66,8 +66,18 @@ Status get_base_tablet_metadat_index(TabletManager* tablet_mgr, int64_t tablet_i
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
                                             int64_t commit_time) {
-    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << txn_ids << ", base_version: " << base_version
-            << ", new_version: " << new_version;
+    auto print_txn_ids = [=]() -> std::string {
+        std::string result;
+        for (int i = 0; i < txn_ids.size(); i++) {
+            if (i != 0) {
+                result.append(", ");
+            }
+            result.append(std::to_string(txn_ids[i]));
+        }
+        return result;
+    };
+    VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << print_txn_ids()
+            << ", base_version: " << base_version << ", new_version: " << new_version;
 
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
@@ -91,7 +101,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     auto index_status = get_base_tablet_metadat_index(tablet_mgr, tablet_id, base_version, new_version, txn_ids,
                                                       base_version_index);
     if (index_status.is_not_found()) {
-        LOG(WARNING) << "all txn_log missing, txn_ids: " << txn_ids;
+        LOG(WARNING) << "all txn_log missing, txn_ids: " << print_txn_ids();
     }
 
     if (!index_status.ok()) {

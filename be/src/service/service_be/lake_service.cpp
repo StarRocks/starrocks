@@ -250,7 +250,7 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
             if (!st.ok()) {
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                             << " txn_id=" << txn_id << " version=" << version;
+                             << " txn_id=" << txn_ids << " version=" << versions;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
