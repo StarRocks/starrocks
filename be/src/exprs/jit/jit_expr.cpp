@@ -77,7 +77,8 @@ Status JITExpr::open(RuntimeState* state, ExprContext* context, FunctionContext:
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
     if (!function.ok()) {
-        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed.count() << " s";
+        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed.count() << " s"
+                  << " Reason: " << function.status();
     } else {
         LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed.count() << " s";
     }

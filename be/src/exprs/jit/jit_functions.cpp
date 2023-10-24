@@ -174,7 +174,7 @@ StatusOr<LLVMDatum> JITFunction::generate_exprs_ir(ExprContext* context, const l
         }
     }
 
-    return Status::OK();
+    return intermediate.back();
 }
 
 // This is the evaluate procss.
