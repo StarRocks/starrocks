@@ -30,7 +30,7 @@ struct LLVMDatum {
     llvm::Value* value = nullptr;     ///< Represents the actual value of the datum.
     llvm::Value* null_flag = nullptr; ///< Represents the nullity status of the datum.
 
-    LLVMDatum(llvm::IRBuilder<>& b) { null_flag = b.getInt8(1); }
+    LLVMDatum(llvm::IRBuilder<>& b) { null_flag = b.getInt8(0); }
 };
 
 /**
