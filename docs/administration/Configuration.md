@@ -515,7 +515,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: 3
-- **Description**: The `default_replication_number` parameter is a system variable that sets the default number of replicas for each data partition when creating a table in StarRocks. The parameter can be set globally by using `set global default_replication_num=x`, where x is a positive integer. This will affect all subsequent table creations in all sessions, unless overridden by a session-level setting or a table-level setting. To set the parameter for the current session use `set default_replication_number=x`. This will affect only the current session and override the global setting, unless overridden by a table-level setting. Both global and session settings can be overridden by specifying the `replication_num=x` in the CREATE TABLE DDL.
+- **Description**: The `default_replication_num` parameter is an FE dynamic parameter that sets the default number of replicas for each data partition. This parameter takes precedence if the `replication_num` property is not specified when you create a table. We recommend that you set this parameter to a value less than or equal to the actual number of BE nodes in the cluster.
 
 ##### enable_strict_storage_medium_check
 
