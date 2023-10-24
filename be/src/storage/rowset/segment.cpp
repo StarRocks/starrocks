@@ -335,10 +335,6 @@ bool Segment::has_loaded_index() const {
     return invoked(_load_index_once);
 }
 
-bool Segment::is_valid_column(uint32_t column_unique_id) const {
-    return _column_readers.count(column_unique_id) > 0;
-}
-
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
     for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
