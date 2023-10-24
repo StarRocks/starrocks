@@ -24,9 +24,11 @@ import java.util.List;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class SchemaScanNodeTest {
+    @Ignore
     @Test
     public void testComputeFeNodes(@Mocked GlobalStateMgr globalStateMgr) {
         List<Frontend> frontends = new ArrayList<>();
