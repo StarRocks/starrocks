@@ -460,12 +460,7 @@ struct TSchemaScanNode {
   23: optional string log_level;
   24: optional string log_pattern;
   25: optional i64 log_limit;
-<<<<<<< HEAD
-=======
   26: optional list<TFrontend> frontends;
-
-  101: optional string catalog_name;
->>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
 }
 
 enum TAccessPathType {
