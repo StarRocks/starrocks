@@ -182,7 +182,11 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
         int64_t time_spent = 0;
         {
             SCOPED_RAW_TIMER(&time_spent);
-            RETURN_IF_ERROR(op->prepare(runtime_state));
+            auto st = op->prepare(runtime_state);
+            if (!st.ok()) {
+                _close_operators(runtime_state);
+                return st;
+            }
         }
         op->set_prepare_time(time_spent);
 
