@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "fs/fs.h"
+#include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -3358,8 +3359,8 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (found_values[i].get_value() != NullIndexValue &&
-            ((uint32_t)(found_values[i].get_value() >> 32)) <= max_src_rssid) {
+        auto found_value = found_values[i].get_value();
+        if (found_value != NullIndexValue && ((uint32_t)(found_value >> 32)) <= max_src_rssid) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
