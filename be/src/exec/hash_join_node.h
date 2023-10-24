@@ -111,7 +111,6 @@ private:
     std::set<SlotId> _output_slots;
 
     bool _is_push_down = false;
-    bool _need_create_tuple_columns = true;
 
     JoinHashTable _ht;
 
@@ -142,7 +141,6 @@ private:
     RuntimeProfile::Counter* _search_ht_timer = nullptr;
     RuntimeProfile::Counter* _output_build_column_timer = nullptr;
     RuntimeProfile::Counter* _output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* _output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* _build_rows_counter = nullptr;
     RuntimeProfile::Counter* _probe_rows_counter = nullptr;
     RuntimeProfile::Counter* _build_buckets_counter = nullptr;

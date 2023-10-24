@@ -140,7 +140,6 @@ inline bool is_spillable(TJoinOp::type join_type) {
 struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* probe_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* other_join_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* where_conjunct_evaluate_timer = nullptr;
@@ -200,7 +199,7 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
-    [[nodiscard]] Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
+    [[nodiscard]] Status append_chunk_to_ht(const ChunkPtr& chunk);
 
     [[nodiscard]] Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
