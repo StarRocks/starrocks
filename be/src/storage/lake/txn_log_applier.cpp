@@ -82,6 +82,9 @@ public:
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
+        if (log.has_op_alter_metadata()) {
+            RETURN_IF_ERROR(apply_alter_meta_log(log.op_alter_metadata()));
+        }
         return Status::OK();
     }
 
@@ -148,6 +151,32 @@ private:
             auto base_meta = std::make_shared<TabletMetadata>(*_metadata);
             base_meta->set_version(_base_version);
             RETURN_IF_ERROR(_tablet.put_metadata(std::move(base_meta)));
+        }
+        return Status::OK();
+    }
+
+    Status apply_alter_meta_log(const TxnLogPB_OpAlterMetadata& op_alter_metas) {
+        DCHECK_EQ(_base_version + 1, _new_version);
+        for (const auto& alter_meta : op_alter_metas.metadata_update_infos()) {
+            if (alter_meta.has_enable_persistent_index()) {
+                // this should always be true,
+                // for FE will check whether the value of `enable_persisent_index` is changed or not
+                // then send the alter task to BE
+                if (_metadata->enable_persistent_index() != alter_meta.enable_persistent_index()) {
+                    _metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
+
+                    // Try remove index from index cache
+                    // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
+                    // because the primary index is available in cache
+                    // But it will be remove from index cache after apply is finished
+                    (void)_tablet.update_mgr()->index_cache().try_remove_by_key(_tablet.id());
+                } else {
+                    LOG(WARNING) << strings::Substitute(
+                            "alter_meta_log not need to apply, for enable_persistent_index is the same, which is $0, "
+                            "base_version: $1, new_version: $2",
+                            _metadata->enable_persistent_index(), _base_version, _new_version);
+                }
+            }
         }
         return Status::OK();
     }
