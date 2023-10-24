@@ -515,7 +515,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: 3
-- **Description**: `default_replication_number` sets the default number of replicas for each data partition when creating a table in StarRocks. This setting can be overridden by specifying the `replication_num=x` in the CREATE TABLE DDL.
+- **Description**: `default_replication_number` sets the default number of replicas for each data partition when creating a table in StarRocks. This setting can be overridden by specifying `replication_num=x` in the CREATE TABLE DDL.
 
 ##### enable_strict_storage_medium_check
 
