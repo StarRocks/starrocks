@@ -31,7 +31,7 @@
 
 namespace starrocks::lake {
 
-UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker)
+UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
           _compaction_cache(std::numeric_limits<size_t>::max()),

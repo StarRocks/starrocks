@@ -53,7 +53,8 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity);
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+                           int64_t cache_capacity);
 
     ~TabletManager();
 
@@ -110,7 +111,7 @@ public:
     void prune_metacache();
 
     // TODO: remove this method
-    LocationProvider* TEST_set_location_provider(LocationProvider* value) {
+    std::shared_ptr<LocationProvider> TEST_set_location_provider(std::shared_ptr<LocationProvider> value) {
         auto ret = _location_provider;
         _location_provider = value;
         return ret;
@@ -134,7 +135,7 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
-    const LocationProvider* location_provider() const { return _location_provider; }
+    const std::shared_ptr<LocationProvider>& location_provider() const { return _location_provider; }
 
     UpdateManager* update_mgr();
 
@@ -178,7 +179,7 @@ private:
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
 
-    LocationProvider* _location_provider;
+    std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
