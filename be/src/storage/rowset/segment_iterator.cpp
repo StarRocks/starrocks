@@ -429,7 +429,6 @@ Status SegmentIterator::_init() {
         _scan_range.split(config::desc_hint_split_range, config::vector_chunk_size);
         _scan_range.reverse();
     }
-    // LOG(WARNING) << "TRACE:" << _opts.asc_hint << ":" << _scan_range.to_string();
 
     _range_iter = _scan_range.new_iterator();
 
