@@ -738,18 +738,17 @@ public class Coordinator {
 
     private void prepareResultSink() throws Exception {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
-        FragmentExecParams topParams = getFragmentExecParamsMap().get(topId);
-        FInstanceExecParam firstInstance = topParams.instanceExecParams.get(0);
-        TNetworkAddress execBeAddr = firstInstance.getHost();
-        // Select top fragment as global runtime filter merge address
-        setGlobalRuntimeFilterParams(firstInstance, toBrpcHost(execBeAddr));
-
+        FragmentExecParams topParams = fragmentExecParamsMap.get(topId);
         if (topParams.fragment.getSink() instanceof ResultSink) {
+            TNetworkAddress execBeAddr = topParams.instanceExecParams.get(0).host;
             receiver = new ResultReceiver(
                     topParams.instanceExecParams.get(0).instanceId,
                     addressToBackendID.get(execBeAddr),
                     toBrpcHost(execBeAddr),
                     queryOptions.query_timeout * 1000);
+
+            // Select top fragment as global runtime filter merge address
+            setGlobalRuntimeFilterParams(topParams, toBrpcHost(execBeAddr));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -813,15 +812,14 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<TNetworkAddress> descTblDeliveryAddresses = new HashSet<>();
+            Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
                 // set up exec states
                 int instanceNum = params.instanceExecParams.size();
                 Preconditions.checkState(instanceNum > 0);
-                List<List<FInstanceExecParam>> threeStageExecParamList =
-                        ImmutableList.of(Lists.newArrayList(), Lists.newArrayList(), Lists.newArrayList());
+                List<List<FInstanceExecParam>> infightFInstanceExecParamList = new LinkedList<>();
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                 // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
@@ -833,24 +831,22 @@ public class Coordinator {
                 for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                     fInstanceExecParam.backendNum = backendId++;
                 }
-                Map<Boolean, List<FInstanceExecParam>> instanceSplits =
-                        params.instanceExecParams.stream()
-                                .collect(Collectors.partitioningBy(
-                                        FInstanceExecParam::isRuntimeFilterCoordinator));
-                threeStageExecParamList.get(0).addAll(instanceSplits.get(true));
-                List<FInstanceExecParam> restInstances = instanceSplits.get(false);
                 if (enablePipelineEngine) {
-                    threeStageExecParamList.get(0).forEach(instance -> descTblDeliveryAddresses.add(instance.host));
-                    for (FInstanceExecParam fInstanceExecParam : restInstances) {
-                        if (!descTblDeliveryAddresses.contains(fInstanceExecParam.host)) {
-                            descTblDeliveryAddresses.add(fInstanceExecParam.host);
-                            threeStageExecParamList.get(1).add(fInstanceExecParam);
+                    List<FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
+                    List<FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
+
+                    for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                        if (!firstDeliveryAddresses.contains(fInstanceExecParam.host)) {
+                            firstDeliveryAddresses.add(fInstanceExecParam.host);
+                            firstFInstanceParamList.add(fInstanceExecParam);
                         } else {
-                            threeStageExecParamList.get(2).add(fInstanceExecParam);
+                            remainingFInstanceParamList.add(fInstanceExecParam);
                         }
                     }
+                    infightFInstanceExecParamList.add(firstFInstanceParamList);
+                    infightFInstanceExecParamList.add(remainingFInstanceParamList);
                 } else {
-                    threeStageExecParamList.get(1).addAll(restInstances);
+                    infightFInstanceExecParamList.add(params.instanceExecParams);
                 }
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
@@ -860,7 +856,7 @@ public class Coordinator {
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
                 if (enablePipelineTableSinkDop) {
-                    for (List<FInstanceExecParam> fInstanceExecParamList : threeStageExecParamList) {
+                    for (List<FInstanceExecParam> fInstanceExecParamList : infightFInstanceExecParamList) {
                         for (FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {
                                 tabletSinkTotalDop += instanceExecParam.getPipelineDop();
@@ -876,16 +872,17 @@ public class Coordinator {
                             "tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
                 }
 
-                for (int stage = 0; stage < threeStageExecParamList.size(); ++stage) {
-                    List<FInstanceExecParam> fInstanceExecParamList = threeStageExecParamList.get(stage);
+                boolean isFirst = true;
+                for (List<FInstanceExecParam> fInstanceExecParamList : infightFInstanceExecParamList) {
                     TDescriptorTable descTable = new TDescriptorTable();
-                    if (stage < 2) {
+                    descTable.setIs_cached(true);
+                    descTable.setTupleDescriptors(Collections.emptyList());
+                    if (isFirst) {
                         descTable = this.descTable;
                         descTable.setIs_cached(false);
-                    } else {
-                        descTable.setIs_cached(true);
-                        descTable.setTupleDescriptors(Collections.emptyList());
+                        isFirst = false;
                     }
+
                     if (fInstanceExecParamList.isEmpty()) {
                         continue;
                     }
@@ -1102,12 +1099,13 @@ public class Coordinator {
             for (int groupIndex = 0; groupIndex < fragmentGroups.size(); ++groupIndex) {
                 List<PlanFragment> fragmentGroup = fragmentGroups.get(groupIndex);
 
-                // Divide requests of fragments in the current group to three stages.
-                // - stage 1, the request with RF coordinator + descTable.
-                // - stage 2, the first request to a host, which need send descTable.
-                // - stage 3, the non-first requests to a host, which needn't send descTable.
+                // Divide requests of fragments in the current group to two stages.
+                // If a request need send descTable, the other requests to the same host will be in the second stage.
+                // Otherwise, the request will be in the first stage, including
+                // - the request need send descTable.
+                // - the request to the host, where some request in the previous group has already sent descTable.
                 List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
-                        ImmutableList.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
+                        ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
                     Preconditions.checkState(!params.instanceExecParams.isEmpty());
@@ -1122,36 +1120,20 @@ public class Coordinator {
                     for (FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                         fInstanceExecParam.backendNum = backendNum++;
                     }
-                    Map<Boolean, List<FInstanceExecParam>> instanceSplits =
-                            params.instanceExecParams.stream().collect(Collectors.partitioningBy(
-                                    FInstanceExecParam::isRuntimeFilterCoordinator));
-                    List<FInstanceExecParam> instanceCarryingGRF = instanceSplits.get(true);
-                    List<FInstanceExecParam> restInstances = instanceSplits.get(false);
 
-                    Map<TNetworkAddress, List<FInstanceExecParam>> requestsPerHost =
-                            restInstances.stream()
-                                    .collect(Collectors.groupingBy(FInstanceExecParam::getHost,
-                                            HashMap::new,
-                                            Collectors.mapping(Function.identity(), Collectors.toList())));
-                    List<Pair<TNetworkAddress, List<FInstanceExecParam>>>
-                            hostAndRequestsList = Lists.newArrayList();
-                    Preconditions.checkArgument(instanceCarryingGRF.size() <= 1,
-                            "At most one instance carries GRF parameters");
-                    if (!instanceCarryingGRF.isEmpty()) {
-                        hostAndRequestsList.add(Pair.create(instanceCarryingGRF.get(0).getHost(), instanceCarryingGRF));
-                    }
-                    requestsPerHost.forEach((host, instances) -> hostAndRequestsList.add(Pair.create(host, instances)));
-
-                    // if pipeline is enable and current fragment contain olap table sink, in fe we will
+                    Map<TNetworkAddress, List<FInstanceExecParam>> requestsPerHost = params.instanceExecParams.stream()
+                            .collect(Collectors.groupingBy(FInstanceExecParam::getHost, HashMap::new,
+                                    Collectors.mapping(Function.identity(), Collectors.toList())));
+                    // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
                     boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
                     boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                     int tabletSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
-                        for (Pair<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests :
-                                hostAndRequestsList) {
-                            List<FInstanceExecParam> requests = hostAndRequests.second;
+                        for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests :
+                                requestsPerHost.entrySet()) {
+                            List<FInstanceExecParam> requests = hostAndRequests.getValue();
                             for (FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
                                     tabletSinkTotalDop += request.getPipelineDop();
@@ -1167,26 +1149,18 @@ public class Coordinator {
                                 "tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
                     }
 
-                    for (Pair<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests :
-                            hostAndRequestsList) {
-                        TNetworkAddress host = hostAndRequests.first;
-                        List<FInstanceExecParam> requests = hostAndRequests.second;
+                    for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : requestsPerHost.entrySet()) {
+                        TNetworkAddress host = hostAndRequests.getKey();
+                        List<FInstanceExecParam> requests = hostAndRequests.getValue();
                         if (requests.isEmpty()) {
                             continue;
                         }
 
-                        int inflightIndex = 1;
+                        int inflightIndex = 0;
                         TDescriptorTable curDescTable = this.descTable;
                         if (enablePipelineEngine) {
                             Integer firstGroupIndex = host2firstGroupIndex.get(host);
-                            if (requests.get(0).isRuntimeFilterCoordinator()) {
-                                Preconditions.checkArgument(requests.size() == 1,
-                                        "There must be exactly one instance carrying GRF parameters if exists");
-                                Preconditions.checkArgument(firstGroupIndex == null,
-                                        "Instance carrying GRF parameters must be the first instance of the root Fragment");
-                                inflightIndex = 0;
-                                host2firstGroupIndex.put(host, groupIndex);
-                            } else if (firstGroupIndex == null) {
+                            if (firstGroupIndex == null) {
                                 // Hasn't sent descTable for this host,
                                 // so send descTable this time.
                                 host2firstGroupIndex.put(host, groupIndex);
@@ -1197,7 +1171,7 @@ public class Coordinator {
                             } else {
                                 // The previous fragment for this host int the current fragment group will send descTable,
                                 // so this fragment need wait until the previous one finishes delivering.
-                                inflightIndex = 2;
+                                inflightIndex = 1;
                                 curDescTable = emptyDescTable;
                             }
                         }
@@ -1314,6 +1288,7 @@ public class Coordinator {
                     handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
             }
+
             attachInstanceProfileToFragmentProfile();
         } finally {
             unlock();
@@ -1368,8 +1343,7 @@ public class Coordinator {
         ).collect(Collectors.toList());
     }
 
-    private void setGlobalRuntimeFilterParams(FInstanceExecParam topParams,
-                                              TNetworkAddress mergeHost)
+    private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
@@ -2851,8 +2825,6 @@ public class Coordinator {
         TUniqueId instanceId;
         TNetworkAddress host;
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
-
-        TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         Map<Integer, Map<Integer, List<TScanRangeParams>>> nodeToPerDriverSeqScanRanges = Maps.newHashMap();
 
         int perFragmentInstanceIdx;
@@ -2903,10 +2875,6 @@ public class Coordinator {
 
         public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
             return nodeToPerDriverSeqScanRanges;
-        }
-
-        public boolean isRuntimeFilterCoordinator() {
-            return runtimeFilterParams.isSetRuntime_filter_builder_number();
         }
 
         public TNetworkAddress getHost() {
@@ -3185,6 +3153,7 @@ public class Coordinator {
 
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
+        TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         public boolean bucketSeqToInstanceForFilterIsSet = false;
 
         public FragmentExecParams(PlanFragment fragment) {
@@ -3238,6 +3207,9 @@ public class Coordinator {
                 commonParams.params.setNum_senders(instanceExecParams.size());
             }
             commonParams.params.setPer_exch_num_senders(perExchNumSenders);
+            if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
+                commonParams.params.setRuntime_filter_params(runtimeFilterParams);
+            }
             commonParams.params.setSend_query_statistics_with_every_batch(
                     fragment.isTransferQueryStatisticsWithEveryBatch());
 
@@ -3335,9 +3307,6 @@ public class Coordinator {
                 uniqueParams.setParams(new TPlanFragmentExecParams());
             }
             uniqueParams.params.setFragment_instance_id(instanceExecParam.instanceId);
-            if (!instanceExecParam.runtimeFilterParams.isSetRuntime_filter_builder_number()) {
-                uniqueParams.params.setRuntime_filter_params(instanceExecParam.runtimeFilterParams);
-            }
 
             Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
             if (scanRanges == null) {
