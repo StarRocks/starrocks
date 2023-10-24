@@ -152,19 +152,10 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
-
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
-<<<<<<< HEAD
     STARROCKS_GRANT_TO_USERS
-=======
-    STARROCKS_GRANT_TO_USERS,
-    SCH_ROUTINE_LOAD_JOBS,
-    SCH_STREAM_LOADS,
-    SCH_PIPE_FILES,
-    SCH_PIPES,
-    SCH_FE_METRICS
->>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
+    SCH_FE_METRICS = 58
 }
 
 enum THdfsCompression {
