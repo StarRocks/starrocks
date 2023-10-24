@@ -448,7 +448,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
     ASSERT_EQ("1.dat", metadata->rowsets(0).segments(0));
     ASSERT_EQ("2.dat", metadata->rowsets(0).segments(1));
 
-    ExecEnv::GetInstance()->vacuum_thread_pool()->wait();
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     // TxnLog should't have been deleted
     ASSERT_TRUE(tablet.get_txn_log(1002).status().ok());
     ASSERT_TRUE(tablet.get_txn_log(1003).status().ok());
@@ -817,8 +817,8 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         lake::PublishLogVersionRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.set_txn_id(txn_id);
-        request.set_version(10);
+        request.add_txn_ids(txn_id);
+        request.add_versions(10);
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
