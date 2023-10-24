@@ -27,24 +27,16 @@ import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.Utils;
-import com.starrocks.proto.PublishLogVersionRequest;
-import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -53,10 +45,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class LakePublishBatchTest {
@@ -330,33 +319,5 @@ public class LakePublishBatchTest {
         Thread.sleep(1000);
         Assert.assertEquals(transactionState1.getTransactionStatus(), TransactionStatus.VISIBLE);
         Assert.assertEquals(transactionState2.getTransactionStatus(), TransactionStatus.VISIBLE);
-    }
-
-    @Test
-    public void testPublishLogVersion() throws Exception {
-        new MockUp<Utils>() {
-            @Mock
-            public Long chooseBackend(LakeTablet tablet) {
-                return 1L;
-            }
-        };
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getComputeNode(long computeNodeId) {
-                return new ComputeNode();
-            }
-        };
-
-        new MockUp<LakeService>() {
-            @Mock
-            public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
-                return CompletableFuture.completedFuture(null);
-            }
-        };
-
-        List<Tablet> tablets = new ArrayList<>();
-        tablets.add(new LakeTablet(1L));
-        Utils.publishLogVersion(tablets, 1, 1);
     }
 }
