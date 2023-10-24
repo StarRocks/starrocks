@@ -219,6 +219,17 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
             return;
         }
 
+        // Double check if task has been abandoned
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+            releaseBeSlot(routineLoadTaskInfo);
+            // task has been abandoned while renew task has been added in queue
+            // or database has been deleted
+            LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
+                    .add("error_msg", "task has been abandoned after BE was allocated")
+                    .build());
+            return;
+        }
+
         // begin txn
         try {
             routineLoadTaskInfo.beginTxn();
