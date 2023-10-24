@@ -82,6 +82,9 @@ private:
     void normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType>
+    void normalize_bitmap_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+
+    template <LogicalType SlotType, typename RangeValueType>
     void normalize_join_runtime_filter(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType>

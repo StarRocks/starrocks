@@ -58,7 +58,6 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
-
         if (!ConnectContext.get().getSessionVariable().isEnableCrossJoinRuntimeFilter()) {
             return;
         }

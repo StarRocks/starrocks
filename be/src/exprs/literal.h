@@ -32,6 +32,8 @@ public:
 
     std::string debug_string() const override;
 
+    ColumnPtr value() const { return _value; }
+
 private:
     // @IMPORTANT: BinaryColumnPtr's build_slice will cause multi-thread(OLAP_SCANNER) crash
     ColumnPtr _value;

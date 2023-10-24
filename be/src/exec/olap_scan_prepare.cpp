@@ -14,18 +14,24 @@
 
 #include "exec/olap_scan_prepare.h"
 
+#include <limits>
+#include <type_traits>
 #include <variant>
 
 #include "column/type_traits.h"
+#include "exprs/bitmap_functions.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/in_const_predicate.hpp"
+#include "exprs/literal.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_runtime_range_pruner.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
+#include "types/bitmap_value.h"
 #include "types/date_value.hpp"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -343,6 +349,66 @@ void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& 
 }
 
 template <LogicalType SlotType, typename RangeValueType>
+void OlapScanConjunctsManager::normalize_bitmap_predicate(const SlotDescriptor& slot,
+                                                          ColumnValueRange<RangeValueType>* range) {
+    if constexpr (SlotType == TYPE_INT || SlotType == TYPE_BIGINT) {
+        const auto& conjunct_ctxs = (*conjunct_ctxs_ptr);
+        for (size_t i = 0; i < conjunct_ctxs.size(); i++) {
+            if (normalized_conjuncts[i]) {
+                continue;
+            }
+
+            Expr* root_expr = get_root_expr(conjunct_ctxs[i]);
+            // normalize if right child is literal
+            if (root_expr->children().size() != 2 || TExprNodeType::FUNCTION_CALL != root_expr->node_type() ||
+                !root_expr->get_child(0)->is_constant()) {
+                continue;
+            }
+            std::vector<SlotId> slot_ids;
+            if (root_expr->get_child(1)->get_slot_ids(&slot_ids) != 1 || slot_ids[0] != slot.id()) {
+                continue;
+            }
+            // now we only support normalize bitmap_contains
+            if (BuiltinFunctions::find_builtin_function(root_expr->fn().fid)->scalar_function !=
+                &BitmapFunctions::bitmap_contains) {
+                continue;
+            }
+            auto value = down_cast<VectorizedLiteral*>(root_expr->get_child(0))->value();
+            if (value->only_null()) {
+                continue;
+            }
+            auto* raw_bitmap = value->get(0).get_bitmap();
+            // if cardinality gt than max push down. we just push down min/max
+            if (raw_bitmap->cardinality() > config::max_pushdown_conditions_per_column) {
+                if (auto vmin = raw_bitmap->min(); vmin.has_value()) {
+                    (void)range->add_range(SQLFilterOp::FILTER_LARGER_OR_EQUAL, vmin.value());
+                }
+                if (auto vmax = raw_bitmap->max(); vmax.has_value()) {
+                    (void)range->add_range(SQLFilterOp::FILTER_LESS_OR_EQUAL, vmax.value());
+                }
+            } else {
+                std::set<RangeValueType> values;
+                std::vector<int64_t> arr;
+                raw_bitmap->to_array(&arr);
+                for (auto v : arr) {
+                    if constexpr (std::is_same_v<RangeValueType, int64_t>) {
+                        values.insert(v);
+                    } else {
+                        if (v >= std::numeric_limits<RangeValueType>::min() &&
+                            v <= std::numeric_limits<RangeValueType>::max()) {
+                            values.insert(v);
+                        }
+                    }
+                }
+
+                (void)range->add_fixed_values(FILTER_IN, values);
+                normalized_conjuncts[i] = true;
+            }
+        }
+    }
+}
+
+template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescriptor& slot,
                                                              ColumnValueRange<RangeValueType>* range) {
     // in runtime filter
@@ -523,6 +589,7 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
     normalize_binary_predicate<SlotType, RangeValueType>(slot, range);
     normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType>(slot, range);
     normalize_is_null_predicate(slot);
+    normalize_bitmap_predicate<SlotType, RangeValueType>(slot, range);
     // Must handle join runtime filter last
     normalize_join_runtime_filter<SlotType, RangeValueType>(slot, range);
 }
