@@ -76,7 +76,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     private static final int PUSH_DOWN_HIGH_CARDINALITY_AGG = 3;
 
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
-            FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION);
+            FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION,
+            FunctionSet.ARRAY_AGG);
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
@@ -179,10 +180,6 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
                 List<ScalarOperator> newWhenThen = Lists.newArrayList();
                 for (int i = 0; i < caseWhen.getWhenClauseSize(); i++) {
-                    if (caseWhen.getThenClause(i).isConstant() && !caseWhen.getThenClause(i).isConstantNull()) {
-                        // forbidden push down
-                        return visit(optExpression, context);
-                    }
                     newWhenThen.add(ConstantOperator.createBoolean(false));
                     newWhenThen.add(caseWhen.getThenClause(i));
                 }
@@ -195,21 +192,10 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
                 aggFn.setChild(0, newCaseWhen);
             } else if (callInput.getFunction() != null &&
                     FunctionSet.IF.equals(callInput.getFunction().getFunctionName().getFunction())) {
-                if (aggInput.getChildren().stream().skip(1).anyMatch(c -> c.isConstant() && !c.isConstantNull())) {
-                    // forbidden push down
-                    return visit(optExpression, context);
-                }
-
                 aggInput.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
                         .forEach(v -> context.groupBys.put(v, v));
                 aggInput.setChild(0, ConstantOperator.createBoolean(false));
             }
-        }
-
-        // check has constant aggregate, forbidden
-        if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
-            return visit(optExpression, context);
         }
 
         return processChild(optExpression, context);
@@ -242,11 +228,6 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     @Override
     public Void visitLogicalJoin(OptExpression optExpression, AggregatePushDownContext context) {
         if (isInvalid(optExpression, context)) {
-            return visit(optExpression, context);
-        }
-        // constant aggregate can't push down
-        if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch(ScalarOperator::isConstant)) {
             return visit(optExpression, context);
         }
 
@@ -285,12 +266,12 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         // check aggregations
         ColumnRefSet aggregationsRefs = new ColumnRefSet();
         context.aggregations.values().stream().map(CallOperator::getUsedColumns).forEach(aggregationsRefs::union);
-        if (!childOutput.containsAll(aggregationsRefs)) {
-            return AggregatePushDownContext.EMPTY;
-        }
 
         AggregatePushDownContext childContext = new AggregatePushDownContext();
-        childContext.aggregations.putAll(context.aggregations);
+        context.aggregations.entrySet().stream().
+                filter(x -> childOutput.containsAll(x.getValue().getUsedColumns())).
+                forEach(x -> childContext.aggregations.put(x.getKey(), x.getValue()));
+        // childContext.aggregations.putAll(context.aggregations);
 
         // check group by
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {

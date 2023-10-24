@@ -18,6 +18,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
@@ -1971,6 +1972,47 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
 
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
+    }
+
+    @Test
+    public void testRollup_ArrayAgg() throws Exception {
+        String mvName = "mv_array";
+        createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW `mv_array`\n" +
+                "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
+                "REFRESH ASYNC\n" +
+                "AS \n" +
+                "SELECT \n" +
+                "    CAST((`d_user`->'region') AS string) AS `region`, \n" +
+                "    CAST((`d_user`->'gender') AS string) AS `gender`, \n" +
+                "    array_agg(d_user) AS `cnt`, \n" +
+                "    array_agg_distinct(d_user) AS `distinct_cnt`\n" +
+                "FROM `json_tbl`\n" +
+                "GROUP BY region, `gender`");
+        starRocksAssert.query("select array_agg(d_user) from json_tbl " +
+                        "where cast(d_user->'gender' as string) = 'male'")
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
+        starRocksAssert.query("select array_sort(array_distinct(array_agg(d_user))) from json_tbl " +
+                        "where cast(d_user->'gender' as string) = 'male'")
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
+        starRocksAssert.query("select " +
+                        " cast(d_user->'region' as string) as region, " +
+                        " array_sort(array_distinct(array_agg(d_user))) " +
+                        "from json_tbl " +
+                        "where cast(d_user->'gender' as string) = 'male' " +
+                        "group by region")
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
+        starRocksAssert.query("select " +
+                        " cast(d_user->'region' as string) as region, " +
+                        " array_sort(array_distinct(array_agg(d_user))) " +
+                        "from json_tbl " +
+                        "group by region")
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
+        starRocksAssert.query("select " +
+                        " cast(d_user->'region' as string) as region, " +
+                        " array_length(array_agg_distinct(d_user)) " +
+                        "from json_tbl " +
+                        "group by region")
+                .explainContains(mvName, FunctionSet.ARRAY_FLATTEN);
     }
 
     @Test

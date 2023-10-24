@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.catalog.Function.CompareMode.IS_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
 
 public class ScalarOperatorUtil {
@@ -63,6 +64,10 @@ public class ScalarOperatorUtil {
 
     public static Function findArithmeticFunction(Type[] argsType, String fnName) {
         return Expr.getBuiltinFunction(fnName, argsType, IS_IDENTICAL);
+    }
+
+    public static Function findRolluFunction(Type[] argsType, String fnName) {
+        return Expr.getBuiltinFunction(fnName, argsType, IS_SUPERTYPE_OF);
     }
 
     public static Function findSumFn(Type[] argTypes) {

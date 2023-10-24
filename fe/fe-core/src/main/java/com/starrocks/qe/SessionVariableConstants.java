@@ -50,4 +50,10 @@ public class SessionVariableConstants {
             return this == AUTO || this == ADAPTIVE_DECREASE;
         }
     }
+
+    public static final String NONE = "none";
+
+    public static final String LEFT = "left";
+
+    public static final String RIGHT = "right";
 }

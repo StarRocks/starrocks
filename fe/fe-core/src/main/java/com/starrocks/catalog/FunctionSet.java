@@ -290,8 +290,10 @@ public class FunctionSet {
     public static final String BITMAP_DICT = "bitmap_dict";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
     public static final String EXCHANGE_SPEED = "exchange_speed";
+
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
+    public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
@@ -315,6 +317,7 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_UNION_AGG = "array_union_agg";
     public static final String ANY_MATCH = "any_match";
     public static final String ALL_MATCH = "all_match";
 
@@ -621,6 +624,7 @@ public class FunctionSet {
             .add(ARRAY_DIFFERENCE)
             .add(ARRAYS_OVERLAP)
             .add(ARRAY_AGG)
+            .add(ARRAY_FLATTEN)
             .add(ARRAY_CONCAT)
             .add(ARRAY_SLICE)
             .build();
@@ -860,9 +864,16 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
                 true, false, false));
 
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_FLATTEN,
+                Lists.newArrayList(Type.ANY_ARRAY), Type.ANY_ARRAY, Type.ANY_ARRAY, true,
+                true, false, false));
+
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.ANY_STRUCT, true,
                 false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_FLATTEN,
+                Lists.newArrayList(Type.ANY_ARRAY), Type.ANY_ARRAY, Type.ANY_ARRAY, true,
+                true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
@@ -1148,20 +1159,19 @@ public class FunctionSet {
 
     private void registerBuiltinArrayAggDistinctFunction() {
         // array_agg(distinct)
-        for (ScalarType type : Type.getNumericTypes()) {
-            Type arrayType = new ArrayType(type);
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
-                    Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
-        }
-        for (ScalarType type : Type.STRING_TYPES) {
-            Type arrayType = new ArrayType(type);
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
-                    Lists.newArrayList(type), arrayType, arrayType,
-                    false, false, false));
-        }
-
-        for (ScalarType type : Type.DATE_TYPES) {
+        // array_flatten
+        List<ScalarType> supportedDistinctTypes =
+                ImmutableList.<ScalarType>builder()
+                        .addAll(Type.getNumericTypes())
+                        .addAll(Type.STRING_TYPES)
+                        .addAll(Type.DATE_TYPES)
+                        .build();
+        List<ScalarType> supportedTypes =
+                ImmutableList.<ScalarType>builder()
+                        .addAll(supportedDistinctTypes)
+                        .add(Type.JSON)
+                        .build();
+        for (ScalarType type : supportedDistinctTypes) {
             Type arrayType = new ArrayType(type);
             addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                     Lists.newArrayList(type), arrayType, arrayType,
@@ -1170,7 +1180,14 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG_DISTINCT,
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
                 false, false, false));
+        for (ScalarType type : supportedTypes) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_FLATTEN,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
     }
+
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         for (ScalarType type : Type.FLOAT_TYPES) {

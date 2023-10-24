@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,7 +56,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
-import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 
 /**
  * SPJG materialized view rewriter, based on
@@ -68,6 +68,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
     private static final Map<String, String> ROLLUP_FUNCTION_MAP = ImmutableMap.<String, String>builder()
             .put(FunctionSet.COUNT, FunctionSet.SUM)
+            .put(FunctionSet.ARRAY_AGG, FunctionSet.ARRAY_FLATTEN)
+            .put(FunctionSet.ARRAY_AGG_DISTINCT, FunctionSet.ARRAY_FLATTEN)
             .build();
 
     private static final Set<String> SUPPORTED_ROLLUP_FUNCTIONS = ImmutableSet.<String>builder()
@@ -79,6 +81,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             .add(FunctionSet.BITMAP_UNION)
             .add(FunctionSet.HLL_UNION)
             .add(FunctionSet.PERCENTILE_UNION)
+            .add(FunctionSet.ARRAY_AGG_DISTINCT)
+            .add(FunctionSet.ARRAY_AGG)
             .build();
 
     public AggregatedMaterializedViewRewriter(MvRewriteContext mvRewriteContext) {
@@ -653,17 +657,17 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (!SUPPORTED_ROLLUP_FUNCTIONS.contains(aggCall.getFnName())) {
             return null;
         }
-        if (ROLLUP_FUNCTION_MAP.containsKey(aggCall.getFnName())) {
-            if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                Type[] argTypes = {targetColumn.getType()};
-                Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
-                return new CallOperator(FunctionSet.SUM, aggCall.getFunction().getReturnType(),
-                        Lists.newArrayList(targetColumn), sumFn);
-            } else {
-                // impossible to reach here
-                LOG.warn("unsupported rollup function:{}", aggCall.getFnName());
+        String mappedFn = ROLLUP_FUNCTION_MAP.get(aggCall.getFnName());
+        if (mappedFn != null) {
+            Type[] argTypes = {targetColumn.getType()};
+            Function fn = ScalarOperatorUtil.findRolluFunction(argTypes, mappedFn);
+            if (fn == null) {
+                LOG.warn("get rollup function {}({})) failed", mappedFn, argTypes);
                 return null;
             }
+            // TODO: ARRAY_FLATTEN does not support distinct, use array_distinct(array_flatten()) instead
+            return new CallOperator(mappedFn, aggCall.getFunction().getReturnType(),
+                    Lists.newArrayList(targetColumn), fn);
         } else {
             // NOTE:
             // 1. Change fn's type  as 1th child has change, otherwise physical plan
