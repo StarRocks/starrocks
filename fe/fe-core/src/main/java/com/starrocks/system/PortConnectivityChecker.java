@@ -38,7 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import org.apache.logging.log4j.LogManager;
