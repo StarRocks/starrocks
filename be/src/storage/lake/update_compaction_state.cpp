@@ -56,7 +56,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
-    CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok());
+    CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
 
     OlapReaderStatistics stats;
     auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
@@ -92,10 +92,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
         itr->close();
     }
     dest = std::move(col);
-    dest->raw_data();
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
-
     return Status::OK();
 }
 
