@@ -42,6 +42,9 @@ namespace starrocks {
 constexpr uint8_t SORT_KEY_NULL_FIRST_MARKER = 0x00;
 constexpr uint8_t SORT_KEY_NORMAL_MARKER = 0x01;
 
+using vectorized::Schema;
+using vectorized::Column;
+
 template <class UT>
 UT to_bigendian(UT v);
 
@@ -281,17 +284,16 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
-                                        std::unique_ptr<vectorized::Column>* pcolumn) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn, bool large_column) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
     }
-    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes);
+    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes, large_column);
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn,
-                                        const std::vector<ColumnId>& key_idxes) {
+Status PrimaryKeyEncoder::create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn,
+                                        const std::vector<ColumnId>& key_idxes, bool large_column) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
@@ -323,7 +325,11 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
             *pcolumn = vectorized::Int128Column::create_mutable();
             break;
         case OLAP_FIELD_TYPE_VARCHAR:
-            *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+            if (large_column) {
+                *pcolumn = vectorized::LargeBinaryColumn::create_mutable();
+            } else {
+                *pcolumn = vectorized::BinaryColumn::create_mutable();
+            }
             break;
         case OLAP_FIELD_TYPE_DATE_V2:
             *pcolumn = vectorized::DateColumn::create_mutable();
@@ -337,7 +343,11 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
-        *pcolumn = std::make_unique<vectorized::BinaryColumn>();
+        if (large_column) {
+            *pcolumn = vectorized::LargeBinaryColumn::create_mutable();
+        } else {
+            *pcolumn = vectorized::BinaryColumn::create_mutable();
+        }
     }
     return Status::OK();
 }
@@ -417,36 +427,47 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
         auto& src = chunk.get_column_by_index(0);
         dest->append(*src, offset, len);
     } else {
-        CHECK(dest->is_binary()) << "dest column should be binary";
+        CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
         std::vector<const void*> datas(ncol);
         std::vector<ColumnId> primary_key_iota_idxes(ncol);
         std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
         prepare_ops_datas(schema, primary_key_iota_idxes, chunk, &ops, &datas);
-        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
-        bdest.reserve(bdest.size() + len);
-        string buff;
-        for (size_t i = 0; i < len; i++) {
-            buff.clear();
-            for (int j = 0; j < ncol; j++) {
-                ops[j](datas[j], offset + i, &buff);
+        if (dest->is_binary()) {
+            auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+            bdest.reserve(bdest.size() + len);
+            std::string buff;
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], offset + i, &buff);
+                }
+                bdest.append(buff);
             }
-            bdest.append(buff);
+        } else {
+            auto& bdest = down_cast<vectorized::LargeBinaryColumn&>(*dest);
+            bdest.reserve(bdest.size() + len);
+            std::string buff;
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], offset + i, &buff);
+                }
+                bdest.append(buff);
+            }
         }
     }
 }
 
-void PrimaryKeyEncoder::encode_sort_key(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset,
-                                        size_t len, vectorized::Column* dest) {
-    CHECK(dest->is_binary()) << "dest column should be binary";
+void PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const vectorized::Chunk& chunk, size_t offset, size_t len,
+                                        Column* dest) {
+    CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
     int ncol = schema.sort_key_idxes().size();
     std::vector<EncodeOp> ops(ncol);
     std::vector<const void*> datas(ncol);
     prepare_ops_datas(schema, schema.sort_key_idxes(), chunk, &ops, &datas);
-    auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
-    bdest.reserve(bdest.size() + len);
-    std::vector<std::shared_ptr<vectorized::Column>> cols(ncol);
+    std::vector<std::shared_ptr<Column>> cols(ncol);
     for (int i = 0; i < ncol; i++) {
         cols[i] = chunk.get_column_by_index(schema.sort_key_idxes()[i]);
     }
@@ -457,27 +478,57 @@ void PrimaryKeyEncoder::encode_sort_key(const vectorized::Schema& schema, const 
             break;
         }
     }
-    std::string buff;
-    if (!has_nullable_sort_key) {
-        for (size_t i = 0; i < len; i++) {
-            buff.clear();
-            for (int j = 0; j < ncol; j++) {
-                ops[j](datas[j], offset + i, &buff);
-            }
-            bdest.append(buff);
-        }
-    } else {
-        for (size_t i = 0; i < len; i++) {
-            buff.clear();
-            for (int j = 0; j < ncol; j++) {
-                if (cols[j]->is_null(i)) {
-                    buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
-                } else {
-                    buff.push_back(SORT_KEY_NORMAL_MARKER);
+    if (dest->is_binary()) {
+        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        bdest.reserve(bdest.size() + len);
+        std::string buff;
+        if (!has_nullable_sort_key) {
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
                     ops[j](datas[j], offset + i, &buff);
                 }
+                bdest.append(buff);
             }
-            bdest.append(buff);
+        } else {
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    if (cols[j]->is_null(i)) {
+                        buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
+                    } else {
+                        buff.push_back(SORT_KEY_NORMAL_MARKER);
+                        ops[j](datas[j], offset + i, &buff);
+                    }
+                }
+                bdest.append(buff);
+            }
+        }
+    } else {
+        auto& bdest = down_cast<vectorized::LargeBinaryColumn&>(*dest);
+        bdest.reserve(bdest.size() + len);
+        std::string buff;
+        if (!has_nullable_sort_key) {
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], offset + i, &buff);
+                }
+                bdest.append(buff);
+            }
+        } else {
+            for (size_t i = 0; i < len; i++) {
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    if (cols[j]->is_null(i)) {
+                        buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
+                    } else {
+                        buff.push_back(SORT_KEY_NORMAL_MARKER);
+                        ops[j](datas[j], offset + i, &buff);
+                    }
+                }
+                bdest.append(buff);
+            }
         }
     }
 }
@@ -489,23 +540,37 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
         auto& src = chunk.get_column_by_index(0);
         dest->append_selective(*src, indexes, 0, len);
     } else {
-        CHECK(dest->is_binary()) << "dest column should be binary";
+        CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
         std::vector<const void*> datas(ncol);
         std::vector<ColumnId> primary_key_iota_idxes(ncol);
         std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
         prepare_ops_datas(schema, primary_key_iota_idxes, chunk, &ops, &datas);
-        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
-        bdest.reserve(bdest.size() + len);
-        string buff;
-        for (int i = 0; i < len; i++) {
-            uint32_t idx = indexes[i];
-            buff.clear();
-            for (int j = 0; j < ncol; j++) {
-                ops[j](datas[j], idx, &buff);
+        if (dest->is_binary()) {
+            auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+            bdest.reserve(bdest.size() + len);
+            std::string buff;
+            for (int i = 0; i < len; i++) {
+                uint32_t idx = indexes[i];
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], idx, &buff);
+                }
+                bdest.append(buff);
             }
-            bdest.append(buff);
+        } else {
+            auto& bdest = down_cast<vectorized::LargeBinaryColumn&>(*dest);
+            bdest.reserve(bdest.size() + len);
+            std::string buff;
+            for (int i = 0; i < len; i++) {
+                uint32_t idx = indexes[i];
+                buff.clear();
+                for (int j = 0; j < ncol; j++) {
+                    ops[j](datas[j], idx, &buff);
+                }
+                bdest.append(buff);
+            }
         }
     }
 }
@@ -563,78 +628,89 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, co
     return false;
 }
 
-Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectorized::Column& keys, size_t offset,
-                                 size_t len, vectorized::Chunk* dest) {
+template <class T>
+Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, vectorized::Chunk* dest) {
+    const int ncol = schema.num_key_fields();
+    for (int i = 0; i < len; i++) {
+        Slice s = bkeys.get_slice(offset + i);
+        for (int j = 0; j < ncol; j++) {
+            auto& column = *(dest->get_column_by_index(j));
+            switch (schema.field(j)->type()->type()) {
+            case OLAP_FIELD_TYPE_BOOL: {
+                auto& tc = down_cast<vectorized::UInt8Column&>(column);
+                uint8_t v;
+                decode_integral(&s, &v);
+                tc.append((int8_t)v);
+            } break;
+            case OLAP_FIELD_TYPE_TINYINT: {
+                auto& tc = down_cast<vectorized::Int8Column&>(column);
+                int8_t v;
+                decode_integral(&s, &v);
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_SMALLINT: {
+                auto& tc = down_cast<vectorized::Int16Column&>(column);
+                int16_t v;
+                decode_integral(&s, &v);
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_INT: {
+                auto& tc = down_cast<vectorized::Int32Column&>(column);
+                int32_t v;
+                decode_integral(&s, &v);
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_BIGINT: {
+                auto& tc = down_cast<vectorized::Int64Column&>(column);
+                int64_t v;
+                decode_integral(&s, &v);
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_LARGEINT: {
+                auto& tc = down_cast<vectorized::Int128Column&>(column);
+                int128_t v;
+                decode_integral(&s, &v);
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_VARCHAR: {
+                auto& tc = down_cast<vectorized::BinaryColumn&>(column);
+                string v;
+                RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_DATE_V2: {
+                auto& tc = down_cast<vectorized::DateColumn&>(column);
+                vectorized::DateValue v;
+                decode_integral(&s, &v._julian);
+                tc.append(v);
+            } break;
+            case OLAP_FIELD_TYPE_DATETIME: {
+                auto& tc = down_cast<vectorized::TimestampColumn&>(column);
+                vectorized::TimestampValue v;
+                decode_integral(&s, &v._timestamp);
+                tc.append(v);
+            } break;
+            default:
+                CHECK(false) << "type not supported for primary key encoding";
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len,
+                                 vectorized::Chunk* dest) {
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);
     } else {
-        CHECK(keys.is_binary()) << "keys column should be binary";
-        auto& bkeys = down_cast<const vectorized::BinaryColumn&>(keys);
-        const int ncol = schema.num_key_fields();
-        for (int i = 0; i < len; i++) {
-            Slice s = bkeys.get_slice(offset + i);
-            for (int j = 0; j < ncol; j++) {
-                auto& column = *(dest->get_column_by_index(j));
-                switch (schema.field(j)->type()->type()) {
-                case OLAP_FIELD_TYPE_BOOL: {
-                    auto& tc = down_cast<vectorized::UInt8Column&>(column);
-                    uint8_t v;
-                    decode_integral(&s, &v);
-                    tc.append((int8_t)v);
-                } break;
-                case OLAP_FIELD_TYPE_TINYINT: {
-                    auto& tc = down_cast<vectorized::Int8Column&>(column);
-                    int8_t v;
-                    decode_integral(&s, &v);
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_SMALLINT: {
-                    auto& tc = down_cast<vectorized::Int16Column&>(column);
-                    int16_t v;
-                    decode_integral(&s, &v);
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_INT: {
-                    auto& tc = down_cast<vectorized::Int32Column&>(column);
-                    int32_t v;
-                    decode_integral(&s, &v);
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_BIGINT: {
-                    auto& tc = down_cast<vectorized::Int64Column&>(column);
-                    int64_t v;
-                    decode_integral(&s, &v);
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_LARGEINT: {
-                    auto& tc = down_cast<vectorized::Int128Column&>(column);
-                    int128_t v;
-                    decode_integral(&s, &v);
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_VARCHAR: {
-                    auto& tc = down_cast<vectorized::BinaryColumn&>(column);
-                    string v;
-                    RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_DATE_V2: {
-                    auto& tc = down_cast<vectorized::DateColumn&>(column);
-                    vectorized::DateValue v;
-                    decode_integral(&s, &v._julian);
-                    tc.append(v);
-                } break;
-                case OLAP_FIELD_TYPE_DATETIME: {
-                    auto& tc = down_cast<vectorized::TimestampColumn&>(column);
-                    vectorized::TimestampValue v;
-                    decode_integral(&s, &v._timestamp);
-                    tc.append(v);
-                } break;
-                default:
-                    CHECK(false) << "type not supported for primary key encoding";
-                }
-            }
+        CHECK(keys.is_binary() || keys.is_large_binary()) << "keys column should be binary";
+        if (keys.is_binary()) {
+            auto& bkeys = down_cast<const vectorized::BinaryColumn&>(keys);
+            return decode_internal(schema, bkeys, offset, len, dest);
+        } else {
+            auto& bkeys = down_cast<const vectorized::LargeBinaryColumn&>(keys);
+            return decode_internal(schema, bkeys, offset, len, dest);
         }
     }
     return Status::OK();

@@ -272,6 +272,10 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
 
 template <typename T>
 void BinaryColumnBase<T>::_build_slices() const {
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        CHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+    }
+
     DCHECK(_offsets.size() > 0);
     _slices_cache = false;
     _slices.clear();

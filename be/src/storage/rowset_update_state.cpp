@@ -190,7 +190,7 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     }
     vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     return _load_upserts(rowset, upsert_id, pk_column.get());
