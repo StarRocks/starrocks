@@ -114,8 +114,8 @@ protected:
                           std::chrono::ceil<std::chrono::system_clock::duration>(dur));
     }
 
-    template <typename Clock, typename Duration>
-    future_status wait_until(const std::chrono::time_point<Clock, Duration>& abs) {
+    template <typename Duration>
+    future_status wait_until(const std::chrono::time_point<std::chrono::system_clock, Duration>& abs) {
         int curr_status;
         timespec ts = TimespecFromTimePoint(abs);
         while ((curr_status = _status->load(butil::memory_order_acquire)) != Status::kReady) {
