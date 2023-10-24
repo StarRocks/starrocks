@@ -144,10 +144,9 @@ public:
     size_t num_columns() const { return _column_readers.size(); }
 
     const ColumnReader* column(size_t i) const {
-        return _column_readers.at(_tablet_schema->column(i).unique_id()).get();
+        auto unique_id = _tablet_schema->column(i).unique_id();
+        return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
     }
-
-    const ColumnReader* column_with_uid(size_t uid) const { return _column_readers.at(uid).get(); }
 
     FileSystem* file_system() const { return _fs.get(); }
 
@@ -167,8 +166,6 @@ public:
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     size_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage(); }
-
-    bool is_valid_column(uint32_t column_unique_id) const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
