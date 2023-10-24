@@ -2,7 +2,16 @@
 
 ## Description
 
-Modifies an existing table.
+Modifies an existing table, including:
+
+- [Add/delete partitions and modify partition attribute](#modify-partition)
+- [Create/delete rollup index](#modify-rollup-index)
+- [Schema change](#schema-change)
+- [Modify bitmap index](#modify-bitmap-indexes)
+- [Rename table, partition, index](#rename)
+- [Atomic swap](#swap)
+- [Modify table comment](#alter-table-comment-from-v31)
+- [Manual compaction](#manual-compaction-from-31))
 
 > **NOTE**
 >
@@ -11,11 +20,15 @@ Modifies an existing table.
 ## Syntax
 
 ```SQL
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
+<<<<<<< HEAD
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, and swap.
+=======
+`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
+>>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
@@ -23,6 +36,11 @@ alter_clause1[, alter_clause2, ...]
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - index: modifies index (only Bitmap index can be modified).
 - swap: atomic exchange of two tables.
+<<<<<<< HEAD
+=======
+- comment: modifies the table comment (supported from v3.1 onwards).
+- compact: performs manual compaction to merge versions of loaded data (supported from v3.1 onwards).
+>>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 
 > **NOTE**
 >
@@ -37,7 +55,7 @@ alter_clause1[, alter_clause2, ...]
 Syntax:
 
 ```SQL
-ALTER TABLE [database.]table 
+ALTER TABLE [<db_name>.]<tbl_name> 
 ADD PARTITION [IF NOT EXISTS] <partition_name>
 partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
@@ -55,7 +73,7 @@ Note:
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
 3. If the bucket mode is not specified, the bucket method used by the built-in table is automatically used.
 4. If the bucket mode is specified, only the bucket number can be modified, and the bucket mode or bucket column cannot be modified.
-5. User can set some properties of the partition in ["key"="value"]. See [CREATE TABLE](CREATE_TABLE.md) for details.
+5. User can set some properties of the partition in `["key"="value"]`. See [CREATE TABLE](CREATE_TABLE.md) for details.
 
 #### Drop a partition
 
@@ -63,10 +81,10 @@ Syntax:
 
 ```sql
 -- Before 2.0
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [IF EXISTS | FORCE] <partition_name>
 -- 2.0 or later
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 ```
 
@@ -81,7 +99,7 @@ Note:
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table 
+ALTER TABLE [<db_name>.]<tbl_name> 
 ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
 partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]]
@@ -92,7 +110,7 @@ partition_desc ["key"="value"]
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 REPLACE PARTITION <partition_name>
 partition_desc ["key"="value"]
 WITH TEMPORARY PARTITION
@@ -105,7 +123,7 @@ partition_desc ["key"="value"]
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP TEMPORARY PARTITION <partition_name>
 ```
 
@@ -114,7 +132,7 @@ DROP TEMPORARY PARTITION <partition_name>
 **Syntax**
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
     MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
         SET ("key" = "value", ...);
 ```
@@ -129,7 +147,7 @@ ALTER TABLE [database.]table
 
 - For the table that has only one partition, the partition name is the same as the table name. If the table is divided into multiple partitions, you can use `(*)`to modify the properties of all partitions, which is more convenient.
 
-- Execute `SHOW PARTITIONS FROM <table_name>` to view the partition properties after modification.
+- Execute `SHOW PARTITIONS FROM <tbl_name>` to view the partition properties after modification.
 
 ### Modify rollup index
 
@@ -138,7 +156,7 @@ ALTER TABLE [database.]table
 Syntax:
 
 ```SQL
-ALTER TABLE [database.]table 
+ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
@@ -149,7 +167,7 @@ PROPERTIES: Support setting timeout time and the default timeout time is one day
 Example:
 
 ```SQL
-ALTER TABLE [database.]table 
+ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
 ```
 
@@ -158,7 +176,7 @@ ADD ROLLUP r1(col1,col2) from r0;
 Syntax:
 
 ```SQL
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)],...];
@@ -167,7 +185,7 @@ ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
 Example:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 ```
 
@@ -182,14 +200,14 @@ Note:
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
 ```
 
 Example:
 
 ```sql
-ALTER TABLE [database.]table DROP ROLLUP r1;
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
 ```
 
 #### Batch drop rollup indexes
@@ -197,14 +215,14 @@ ALTER TABLE [database.]table DROP ROLLUP r1;
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
 ```
 
 Example:
 
 ```sql
-ALTER TABLE [database.]table DROP ROLLUP r1, r2;
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
 ```
 
 Note: You cannot drop the base index.
@@ -218,7 +236,7 @@ Schema change supports the following modifications.
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 [AFTER column_name|FIRST]
 [TO rollup_index_name]
@@ -227,22 +245,32 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 Note:
 
-```plain text
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
 2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
 3. You cannot add a column that already exists in the base index to the rollup index. (You can recreate a rollup index if needed.)
-```
 
 #### Add multiple columns to specified index
 
 Syntax:
 
-```sql
-ALTER TABLE [database.]table
-ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...)
-[TO rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
+- Add multiple columns
+
+  ```sql
+  ALTER TABLE [<db_name>.]<tbl_name>
+  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...)
+  [TO rollup_index_name]
+  [PROPERTIES ("key"="value", ...)]
+  ```
+
+- Add multiple columns and use AFTER to specify locations of the added columns
+
+  ```sql
+  ALTER TABLE [<db_name>.]<tbl_name>
+  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  ADD COLUMN (column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  [TO rollup_index_name]
+  [PROPERTIES ("key"="value", ...)]
+  ```
 
 Note:
 
@@ -257,7 +285,7 @@ Note:
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP COLUMN column_name
 [FROM rollup_index_name];
 ```
@@ -272,7 +300,7 @@ Note:
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 [AFTER column_name|FIRST]
 [FROM rollup_index_name]
@@ -303,7 +331,7 @@ Note:
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ORDER BY (column_name1, column_name2, ...)
 [FROM rollup_index_name]
 [PROPERTIES ("key"="value", ...)]
@@ -314,6 +342,20 @@ Note:
 1. All columns in the index must be written.
 2. The value column is listed after the key column.
 
+<<<<<<< HEAD
+=======
+#### Add a generated column (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+```
+
+You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
+
+>>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 #### Modify table properties
 
 Currently, StarRocks supports modifying `bloom_filter_columns` property,`colocate_with` property, dynamic partitioning related properties, `enable_persistent_index` property, `replication_num` property and `default.replication_num` property, `storage_cooldown_ttl` property and `storage_cooldown_time` property.
@@ -334,20 +376,20 @@ Rename supports modification of table name, rollup index, and partition name.
 #### Rename a table
 
 ```sql
-ALTER TABLE <table_name> RENAME <new_table_name>
+ALTER TABLE <tbl_name> RENAME <new_tbl_name>
 ```
 
 #### Rename a rollup index
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 RENAME ROLLUP <old_rollup_name> <new_rollup_name>
 ```
 
 #### Rename a partition
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>
 ```
 
@@ -360,7 +402,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [database.]table
+ ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -386,10 +428,53 @@ Swap supports atomic exchange of two tables.
 Syntax:
 
 ```sql
-ALTER TABLE [database.]table
-SWAP WITH table_name;
+ALTER TABLE [<db_name>.]<tbl_name>
+SWAP WITH <tbl_name>;
 ```
 
+<<<<<<< HEAD
+=======
+### Alter table comment (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
+```
+
+### Manual compaction (from 3.1)
+
+StarRocks uses a compaction mechanism to merge different versions of loaded data. This feature can combine small files into large files, which effectively improves query performance.
+
+Before v3.1, compaction is performed in two ways:
+
+- Automatic compaction by system: Compaction is performed at the BE level in the background. Users cannot specify database or table for compaction.
+- Users can perform compaction by calling an HTTP interface.
+
+Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
+
+Syntax:
+
+```sql
+-- Perform compaction on the entire table.
+ALTER TABLE <tbl_name> COMPACT
+
+-- Perform compaction on a single partition.
+ALTER TABLE <tbl_name> COMPACT <partition_name>
+
+-- Perform compaction on multiple partitions.
+ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
+
+-- Perform cumulative compaction.
+ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
+
+-- Perform base compaction.
+ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
+```
+
+The `be_compactions` table in the `information_schema` database records compaction results. You can run `SELECT * FROM information_schema.be_compactions;` to query data versions after compaction.
+
+>>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 ## Examples
 
 ### Table
@@ -552,7 +637,16 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-6. Drop a column from `example_rollup_index`.
+6. Add multiple columns to `example_rollup_index` (aggregate) and specify the locations of the added columns using `AFTER`.
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    TO example_rollup_index;
+    ```
+
+7. Drop a column from `example_rollup_index`.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -560,21 +654,21 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-7. Modify the column type of col1 of the base index to BIGINT and put it after `col2`.
+8. Modify the column type of col1 of the base index to BIGINT and put it after `col2`.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN col1 BIGINT DEFAULT "1" AFTER col2;
     ```
 
-8. Modify the maximum length of the `val1` column of the base index to 64. The original length is 32.
+9. Modify the maximum length of the `val1` column of the base index to 64. The original length is 32.
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN val1 VARCHAR(64) REPLACE DEFAULT "abc";
     ```
 
-9. Reorder the columns in `example_rollup_index`. The original column order is k1, k2, k3, v1, v2.
+10. Reorder the columns in `example_rollup_index`. The original column order is k1, k2, k3, v1, v2.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -582,7 +676,7 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-10. Perform two operations (ADD COLUMN and ORDER BY) at one time.
+11. Perform two operations (ADD COLUMN and ORDER BY) at one time.
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -590,7 +684,7 @@ SWAP WITH table_name;
     ORDER BY (k3,k1,k2,v2,v1) FROM example_rollup_index;
     ```
 
-11. Alter the bloomfilter columns of the table.
+12. Alter the bloomfilter columns of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -605,21 +699,21 @@ SWAP WITH table_name;
      PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
      ```
 
-12. Alter the Colocate property of the table.
+13. Alter the Colocate property of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
      SET ("colocate_with" = "t1");
      ```
 
-13. Alter the bucketing mode of the table from Random Distribution to Hash Distribution.
+14. Alter the bucketing mode of the table from Random Distribution to Hash Distribution.
 
      ```sql
      ALTER TABLE example_db.my_table
      SET ("distribution_type" = "hash");
      ```
 
-14. Alter the dynamic partition property of the table.
+15. Alter the dynamic partition property of the table.
 
      ```sql
      ALTER TABLE example_db.my_table
@@ -677,14 +771,47 @@ SWAP WITH table_name;
 
 ### Swap
 
-1. Atomic swap between `table1` and `table2`.
+Atomic swap between `table1` and `table2`.
 
-    ```sql
-    ALTER TABLE table1 SWAP WITH table2
-    ```
+```sql
+ALTER TABLE table1 SWAP WITH table2
+```
+
+### Example of manual compaction
+
+```sql
+CREATE TABLE compaction_test( 
+    event_day DATE,
+    pv BIGINT)
+DUPLICATE KEY(event_day)
+PARTITION BY date_trunc('month', event_day)
+DISTRIBUTED BY HASH(event_day) BUCKETS 8
+PROPERTIES("replication_num" = "3");
+
+INSERT INTO compaction_test VALUES
+('2023-02-14', 2),
+('2033-03-01',2);
+{'label':'insert_734648fa-c878-11ed-90d6-00163e0dcbfc', 'status':'VISIBLE', 'txnId':'5008'}
+
+INSERT INTO compaction_test VALUES
+('2023-02-14', 2),('2033-03-01',2);
+{'label':'insert_85c95c1b-c878-11ed-90d6-00163e0dcbfc', 'status':'VISIBLE', 'txnId':'5009'}
+
+ALTER TABLE compaction_test COMPACT;
+
+ALTER TABLE compaction_test COMPACT p203303;
+
+ALTER TABLE compaction_test COMPACT (p202302,p203303);
+
+ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
+
+ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
+```
 
 ## References
 
-- [CREATE TABLE](CREATE_TABLE.md)
+- [CREATE TABLE](./CREATE_TABLE.md)
 - [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
 - [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md)
+- [DROP TABLE](./DROP_TABLE.md)
