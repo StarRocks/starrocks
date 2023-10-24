@@ -212,6 +212,8 @@ private:
     Segment* _segment = nullptr;
 
     uint8_t _flags = 0;
+    // counter to record all those `*_index_meta` space usage that will be used one time and will be reset after first load
+    std::atomic<size_t> _onetime_meta_bytes = 0;
 };
 
 } // namespace starrocks

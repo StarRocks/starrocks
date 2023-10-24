@@ -83,21 +83,25 @@ ColumnReader::~ColumnReader() {
     if (_ordinal_index_meta != nullptr) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _ordinal_index_meta.reset(nullptr);
     }
     if (_zonemap_index_meta != nullptr) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _zonemap_index_meta.reset(nullptr);
     }
     if (_bitmap_index_meta != nullptr) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _bitmap_index_meta.reset(nullptr);
     }
     if (_bloom_filter_index_meta != nullptr) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _bloom_filter_index_meta.reset(nullptr);
     }
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
@@ -128,6 +132,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
+                _onetime_meta_bytes.fetch_add(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
                 break;
             case ZONE_MAP_INDEX:
@@ -145,6 +150,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 }
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                          _zonemap_index_meta->SpaceUsedLong())
+                _onetime_meta_bytes.fetch_add(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 // the segment zone map will release from zonemap_index_map,
                 // so we should calc mem usage after release.
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
@@ -155,12 +161,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
+                _onetime_meta_bytes.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
+                _onetime_meta_bytes.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
             case UNKNOWN_INDEX_TYPE:
@@ -360,6 +368,7 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _ordinal_index_meta.reset();
         _segment->update_cache_size();
     }
@@ -374,6 +383,7 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _zonemap_index_meta.reset();
         _segment->update_cache_size();
     }
@@ -388,6 +398,7 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _bitmap_index_meta.reset();
         _segment->update_cache_size();
     }
@@ -402,6 +413,7 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
+        _onetime_meta_bytes.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
         _bloom_filter_index_meta.reset();
         _segment->update_cache_size();
     }
@@ -561,10 +573,7 @@ size_t ColumnReader::mem_usage() {
     size_t size = sizeof(ColumnReader);
 
     size += _segment_zone_map != nullptr ? _segment_zone_map->SpaceUsedLong() : 0;
-    size += _ordinal_index_meta != nullptr ? _ordinal_index_meta->SpaceUsedLong() : 0;
-    size += _zonemap_index_meta != nullptr ? _zonemap_index_meta->SpaceUsedLong() : 0;
-    size += _bitmap_index_meta != nullptr ? _bitmap_index_meta->SpaceUsedLong() : 0;
-    size += _bloom_filter_index_meta != nullptr ? _bloom_filter_index_meta->SpaceUsedLong() : 0;
+    size += _onetime_meta_bytes.load(std::memory_order_relaxed);
 
     size += _zonemap_index != nullptr ? _zonemap_index->mem_usage() : 0;
     size += _ordinal_index != nullptr ? _ordinal_index->mem_usage() : 0;
