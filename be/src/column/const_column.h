@@ -113,10 +113,10 @@ public:
     bool append_nulls(size_t count) override {
         if (_data->is_nullable()) {
             bool ok = true;
-            if (_size == 0) {
+            if (count > 0 && _size == 0) {
                 ok = _data->append_nulls(1);
             }
-            _size += ok;
+            _size += count;
             return ok;
         } else {
             return false;
