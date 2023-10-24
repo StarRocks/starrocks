@@ -131,8 +131,6 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
 }
 
 void NullableColumn::append_shallow_copy(const Column& src, size_t offset, size_t count) {
-    DCHECK_EQ(_null_column->size(), _data_column->size());
-
     if (src.only_null()) {
         append_nulls(count);
     } else if (src.is_nullable()) {
