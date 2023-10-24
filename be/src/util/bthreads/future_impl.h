@@ -110,8 +110,8 @@ protected:
     future_status wait_for(const std::chrono::duration<Rep, Period>& dur) {
         if (_status->load(butil::memory_order_acquire) == Status::kReady) return future_status::ready;
 
-        return wait_until(std::chrono::steady_clock::now() +
-                          std::chrono::ceil<std::chrono::steady_clock::duration>(dur));
+        return wait_until(std::chrono::system_clock::now() +
+                          std::chrono::ceil<std::chrono::system_clock::duration>(dur));
     }
 
     template <typename Clock, typename Duration>
