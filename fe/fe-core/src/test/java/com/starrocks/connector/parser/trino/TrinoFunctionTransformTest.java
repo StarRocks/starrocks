@@ -371,10 +371,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : CATALOG()");
 
         sql = "select database() from tall";
-        assertPlanContains(sql, "<slot 12> : 'test'");
+        assertPlanContains(sql, "<slot 12> : DATABASE()");
 
         sql = "select schema() from tall";
-        assertPlanContains(sql, "<slot 12> : 'test'");
+        assertPlanContains(sql, "<slot 12> : SCHEMA()");
 
         sql = "select user() from tall";
         assertPlanContains(sql, "<slot 12> : USER()");
