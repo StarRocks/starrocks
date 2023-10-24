@@ -590,7 +590,7 @@ CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 // this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
 // The value must be power of two.
-CONF_Int32(pk_index_map_shard_size, "32");
+CONF_Int32(pk_index_map_shard_size, "4096");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
