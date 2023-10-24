@@ -15,20 +15,9 @@
 package com.starrocks.credential.hdfs;
 
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationConstants;
 
 import java.util.Map;
-
-import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
-import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
 
 public class StrictHDFSCloudConfigurationProvider extends HDFSCloudConfigurationProvider {
     @Override
@@ -36,12 +25,17 @@ public class StrictHDFSCloudConfigurationProvider extends HDFSCloudConfiguration
         Map<String, String> prop = preprocessProperties(properties);
 
         HDFSCloudCredential hdfsCloudCredential = new StrictHDFSCloudCredential(
-                getOrDefault(properties, HDFS_AUTHENTICATION),
-                getOrDefault(properties, HDFS_USERNAME, HDFS_USERNAME_DEPRECATED),
-                getOrDefault(properties, HDFS_PASSWORD, HDFS_PASSWORD_DEPRECATED),
-                getOrDefault(properties, HDFS_KERBEROS_PRINCIPAL, HDFS_KERBEROS_PRINCIPAL_DEPRECATED),
-                getOrDefault(properties, HADOOP_KERBEROS_KEYTAB, HDFS_KERBEROS_KEYTAB_DEPRECATED),
-                getOrDefault(properties, HADOOP_KERBEROS_KEYTAB_CONTENT, HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
+                getOrDefault(properties, CloudConfigurationConstants.HDFS_AUTHENTICATION),
+                getOrDefault(properties, CloudConfigurationConstants.HDFS_USERNAME,
+                        CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED),
+                getOrDefault(properties, CloudConfigurationConstants.HDFS_PASSWORD,
+                        CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED),
+                getOrDefault(properties, CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL,
+                        CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED),
+                getOrDefault(properties, CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB,
+                        CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED),
+                getOrDefault(properties, CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT,
+                        CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED),
                 prop
         );
         if (!hdfsCloudCredential.validate()) {

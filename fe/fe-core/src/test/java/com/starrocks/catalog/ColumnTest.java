@@ -344,8 +344,8 @@ public class ColumnTest {
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
-        Assert.assertEquals(true, t0.has_bitmap_index);
-        Assert.assertEquals(true, t0.is_bloom_filter_column);
+        Assert.assertEquals(t0.has_bitmap_index, true);
+        Assert.assertEquals(t0.is_bloom_filter_column, true);
 
         Assert.assertEquals(f0.getUniqueId(), 0);
         f0.setUniqueId(1);

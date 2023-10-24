@@ -46,6 +46,7 @@ public class CloudConfigurationFactory {
             new GCPCloudConfigurationProvoder(),
             new AliyunCloudConfigurationProvider(),
             new TencentCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
             new StrictHDFSCloudConfigurationProvider(),
             (Map<String, String> properties) -> new CloudConfiguration());
 

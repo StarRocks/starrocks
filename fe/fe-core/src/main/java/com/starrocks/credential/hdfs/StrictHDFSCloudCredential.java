@@ -24,6 +24,9 @@ public class StrictHDFSCloudCredential extends HDFSCloudCredential {
 
     @Override
     public boolean validate() {
+        if (!authentication.isEmpty()) {
+            return authentication.equals(SIMPLE_AUTH) || authentication.equals(KERBEROS_AUTH);
+        }
         return true;
     }
 }

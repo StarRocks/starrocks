@@ -26,10 +26,9 @@ import java.util.Map;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class HDFSCloudCredential implements CloudCredential {
-    public static final String NO_AUTH = "no_auth";
     public static final String SIMPLE_AUTH = "simple";
     public static final String KERBEROS_AUTH = "kerberos";
-    private String authentication;
+    protected String authentication;
     private String userName;
     private String password;
     private String kerberosPrincipal;
@@ -69,14 +68,17 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
-        if (authentication.equals(SIMPLE_AUTH)) {
-            return true;
-        }
-        if (authentication.equals(KERBEROS_AUTH)) {
-            if (kerberosPrincipal.isEmpty()) {
-                return false;
+        if (!authentication.isEmpty()) {
+            if (authentication.equals(SIMPLE_AUTH)) {
+                return true;
             }
-            return !(keytab.isEmpty() && keytabContent.isEmpty());
+            if (authentication.equals(KERBEROS_AUTH)) {
+                if (kerberosPrincipal.isEmpty()) {
+                    return false;
+                }
+                return !(keytab.isEmpty() && keytabContent.isEmpty());
+            }
+            return false;
         }
 
         return false;
