@@ -71,6 +71,7 @@ import com.starrocks.http.rest.GetLoadInfoAction;
 import com.starrocks.http.rest.GetLogFileAction;
 import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.GetStreamLoadState;
+import com.starrocks.http.rest.GossipAction;
 import com.starrocks.http.rest.HealthAction;
 import com.starrocks.http.rest.IdleAction;
 import com.starrocks.http.rest.LoadAction;
@@ -211,6 +212,7 @@ public class HttpServer {
         QueryDumpAction.registerAction(controller);
         SyncCloudTableMetaAction.registerAction(controller);
         IdleAction.registerAction(controller);
+        GossipAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
