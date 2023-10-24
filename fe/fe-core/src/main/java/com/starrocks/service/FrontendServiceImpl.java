@@ -974,6 +974,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } else {
                 desc.setColumnKey("");
             }
+            desc.setDataType(column.getType().toMysqlDataTypeString());
+            desc.setColumnTypeStr(column.getType().toMysqlColumnTypeString());
             final TColumnDef colDef = new TColumnDef(desc);
             final String comment = column.getComment();
             if (comment != null) {

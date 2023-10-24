@@ -78,6 +78,9 @@ struct TColumnDesc {
   23: optional string dbName
   24: optional string tableName
   25: optional string columnDefault
+  // Let FE control the type, which makes it easier to modify and display complex types
+  26: optional string columnTypeStr
+  27: optional string dataType
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
