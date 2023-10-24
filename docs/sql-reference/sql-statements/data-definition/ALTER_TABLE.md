@@ -10,8 +10,6 @@ Modifies an existing table, including:
 - [Modify bitmap index](#modify-bitmap-indexes)
 - [Rename table, partition, index](#rename)
 - [Atomic swap](#swap)
-- [Modify table comment](#alter-table-comment-from-v31)
-- [Manual compaction](#manual-compaction-from-31))
 
 > **NOTE**
 >
@@ -24,11 +22,7 @@ ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
-<<<<<<< HEAD
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, and swap.
-=======
-`alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
->>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
@@ -36,11 +30,6 @@ alter_clause1[, alter_clause2, ...]
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
 - index: modifies index (only Bitmap index can be modified).
 - swap: atomic exchange of two tables.
-<<<<<<< HEAD
-=======
-- comment: modifies the table comment (supported from v3.1 onwards).
-- compact: performs manual compaction to merge versions of loaded data (supported from v3.1 onwards).
->>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 
 > **NOTE**
 >
@@ -432,49 +421,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
-<<<<<<< HEAD
-=======
-### Alter table comment (from v3.1)
-
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
-```
-
-### Manual compaction (from 3.1)
-
-StarRocks uses a compaction mechanism to merge different versions of loaded data. This feature can combine small files into large files, which effectively improves query performance.
-
-Before v3.1, compaction is performed in two ways:
-
-- Automatic compaction by system: Compaction is performed at the BE level in the background. Users cannot specify database or table for compaction.
-- Users can perform compaction by calling an HTTP interface.
-
-Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
-
-Syntax:
-
-```sql
--- Perform compaction on the entire table.
-ALTER TABLE <tbl_name> COMPACT
-
--- Perform compaction on a single partition.
-ALTER TABLE <tbl_name> COMPACT <partition_name>
-
--- Perform compaction on multiple partitions.
-ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
-
--- Perform cumulative compaction.
-ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
-
--- Perform base compaction.
-ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
-```
-
-The `be_compactions` table in the `information_schema` database records compaction results. You can run `SELECT * FROM information_schema.be_compactions;` to query data versions after compaction.
-
->>>>>>> 4dfe0ddb98 ([Doc] add manual compaction (#33552))
 ## Examples
 
 ### Table
@@ -775,37 +721,6 @@ Atomic swap between `table1` and `table2`.
 
 ```sql
 ALTER TABLE table1 SWAP WITH table2
-```
-
-### Example of manual compaction
-
-```sql
-CREATE TABLE compaction_test( 
-    event_day DATE,
-    pv BIGINT)
-DUPLICATE KEY(event_day)
-PARTITION BY date_trunc('month', event_day)
-DISTRIBUTED BY HASH(event_day) BUCKETS 8
-PROPERTIES("replication_num" = "3");
-
-INSERT INTO compaction_test VALUES
-('2023-02-14', 2),
-('2033-03-01',2);
-{'label':'insert_734648fa-c878-11ed-90d6-00163e0dcbfc', 'status':'VISIBLE', 'txnId':'5008'}
-
-INSERT INTO compaction_test VALUES
-('2023-02-14', 2),('2033-03-01',2);
-{'label':'insert_85c95c1b-c878-11ed-90d6-00163e0dcbfc', 'status':'VISIBLE', 'txnId':'5009'}
-
-ALTER TABLE compaction_test COMPACT;
-
-ALTER TABLE compaction_test COMPACT p203303;
-
-ALTER TABLE compaction_test COMPACT (p202302,p203303);
-
-ALTER TABLE compaction_test CUMULATIVE COMPACT (p202302,p203303);
-
-ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ```
 
 ## References
