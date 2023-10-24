@@ -2693,7 +2693,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             response.setPartition(
-                    OlapTableSink.createPartition(db.getId(), dictTable, dictTable.supportedAutomaticPartition(),
+                    OlapTableSink.createPartition(db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
                     dictTable.getAutomaticBucketSize(), allPartitions));
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
