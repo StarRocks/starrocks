@@ -73,6 +73,7 @@
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
   + [Export data using EXPORT](./unloading/Export.md)
+  + [Unload data using INSERT INTO FILES](./unloading/unload_using_insert_into_files.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
 + Query Data Lakes
