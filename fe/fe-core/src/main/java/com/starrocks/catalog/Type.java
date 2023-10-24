@@ -1776,4 +1776,14 @@ public abstract class Type implements Cloneable {
     public String canonicalName() {
         return toString();
     }
+
+    // This is used for information_schema.COLUMNS DATA_TYPE
+    public String toMysqlDataTypeString() {
+        return "unknown";
+    }
+
+    // This is used for information_schema.COLUMNS COLUMN_TYPE
+    public String toMysqlColumnTypeString() {
+        return "unknown";
+    }
 }
