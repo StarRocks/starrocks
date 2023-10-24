@@ -1517,6 +1517,7 @@ public class CoordinatorPreprocessor {
 
         TUniqueId instanceId;
         TNetworkAddress host;
+        TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         Map<Integer, List<TScanRangeParams>> perNodeScanRanges = Maps.newHashMap();
         Map<Integer, Map<Integer, List<TScanRangeParams>>> nodeToPerDriverSeqScanRanges = Maps.newHashMap();
 
@@ -1566,6 +1567,10 @@ public class CoordinatorPreprocessor {
             return perNodeScanRanges;
         }
 
+        public boolean isRuntimeFilterCoordinator() {
+            return runtimeFilterParams.isSetRuntime_filter_builder_number();
+        }
+
         public Map<Integer, Map<Integer, List<TScanRangeParams>>> getNodeToPerDriverSeqScanRanges() {
             return nodeToPerDriverSeqScanRanges;
         }
@@ -1601,7 +1606,6 @@ public class CoordinatorPreprocessor {
 
         public List<FInstanceExecParam> instanceExecParams = Lists.newArrayList();
         public FragmentScanRangeAssignment scanRangeAssignment = new FragmentScanRangeAssignment();
-        TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
         public boolean bucketSeqToInstanceForFilterIsSet = false;
 
         public FragmentExecParams(PlanFragment fragment) {
@@ -1658,9 +1662,6 @@ public class CoordinatorPreprocessor {
             }
             commonParams.setIs_stream_pipeline(isEnableStreamPipeline);
             commonParams.params.setPer_exch_num_senders(perExchNumSenders);
-            if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
-                commonParams.params.setRuntime_filter_params(runtimeFilterParams);
-            }
             commonParams.params.setSend_query_statistics_with_every_batch(
                     fragment.isTransferQueryStatisticsWithEveryBatch());
 
@@ -1766,6 +1767,9 @@ public class CoordinatorPreprocessor {
                 uniqueParams.setParams(new TPlanFragmentExecParams());
             }
             uniqueParams.params.setFragment_instance_id(instanceExecParam.instanceId);
+            if (instanceExecParam.runtimeFilterParams.isSetRuntime_filter_builder_number()) {
+                uniqueParams.params.setRuntime_filter_params(instanceExecParam.runtimeFilterParams);
+            }
 
             Map<Integer, List<TScanRangeParams>> scanRanges = instanceExecParam.perNodeScanRanges;
             if (scanRanges == null) {
