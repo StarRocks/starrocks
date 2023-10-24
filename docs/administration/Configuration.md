@@ -515,7 +515,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: 3
-- **Description**: Sets the default number of replicas for each data partition. This setting can be overridden by the `replication_num` property when creating a table in StarRocks. This setting takes precedence if the `replication_num` property is not specified. We recommend that you set this parameter to a value less than or equal to the actual number of BE nodes in the cluster.
+- **Description**: Sets the default number of replicas for each data partition. This setting can be overridden by the `replication_num` property when creating a table in StarRocks. This setting takes effect if the `replication_num` property is not specified. We recommend that you set this parameter to a value less than or equal to the actual number of BE nodes in the cluster.
 
 ##### enable_strict_storage_medium_check
 
