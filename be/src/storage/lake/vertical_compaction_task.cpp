@@ -113,12 +113,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         ASSIGN_OR_RETURN(auto segments, rowset->segments(false, true));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
-                auto uid = _tablet_schema->column(column_index).unique_id();
-                if (!segment->is_valid_column(uid)) {
-                    continue;
-                }
-
-                const auto* column_reader = segment->column_with_uid(uid);
+                const auto* column_reader = segment->column(column_index);
                 if (column_reader == nullptr) {
                     continue;
                 }
