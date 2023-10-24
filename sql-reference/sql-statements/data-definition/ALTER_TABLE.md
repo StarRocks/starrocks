@@ -2,7 +2,14 @@
 
 ## 功能
 
-该语句用于修改已有表的结构。
+该语句用于修改已有表的结构，包括：
+
+- [增加或删除分区，修改分区属性](#操作-partition-相关语法)
+- [创建或删除 rollup index](#操作-rollup-相关语法)
+- [执行 schema change](#schema-change)
+- [修改表名、分区名、索引名](#rename-对名称进行修改)
+- [修改 Bitmap 索引](#bitmap-index-修改)
+- [对表进行原子替换](#swap-将两个表原子替换)
 
 > **注意**
 >
@@ -13,24 +20,24 @@
 ALTER TABLE 语法格式如下：
 
 ```SQL
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 alter_clause1[, alter_clause2, ...]
 ```
 
 其中 **alter_clause** 分为 partition、rollup、schema change、rename、index、swap 操作，不同操作的应用场景为：
 
-* partition: 修改分区属性，删除分区，增加分区。
-* rollup: 创建或删除 rollup index。
-* schema change: 增加列，删除列，调整列顺序，修改列类型。
-* rename: 修改表名，rollup index 名称，修改 partition 名称，注意列名不支持修改。
-* index: 修改索引(目前支持 bitmap 索引)。
-* swap: 原子替换两张表。
+- partition: 修改分区属性，删除分区，增加分区。
+- rollup: 创建或删除 rollup index。
+- schema change: 增加列，删除列，调整列顺序，修改列类型。
+- rename: 修改表名，rollup index 名称，修改 partition 名称，注意列名不支持修改。
+- index: 修改索引(目前支持 bitmap 索引)。
+- swap: 原子替换两张表。
 
 > **说明**
 >
-> * partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
-> * rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
-> * partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
+> - partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
+> - rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
+> - partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
 
 ### 操作 partition 相关语法
 
@@ -39,8 +46,8 @@ alter_clause1[, alter_clause2, ...]
 语法：
 
 ```SQL
-ALTER TABLE [database.]table 
-ADD PARTITION [IF NOT EXISTS] partition_name
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD PARTITION [IF NOT EXISTS] <partition_name>
 partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
 ```
@@ -48,12 +55,14 @@ partition_desc ["key"="value"]
 注意：
 
 1. partition_desc 支持以下两种写法：
-    * VALUES LESS THAN [MAXVALUE|("value1", ...)]
-    * VALUES [("value1", ...), ("value1", ...))
+
+   - `VALUES LESS THAN [MAXVALUE|("value1", ...)]`
+   - `VALUES [("value1", ...), ("value1", ...)]`
+
 2. 分区为左闭右开区间，如果用户仅指定右边界，系统会自动确定左边界。
 3. 如果没有指定分桶方式，则自动使用建表使用的分桶方式。
 4. 如指定分桶方式，只能修改分桶数，不可修改分桶方式或分桶列。
-5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](../data-definition/CREATE_TABLE.md)。
+5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](./CREATE_TABLE.md)。
 
 #### 删除分区 (DROP PARTITION)
 
@@ -61,11 +70,11 @@ partition_desc ["key"="value"]
 
 ```sql
 -- 2.0之前版本
-ALTER TABLE [database.]table
-DROP PARTITION [IF EXISTS | FORCE] partition_name;
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITION [IF EXISTS | FORCE] <partition_name>;
 -- 2.0及之后版本
-ALTER TABLE [database.]table
-DROP PARTITION [IF EXISTS] partition_name [FORCE];
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
 ```
 
 注意：
@@ -81,8 +90,8 @@ DROP PARTITION [IF EXISTS] partition_name [FORCE];
 语法：
 
 ```SQL
-ALTER TABLE [database.]table 
-ADD TEMPORARY PARTITION [IF NOT EXISTS] partition_name
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD TEMPORARY PARTITION [IF NOT EXISTS] <partition_name>
 partition_desc ["key"="value"]
 [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
 ```
@@ -92,8 +101,8 @@ partition_desc ["key"="value"]
 语法：
 
 ```SQL
-ALTER TABLE [database.]table 
-REPLACE PARTITION partition_name 
+ALTER TABLE [<db_name>.]<tbl_name>
+REPLACE PARTITION <partition_name> 
 partition_desc ["key"="value"]
 WITH TEMPORARY PARTITION
 partition_desc ["key"="value"]
@@ -105,8 +114,8 @@ partition_desc ["key"="value"]
 语法：
 
 ```sql
-ALTER TABLE [database.]table
-DROP TEMPORARY PARTITION partition_name;
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP TEMPORARY PARTITION <partition_name>;
 ```
 
 #### 修改分区属性 (MODIFY PARTITION)
@@ -114,20 +123,20 @@ DROP TEMPORARY PARTITION partition_name;
 **语法：**
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
     MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
         SET ("key" = "value", ...);
 ```
 
 **使用说明：**
 
-* 当前支持修改分区的下列属性：
-  * storage_medium
-  * storage_cooldown_ttl 或 storage_cooldown_time
-  * replication_num
+- 当前支持修改分区的下列属性：
+  - storage_medium
+  - storage_cooldown_ttl 或 storage_cooldown_time
+  - replication_num
 
-* 对于单分区表，分区名同表名。对于多分区表，如果需要修改所有分区的属性，则使用 `(*)` 更加方便。
-* 执行 `SHOW PARTITIONS FROM <table_name>` 查看修改后分区属性。
+- 对于单分区表，分区名同表名。对于多分区表，如果需要修改所有分区的属性，则使用 `(*)` 更加方便。
+- 执行 `SHOW PARTITIONS FROM <tbl_name>` 查看修改后分区属性。
 
 ### 操作 rollup 相关语法
 
@@ -138,7 +147,7 @@ ALTER TABLE [database.]table
 语法：
 
 ```SQL
-ALTER TABLE [database.]table 
+ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)];
@@ -149,7 +158,7 @@ properties: 支持设置超时时间，默认超时时间为 1 天。
 例子：
 
 ```SQL
-ALTER TABLE [database.]table 
+ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
 ```
 
@@ -158,7 +167,7 @@ ADD ROLLUP r1(col1,col2) from r0;
 语法：
 
 ```SQL
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)],...];
@@ -167,7 +176,7 @@ ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
 例子：
 
 ```SQL
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 ```
 
@@ -182,14 +191,14 @@ ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 语法：
 
 ```SQL
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
 ```
 
 例子：
 
 ```sql
-ALTER TABLE [database.]table DROP ROLLUP r1;
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
 ```
 
 #### 批量删除 rollup index
@@ -197,14 +206,14 @@ ALTER TABLE [database.]table DROP ROLLUP r1;
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
 ```
 
 例子：
 
 ```sql
-ALTER TABLE [database.]table DROP ROLLUP r1, r2;
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
 ```
 
 注意：
@@ -222,7 +231,7 @@ base index 和 rollup index 都是物化索引。下方语句在编写时如果�
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 [AFTER column_name|FIRST]
 [TO rollup_index_name]
@@ -241,12 +250,24 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 语法：
 
-```sql
-ALTER TABLE [database.]table
-ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...)
-[TO rollup_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
+- 添加多列:
+
+  ```sql
+  ALTER TABLE [<db_name>.]<tbl_name>
+  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", ...)
+  [TO rollup_index_name]
+  [PROPERTIES ("key"="value", ...)]
+  ```
+
+- 添加多列的同时通过 `AFTER` 指定列的添加位置：
+
+  ```sql
+  ALTER TABLE [<db_name>.]<tbl_name>
+  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  ADD COLUMN (column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  [TO rollup_index_name]
+  [PROPERTIES ("key"="value", ...)]
+  ```
 
 注意：
 
@@ -259,7 +280,7 @@ ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value", .
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP COLUMN column_name
 [FROM rollup_index_name];
 ```
@@ -274,7 +295,7 @@ DROP COLUMN column_name
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 [AFTER column_name|FIRST]
 [FROM rollup_index_name]
@@ -289,15 +310,15 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 4. 分区列不能做任何修改。
 5. 目前支持以下类型的转换（精度损失由用户保证）：
 
-    * TINYINT/SMALLINT/INT/BIGINT 转换成 TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
-    * TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
-    * VARCHAR 支持修改最大长度。
-    * VARCHAR 转换成 TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
-    * VARCHAR 转换成 DATE (目前支持 "%Y-%m-%d"，"%y-%m-%d"， "%Y%m%d"，"%y%m%d"，"%Y/%m/%d，"%y/%m/%d " 六种格式化格式)
+    - TINYINT/SMALLINT/INT/BIGINT 转换成 TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
+    - TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL 转换成 VARCHAR。
+    - VARCHAR 支持修改最大长度。
+    - VARCHAR 转换成 TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
+    - VARCHAR 转换成 DATE (目前支持 "%Y-%m-%d"，"%y-%m-%d"， "%Y%m%d"，"%y%m%d"，"%Y/%m/%d，"%y/%m/%d " 六种格式化格式)
     DATETIME 转换成 DATE(仅保留年-月-日信息，例如: `2019-12-09 21:47:05` &lt;--&gt; `2019-12-09`)
     DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` &lt;--&gt; `2019-12-09 00:00:00`)
-    * FLOAT 转换成 DOUBLE。
-    * INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
+    - FLOAT 转换成 DOUBLE。
+    - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
 
 6. 不支持从 NULL 转为 NOT NULL。
 
@@ -306,7 +327,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ORDER BY (column_name1, column_name2, ...)
 [FROM rollup_index_name]
 [PROPERTIES ("key"="value", ...)]
@@ -337,7 +358,7 @@ PROPERTIES ("key"="value")
 语法：
 
 ```sql
-ALTER TABLE table_name RENAME new_table_name;
+ALTER TABLE <tbl_name> RENAME <new_tbl_name>;
 ```
 
 #### 修改 rollup index 名称 (RENAME ROLLUP)
@@ -345,7 +366,7 @@ ALTER TABLE table_name RENAME new_table_name;
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 RENAME ROLLUP old_rollup_name new_rollup_name;
 ```
 
@@ -354,8 +375,8 @@ RENAME ROLLUP old_rollup_name new_rollup_name;
 语法：
 
 ```sql
-ALTER TABLE [database.]table
-RENAME PARTITION old_partition_name new_partition_name;
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```
 
 ### Bitmap index 修改
@@ -365,7 +386,7 @@ RENAME PARTITION old_partition_name new_partition_name;
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -381,7 +402,7 @@ ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 语法：
 
 ```sql
-ALTER TABLE [database.]table
+ALTER TABLE [<db_name>.]<tbl_name>
 DROP INDEX index_name;
 ```
 
@@ -390,8 +411,8 @@ DROP INDEX index_name;
 语法：
 
 ```sql
-ALTER TABLE [database.]table
-SWAP WITH table_name;
+ALTER TABLE [<db_name>.]<tbl_name>
+SWAP WITH <tbl_name>;
 ```
 
 ## 示例
@@ -556,7 +577,16 @@ SWAP WITH table_name;
     TO example_rollup_index;
     ```
 
-6. 从 `example_rollup_index` 删除一列。
+6. 向 `example_rollup_index` 添加多列并通过 `AFTER` 指定列的添加位置。
+
+    ```sql
+    ALTER TABLE example_db.my_table
+    ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    TO example_rollup_index;
+    ```
+
+7. 从 `example_rollup_index` 删除一列。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -564,21 +594,21 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-7. 修改 base index 的 `col1` 列的类型为 BIGINT，并移动到 `col2` 列后面。
+8. 修改 base index 的 `col1` 列的类型为 BIGINT，并移动到 `col2` 列后面。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN col1 BIGINT DEFAULT "1" AFTER col2;
     ```
 
-8. 修改 base index 的 `val1` 列最大长度。原 `val1` 为 (`val1 VARCHAR(32) REPLACE DEFAULT "abc"`)。
+9. 修改 base index 的 `val1` 列最大长度。原 `val1` 为 (`val1 VARCHAR(32) REPLACE DEFAULT "abc"`)。
 
     ```sql
     ALTER TABLE example_db.my_table
     MODIFY COLUMN val1 VARCHAR(64) REPLACE DEFAULT "abc";
     ```
 
-9. 重新排序 `example_rollup_index` 中的列（设原列顺序为：k1, k2, k3, v1, v2）。
+10. 重新排序 `example_rollup_index` 中的列（设原列顺序为：k1, k2, k3, v1, v2）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -586,7 +616,7 @@ SWAP WITH table_name;
     FROM example_rollup_index;
     ```
 
-10. 同时执行两种操作。
+11. 同时执行两种操作。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -594,7 +624,7 @@ SWAP WITH table_name;
     ORDER BY (k3,k1,k2,v2,v1) FROM example_rollup_index;
     ```
 
-11. 修改表的 bloom filter 列。
+12. 修改表的 bloom filter 列。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -609,21 +639,21 @@ SWAP WITH table_name;
     PROPERTIES ("bloom_filter_columns"="k1,k2,k3");
     ```
 
-12. 修改表的 Colocate 属性。
+13. 修改表的 Colocate 属性。
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("colocate_with" = "t1");
     ```
 
-13. 将表的分桶方式由 Random Distribution 改为 Hash Distribution。
+14. 将表的分桶方式由 Random Distribution 改为 Hash Distribution。
 
     ```sql
     ALTER TABLE example_db.my_table
     SET ("distribution_type" = "hash");
     ```
 
-14. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
+15. 修改表的动态分区属性(支持未添加动态分区属性的表添加动态分区属性)。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -645,7 +675,7 @@ SWAP WITH table_name;
 
 ### rename
 
-1. 将名为 `table1` 的表修改为 `table2`。
+1. 将表 `table1` 的名称修改为 `table2`。
 
     ```sql
     ALTER TABLE table1 RENAME table2;
@@ -686,10 +716,10 @@ SWAP WITH table_name;
 ALTER TABLE table1 SWAP WITH table2;
 ```
 
-## 参考文档
+## 相关参考
 
-* [CREATE TABLE](CREATE_TABLE.md)
-* [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
-* [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
-* [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md)
-* [DROP TABLE](DROP_TABLE.md)
+- [CREATE TABLE](./CREATE_TABLE.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md)
+- [DROP TABLE](./DROP_TABLE.md)
