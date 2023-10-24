@@ -179,9 +179,10 @@ public class HashJoinCostModel {
             }
 
             if (keyStatistics.isUnknown()) {
-                keySize += keyStatistics.getAverageRowSize();
-            } else {
+                // can't trust unknown statistics, may be produced by other node
                 keySize += buildMapOp.getType().getTypeSize();
+            } else {
+                keySize += keyStatistics.getAverageRowSize();
             }
         }
         return keySize;
