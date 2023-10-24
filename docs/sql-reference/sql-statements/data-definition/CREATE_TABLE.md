@@ -561,7 +561,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
 
-To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
+To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
 
 ```SQL
 PROPERTIES (
@@ -916,7 +916,7 @@ PROPERTIES(
 
 ### Create a Hive external table
 
-Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#hive-external-table).
+Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#deprecated-hive-external-table).
 
 ```SQL
 CREATE EXTERNAL TABLE example_db.table_hive
