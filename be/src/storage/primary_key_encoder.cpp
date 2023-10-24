@@ -425,7 +425,21 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
-        dest->append(*src, offset, len);
+        if (dest->is_large_binary() && src->is_binary()) {
+            auto& bdest = down_cast<vectorized::LargeBinaryColumn&>(*dest);
+            auto& bsrc = down_cast<vectorized::BinaryColumn&>(*src);
+            for (size_t i = 0; i < len; i++) {
+                bdest.append(bsrc.get_slice(offset + i));
+            }
+        } else if (dest->is_binary() && src->is_large_binary()) {
+            auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+            auto& bsrc = down_cast<vectorized::LargeBinaryColumn&>(*src);
+            for (size_t i = 0; i < len; i++) {
+                bdest.append(bsrc.get_slice(offset + i));
+            }
+        } else {
+            dest->append(*src, offset, len);
+        }
     } else {
         CHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
