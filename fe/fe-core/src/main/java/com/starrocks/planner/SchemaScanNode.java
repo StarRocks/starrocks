@@ -63,13 +63,6 @@ import java.util.List;
  * Full scan of an SCHEMA table.
  */
 public class SchemaScanNode extends ScanNode {
-<<<<<<< HEAD
-=======
-
-    private static final Logger LOG = LogManager.getLogger(SchemaScanNode.class);
-
-    private String catalogName;
->>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
     private final String tableName;
     private String schemaDb;
     private String schemaTable;
