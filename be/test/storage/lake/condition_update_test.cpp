@@ -170,9 +170,7 @@ protected:
 TEST_P(ConditionUpdateTest, test_condition_update) {
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -242,9 +240,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
 TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
     auto chunk0 = generate_data(kChunkSize, 0, 3, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -307,9 +303,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
 TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
     // condition update
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
     Chunk chunks[2];
     chunks[0] = generate_data(kChunkSize, 0, 4, 5);
     chunks[1] = generate_data(kChunkSize, 0, 3, 6);

@@ -28,7 +28,6 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/pk_tablet_writer.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"

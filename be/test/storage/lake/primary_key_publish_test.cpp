@@ -108,9 +108,7 @@ public:
             auto rng = std::default_random_engine{};
             std::shuffle(v0.begin(), v0.end(), rng);
         }
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -255,9 +253,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         chunks.emplace_back(gen_data(kChunkSize, i, true));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();

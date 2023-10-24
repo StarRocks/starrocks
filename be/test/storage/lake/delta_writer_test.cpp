@@ -90,14 +90,10 @@ protected:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -194,9 +190,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Create and open DeltaWriter
     auto txn_id = next_id();
@@ -273,9 +267,7 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
     static const int kChunkSize = 12;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
     bool invoked = false;
 
     SyncPoint::GetInstance()->EnableProcessing();
@@ -318,9 +310,7 @@ TEST_F(LakeDeltaWriterTest, test_close) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Create and open DeltaWriter
     auto txn_id = next_id();
@@ -357,9 +347,7 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     static const int kChunkSize = 1;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Create and open DeltaWriter
     auto txn_id = next_id();
@@ -443,9 +431,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Create and open DeltaWriter
     auto txn_id = next_id();
@@ -489,9 +475,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Change the memory limit to a very small value
     _mem_tracker->set_limit(1);
@@ -540,9 +524,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Change the memory limit to a very small value
     _parent_tracker->set_limit(1);
@@ -591,9 +573,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     static const int kChunkSize = 128;
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     // Change the memtable capacity to a very small value
     auto backup = config::write_buffer_size;

@@ -108,14 +108,10 @@ protected:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -154,9 +150,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -272,14 +266,10 @@ protected:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -318,9 +308,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -453,14 +441,10 @@ protected:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -499,9 +483,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -601,14 +583,10 @@ protected:
     Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -647,9 +625,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();

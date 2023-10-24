@@ -120,9 +120,7 @@ public:
             std::iota(v1.begin(), v1.end(), 1);
         }
 
-        for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
-        }
+        std::iota(v0.begin(), v0.end(), 0);
 
         auto c0 = Int32Column::create();
         auto c1 = Int64Column::create();
@@ -184,9 +182,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_write) {
     auto chunk0 = generate_data(kChunkSize, false);
     auto chunk1 = generate_data(kChunkSize, true);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -254,9 +250,7 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
     auto chunk0 = generate_data(kChunkSize, false);
     auto chunk1 = generate_data(kChunkSize, true);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();

@@ -114,9 +114,7 @@ protected:
         }
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -133,9 +131,7 @@ protected:
         }
         auto rng = std::default_random_engine{};
         std::shuffle(v0.begin(), v0.end(), rng);
-        for (int i = 0; i < chunk_size; i++) {
-            v1[i] = v0[i] * 3;
-        }
+        std::generate(v1.begin(), v1.end(), [&, n = 0]() mutable { return v0[n++] * 3; });
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -203,9 +199,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -269,9 +263,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -329,9 +321,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
     auto indexes_empty = std::vector<uint32_t>();
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -387,9 +377,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -582,9 +570,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -635,9 +621,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
         chunks.push_back(generate_data2(kChunkSize, 3, i));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
-    for (int i = 0; i < kChunkSize; i++) {
-        indexes[i] = i;
-    }
+    std::iota(indexes.begin(), indexes.end(), 0);
     // write chunk without order
     std::vector<int> chunk_write_without_order = {1, 0, 2};
 

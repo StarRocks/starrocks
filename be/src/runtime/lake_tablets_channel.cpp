@@ -17,8 +17,6 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
-#include <chrono>
-#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -38,7 +36,6 @@
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
 #include "storage/memtable.h"
-#include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
@@ -227,8 +224,10 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                    PTabletWriterAddBatchResult* response) {
+    constexpr static int64_t kDefaultTimeoutMs = 30L * 60 * 1000; // 30 minutes
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
-    auto t0 = std::chrono::steady_clock::now();
+    auto start_time_us = butil::gettimeofday_us();
+    auto timeout_deadline_ms = start_time_us / 1000 + request.timeout_ms() ? request.timeout_ms() : kDefaultTimeoutMs;
     int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
@@ -311,17 +310,15 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
-            auto t1 = std::chrono::steady_clock::now();
-            if (std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() > request.timeout_ms()) {
+            auto t1 = butil::gettimeofday_us();
+            if (t1 / 1000 > timeout_deadline_ms) {
                 LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                           << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
                           << "ms still has queueing num " << dw->queueing_memtable_num();
                 break;
             }
             bthread_usleep(10000); // 10ms
-            wait_memtable_flush_time_us +=
-                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1)
-                            .count();
+            wait_memtable_flush_time_us += butil::gettimeofday_us() - t1;
         }
 
         if (auto st = dw->open(); !st.ok()) { // Fail to `open()` AsyncDeltaWriter
@@ -330,10 +327,14 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             // Do NOT return
             break;
         }
-        dw->write(chunk, row_indexes + from, size, [&](const Status& st) {
+
+        auto callback = [&](const Status& st) {
             context->update_status(st);
             count_down_latch.count_down();
-        });
+        };
+
+        AsyncDeltaWriter::Options options{.timeout_ms = timeout_deadline_ms - butil::gettimeofday_ms()};
+        dw->write(options, chunk, row_indexes + from, size, std::move(callback));
     }
 
     // _channel_row_idx_start_points no longer used, free its memory.
@@ -363,7 +364,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     count_down_latch.count_down();
                     continue;
                 }
-                dw->finish([&, id = tablet_id](const Status& st) {
+                AsyncDeltaWriter::Options options{.timeout_ms = timeout_deadline_ms - butil::gettimeofday_ms()};
+                dw->finish(options, [&, id = tablet_id](const Status& st) {
                     if (st.ok()) {
                         context->add_finished_tablet(id);
                         VLOG(5) << "Finished tablet " << id;
@@ -405,8 +407,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // we need to proactively perform a flush when memory resources are insufficient.
     _flush_stale_memtables();
 
-    auto t1 = std::chrono::steady_clock::now();
-    response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+    auto t1 = butil::gettimeofday_us();
+    response->set_execution_time_us(t1 - start_time_us);
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
     response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_us);
 
@@ -415,8 +417,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     } else if (request.eos() && request.wait_all_sender_close()) {
         std::string msg = fmt::format("LakeTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         // wait for senders to be closed, may be timed out
-        auto remain = request.timeout_ms();
-        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+        auto remain = timeout_deadline_ms - butil::gettimeofday_ms();
         LOG(INFO) << msg << ", wait for all senders closed ...";
 
         // unlock write lock so that incremental open can aquire read lock
@@ -441,23 +442,27 @@ void LakeTabletsChannel::_flush_stale_memtables() {
         high_mem_usage = true;
     }
 
+    AsyncDeltaWriter::Options options{.timeout_ms = /*10 minutes=*/10L * 60 * 1000};
     int64_t now = butil::gettimeofday_s();
     for (auto& [tablet_id, writer] : _delta_writers) {
         bool log_flushed = false;
         auto last_write_ts = writer->last_write_ts();
+        auto cb = [=](Status err) {
+            LOG_IF(WARNING, !err.ok()) << "Fail to flush async delta writer of tablet " << tablet_id << ": " << err;
+        };
         if (last_write_ts > 0) {
             if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
                 if (high_mem_usage) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(options, cb);
                 } else if (now - last_write_ts > 1) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(options, cb);
                 }
             } else {
                 if (high_mem_usage && now - last_write_ts > config::stale_memtable_flush_time_sec) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(options, cb);
                 }
             }
             if (log_flushed) {
