@@ -1154,10 +1154,11 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
 
 const Slice* PrimaryIndex::_build_persistent_keys(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                                   std::vector<Slice>* key_slices) const {
-    if (pks.is_binary()) {
+    if (pks.is_binary() || pks.is_large_binary()) {
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
+        CHECK(_key_size > 0);
         const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
