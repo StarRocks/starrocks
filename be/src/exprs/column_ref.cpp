@@ -52,7 +52,7 @@ StatusOr<ColumnPtr> ColumnRef::evaluate_checked(ExprContext* context, Chunk* ptr
 }
 
 ColumnPtr& ColumnRef::get_column(Expr* expr, Chunk* chunk) {
-    auto* ref = (ColumnRef*)expr;
+    auto* ref = down_cast<ColumnRef*>(expr);
     ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
     return column;
 }

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -59,27 +58,22 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
-        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        PlanNode buildStageNode = this.getChild(1);
+
+        if (!ConnectContext.get().getSessionVariable().isEnableCrossJoinRuntimeFilter()) {
+            return;
+        }
+
         List<Expr> conjuncts = new ArrayList<>(otherJoinConjuncts);
         conjuncts.addAll(getConjuncts());
         for (int i = 0; i < conjuncts.size(); i++) {
             Expr expr = conjuncts.get(i);
-            if (canBuildFilter(expr)) {
+            if (expr.getChildren().size() == 2) {
                 Expr left = expr.getChild(0);
                 Expr right = expr.getChild(1);
-
-                RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
-                rf.setFilterId(generator.getNextId().asInt());
-                rf.setBuildPlanNodeId(getId().asInt());
-                rf.setExprOrder(i);
-                rf.setJoinMode(DistributionMode.BROADCAST);
-                rf.setBuildCardinality(buildStageNode.getCardinality());
-                rf.setOnlyLocal(true);
-                rf.setBuildExpr(right);
-
-                if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
-                    this.getBuildRuntimeFilters().add(rf);
+                if (canBuildFilter(expr, left, right)) {
+                    pushDownCrossJoinFilter(generator, descTbl, left, right, i);
+                } else if (canBuildFilter(expr, right, left)) {
+                    pushDownCrossJoinFilter(generator, descTbl, right, left, i);
                 }
             }
         }
@@ -87,25 +81,32 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     // Only binary op could build a filter
     // And some special cases are not suitable for build a filter, such as NOT_EQ
-    private boolean canBuildFilter(Expr joinExpr) {
-        if (joinExpr.getChildren().size() != 2) {
+    private boolean canBuildFilter(Expr joinExpr, Expr probeExpr, Expr buildExpr) {
+        if (!(probeExpr instanceof SlotRef)) {
             return false;
         }
-        Expr leftExpr = joinExpr.getChild(0);
-        Expr rightExpr = joinExpr.getChild(1);
-        PlanNode leftChild = getChild(0);
-        PlanNode rightChild = getChild(1);
+        PlanNode probeChild = getChild(0);
+        PlanNode buildChild = getChild(1);
+        return probeExpr.isBoundByTupleIds(probeChild.getTupleIds()) &&
+                buildExpr.isBoundByTupleIds(buildChild.getTupleIds());
+    }
 
-        if (!(leftExpr instanceof SlotRef)) {
-            return false;
+    private void pushDownCrossJoinFilter(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                         Expr probeExpr, Expr buildExpr, int idx) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        PlanNode buildStageNode = this.getChild(1);
+        RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
+        rf.setFilterId(generator.getNextId().asInt());
+        rf.setBuildPlanNodeId(getId().asInt());
+        rf.setExprOrder(idx);
+        rf.setJoinMode(DistributionMode.BROADCAST);
+        rf.setBuildCardinality(buildStageNode.getCardinality());
+        rf.setOnlyLocal(true);
+        rf.setBuildExpr(buildExpr);
+
+        if (getChild(0).pushDownRuntimeFilters(descTbl, rf, probeExpr, probePartitionByExprs)) {
+            this.getBuildRuntimeFilters().add(rf);
         }
-        if (joinExpr instanceof BinaryPredicate && ((BinaryPredicate) joinExpr).getOp().isUnequivalence()) {
-            return false;
-        }
-        if (!leftExpr.isBoundByTupleIds(leftChild.getTupleIds())) {
-            return false;
-        }
-        return rightExpr.isBoundByTupleIds(rightChild.getTupleIds());
     }
 
     @Override

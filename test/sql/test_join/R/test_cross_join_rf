@@ -1,0 +1,75 @@
+-- name: test_cross_join_rf
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+create table t1 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 values(1, 1);
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] t1 r on l.c0 <= r.c0;
+-- result:
+2
+-- !result
+select count(*) from t0 l join [broadcast] t1 r on r.c0 >= l.c0;
+-- result:
+2
+-- !result
+truncate table t1;
+-- result:
+-- !result
+insert into t1 values(NULL, NULL);
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] t1 r on l.c0 <= r.c0;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] t1 r on r.c0 >= l.c0;
+-- result:
+0
+-- !result
+select count(*) from t0 l join [broadcast] t1 r on l.c0 <= r.c0 and l.c0 >= r.c0;
+-- result:
+0
+-- !result
+create table t2 (
+    c0 STRING,
+    c1 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+create table t3 (
+    c0 STRING,
+    c1 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t3 values (9, 9)
+select count(*) from t2 l join [broadcast] t3 r on l.c0 like r.c0;
+-- result:
+E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'select', the most similar input is {<EOF>, ';'}.")
+-- !result
+select count(*) from t2 l join [broadcast] t3 r on l.c0 like concat('%',r.c0,'%');
+-- result:
+0
+-- !result

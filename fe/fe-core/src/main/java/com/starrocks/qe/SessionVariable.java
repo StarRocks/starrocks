@@ -318,6 +318,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
+    public static final String ENABLE_CROSS_JOIN_RUNTIME_FILTER = "enable_cross_join_runtime_filter";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
@@ -1018,6 +1019,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+
+    @VariableMgr.VarAttr(name = ENABLE_CROSS_JOIN_RUNTIME_FILTER)
+    private boolean enableCrossJoinRuntimeFilter = true;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -2010,6 +2014,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public boolean isEnableCrossJoinRuntimeFilter() {
+        return enableCrossJoinRuntimeFilter;
     }
 
     public boolean isMVPlanner() {

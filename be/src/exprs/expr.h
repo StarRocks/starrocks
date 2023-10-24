@@ -61,6 +61,7 @@ struct UserFunctionCacheEntry;
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
+class ExprRewriter;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -220,6 +221,7 @@ protected:
     friend class Literal;
     friend class ExprContext;
     friend class ColumnPredicateRewriter;
+    friend class ExprRewriter;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);

@@ -17,7 +17,10 @@
 #include <thread>
 
 #include "column/column.h"
+#include "common/object_pool.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_rewriter.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
 #include "exprs/runtime_filter.h"
@@ -155,31 +158,35 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
                                                                                       ExprContext* conjunct,
                                                                                       Chunk* chunk) {
-    auto left_child = conjunct->root()->get_child(0);
-    auto right_child = conjunct->root()->get_child(1);
-    // all of the child(1) in expr is in build chunk
-    ASSIGN_OR_RETURN(auto res, conjunct->evaluate(right_child, chunk));
-    DCHECK_EQ(res->size(), 1);
-    ColumnPtr col;
-    if (res->is_constant()) {
-        col = res;
-    } else if (res->is_nullable()) {
-        if (res->is_null(0)) {
-            col = ColumnHelper::create_const_null_column(1);
-        } else {
-            auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
-            col = std::make_shared<ConstColumn>(data_col, 1);
+    ExprRewriter rewriter(pool, conjunct->root());
+    // NOTE: chunk should be immutable
+    ASSIGN_OR_RETURN(auto new_expr, rewriter.rewrite([chunk](Expr* expr, ObjectPool* pool) -> StatusOr<Expr*> {
+        if (!expr->is_slotref()) {
+            return expr->clone(pool);
         }
-    } else {
-        col = std::make_shared<ConstColumn>(res, 1);
-    }
+        auto ref = expr->get_column_ref();
+        // if column ref exist in build chunk. we rewrite it as literal
+        if (chunk->is_slot_exist(ref->slot_id())) {
+            auto res = ColumnRef::get_column(ref, chunk);
+            DCHECK_EQ(res->size(), 1);
+            ColumnPtr col;
+            if (res->is_constant()) {
+                col = res;
+            } else if (res->is_nullable()) {
+                if (res->is_null(0)) {
+                    col = ColumnHelper::create_const_null_column(1);
+                } else {
+                    auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
+                    col = std::make_shared<ConstColumn>(data_col, 1);
+                }
+            } else {
+                col = std::make_shared<ConstColumn>(res, 1);
+            }
+            return pool->add(new VectorizedLiteral(std::move(col), ref->type()));
+        }
+        return expr->clone(pool);
+    }));
 
-    auto literal = pool->add(new VectorizedLiteral(std::move(col), right_child->type()));
-    auto new_expr = conjunct->root()->clone(pool);
-    auto new_left = left_child->clone(pool);
-    new_expr->clear_children();
-    new_expr->add_child(new_left);
-    new_expr->add_child(literal);
     return pool->add(new ExprContext(new_expr));
 }
 

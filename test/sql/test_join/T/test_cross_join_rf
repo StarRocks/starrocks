@@ -1,0 +1,41 @@
+-- name: test_cross_join_rf
+-- prepare probe table
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+insert into t0 select * from t0;
+-- prepare build table t1
+create table t1 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- nullable
+truncate table t1;
+insert into t1 values(1, 1);
+select count(*) from t0 l join [broadcast] t1 r on l.c0 <= r.c0;
+select count(*) from t0 l join [broadcast] t1 r on r.c0 >= l.c0;
+
+-- nullable only null
+truncate table t1;
+insert into t1 values(NULL, NULL);
+select count(*) from t0 l join [broadcast] t1 r on l.c0 <= r.c0;
+select count(*) from t0 l join [broadcast] t1 r on r.c0 >= l.c0;
+
+-- multi predicate
+select count(*) from t0 l join [broadcast] t1 r on l.c0 <= r.c0 and l.c0 >= r.c0;
+
+create table t2 (
+    c0 STRING,
+    c1 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+create table t3 (
+    c0 STRING,
+    c1 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t2 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+insert into t3 values (9, 9)
+-- special string expr
+select count(*) from t2 l join [broadcast] t3 r on l.c0 like r.c0;
+select count(*) from t2 l join [broadcast] t3 r on l.c0 like concat('%',r.c0,'%');
