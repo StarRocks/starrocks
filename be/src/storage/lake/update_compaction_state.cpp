@@ -47,6 +47,8 @@ Status CompactionState::load_segments(Rowset* rowset, const TabletSchemaCSPtr& t
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
+static const size_t large_compaction_memory_threshold = 1000000000;
+
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
@@ -56,7 +58,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
-    CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok());
+    CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
 
     OlapReaderStatistics stats;
     auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
@@ -92,10 +94,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
         itr->close();
     }
     dest = std::move(col);
-    dest->raw_data();
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
-
     return Status::OK();
 }
 
