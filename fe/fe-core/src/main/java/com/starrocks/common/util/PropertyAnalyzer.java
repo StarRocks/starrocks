@@ -65,6 +65,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -294,11 +295,7 @@ public class PropertyAnalyzer {
         return shortKeyColumnCount;
     }
 
-<<<<<<< HEAD
     public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
-=======
-    public static int analyzePartitionTTLNumber(Map<String, String> properties) {
->>>>>>> 8bd490a9fe ([Feature] add support for partition_ttl  on materialized view (#31479))
         int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {

@@ -3057,7 +3057,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // partition ttl number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-                int number = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+                int number = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
