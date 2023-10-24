@@ -66,7 +66,7 @@ private:
     void _build_metacache_key();
 
     // parse footer of parquet file
-    Status _parse_footer(FileMetaData** file_metadata, size_t* metadata_size);
+    Status _parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size);
 
     void _prepare_read_columns();
 

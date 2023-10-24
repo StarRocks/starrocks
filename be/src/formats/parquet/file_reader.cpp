@@ -25,6 +25,7 @@
 #include "formats/parquet/metadata.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "util/coding.h"
 #include "util/defer_op.h"
@@ -71,7 +72,7 @@ void FileReader::_build_metacache_key() {
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    if (ctx->use_file_metacache && config::block_cache_enable) {
+    if (ctx->use_file_metacache && config::datacache_enable) {
         _build_metacache_key();
         _cache = BlockCache::instance();
     }
@@ -104,7 +105,7 @@ FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata;
 }
 
-Status FileReader::_parse_footer(FileMetaData** file_metadata, size_t* metadata_size) {
+Status FileReader::_parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
     footer_buffer.resize(footer_read_size);
@@ -135,17 +136,22 @@ Status FileReader::_parse_footer(FileMetaData** file_metadata, size_t* metadata_
     RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
                                                    PARQUET_FOOTER_SIZE - metadata_length,
                                            &metadata_length, TProtocolType::COMPACT, &t_metadata));
+    int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
     *file_metadata = new FileMetaData();
-    *metadata_size = metadata_length;
     RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
+    *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
+#ifdef BE_TEST
+    *file_metadata_size = sizeof(FileMetaData);
+#endif
+
     return Status::OK();
 }
 
 Status FileReader::_get_footer() {
     _is_metadata_cached = false;
     if (!_cache) {
-        size_t metadata_size = 0;
-        return _parse_footer(&_file_metadata, &metadata_size);
+        int64_t file_metadata_size = 0;
+        return _parse_footer(&_file_metadata, &file_metadata_size);
     }
 
     {
@@ -159,18 +165,21 @@ Status FileReader::_get_footer() {
         }
     }
 
-    size_t metadata_size = 0;
+    int64_t file_metadata_size = 0;
     FileMetaData* file_metadata = nullptr;
-    RETURN_IF_ERROR(_parse_footer(&file_metadata, &metadata_size));
-    size_t metadata_space = metadata_size + 8 + file_metadata->estimate_memory();
-
-    auto deleter = [file_metadata]() { delete file_metadata; };
-    Status st = _cache->write_object(_metacache_key, file_metadata, metadata_space, deleter, &_cache_handle);
-    if (st.ok()) {
-        _scanner_ctx->stats->footer_cache_write_bytes += metadata_space;
-        _scanner_ctx->stats->footer_cache_write_count += 1;
-        _is_metadata_cached = true;
+    RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
+    if (file_metadata_size > 0) {
+        auto deleter = [file_metadata]() { delete file_metadata; };
+        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle);
+        if (st.ok()) {
+            _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
+            _scanner_ctx->stats->footer_cache_write_count += 1;
+            _is_metadata_cached = true;
+        }
+    } else {
+        LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }
+
     _file_metadata = file_metadata;
     return Status::OK();
 }
