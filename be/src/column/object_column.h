@@ -42,6 +42,7 @@ class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
 
 public:
     using ValueType = T;
+    using Container = Buffer<ValueType*>;
 
     ObjectColumn() = default;
 
