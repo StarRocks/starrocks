@@ -497,6 +497,10 @@ public class MvUtils {
         if (predicate == null) {
             return null;
         }
+<<<<<<< HEAD
+=======
+        // do not change original predicate, clone it here
+>>>>>>> 2d6ba6abb1 ([BugFix] clone a scalarOperator before rewriting it (#33535))
         ScalarOperator cloned = predicate.clone();
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
         return rewrite.rewrite(cloned, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
@@ -513,6 +517,10 @@ public class MvUtils {
         if (predicate == null) {
             return null;
         }
+<<<<<<< HEAD
+=======
+        // do not change original predicate, clone it here
+>>>>>>> 2d6ba6abb1 ([BugFix] clone a scalarOperator before rewriting it (#33535))
         ScalarOperator cloned = predicate.clone();
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
         return rewrite.rewrite(cloned, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
