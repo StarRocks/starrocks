@@ -242,6 +242,18 @@ public class NativeAccessController implements AccessController {
     }
 
     @Override
+    public void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.PIPE, Collections.singletonList(name));
+    }
+
+    @Override
+    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, String pipe)
+            throws AccessDeniedException {
+        checkAnyActionOnObject(currentUser, roleIds, ObjectType.PIPE, Collections.singletonList(pipe));
+    }
+
+    @Override
     public void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
                                          PrivilegeType privilegeType) throws AccessDeniedException {
         checkObjectTypeAction(currentUser, roleIds,

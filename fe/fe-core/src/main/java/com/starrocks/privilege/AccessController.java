@@ -149,6 +149,16 @@ public interface AccessController {
         throw new AccessDeniedException();
     }
 
+    default void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
     default void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
                                           PrivilegeType privilegeType) throws AccessDeniedException {
         throw new AccessDeniedException();

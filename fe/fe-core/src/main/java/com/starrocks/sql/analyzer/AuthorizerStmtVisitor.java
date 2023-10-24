@@ -197,6 +197,11 @@ import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.pipe.AlterPipeStmt;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
+import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
 import java.util.List;
 import java.util.Map;
@@ -2400,6 +2405,73 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ALTER.name(), ObjectType.STORAGE_VOLUME.name(), statement.getName());
         }
+        return null;
+    }
+
+    // -------------------------------------- Pipe Statement ---------------------------------------- //
+    @Override
+    public Void visitCreatePipeStatement(CreatePipeStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    statement.getPipeName().getDbName(), PrivilegeType.CREATE_PIPE);
+            visitQueryStatement(statement.getInsertStmt().getQueryStatement(), context);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.CREATE_PIPE.name(), ObjectType.DATABASE.name(), statement.getPipeName().getDbName());
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDropPipeStatement(DropPipeStmt statement, ConnectContext context) {
+        String pipeName = statement.getPipeName().getPipeName();
+        try {
+            Authorizer.checkPipeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    pipeName, PrivilegeType.DROP);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DROP.name(), ObjectType.PIPE.name(), pipeName);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterPipeStatement(AlterPipeStmt statement, ConnectContext context) {
+        String pipeName = statement.getPipeName().getPipeName();
+        try {
+            Authorizer.checkPipeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), pipeName,
+                    PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectType.PIPE.name(), pipeName);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitDescPipeStatement(DescPipeStmt statement, ConnectContext context) {
+        String pipeName = statement.getName().getPipeName();
+        try {
+            Authorizer.checkAnyActionOnPipe(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), pipeName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.PIPE.name(), pipeName);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
+        // show pipes with privilege, handled in ShowExecutor.handleShowPipes
         return null;
     }
 

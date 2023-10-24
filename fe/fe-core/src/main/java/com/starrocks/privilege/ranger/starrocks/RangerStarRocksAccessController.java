@@ -271,6 +271,20 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
+    public void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.PIPE, Lists.newArrayList(name));
+        hasPermission(resource, currentUser, privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, String pipe)
+            throws AccessDeniedException {
+        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.PIPE, Lists.newArrayList(pipe));
+        hasPermission(resource, currentUser, PrivilegeType.ANY);
+    }
+
+    @Override
     public void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
                                          PrivilegeType privilegeType) throws AccessDeniedException {
         RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.STORAGE_VOLUME,

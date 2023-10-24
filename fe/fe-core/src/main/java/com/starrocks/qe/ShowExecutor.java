@@ -2717,6 +2717,16 @@ public class ShowExecutor {
             if (pipe.getPipeId().getDbId() != dbId) {
                 continue;
             }
+
+            // check privilege
+            try {
+                Authorizer.checkAnyActionOnPipe(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), pipe.getName());
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            // execute
             List<Comparable> row = Lists.newArrayList();
             ShowPipeStmt.handleShow(row, pipe);
             rows.add(row);
