@@ -163,9 +163,7 @@ public:
     size_t deserialize(const uint8_t* data);
     void merge(const SimdBlockFilter& bf);
     bool check_equal(const SimdBlockFilter& bf) const;
-    uint32_t directory_mask() const {
-        return _directory_mask;
-    }
+    uint32_t directory_mask() const { return _directory_mask; }
 
 private:
     // The number of bits to set in a tiny Bloom filter block
@@ -209,9 +207,7 @@ private:
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
-    size_t get_alloc_size() const {
-        return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE);
-    }
+    size_t get_alloc_size() const { return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE); }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
