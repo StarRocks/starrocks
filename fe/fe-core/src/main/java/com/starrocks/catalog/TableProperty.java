@@ -155,7 +155,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
-    // and it's null in SHARED NOTHGING
     TPersistentIndexType persistendIndexType;
 
     /*
@@ -250,6 +249,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
+                buildPersistentIndexType();
                 break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();

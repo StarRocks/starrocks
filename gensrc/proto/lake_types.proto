@@ -89,6 +89,10 @@ message TabletMetadataPB {
     optional int64 commit_time = 13;
 }
 
+message MetadataUpdateInfoPB {
+    optional bool enable_persistent_index = 1;
+}
+
 message TxnLogPB {
     message OpWrite {
         optional RowsetMetadataPB rowset = 1;
@@ -119,11 +123,16 @@ message TxnLogPB {
         optional DelvecMetadataPB delvec_meta = 4;
     }
 
+    message OpAlterMetadata {
+        repeated MetadataUpdateInfoPB metadata_update_infos = 1;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
     optional OpCompaction op_compaction = 4;
     optional OpSchemaChange op_schema_change = 5;
+    optional OpAlterMetadata op_alter_metadata = 6;
 }
 
 message TabletMetadataLockPB {}

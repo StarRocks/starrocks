@@ -78,7 +78,7 @@ public abstract class AlterJobV2 implements Writable {
 
     public enum JobType {
         // DECOMMISSION_BACKEND is for compatible with older versions of metadata
-        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND 
+        ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND
     }
 
     @SerializedName(value = "type")
