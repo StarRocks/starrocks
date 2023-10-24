@@ -96,15 +96,8 @@ public class SystemId {
 
     public static final long BE_CLOUD_NATIVE_COMPACTIONS = 39L;
 
-<<<<<<< HEAD
-=======
-    public static final long ROUTINE_LOAD_JOBS_ID = 40L;
-
-    public static final long STREAM_LOADS_ID = 41L;
-
     public static final long FE_METRICS_ID = 42L;
 
->>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
     public static final long SYS_DB_ID = 100L;
     public static final long ROLE_EDGES_ID = 101L;
     public static final long GRANTS_TO_ROLES_ID = 102L;
