@@ -43,7 +43,10 @@ public class ColumnType {
         DATETIME_MICROS,
         // INT64 timestamp type, TIMESTAMP(isAdjustedToUTC=true, unit=MILLIS)
         DATETIME_MILLIS,
-        DECIMAL,
+        DECIMALV2,
+        DECIMAL32,
+        DECIMAL64,
+        DECIMAL128,
         ARRAY,
         MAP,
         STRUCT,
@@ -55,7 +58,7 @@ public class ColumnType {
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
-
+    int scale = -1;
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
 
@@ -73,7 +76,10 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimalv2", TypeValue.DECIMALV2);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal32", TypeValue.DECIMAL32);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal64", TypeValue.DECIMAL64);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal128", TypeValue.DECIMAL128);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
@@ -84,6 +90,10 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.LONG, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DOUBLE, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.TINYINT, 1);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMALV2, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
     }
 
     @Override
@@ -160,7 +170,12 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p = scanner.indexOf('<', ',', '>');
+        int p;
+        if (scanner.s.startsWith("decimal")) {
+            p = scanner.s.length();
+        } else {
+            p = scanner.indexOf('<', ',', '>');
+        }
         String t = scanner.substr(p);
         scanner.moveTo(p);
         // assume there is no blank char in `type`.
@@ -191,10 +206,6 @@ public class ColumnType {
             }
             break;
             default: {
-                // convert decimal(x,y) to decimal
-                if (t.startsWith("decimal")) {
-                    t = "decimal";
-                }
                 typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
             }
         }
@@ -220,7 +231,7 @@ public class ColumnType {
     }
 
     public boolean isByteStorageType() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE || typeValue == TypeValue.DECIMAL
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE
                 || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
                 || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
     }
@@ -272,7 +283,10 @@ public class ColumnType {
             }
             case STRING:
             case BINARY:
-            case DECIMAL:
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
             case DATE:
             case DATETIME:
             case DATETIME_MICROS:
@@ -369,5 +383,13 @@ public class ColumnType {
             sb.append(top);
             sb.append(',');
         }
+    }
+
+    public void setScale(int scale) {
+        this.scale = scale;
+    }
+
+    public int getScale() {
+        return scale;
     }
 }

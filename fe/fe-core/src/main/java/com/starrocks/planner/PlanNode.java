@@ -59,6 +59,7 @@ import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.roaringbitmap.RoaringBitmap;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -835,6 +836,18 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return (Expr expr) -> expr.isBoundByTupleIds(getTupleIds());
     }
 
+    private RoaringBitmap cachedSlotIds = null;
+
+    public RoaringBitmap getSlotIds(DescriptorTable descTbl) {
+        if (cachedSlotIds == null) {
+            cachedSlotIds = new RoaringBitmap();
+            getTupleIds().stream().map(descTbl::getTupleDesc)
+                    .flatMap(tupleDesc -> tupleDesc.getSlots().stream().map(SlotDescriptor::getId))
+                    .map(SlotId::asInt).forEach(cachedSlotIds::add);
+        }
+        return cachedSlotIds;
+    }
+
     protected boolean couldBound(Expr probeExpr, RuntimeFilterDescription rfDesc, DescriptorTable descTbl) {
         if (probeExpr instanceof SlotRef &&
                 rfDesc.runtimeFilterType().equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
@@ -849,7 +862,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             return false;
         } else {
-            return probeExpr.isBoundByTupleIds(getTupleIds());
+            return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
         }
     }
 
@@ -896,14 +909,16 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                                                             boolean addProbeInfo) {
         boolean accept = tryPushdownRuntimeFilterToChild(descTbl, description, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
-        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
+        RoaringBitmap slotIds = getSlotIds(descTbl);
+        boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
+                partitionByExprs.stream().allMatch(expr->slotIds.contains(expr.getUsedSlotIds()));
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }
         if (accept) {
             return true;
         }
-        if (addProbeInfo && description.canProbeUse(this)) {
+        if (isBound && addProbeInfo && description.canProbeUse(this)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);

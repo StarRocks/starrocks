@@ -311,7 +311,7 @@ public class LakeMaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
                         "   'datacache.enable' = 'true',\n" +
-                        "   'enable_async_write_back' = 'true'\n" +
+                        "   'enable_async_write_back' = 'false'\n" +
                         ")\n" +
                         "refresh async\n" +
                         "as select k2, sum(k3) as total from base_table group by k2;");
@@ -328,7 +328,7 @@ public class LakeMaterializedViewTest {
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());
         Assert.assertEquals(-1, cacheInfo.getTtlSeconds());
-        Assert.assertTrue(cacheInfo.getAsyncWriteBack());
+        Assert.assertFalse(cacheInfo.getAsyncWriteBack());
 
         // replication num
         Assert.assertEquals(1L, lakeMv.getDefaultReplicationNum().longValue());
@@ -338,7 +338,7 @@ public class LakeMaterializedViewTest {
         System.out.println(ddlStmt);
         Assert.assertTrue(ddlStmt.contains("\"replication_num\" = \"1\""));
         Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
-        Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"true\""));
+        Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
         Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
 
         // check task

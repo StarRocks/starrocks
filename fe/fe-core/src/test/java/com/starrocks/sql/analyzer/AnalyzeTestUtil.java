@@ -272,6 +272,19 @@ public class AnalyzeTestUtil {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tmcwr` (\n" +
+                "  `id`  bigint COMMENT \"\",\n" +
+                "  `name`  bigint NULL COMMENT \"\",\n" +
+                "  `mc` bigint NULL COMMENT \"\" ,\n" +
+                "  `ff` bigint NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"" +
+                ");");
     }
 
     public static String getDbName() {
@@ -342,7 +355,7 @@ public class AnalyzeTestUtil {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
         } catch (Exception e) {
-            Assert.fail("analyze exception");
+            Assert.fail("analyze exception: " + e);
         }
     }
 }

@@ -352,6 +352,9 @@ struct THdfsScanRange {
     16: optional i64 modification_time
 
     17: optional TDataCacheOptions datacache_options
+
+    // identity partition column slots
+    18: optional list<Types.TSlotId> identity_partition_slot_ids;
 }
 
 struct TBinlogScanRange {
@@ -432,6 +435,12 @@ struct TEsScanNode {
     4: optional map<string, string> fields_context
 }
 
+struct TFrontend {
+  1: optional string id
+  2: optional string ip
+  3: optional i32 http_port
+}
+
 struct TSchemaScanNode {
   1: required Types.TTupleId tuple_id
 
@@ -459,6 +468,7 @@ struct TSchemaScanNode {
   23: optional string log_level;
   24: optional string log_pattern;
   25: optional i64 log_limit;
+  26: optional list<TFrontend> frontends;
 
   101: optional string catalog_name;
 }
@@ -1026,6 +1036,8 @@ struct THdfsScanNode {
     14: optional bool can_use_any_column;
 
     15: optional bool can_use_min_max_count_opt;
+
+    16: optional bool use_partition_column_value_only;
 }
 
 struct TProjectNode {
@@ -1037,6 +1049,7 @@ struct TProjectNode {
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
+    2: optional list<Descriptors.TColumn> columns
 }
 
 struct TDecodeNode {

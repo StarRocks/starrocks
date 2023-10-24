@@ -19,6 +19,7 @@
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
+#include "exec/hdfs_scanner_partition.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
@@ -163,7 +164,7 @@ Status HiveDataSource::_init_partition_values() {
     const auto& partition_values = partition_desc->partition_key_value_evals();
     _partition_values = partition_values;
 
-    if (_has_partition_conjuncts) {
+    if (_has_partition_conjuncts || _has_scan_range_indicate_const_column) {
         ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
         // append partition data
         for (int i = 0; i < _partition_slots.size(); i++) {
@@ -182,12 +183,37 @@ Status HiveDataSource::_init_partition_values() {
         }
 
         // eval conjuncts and skip if no rows.
-        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+        if (_has_scan_range_indicate_const_column) {
+            std::vector<ExprContext*> ctxs;
+            for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
+                if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
+                    ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
+                                _conjunct_ctxs_by_slot.at(slotId).end());
+                }
+            }
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+        } else {
+            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+        }
+
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
         }
     }
     return Status::OK();
+}
+
+int32_t HiveDataSource::scan_range_indicate_const_column_index(SlotId id) const {
+    if (!_scan_range.__isset.identity_partition_slot_ids) {
+        return -1;
+    }
+    auto it = std::find(_scan_range.identity_partition_slot_ids.begin(), _scan_range.identity_partition_slot_ids.end(),
+                        id);
+    if (it == _scan_range.identity_partition_slot_ids.end()) {
+        return -1;
+    } else {
+        return it - _scan_range.identity_partition_slot_ids.begin();
+    }
 }
 
 void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
@@ -204,6 +230,12 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             _partition_index_in_chunk.push_back(i);
             _partition_index_in_hdfs_partition_columns.push_back(_hive_table->get_partition_col_index(slots[i]));
             _has_partition_columns = true;
+        } else if (int32_t index = scan_range_indicate_const_column_index(slots[i]->id()); index >= 0) {
+            _partition_slots.push_back(slots[i]);
+            _partition_index_in_chunk.push_back(i);
+            _partition_index_in_hdfs_partition_columns.push_back(index);
+            _has_partition_columns = true;
+            _has_scan_range_indicate_const_column = true;
         } else {
             _materialize_slots.push_back(slots[i]);
             _materialize_index_in_chunk.push_back(i);
@@ -221,6 +253,34 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     }
     if (hdfs_scan_node.__isset.can_use_min_max_count_opt) {
         _can_use_min_max_count_opt = hdfs_scan_node.can_use_min_max_count_opt;
+    }
+    if (hdfs_scan_node.__isset.use_partition_column_value_only) {
+        _use_partition_column_value_only = hdfs_scan_node.use_partition_column_value_only;
+    }
+
+    // The reason why we need double check here is for iceberg table.
+    // for some partitions, partition column maybe is not constant value.
+    // If partition column is not constant value, we can not use this optimization,
+    // And we can not use `can_use_any_column` either.
+    // So checks are:
+    // 1. can_use_any_column = true
+    // 2. only one materialized slot
+    // 3. besides that, all slots are partition slots.
+    auto check_opt_on_iceberg = [&]() {
+        if (!_can_use_any_column) {
+            return false;
+        }
+        if ((_partition_slots.size() + 1) != slots.size()) {
+            return false;
+        }
+        if (_materialize_slots.size() != 1) {
+            return false;
+        }
+        return true;
+    };
+    if (!check_opt_on_iceberg()) {
+        _use_partition_column_value_only = false;
+        _can_use_any_column = false;
     }
 }
 
@@ -309,6 +369,14 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         _profile.datacache_read_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadCounter", TUnit::UNIT, prefix);
         _profile.datacache_read_bytes = ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.datacache_read_mem_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadMemBytes", TUnit::BYTES, "DataCacheReadBytes");
+        _profile.datacache_read_disk_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheReadDiskBytes", TUnit::BYTES, "DataCacheReadBytes");
+        _profile.datacache_skip_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadCounter", TUnit::UNIT, prefix);
+        _profile.datacache_skip_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DataCacheSkipReadBytes", TUnit::BYTES, prefix);
         _profile.datacache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "DataCacheReadTimer", prefix);
         _profile.datacache_write_counter =
                 ADD_CHILD_COUNTER(_runtime_profile, "DataCacheWriteCounter", TUnit::UNIT, prefix);
@@ -484,7 +552,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     const auto& scan_range = _scan_range;
     std::string native_file_path = scan_range.full_path;
-    if (_hive_table != nullptr && _hive_table->has_partition()) {
+    if (_hive_table != nullptr && _hive_table->has_partition() && !_hive_table->has_base_path()) {
         auto* partition_desc = _hive_table->get_partition(scan_range.partition_id);
         if (partition_desc == nullptr) {
             return Status::InternalError(fmt::format(
@@ -494,6 +562,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         std::filesystem::path file_path(partition_desc->location());
         file_path /= scan_range.relative_path;
         native_file_path = file_path.native();
+    }
+    if (native_file_path.empty()) {
+        native_file_path = _hive_table->get_base_path() + scan_range.relative_path;
     }
 
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
@@ -552,7 +623,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
 
-    if (use_paimon_jni_reader) {
+    if (_use_partition_column_value_only) {
+        DCHECK(_can_use_any_column);
+        scanner = _pool.add(new HdfsPartitionScanner());
+    } else if (use_paimon_jni_reader) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner();

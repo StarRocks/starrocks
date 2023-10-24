@@ -51,7 +51,6 @@ import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -199,15 +198,20 @@ public class QueryAnalyzer {
             sourceScope.setParent(scope);
 
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
-            if (!(resolvedRelation instanceof ViewRelation)) {
-                new AstTraverser<Void, Void>() {
-                    @Override
-                    public Void visitTable(TableRelation tableRelation, Void context) {
-                        generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
-                        return null;
-                    }
-                }.visit(resolvedRelation);
-            }
+            new AstVisitor<Void, Void>() {
+                @Override
+                public Void visitTable(TableRelation tableRelation, Void context) {
+                    generatedExprToColumnRef.putAll(tableRelation.getGeneratedExprToColumnRef());
+                    return null;
+                }
+
+                @Override
+                public Void visitJoin(JoinRelation joinRelation, Void context) {
+                    visit(joinRelation.getLeft());
+                    visit(joinRelation.getRight());
+                    return null;
+                }
+            }.visit(resolvedRelation);
             analyzeState.setGeneratedExprToColumnRef(generatedExprToColumnRef);
 
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
@@ -954,6 +958,11 @@ public class QueryAnalyzer {
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+
+            if (table.isExternalTableWithFileSystem() && tableRelation.getPartitionNames() != null) {
+                throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
+            }
+
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

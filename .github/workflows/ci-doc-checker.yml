@@ -44,7 +44,7 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -86,6 +86,18 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+      - name: docusaurus-mdx-checker
+        if: always()
+        run: |
+          npx docusaurus-mdx-checker -c docs
+      - name: link check
+        if: always()
+        uses: lycheeverse/lychee-action@v1.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
 
   behavior-unchange:
     runs-on: ubuntu-latest
@@ -93,7 +105,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ secrets.PAT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Set Body
         run: |

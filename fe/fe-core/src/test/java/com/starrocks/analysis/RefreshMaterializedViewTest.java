@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -45,6 +46,8 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.time.LocalDate;
+import java.time.Period;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -164,25 +167,31 @@ public class RefreshMaterializedViewTest {
         cluster.runSql(dbName, String.format("refresh materialized view %s with sync mode", mvName));
     }
 
+    public Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+        mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        return toRefreshPartitions;
+    }
+
     @Test
     public void testRefreshExecution() throws Exception {
         cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
         refreshMaterializedView("test", "mv_to_refresh");
         MaterializedView mv1 = getMv("test", "mv_to_refresh");
-        Set<String> partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv(true);
+        Set<String> partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
         Assert.assertTrue(partitionsToRefresh1.isEmpty());
         refreshMaterializedView("test", "mv2_to_refresh");
         MaterializedView mv2 = getMv("test", "mv2_to_refresh");
-        Set<String> partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv(true);
+        Set<String> partitionsToRefresh2 = getPartitionNamesToRefreshForMv(mv2);
         Assert.assertTrue(partitionsToRefresh2.isEmpty());
         cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
         OlapTable table = (OlapTable) getTable("test", "tbl_with_mv");
         Partition p1 = table.getPartition("p1");
         Partition p2 = table.getPartition("p2");
         if (p2.getVisibleVersion() == 3) {
-            partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv(true);
+            partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv1);
             Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
-            partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv(true);
+            partitionsToRefresh2 = getPartitionNamesToRefreshForMv(mv2);
             Assert.assertTrue(partitionsToRefresh2.contains("p2"));
         } else {
             // publish version is async, so version update may be late
@@ -237,26 +246,29 @@ public class RefreshMaterializedViewTest {
         cluster.runSql("test", "insert into tbl_staleness1 values(\"2022-02-20\", 1, 10)");
         {
             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
-            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv(true);
-            Assert.assertTrue(partitionsToRefresh.isEmpty());
-
+            checkToRefreshPartitionsEmpty(mv1);
         }
+
         // no refresh partitions if there is no new data.
         {
             refreshMaterializedView("test", "mv_with_mv_rewrite_staleness");
             MaterializedView mv2 = getMv("test", "mv_with_mv_rewrite_staleness");
-            Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv(true);
-            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            checkToRefreshPartitionsEmpty(mv2);
         }
         // no refresh partitions if there is new data & no refresh but is set `mv_rewrite_staleness`.
         {
             cluster.runSql("test", "insert into tbl_staleness1 values(\"2022-02-22\", 1, 10)");
             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness");
-            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv(true);
-            Assert.assertTrue(partitionsToRefresh.isEmpty());
+            checkToRefreshPartitionsEmpty(mv1);
         }
         starRocksAssert.dropTable("tbl_staleness1");
         starRocksAssert.dropMaterializedView("mv_with_mv_rewrite_staleness");
+    }
+
+    private void checkToRefreshPartitionsEmpty(MaterializedView mv) {
+        Set<String> partitionsToRefresh = Sets.newHashSet();
+        Assert.assertTrue(mv.getPartitionNamesToRefreshForMv(partitionsToRefresh, true));
+        Assert.assertTrue(partitionsToRefresh.isEmpty());
     }
 
     @Test
@@ -324,7 +336,7 @@ public class RefreshMaterializedViewTest {
             Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
             Assert.assertTrue(mv1.isStalenessSatisfied());
 
-            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv(true);
+            Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
             Assert.assertTrue(partitionsToRefresh.isEmpty());
         }
         starRocksAssert.dropTable("tbl_staleness2");
@@ -422,7 +434,7 @@ public class RefreshMaterializedViewTest {
                 Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
                 Assert.assertTrue(mv1.isStalenessSatisfied());
 
-                Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv(true);
+                Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
                 Assert.assertTrue(partitionsToRefresh.isEmpty());
             }
             {
@@ -443,7 +455,7 @@ public class RefreshMaterializedViewTest {
                 Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
                 Assert.assertTrue(mv2.isStalenessSatisfied());
 
-                Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv(true);
+                Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv2);
                 Assert.assertTrue(partitionsToRefresh.isEmpty());
             }
         }
@@ -468,7 +480,7 @@ public class RefreshMaterializedViewTest {
                 Assert.assertFalse(mv1.isStalenessSatisfied());
                 Assert.assertFalse(mv2.maxBaseTableRefreshTimestamp().isPresent());
 
-                Set<String> partitionsToRefresh = mv2.getPartitionNamesToRefreshForMv(true);
+                Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv2);
                 Assert.assertFalse(partitionsToRefresh.isEmpty());
             }
         }
@@ -660,5 +672,106 @@ public class RefreshMaterializedViewTest {
             .useDatabase("test")
             .dropMaterializedView("mv_with_partition")
             .dropTable("tbl_with_partition");
+    }
+
+    private void buildTimePartitions(String tableName, OlapTable tbl, int partitionCount) throws Exception {
+        LocalDate currentDate = LocalDate.now();
+        for (int i = 0; i < partitionCount; i++) {
+            LocalDate lowerBound = currentDate.minus(Period.ofMonths(i + 1));
+            LocalDate upperBound = currentDate.minus(Period.ofMonths(i));
+            String partitionName = String.format("p_%d_%d", lowerBound.getYear(), lowerBound.getMonthValue());
+            String addPartition = String.format("alter table %s add partition p%s values [('%s'), ('%s')) ",
+                    tableName, partitionName, lowerBound.toString(), upperBound);
+            starRocksAssert.getCtx().executeSql(addPartition);
+        }
+    }
+
+    @Test
+    public void testMaterializedViewPartitionTTL() throws Exception {
+        String dbName = "test";
+        String tableName = "test.tbl1";
+        starRocksAssert.withTable("CREATE TABLE " + tableName +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    v1 int \n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2022-06-01'),\n" +
+                        "    PARTITION p2 values less than('2022-07-01'),\n" +
+                        "    PARTITION p3 values less than('2022-08-01'),\n" +
+                        "    PARTITION p4 values less than('2022-09-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH (k1) BUCKETS 3\n" +
+                        "PROPERTIES\n" +
+                        "(\n" +
+                        "    'replication_num' = '1'\n" +
+                        ");");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.mv_ttl_mv1\n" +
+                " REFRESH ASYNC " +
+                " PARTITION BY k1\n" +
+                " PROPERTIES('partition_ttl'='2 month')" +
+                " AS SELECT k1, v1 FROM test.tbl1");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("mv_ttl_mv1");
+        buildTimePartitions(tableName, tbl, 10);
+
+        // initial partitions should consider the ttl
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
+
+        // normal ttl
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='2 month')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
+
+        // large ttl
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='10 year')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 14, tbl.getPartitions().size());
+
+        // tiny ttl
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='1 day')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(ImmutableSet.of("pp_2023_9"), tbl.getPartitionNames());
+
+        // zero ttl
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 14, tbl.getPartitions().size());
+        Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
+
+        // tiny ttl
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='24 hour')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 1, tbl.getPartitions().size());
+        Assert.assertEquals(ImmutableSet.of("pp_2023_9"), tbl.getPartitionNames());
+
+        // the ttl cross two partitions
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='32 day')");
+        cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
+        dynamicPartitionScheduler.runOnceForTest();
+        Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
+        Assert.assertEquals(tbl.getRangePartitionMap().toString(), 2, tbl.getPartitions().size());
+
+        // corner cases
+        Assert.assertThrows(Exception.class,
+                () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='error')"));
+        Assert.assertThrows(Exception.class,
+                () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='day')"));
+        Assert.assertThrows(Exception.class,
+                () -> cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0')"));
+        Assert.assertEquals("P32D", tbl.getTableProperty().getPartitionTTL().toString());
+        cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
+        Assert.assertEquals("PT0S", tbl.getTableProperty().getPartitionTTL().toString());
+
     }
 }

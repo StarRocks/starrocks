@@ -26,7 +26,7 @@ Submit the Kafka connector into Kafka Connect:
 - Self-managed Kafka cluster:
 
   - Download and unzip [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz).
-  - Copy the extracted directory to the libs directory of Kafka. Restart Kafka Connect to read the latest JAR files.
+  - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes within the Kafka Connect cluster.
 
 - Confluent cloud:
 
@@ -40,7 +40,7 @@ Create a table or tables in StarRocks according to Kafka Topics and data.
 
 ## Examples
 
-The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka connect in order to load data into StarRocks.
+The following steps take a self-managed Kafka cluster as an example to demonstrate how to configure the Kafka connector and start the Kafka Connect (no need to restart the Kafka service) in order to load data into StarRocks.
 
 1. Create a Kafka connector configuration file named **connect-StarRocks-sink.properties** and configure the  parameters. For detailed information about parameters, see [Parameters](#parameters).
 
@@ -60,7 +60,7 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
     >
     > If the source data is CDC data, such as data in Debezium format, and the StarRocks table is a Primary Key table, you also need to [configure `transform`](#load-debezium-formatted-cdc-data) in order to synchronize the source data changes to the Primary Key table.
 
-2. Run the Kafka Connector. For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
+2. Run the Kafka Connector (no need to restart the Kafka service). For parameters and description in the following command, see [Kafka Documentation](https://kafka.apache.org/documentation.html#connect_running).
 
     - Standalone mode
 
@@ -104,17 +104,17 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 
 | Parameter                           | Required | Default value                                                | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| name                                | YES      |                                                              | Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka connect cluster. For example, starrocks-kafka-connector. |
+| name                                | YES      |                                                              | Name for this Kafka connector. It must be globally unique among all Kafka connectors within this Kafka Connect cluster. For example, starrocks-kafka-connector. |
 | connector.class                     | YES      | com.starrocks.connector.kafka.SinkConnector                  | Class used by this Kafka connector's sink.                   |
 | topics                              | YES      |                                                              | One or more topics to subscribe to, where each topic corresponds to a StarRocks table. By default, StarRocks assumes that the topic name matches the name of the StarRocks table. So StarRocks determines the target StarRocks table by using the topic name. Please choose either to fill in `topics` or `topics.regex` (below), but not both.However, if the StarRocks table name is not the same as the topic name, then use the optional `starrocks.topic2table.map` parameter (below) to specify the mapping from topic name to table name. |
 | topics.regex                        |          | Regular expression to match the one or more topics to subscribe to. For more description, see `topics`. Please choose either to fill in  `topics.regex`or `topics` (above), but not both. |                                                              |
 | starrocks.topic2table.map           | NO       |                                                              | The mapping of the StarRocks table name and the topic name when the topic name is different from the StarRocks table name. The format is `<topic-1>:<table-1>,<topic-2>:<table-2>,...`. |
 | starrocks.http.url                  | YES      |                                                              | The HTTP URL of the FE in your StarRocks cluster. The format is `<fe_host1>:<fe_http_port1>,<fe_host2>:<fe_http_port2>,...`. Multiple addresses are separated by commas (,). For example, `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`. |
 | starrocks.database.name             | YES      |                                                              | The name of StarRocks database.                              |
-| starrocks.username                  | YES      |                                                              | The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table. |
+| starrocks.username                  | YES      |                                                      | The username of your StarRocks cluster account. The user needs the [INSERT](../sql-reference/sql-statements/account-management/GRANT.md) privilege on the StarRocks table. |
 | starrocks.password                  | YES      |                                                              | The password of your StarRocks cluster account.              |
-| key.converter                       | YES      |                                                              | In this scenario, the Kafka connector provided by StarRocks is a sink connector. This parameter specifies the key converter for the sink connector, which is used to deserialize the keys of Kafka data. You need to determine the value of this parameter based on the key converter used by the source connector. |
-| value.converter                     | YES      |                                                              | This parameter specifies the value converter for the sink connector, which is used to deserialize the values of Kafka data. You need to determine the value of this parameter based on the value converter used by the source connector. |
+| key.converter                       | NO      |           Key converter used by Kafka Connect cluster                                                           | This parameter specifies the key converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the keys of Kafka data. The default key converter is the one used by Kafka Connect cluster.|
+| value.converter                     | NO      |    Value converter used by Kafka Connect cluster                             | This parameter specifies the value converter for the sink connector (Kafka-connector-starrocks), which is used to deserialize the values of Kafka data. The default value converter is the one used by Kafka Connect cluster. |
 | key.converter.schema.registry.url   | NO       |                                                              | Schema registry URL for the key converter.                   |
 | value.converter.schema.registry.url | NO       |                                                              | Schema registry URL for the value converter.                 |
 | tasks.max                           | NO       | 1                                                            | The upper limit for the number of task threads that the Kafka connector can create, which is usually the same as the number of CPU cores on the worker nodes in the Kafka Connect cluster. You can tune this parameter to control load performance. |
@@ -122,7 +122,7 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
 | bufferflush.intervalms              | NO       | 300000                                                       | Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000]. |
 | connect.timeoutms                   | NO       | 1000                                                         | Timeout for connecting to the HTTP URL. Range: [100, 60000]. |
 | sink.properties.*                   |          |                                                              | Stream Load parameters o control load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM LOAD.md). |
-| sink.properties.format              | NO       | json                                                         | The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters**](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD#csv-parameters)和** [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD#json-parameters). |
+| sink.properties.format              | NO       | json                                                         | The format used for Stream Load. The Kafka connector will transform each batch of data to the format before sending them to StarRocks. Valid values: `csv` and `json`. For more information, see [CSV parameters**](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#csv-parameters)和** [JSON parameters](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#json-parameters). |
 
 ## Limits
 

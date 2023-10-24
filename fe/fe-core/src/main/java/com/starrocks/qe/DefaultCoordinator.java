@@ -493,22 +493,21 @@ public class DefaultCoordinator extends Coordinator {
 
     private void prepareResultSink() throws AnalysisException {
         ExecutionFragment rootExecFragment = executionDAG.getRootFragment();
+        long workerId = rootExecFragment.getInstances().get(0).getWorkerId();
+        ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
+        // Select top fragment as global runtime filter merge address
+        setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcIpAddress());
         boolean isLoadType = !(rootExecFragment.getPlanFragment().getSink() instanceof ResultSink);
         if (isLoadType) {
             return;
         }
 
-        long workerId = rootExecFragment.getInstances().get(0).getWorkerId();
-        ComputeNode worker = coordinatorPreprocessor.getWorkerProvider().getWorkerById(workerId);
         TNetworkAddress execBeAddr = worker.getAddress();
         receiver = new ResultReceiver(
                 rootExecFragment.getInstances().get(0).getInstanceId(),
                 workerId,
                 worker.getBrpcAddress(),
                 jobSpec.getQueryOptions().query_timeout * 1000);
-
-        // Select top fragment as global runtime filter merge address
-        setGlobalRuntimeFilterParams(rootExecFragment, worker.getBrpcAddress());
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(jobSpec.getQueryId()), execBeAddr);
@@ -526,7 +525,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
         lock();
-        try {
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution);
@@ -605,7 +604,7 @@ public class DefaultCoordinator extends Coordinator {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.getInstanceId());
                     probeParam.setFragment_instance_address(
-                            coordinatorPreprocessor.getBrpcAddress(instance.getWorkerId()));
+                            coordinatorPreprocessor.getBrpcIpAddress(instance.getWorkerId()));
                     probeParamList.add(probeParam);
                 }
                 if (jobSpec.isEnablePipeline() && kv.getValue().isBroadcastJoin() &&

@@ -226,6 +226,16 @@ Boolean value to enable query queues for SELECT queries. Default: `false`.
 
 Boolean value to enable query queues for statistics queries.
 
+### enable_query_tablet_affinity（2.5 and later）
+
+Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
+
+In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
+
+However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
+
+Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, 3.1.4, and 3.2.0.
+
 ### enable_scan_block_cache (2.5 and later)
 
 Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md).
@@ -357,6 +367,16 @@ Specifies the maximum number of unqualified data rows that can be logged. Valid 
 
 Used for MySQL client compatibility. No practical usage. Table names in StarRocks are case-sensitive.
 
+### materialized_view_rewrite_mode (v3.2 and later)
+
+Specifies the query rewrite mode of asynchronous materialized views. Valid values:
+
+* `disable`: Disable automatic query rewrite of asynchronous materialized views.
+* `default` (Default value): Enable automatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, it directly scans the data in the base table.
+* `default_or_error`: Enable automatic query rewrite of asynchronous materialized views, and allow the optimizer to decide whether a query can be rewritten using the materialized view based on the cost. If the query cannot be rewritten, an error is returned.
+* `force`: Enable automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, it directly scans the data in the base table.
+* `force_or_error`: Enable automatic query rewrite of asynchronous materialized views, and the optimizer prioritizes query rewrite using the materialized view. If the query cannot be rewritten, an error is returned.
+
 ### max_allowed_packet
 
 Used for compatibility with the JDBC connection pool C3P0. This variable specifies the maximum size of packets that can be transmitted between the client and server. Default value: 32 MB. Unit: Byte. You can raise this value if the client reports "PacketTooBigException".
@@ -389,7 +409,7 @@ Used for MySQL client compatibility. No practical usage.
 
 The timeout duration of the query optimizer. When the optimizer times out, an error is returned and the query is stopped, which affects the query performance. You can set this variable to a larger value based on your query or contact StarRocks technical support for troubleshooting. A timeout often occurs when a query has too many joins.
 
-Default value: 3000. Unit: seconds.
+Default value: 3000. Unit: ms.
 
 ### parallel_exchange_instance_num
 

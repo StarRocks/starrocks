@@ -38,7 +38,6 @@ public class WindowTest extends PlanTestBase {
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), " +
                 "has_var_args:false";
-        System.out.println(expectSlice);
         Assert.assertTrue(plan, plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
@@ -984,8 +983,17 @@ public class WindowTest extends PlanTestBase {
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
-                "  |  probe runtime filters:\n" +
-                "  |  - filter_id = 0, probe_expr = (1: v1)");
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: t0, rollup: t0\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: 1: v1 IS NOT NULL\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=2.0\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v1)");
     }
 
     @Test

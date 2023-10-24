@@ -102,6 +102,8 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
 Status SpillableAggregateBlockingSourceOperator::reset_state(RuntimeState* state,
                                                              const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    _has_last_chunk = true;
     _accumulator.reset_state();
     return Status::OK();
 }
@@ -118,7 +120,8 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
 
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
-        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+        ASSIGN_OR_RETURN(auto chunk,
+                         spiller->restore(state, *executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }

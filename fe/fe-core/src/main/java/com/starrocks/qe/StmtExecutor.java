@@ -330,7 +330,7 @@ public class StmtExecutor {
 
         RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
         profile.addChild(plannerProfile);
-        Tracers.toRuntimeProfile(plannerProfile);;
+        Tracers.toRuntimeProfile(plannerProfile);
         return profile;
     }
 
@@ -1118,7 +1118,6 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
@@ -1132,7 +1131,7 @@ public class StmtExecutor {
             statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
                             analyzeStmt.getTableName().getCatalog(),
-                            db, table,
+                            db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeType,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),

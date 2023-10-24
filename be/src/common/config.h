@@ -86,7 +86,7 @@ CONF_Int32(heartbeat_service_thread_count, "1");
 // The count of thread to create table.
 CONF_Int32(create_tablet_worker_count, "3");
 // The count of thread to drop table.
-CONF_Int32(drop_tablet_worker_count, "3");
+CONF_mInt32(drop_tablet_worker_count, "3");
 // The count of thread to batch load.
 CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
@@ -121,7 +121,7 @@ CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
 CONF_Int32(download_worker_count, "1");
 // The count of thread to make snapshot.
-CONF_Int32(make_snapshot_worker_count, "5");
+CONF_mInt32(make_snapshot_worker_count, "5");
 // The count of thread to release snapshot.
 CONF_Int32(release_snapshot_worker_count, "5");
 // The interval time(seconds) for agent report tasks signatrue to FE.
@@ -355,6 +355,8 @@ CONF_Int64(load_data_reserve_hours, "4");
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
+// when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
+CONF_mInt64(stale_memtable_flush_time_sec, "30");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");
@@ -712,6 +714,8 @@ CONF_Int64(pipeline_scan_queue_mode, "0");
 CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
 CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
+CONF_Int32(pipeline_analytic_max_buffer_size, "128");
+
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
 // It is `splitted_scan_bytes/scan_row_bytes` and restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
@@ -862,10 +866,10 @@ CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
+CONF_mBool(starlet_use_star_cache, "false");
 // TODO: support runtime change
-CONF_Bool(starlet_use_star_cache, "false");
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
-CONF_Int32(starlet_star_cache_disk_size_percent, "60");
+CONF_Int32(starlet_star_cache_disk_size_percent, "80");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
 // domain list separated by comma, e.g. '.example.com,.helloworld.com'
@@ -920,6 +924,10 @@ CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "16");
+// make sure 2^spill_max_partition_level < spill_max_partition_size
+CONF_Int32(spill_max_partition_level, "7");
+CONF_Int32(spill_max_partition_size, "1024");
+
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
@@ -965,6 +973,12 @@ CONF_Int64(datacache_max_concurrent_inserts, "1500000");
 // Total memory limit for in-flight cache jobs.
 // Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
 CONF_Int64(datacache_max_flying_memory_mb, "256");
+// Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
+CONF_Bool(datacache_adaptor_enable, "true");
+// A factor to control the io traffic between cache and network. The larger this parameter,
+// the more requests will be sent to the network.
+// Usually there is no need to modify it.
+CONF_Int64(datacache_skip_read_factor, "1");
 // DataCache engines, alternatives: cachelib, starcache.
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
@@ -1082,6 +1096,6 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 // 0 means no limit
 CONF_Int32(lake_service_max_concurrency, "0");
 
-CONF_mInt64(lake_vacuum_max_batch_delete_size, "10000");
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
 } // namespace starrocks::config

@@ -219,7 +219,7 @@ void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
     }
-    exec_debug_action(TExecNodePhase::CLOSE);
+    (void)exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
     while (_running_threads.load(std::memory_order_acquire) > 0) {
@@ -631,7 +631,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
+    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {

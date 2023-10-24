@@ -134,6 +134,11 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BINLOG_MAX_SIZE = "binlog_max_size";
 
+    public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
+    public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
+    public static final String PROPERTIES_STORAGE_TYPE_ROW = "row";
+    public static final String PROPERTIES_STORAGE_TYPE_ROW_MVCC = "row_mvcc";
+
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
     public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
@@ -155,6 +160,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
+    public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
@@ -302,7 +308,7 @@ public class PropertyAnalyzer {
         return shortKeyColumnCount;
     }
 
-    public static int analyzePartitionTimeToLive(Map<String, String> properties) {
+    public static int analyzePartitionTTLNumber(Map<String, String> properties) {
         int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
@@ -316,6 +322,21 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
+    }
+
+    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties) {
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL)) {
+            String ttlStr = properties.get(PROPERTIES_PARTITION_TTL);
+            PeriodDuration duration;
+            try {
+                duration = TimeUtils.parseHumanReadablePeriodOrDuration(ttlStr);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("illegal %s: %s", PROPERTIES_PARTITION_TTL, e.getMessage()));
+            }
+            properties.remove(PROPERTIES_PARTITION_TTL);
+            return Pair.create(ttlStr, duration);
+        }
+        return Pair.create(null, PeriodDuration.ZERO);
     }
 
     public static int analyzePartitionLiveNumber(Map<String, String> properties,
@@ -346,7 +367,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
             if (bucketSize <= 0) {
-                throw new AnalysisException("Illegal Partition Bucket size: " + bucketSize);
+                throw new AnalysisException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
         } else {
@@ -505,20 +526,27 @@ public class PropertyAnalyzer {
         return rowDelimiter;
     }
 
-    public static TStorageType analyzeStorageType(Map<String, String> properties) throws AnalysisException {
+    public static TStorageType analyzeStorageType(Map<String, String> properties, OlapTable olapTable)
+            throws AnalysisException {
         // default is COLUMN
         TStorageType tStorageType = TStorageType.COLUMN;
         if (properties != null && properties.containsKey(PROPERTIES_STORAGE_TYPE)) {
             String storageType = properties.get(PROPERTIES_STORAGE_TYPE);
             if (storageType.equalsIgnoreCase(TStorageType.COLUMN.name())) {
                 tStorageType = TStorageType.COLUMN;
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.ROW.name())) {
+                tStorageType = TStorageType.ROW;
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
+                tStorageType = TStorageType.COLUMN_WITH_ROW;
+                if (!olapTable.supportColumnWithRow()) {
+                    throw new AnalysisException("Olap Table must have more value columns exclude key columns");
+                }
             } else {
-                throw new AnalysisException("Invalid storage type: " + storageType);
+                throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
             }
 
             properties.remove(PROPERTIES_STORAGE_TYPE);
         }
-
         return tStorageType;
     }
 
@@ -787,11 +815,11 @@ public class PropertyAnalyzer {
             try {
                 val = Integer.parseInt(valStr);
                 if (val < 0) {
-                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                    throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC
                             + " must not be less than 0");
                 }
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC 
+                throw new AnalysisException("Property " + PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC
                         + " must be integer: " + valStr);
             }
             properties.remove(PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC);
@@ -1050,10 +1078,9 @@ public class PropertyAnalyzer {
 
         boolean enableAsyncWriteBack =
                 analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
-        if (!enableDataCache && enableAsyncWriteBack) {
-            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        if (enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back is disabled since version 3.1.4");
         }
-
         return new DataCacheInfo(enableDataCache, enableAsyncWriteBack);
     }
 
@@ -1096,5 +1123,4 @@ public class PropertyAnalyzer {
         }
         return periodDuration;
     }
-
 }

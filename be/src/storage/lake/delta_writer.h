@@ -80,6 +80,8 @@ public:
 
     [[nodiscard]] MemTracker* mem_tracker();
 
+    const int64_t queueing_memtable_num() const;
+
     // Return the list of files created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
     std::vector<std::string> files() const;
@@ -95,6 +97,8 @@ public:
     bool is_immutable() const;
 
     Status check_immutable();
+
+    int64_t last_write_ts() const;
 
 private:
     DeltaWriterImpl* _impl;

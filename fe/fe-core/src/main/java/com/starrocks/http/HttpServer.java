@@ -37,7 +37,6 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
-import com.starrocks.http.action.HelpAction;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
 import com.starrocks.http.action.QueryAction;
@@ -157,7 +156,6 @@ public class HttpServer {
         QueryProfileAction.registerAction(controller);
         SessionAction.registerAction(controller);
         VariableAction.registerAction(controller);
-        HelpAction.registerAction(controller);
         StaticResourceAction.registerAction(controller);
         HaAction.registerAction(controller);
 

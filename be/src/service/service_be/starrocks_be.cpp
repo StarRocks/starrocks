@@ -108,6 +108,8 @@ Status init_datacache(GlobalEnv* global_env) {
         cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = config::datacache_checksum_enable;
         cache_options.enable_direct_io = config::datacache_direct_io_enable;
+        cache_options.enable_cache_adaptor = starrocks::config::datacache_adaptor_enable;
+        cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
         cache_options.engine = config::datacache_engine;
         return cache->init(cache_options);
     }
@@ -200,7 +202,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
     BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
-    LakeServiceImpl lake_service(exec_env);
+    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);

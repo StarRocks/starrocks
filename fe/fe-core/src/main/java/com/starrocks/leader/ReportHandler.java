@@ -97,7 +97,6 @@ import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMetaType;
@@ -811,9 +810,10 @@ public class ReportHandler extends Daemon {
                                     double bfFpp = olapTable.getBfFpp();
                                     CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId,
                                             tableId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                                            indexMeta.getSchemaHash(), partition.getVisibleVersion(),
+                                            indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(),
+                                            partition.getVisibleVersion(),
                                             indexMeta.getKeysType(),
-                                            TStorageType.COLUMN,
+                                            olapTable.getStorageType(),
                                             TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,
                                             olapTable.getCopiedIndexes(),
                                             olapTable.isInMemory(),

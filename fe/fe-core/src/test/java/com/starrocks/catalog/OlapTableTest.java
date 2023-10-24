@@ -57,6 +57,26 @@ import java.util.stream.Collectors;
 public class OlapTableTest {
 
     @Test
+    public void testSetIdForRestore() {
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
+        List<Table> tables = db.getTables();
+        final long id = 0;
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            long getNextId() {
+                return id;
+            }
+        };
+
+        for (Table table : tables) {
+            if (table.getType() != TableType.OLAP) {
+                continue;
+            }
+            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3);
+        }
+    }
+
+    @Test
     public void testTableWithLocalTablet() throws IOException {
         new MockUp<GlobalStateMgr>() {
             @Mock

@@ -91,6 +91,7 @@ public class JDBCTable extends Table {
         return resourceName;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }
@@ -261,6 +262,6 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
-        ORACLE;
+        ORACLE
     }
 }

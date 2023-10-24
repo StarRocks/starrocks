@@ -17,7 +17,10 @@ package com.starrocks.sql.analyzer;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.ArithmeticExpr;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.RemoteFile;
@@ -44,6 +47,7 @@ import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -51,6 +55,8 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -58,7 +64,9 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -76,12 +84,16 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
@@ -238,7 +250,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.getCtx().setCurrentRoleIds(
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(testUser)
         );
-        starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(testUser.getUser());
     }
 
     private static void ctxToRoot() throws PrivilegeException {
@@ -247,7 +259,7 @@ public class PrivilegeCheckerTest {
                 starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT)
         );
 
-        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getUser());
     }
 
     private static void grantOrRevoke(String sql) throws Exception {
@@ -1170,6 +1182,15 @@ public class PrivilegeCheckerTest {
 
         // test select view
         String selectViewSql = "select * from db1.view1";
+
+        verifyGrantRevoke(
+                selectViewSql,
+                "grant select on view db1.view1 to test",
+                "revoke select on view db1.view1 from test",
+                "Access denied;");
+
+        // test select view
+        selectViewSql = "select * from db1.view1 v";
 
         verifyGrantRevoke(
                 selectViewSql,
@@ -3026,5 +3047,82 @@ public class PrivilegeCheckerTest {
                 "grant ALTER on all storage volumes to test",
                 "revoke ALTER on all storage volumes from test",
                 "Access denied;");
+    }
+
+    @Test
+    public void testPolicyRewrite() throws Exception {
+        Config.access_control = "ranger";
+        ConnectContext context = starRocksAssert.getCtx();
+
+        final String testDbName = "db_for_ranger";
+        starRocksAssert.withDatabase(testDbName);
+        String createTblStmtStr = "create table " + testDbName +
+                ".tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+        createTblStmtStr = "create table " + testDbName +
+                ".tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+        createTblStmtStr = "create table " + testDbName +
+                ".tbl3(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+
+        TableName tableName = new TableName("default_catalog", "db_for_ranger", "tbl1");
+
+        Expr e = SqlParser.parseSqlToExpr("exists (select * from db_for_ranger.tbl2)", SqlModeHelper.MODE_DEFAULT);
+        Map<String, Expr> e2 = new HashMap<>();
+        e2.put("k1", SqlParser.parseSqlToExpr("k1+1", SqlModeHelper.MODE_DEFAULT));
+        try (MockedStatic<Authorizer> authorizerMockedStatic =
+                     Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), Mockito.eq(tableName)))
+                    .thenReturn(e);
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getColumnMaskingPolicy(
+                            Mockito.any(), Mockito.eq(tableName), Mockito.any()))
+                    .thenReturn(e2);
+            authorizerMockedStatic.when(Authorizer::getInstance)
+                    .thenCallRealMethod();
+            authorizerMockedStatic
+                    .when(() -> Authorizer.check(Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
+                            Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+
+            String sql = "select * from db_for_ranger.tbl1";
+
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            Analyzer.analyze(stmt, context);
+
+            QueryStatement queryStatement = (QueryStatement) stmt;
+            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+            SubqueryRelation subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
+                    .getRelation();
+            SelectRelation selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
+            Assert.assertTrue(selectRelation.getOutputExpression().get(0) instanceof ArithmeticExpr);
+
+            verifyGrantRevoke(
+                    sql,
+                    "grant select on table db_for_ranger.tbl1 to test",
+                    "revoke select on table db_for_ranger.tbl1 from test",
+                    "Access denied;");
+
+            sql = "select k1 from db_for_ranger.tbl1";
+            stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
+            Analyzer.analyze(stmt, context);
+            queryStatement = (QueryStatement) stmt;
+            Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+            subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
+                    .getRelation();
+            selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
+            Assert.assertTrue(selectRelation.getOutputExpression().get(0) instanceof ArithmeticExpr);
+        }
+
+        Config.access_control = "native";
     }
 }

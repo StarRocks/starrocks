@@ -156,6 +156,15 @@ public:
     DEFINE_VECTORIZED_FN(week_of_year);
 
     /**
+     * Get yearweek.
+     * @param context
+     * @param columns [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn year_week:
+     */
+    DEFINE_VECTORIZED_FN(year_week_with_default_mode);
+    DEFINE_VECTORIZED_FN(year_week_with_mode);
+
+    /**
      * Get week of the year.
      * @param context
      * @param column[0] [TimestampColumn] Columns that hold timestamps.
@@ -760,7 +769,7 @@ public:
     static int compute_weekday(long daynr, bool sunday_first_day_of_week);
     static uint32_t compute_days_in_year(uint year);
     static uint week_mode(uint mode);
-    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour);
+    static int32_t compute_week(uint year, uint month, uint day, uint week_behaviour, uint* year_local);
 
     /**
      * calculate a date by year and day of year

@@ -611,6 +611,7 @@ public class PlanFragmentBuilder {
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
+            Map<SlotRef, SlotRef> slotRefMap = Maps.newHashMap();
             for (TupleId tupleId : inputFragment.getPlanRoot().getTupleIds()) {
                 TupleDescriptor childTuple = context.getDescTbl().getTupleDesc(tupleId);
                 ArrayList<SlotDescriptor> slots = childTuple.getSlots();
@@ -632,6 +633,9 @@ public class PlanFragmentBuilder {
                         // Note: must change the parent tuple id
                         SlotDescriptor slotDescriptor = new SlotDescriptor(slot.getId(), tupleDescriptor, slot);
                         tupleDescriptor.addSlot(slotDescriptor);
+                        SlotRef inputSlotRef = new SlotRef(slot);
+                        SlotRef outputSlotRef = new SlotRef(slotDescriptor);
+                        slotRefMap.put(outputSlotRef, inputSlotRef);
                     }
                 }
             }
@@ -651,7 +655,7 @@ public class PlanFragmentBuilder {
             DecodeNode decodeNode = new DecodeNode(context.getNextNodeId(),
                     tupleDescriptor,
                     inputFragment.getPlanRoot(),
-                    node.getDictToStrings(), projectMap);
+                    node.getDictToStrings(), projectMap, slotRefMap);
             decodeNode.computeStatistics(optExpression.getStatistics());
             decodeNode.setLimit(node.getLimit());
 
@@ -757,11 +761,29 @@ public class PlanFragmentBuilder {
             }
 
             // set slot
+            Map<String, Column> mvColumnMap = Maps.newHashMap();
+            boolean scanBaseTable = node.getSelectedIndexId() == referenceTable.getBaseIndexId();
+            if (!scanBaseTable) {
+                MaterializedIndexMeta indexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+                mvColumnMap = indexMeta.getSchema().stream()
+                        .filter(x -> CollectionUtils.isNotEmpty(x.getRefColumns()))
+                        .collect(Collectors.toMap(x -> x.getRefColumns().get(0).getColumnName().toLowerCase(), x -> x));
+            }
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                Column column = entry.getValue();
+                if (scanBaseTable || !mvColumnMap.containsKey(column.getName())) {
+                    slotDescriptor.setColumn(entry.getValue());
+                    slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                } else {
+                    // Replace the column to mv column for special case:
+                    // If the MV is for aggregate table, and the query doesn't contain aggregate function
+                    // The MV would be chosen but the columns would not be rewritten
+                    Column mvColumn = mvColumnMap.get(column.getName());
+                    slotDescriptor.setColumn(mvColumn);
+                    slotDescriptor.setIsNullable(mvColumn.isAllowNull());
+                }
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
@@ -1153,7 +1175,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
-                icebergScanNode.setupScanRangeLocations();
+                icebergScanNode.setupScanRangeLocations(context.getDescTbl());
                 // set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
@@ -1305,6 +1327,10 @@ public class PlanFragmentBuilder {
             if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
+            if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
+                scanNode.computeFeNodes();
             }
 
             if (scanNode.isBeSchemaTable()) {

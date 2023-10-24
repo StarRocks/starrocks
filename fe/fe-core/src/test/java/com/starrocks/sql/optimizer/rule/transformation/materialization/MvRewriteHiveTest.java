@@ -202,7 +202,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
             Assert.assertTrue((mvMaxBaseTableRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
             Assert.assertTrue(mv1.isStalenessSatisfied());
 
-            Set<String> partitionsToRefresh = mv1.getPartitionNamesToRefreshForMv(true);
+            Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
             Assert.assertTrue(partitionsToRefresh.isEmpty());
         }
         starRocksAssert.dropMaterializedView("hive_staleness_1");
@@ -231,7 +231,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                     "WHERE l_shipdate = '1998-01-01' GROUP BY `l_orderkey`, `l_suppkey`;";
 
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
             PlanTestBase.assertContains(plan, "partitions=1/6\n" +
                     "     rollup: hive_partition_prune_mv1");
@@ -242,7 +241,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                     "WHERE l_shipdate = '1998-01-01' and l_orderkey=1 GROUP BY `l_suppkey`;";
 
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertNotContains(plan, "AGGREGATE");
             PlanTestBase.assertContains(plan, "PREDICATES: 18: l_orderkey = 1\n" +
                     "     partitions=1/6\n" +
@@ -253,7 +251,6 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
             String query = "SELECT l_suppkey, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                     "WHERE l_orderkey>1 GROUP BY `l_suppkey`;";
             String plan = getFragmentPlan(query);
-            System.out.println(plan);
             PlanTestBase.assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                             "  |  STREAMING\n" +
                             "  |  output: sum(21: sum(l_orderkey))\n" +
@@ -263,5 +260,89 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                     "     rollup: hive_partition_prune_mv1");
         }
         starRocksAssert.dropMaterializedView("hive_partition_prune_mv1");
+    }
+
+    @Test
+    public void testHiveEmptyMV_UnPartitioned_NotRewritten() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view hive_empty_mv " +
+                " distributed by hash(s_suppkey) " +
+                " refresh deferred manual  " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"false\"\n" +
+                ") " +
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+        // mv is not refreshed, even mv has no partitions, it should not be rewritten.
+        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertNotContains(plan, "hive_empty_mv");
+        dropMv("test", "hive_empty_mv");
+    }
+
+    @Test
+    public void testHiveEmptyMV_UnPartitioned_Rewritten() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view hive_empty_mv " +
+                " distributed by hash(s_suppkey) " +
+                " refresh deferred manual  " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ") " +
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+        refreshMaterializedView("test", "hive_empty_mv");
+
+        // mv is not refreshed, even mv has no partitions, it should not be rewritten.
+        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "hive_empty_mv");
+        dropMv("test", "hive_empty_mv");
+    }
+
+    @Test
+    public void testHiveEmptyMV_Partitioned_NotRewritten() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_partitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"false\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+        // mv is not refreshed, even mv has no partitions, it should not be rewritten.
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertNotContains(plan, "hive_partitioned_mv");
+        dropMv("test", "hive_partitioned_mv");
+    }
+
+    @Test
+    public void testHiveEmptyMV_Partitioned_Rewritten() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `hive_partitioned_mv`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`l_shipdate`)\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"" +
+                ")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;");
+        refreshMaterializedView("test", "hive_partitioned_mv");
+        String query1 = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
+                "FROM `hive0`.`partitioned_db`.`lineitem_par` as a \n " +
+                "GROUP BY " +
+                "`l_orderkey`, `l_suppkey`, `l_shipdate`;";
+        String plan = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan, "hive_partitioned_mv");
+        dropMv("test", "hive_partitioned_mv");
     }
 }

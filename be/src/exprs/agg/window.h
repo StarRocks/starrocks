@@ -180,6 +180,10 @@ class RankWindowFunction final : public WindowFunction<RankState> {
         this->data(state).peer_group_start = -1;
     }
 
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        this->data(state).peer_group_start -= count;
+    }
+
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
@@ -214,6 +218,10 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
         this->data(state).peer_group_start = -1;
     }
 
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        this->data(state).peer_group_start -= count;
+    }
+
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
@@ -237,7 +245,7 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
 
 struct CumeDistState {
     int64_t rank;
-    int64_t frame_start;
+    int64_t peer_group_start;
     int64_t count;
 };
 
@@ -245,16 +253,20 @@ class CumeDistWindowFunction final : public WindowFunction<CumeDistState> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         auto& s = this->data(state);
         s.rank = 0;
-        s.frame_start = -1;
+        s.peer_group_start = -1;
         s.count = 1;
+    }
+
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        this->data(state).peer_group_start -= count;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         auto& s = this->data(state);
-        if (s.frame_start != peer_group_start) {
-            s.frame_start = peer_group_start;
+        if (s.peer_group_start != peer_group_start) {
+            s.peer_group_start = peer_group_start;
             int64_t peer_group_count = peer_group_end - peer_group_start;
             s.rank += peer_group_count;
         }
@@ -281,9 +293,13 @@ class PercentRankWindowFunction final : public WindowFunction<PercentRankState> 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         auto& s = this->data(state);
         s.rank = 0;
-        s.frame_start = -1;
+        s.peer_group_start = -1;
         s.peer_group_count = 1;
         s.count = 1;
+    }
+
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        this->data(state).peer_group_start -= count;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -291,8 +307,8 @@ class PercentRankWindowFunction final : public WindowFunction<PercentRankState> 
                                               int64_t frame_end) const override {
         int64_t peer_group_count = peer_group_end - peer_group_start;
         auto& s = this->data(state);
-        if (s.frame_start != peer_group_start) {
-            s.frame_start = peer_group_start;
+        if (s.peer_group_start != peer_group_start) {
+            s.peer_group_start = peer_group_start;
             s.rank += s.peer_group_count;
         }
         s.peer_group_count = peer_group_count;

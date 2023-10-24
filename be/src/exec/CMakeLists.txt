@@ -95,6 +95,7 @@ set(EXEC_FILES
     hdfs_scanner_orc.cpp
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
+    hdfs_scanner_partition.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -132,6 +133,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_fe_metrics_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp

@@ -243,6 +243,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select length('aaa');";
         assertPlanContains(sql, "char_length('aaa')");
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|', ':');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a');";
+        assertPlanContains(sql, "str_to_map(split('a', ','), ':')");
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a:1,b:2,c:null');";
+        assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
     }
 
     @Test
@@ -328,6 +340,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select sha256(tk) from tall";
         assertPlanContains(sql, "sha2(from_binary(11: tk, 'utf8'), 256)");
         System.out.println(getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testInformationFunction() throws Exception {
+        String sql = "select connection_id() from tall";
+        assertPlanContains(sql, "<slot 12> : CONNECTION_ID()");
+
+        sql = "select catalog() from tall";
+        assertPlanContains(sql, "<slot 12> : CATALOG()");
+
+        sql = "select database() from tall";
+        assertPlanContains(sql, "<slot 12> : 'test'");
+
+        sql = "select schema() from tall";
+        assertPlanContains(sql, "<slot 12> : 'test'");
+
+        sql = "select user() from tall";
+        assertPlanContains(sql, "<slot 12> : USER()");
+
+        sql = "select CURRENT_USER from tall";
+        assertPlanContains(sql, "<slot 12> : CURRENT_USER()");
+
+        sql = "select CURRENT_ROLE from tall";
+        assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
     }
 
 }

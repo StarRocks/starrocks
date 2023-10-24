@@ -72,7 +72,6 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableDPJoinReorder();
         String sql = "select * from t1 join t3 on t1.v4 = t3.v10 join t0 join t2";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains(" |----8:EXCHANGE\n" +
@@ -203,11 +202,9 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----25:EXCHANGE"));
 
         // Right sub join tree (a)
-        assertContains(planFragment, "  22:NESTLOOP JOIN\n" +
+        assertContains(planFragment, "23:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----21:EXCHANGE\n");
+                "  |  colocate: false, reason:");
     }
 
     @Test
@@ -220,15 +217,15 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join (select * from t1 join t3 on t1.v4 = t3.v10 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
                 "on t1.v5 = a.v8 ";
         String planFragment = getCostExplain(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("  23:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("24:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [1: v4, BIGINT, true] = [4: v10, BIGINT, true]\n" +
                 "  |  output columns: 7\n" +
-                "  |  cardinality: 900000000\n"));
+                "  |  cardinality: 900000000"));
 
-        Assert.assertTrue(planFragment, planFragment.contains("  18:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [13: v10, BIGINT, true] = [10: v4, BIGINT, true]\n"));
+                "  |  equal join conjunct: [13: v10, BIGINT, true] = [10: v4, BIGINT, true]"));
     }
 
     @Test
@@ -311,47 +308,35 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "     TABLE: t3\n");
 
         // Left sub join tree (b)
-        Assert.assertTrue(planFragment, planFragment.contains("  26:HASH JOIN\n" +
+        Assert.assertTrue(planFragment, planFragment.contains("26:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: count = 12: v5\n" +
                 "  |  \n" +
                 "  |----25:EXCHANGE\n" +
                 "  |    \n" +
-                "  23:Project\n" +
+                "  18:Project\n" +
                 "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
-                "  22:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----21:EXCHANGE\n" +
-                "  |    \n" +
-                "  2:Project\n" +
-                "  |  <slot 26> : 1\n" +
-                "  |  \n" +
-                "  1:OlapScanNode\n" +
-                "     TABLE: t2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: t2\n" +
-                "     tabletRatio=3/3\n"));
+                "  17:NESTLOOP JOIN"));
 
         // Right sub join tree (a)
-        assertContains(planFragment, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 21\n" +
+        assertContains(planFragment, "STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 25\n" +
                 "    UNPARTITIONED\n" +
                 "\n" +
-                "  20:Project\n" +
-                "  |  <slot 10> : 10: count\n" +
+                "  24:Project\n" +
+                "  |  <slot 11> : 11: v4\n" +
+                "  |  <slot 12> : 12: v5\n" +
                 "  |  \n" +
-                "  19:NESTLOOP JOIN\n" +
+                "  23:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----18:EXCHANGE\n" +
+                "  |----22:EXCHANGE\n" +
                 "  |    \n" +
-                "  15:AGGREGATE (merge finalize)");
+                "  19:OlapScanNode\n" +
+                "     TABLE: t1");
     }
 
     @Test

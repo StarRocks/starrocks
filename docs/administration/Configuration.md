@@ -42,7 +42,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### Logging
 
-#### qe_slow_log_ms
+##### qe_slow_log_ms
 
 - Unit: ms
 - Default: 5000
@@ -510,6 +510,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 
 #### Storage
+
+##### default_replication_num
+
+- **Unit**: -
+- **Default**: 3
+- **Description**: The `default_replication_number` parameter is a system variable that sets the default number of replicas for each data partition when creating a table in StarRocks. The parameter can be set globally by using `set global default_replication_num=x`, where x is a positive integer. This will affect all subsequent table creations in all sessions, unless overridden by a session-level setting or a table-level setting. To set the parameter for the current session use `set default_replication_number=x`. This will affect only the current session and override the global setting, unless overridden by a table-level setting. Both global and session settings can be overridden by specifying the `replication_num=x` in the CREATE TABLE DDL.
 
 ##### enable_strict_storage_medium_check
 

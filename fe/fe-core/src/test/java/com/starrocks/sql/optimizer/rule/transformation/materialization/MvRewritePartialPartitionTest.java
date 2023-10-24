@@ -301,6 +301,65 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testPartitionTTL() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE ttl_base_table (\n" +
+                "                            k1 INT,\n" +
+                "                            v1 INT,\n" +
+                "                            v2 INT)\n" +
+                "                        DUPLICATE KEY(k1)\n" +
+                "                        PARTITION BY RANGE(`k1`)\n" +
+                "                        (\n" +
+                "                        PARTITION `p1` VALUES LESS THAN ('2'),\n" +
+                "                        PARTITION `p2` VALUES LESS THAN ('3'),\n" +
+                "                        PARTITION `p3` VALUES LESS THAN ('4'),\n" +
+                "                        PARTITION `p4` VALUES LESS THAN ('5'),\n" +
+                "                        PARTITION `p5` VALUES LESS THAN ('6'),\n" +
+                "                        PARTITION `p6` VALUES LESS THAN ('7')\n" +
+                "                        )\n" +
+                "                        DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into ttl_base_table values (1,1,1),(1,1,2),(1,2,1),(1,2,2),\n" +
+                "                                              (2,1,1),(2,1,2),(2,2,1),(2,2,2),\n" +
+                "                                              (3,1,1),(3,1,2),(3,2,1),(3,2,2);");
+
+        String mvName = "ttl_mv_3";
+        createAndRefreshMv("test", mvName, "CREATE MATERIALIZED VIEW " + mvName +
+                " PARTITION BY k1\n" +
+                " DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                " REFRESH ASYNC\n" +
+                " PROPERTIES(\n" +
+                " 'partition_refresh_number'='1',\n" +
+                " 'partition_ttl_number'='2' \n" +
+                " )\n" +
+                " AS SELECT k1, sum(v1) as sum_v1 FROM ttl_base_table group by k1;");
+        MaterializedView mv = getMv("test", mvName);
+
+        // initial mv should create only 1 partition
+        Assert.assertEquals(2, mv.getPartitions().size());
+
+        // refresh multiple times, should not change the live partition number
+        for (int i = 0; i < 10; i++) {
+            refreshMaterializedView("test", mvName);
+            Assert.assertEquals("refresh " + i, 2, mv.getPartitions().size());
+        }
+
+        // increase the ttl number, and add more ttl partitions
+        cluster.runSql("test", String.format("alter materialized view %s set('partition_ttl_number'='5')", mvName));
+        refreshMaterializedView("test", mvName);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(5, mv.getPartitions().size());
+
+        // decrease the ttl number, and drop some ttl partitions
+        cluster.runSql("test", String.format("alter materialized view %s set('partition_ttl_number'='1')", mvName));
+        refreshMaterializedView("test", mvName);
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(1, mv.getPartitions().size());
+
+        // cleanup
+        dropMv("test", mvName);
+        starRocksAssert.dropTable("ttl_base_table");
+    }
+
+    @Test
     public void testHivePartialPartitionWithTTL() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_parttbl_mv",
@@ -742,4 +801,5 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             dropMv("test", mvName);
         }
     }
+
 }
