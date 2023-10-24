@@ -411,6 +411,12 @@ struct TEsScanNode {
     4: optional map<string, string> fields_context
 }
 
+struct TFrontend {
+  1: optional string id
+  2: optional string ip
+  3: optional i32 http_port
+}
+
 struct TSchemaScanNode {
   1: required Types.TTupleId tuple_id
 
@@ -438,6 +444,28 @@ struct TSchemaScanNode {
   23: optional string log_level;
   24: optional string log_pattern;
   25: optional i64 log_limit;
+<<<<<<< HEAD
+=======
+  26: optional list<TFrontend> frontends;
+
+  101: optional string catalog_name;
+}
+
+enum TAccessPathType {
+    ROOT,       // ROOT
+    KEY,        // MAP KEY
+    OFFSET,     // ARRAY/MAP OFFSET
+    FIELD,      // STRUCT FIELD
+    INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
+    ALL,        // ARRAY/MAP ALL DATA
+}
+
+struct TColumnAccessPath {
+    1: optional TAccessPathType type
+    2: optional Exprs.TExpr path
+    3: optional list<TColumnAccessPath> children
+    4: optional bool from_predicate
+>>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode

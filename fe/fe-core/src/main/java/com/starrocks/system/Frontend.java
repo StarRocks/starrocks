@@ -134,6 +134,19 @@ public class Frontend implements Writable {
         this.editLogPort = editLogPort;
     }
 
+<<<<<<< HEAD
+=======
+    @VisibleForTesting
+    public void setRpcPort(int rpcPort) {
+        this.rpcPort = rpcPort;
+    }
+
+    @VisibleForTesting
+    public void setAlive(boolean isAlive) {
+        this.isAlive = isAlive;
+    }
+
+>>>>>>> 3a3b531181 ([Feature] Support query fe metrics from information_schea.fe_metris table (#33365))
     /**
      * handle Frontend's heartbeat response.
      * Because the replayed journal id is very likely to be changed at each heartbeat response,

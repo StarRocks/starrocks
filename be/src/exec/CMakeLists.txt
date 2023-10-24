@@ -126,6 +126,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_fe_metrics_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
