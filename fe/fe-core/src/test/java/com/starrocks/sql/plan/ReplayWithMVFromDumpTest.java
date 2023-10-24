@@ -110,8 +110,27 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testMVOnMV2() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+=======
+    public void testMVJoin() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_join"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("16:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 384: cast = 209: tenant_id\n" +
+                "  |  equal join conjunct: 385: cast = 210: poi_id\n" +
+                "  |  equal join conjunct: 36: cate_id = 227: if"));
+    }
+
+    @Test
+    public void testMock_MV_MVOnMV1() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+>>>>>>> 2d6ba6abb1 ([BugFix] clone a scalarOperator before rewriting it (#33535))
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
