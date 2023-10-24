@@ -114,6 +114,25 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+void NullableColumn::append_shallow_copy(const Column& src, size_t offset, size_t count) {
+    if (src.only_null()) {
+        append_nulls(count);
+    } else if (src.is_nullable()) {
+        const auto& c = down_cast<const NullableColumn&>(src);
+
+        DCHECK_EQ(c._null_column->size(), c._data_column->size());
+
+        _null_column->append(*c._null_column, offset, count);
+        _data_column->append_shallow_copy(*c._data_column, offset, count);
+        _has_null = _has_null || SIMD::contain_nonzero(c._null_column->get_data(), offset, count);
+    } else {
+        _null_column->resize(_null_column->size() + count);
+        _data_column->append_shallow_copy(src, offset, count);
+    }
+
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+}
+
 ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
     return NullableColumn::create(this->_data_column->replicate(offsets),
                                   std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));

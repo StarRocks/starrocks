@@ -122,6 +122,8 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
+    void append_shallow_copy(const Column& src, size_t offset, size_t count) override;
+
     bool append_nulls(size_t count) override;
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
