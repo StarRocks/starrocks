@@ -88,18 +88,6 @@ struct ArrayAggDistinctDispatcher {
     }
 };
 
-struct ArrayFlattenDispatcher {
-    template <LogicalType lt>
-    void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
-            auto func = std::make_shared<ArrayFlattenAggregateFunction<lt, false>>();
-            using AggState = ArrayFlattenAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_flatten", false,
-                                                                                                   func);
-            }
-        }
-};
-
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);

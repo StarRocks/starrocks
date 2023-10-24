@@ -156,19 +156,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto* column = down_cast<ArrayColumn*>(dst->get());
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
-
-        const auto* array_column = down_cast<const ArrayColumn*>(src[0].get());
-        const auto& array_offset = array_column->offsets();
-        const auto& array_ele = array_column->elements();
-        for (size_t i = 0; i < chunk_size; i++) {
-            for (size_t j = array_offset.get_data()[i]; j < array_offset.get_data()[i+1]; j++) {
-                elements_column->append_datum(array_ele.get(j));
-            }
-            offsets.emplace_back(offsets.back() + array_offset.get_data()[i+1] - array_offset.get_data()[i]);
-        }
+        (*dst)->append(*(src[0].get()));
     }
 
     std::string get_name() const override { return is_distinct ? "array_flatten_distinct" : "array_flatten"; }
