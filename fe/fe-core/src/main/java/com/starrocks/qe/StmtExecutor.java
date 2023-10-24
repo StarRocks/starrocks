@@ -40,7 +40,6 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1532,7 +1531,7 @@ public class StmtExecutor {
                 // otherwise, the result of the insert statement is failed
                 String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
-                    if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
+                    if (!(targetTable instanceof IcebergTable)) {
                         // schema table and iceberg table does not need txn
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(), transactionId, errorMsg);
