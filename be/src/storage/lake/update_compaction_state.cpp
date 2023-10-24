@@ -47,7 +47,13 @@ Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
+<<<<<<< HEAD
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
+=======
+static const size_t large_compaction_memory_threshold = 1000000000;
+
+Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+>>>>>>> 4a2c85a904 ([BugFix] Fix column overflow in RowsetUpdateState and CompactionState (#33246))
     vector<uint32_t> pk_columns;
     for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns.push_back(static_cast<uint32_t>(i));
