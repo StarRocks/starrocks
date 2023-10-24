@@ -28,6 +28,7 @@ namespace starrocks::lake {
 // check whether all txn log exists, for versions may be published repeatedly and
 // txn log has been deleted when converting from single publish to batch,
 // there we find the latest txnLog as base_version to skip repeated version.
+// result_base_index indicates the index of first txn in the txn_ids, which the corresponding txn_log is not deleted.
 
 // for example:
 // the mode of publish is single,
@@ -35,8 +36,8 @@ namespace starrocks::lake {
 // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
 // turn the mode of publish to batch,
 // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped and should return 1, just apply txn_log of txn4 and txn5.
-Status get_base_tablet_metadat_index(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                     int64_t new_version, std::span<const int64_t>& txn_ids, int& result_base_index) {
+Status get_base_tablet_metadata_index(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
+                                      int64_t new_version, std::span<const int64_t>& txn_ids, int& result_base_index) {
     result_base_index = -1;
     for (int i = 0; i < txn_ids.size(); i++) {
         auto txn_id = txn_ids[i];
@@ -49,17 +50,13 @@ Status get_base_tablet_metadat_index(TabletManager* tablet_mgr, int64_t tablet_i
                 // this should't happen
                 LOG(WARNING) << "txn_log of txn: " << txn_id << " not found, and can not find the tablet_meta";
                 return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
-            } else {
-                result_base_index = i;
-                break;
             }
+        } else {
+            result_base_index = i;
+            break;
         }
     }
 
-    // all txnlog are not found
-    if (UNLIKELY(result_base_index == -1)) {
-        return Status::NotFound("all txn_log missing");
-    }
     return Status::OK();
 }
 
@@ -97,15 +94,17 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         return base_metadata_or.status();
     }
 
-    int base_version_index = 0;
-    auto index_status = get_base_tablet_metadat_index(tablet_mgr, tablet_id, base_version, new_version, txn_ids,
-                                                      base_version_index);
-    if (index_status.is_not_found()) {
-        LOG(WARNING) << "all txn_log missing, txn_ids: " << print_txn_ids();
-    }
+    int base_version_index = -1;
+    auto index_status = get_base_tablet_metadata_index(tablet_mgr, tablet_id, base_version, new_version, txn_ids,
+                                                       base_version_index);
 
     if (!index_status.ok()) {
         return new_version_metadata_or_error(index_status);
+    }
+
+    if (base_version_index == -1) {
+        LOG(WARNING) << "all txn_log missing, txn_ids: " << print_txn_ids();
+        return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
     }
 
     auto base_metadata = std::move(base_metadata_or).value();
