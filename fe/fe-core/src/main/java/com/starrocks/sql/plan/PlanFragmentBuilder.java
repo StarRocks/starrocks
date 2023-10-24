@@ -1387,6 +1387,10 @@ public class PlanFragmentBuilder {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
             }
 
+            if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
+                scanNode.computeFeNodes();
+            }
+
             if (scanNode.isBeSchemaTable()) {
                 scanNode.computeBeScanRanges();
             }

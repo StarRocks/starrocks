@@ -111,6 +111,9 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
     if (_tnode.schema_scan_node.__isset.log_limit) {
         _param->log_limit = _tnode.schema_scan_node.log_limit;
     }
+    if (_tnode.schema_scan_node.__isset.frontends) {
+        _param->frontends = _tnode.schema_scan_node.frontends;
+    }
 
     return Status::OK();
 }
