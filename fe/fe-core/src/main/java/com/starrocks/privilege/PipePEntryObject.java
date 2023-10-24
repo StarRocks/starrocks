@@ -32,7 +32,7 @@ public class PipePEntryObject implements PEntryObject {
     @SerializedName(value = "database")
     private String dbUUID;
 
-    protected PipePEntryObject(String name, String dbUUID) {
+    protected PipePEntryObject(String dbUUID, String name) {
         this.name = name;
         this.dbUUID = dbUUID;
     }
@@ -63,7 +63,7 @@ public class PipePEntryObject implements PEntryObject {
 
                 pipe.orElseThrow(() ->
                         new PrivObjNotFoundException(
-                                "cannot find materialized view " + tokens.get(1) + " in db " + tokens.get(0))
+                                "cannot find pipe " + tokens.get(1) + " in db " + tokens.get(0))
                 );
                 pipeName = pipe.get().getName();
             }
@@ -87,7 +87,8 @@ public class PipePEntryObject implements PEntryObject {
         }
         PipePEntryObject other = (PipePEntryObject) obj;
         if (Objects.equals(other.getDbUUID(), PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-            return Objects.equals(getName(), other.getName());
+            return true;
+            //            return Objects.equals(getName(), other.getName());
         }
         if (Objects.equals(other.getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
             return Objects.equals(getDbUUID(), other.getDbUUID());
@@ -156,7 +157,7 @@ public class PipePEntryObject implements PEntryObject {
 
     @Override
     public PEntryObject clone() {
-        return new PipePEntryObject(getName(), getDbUUID());
+        return new PipePEntryObject(getDbUUID(), getName());
     }
 
     public Optional<Database> getDatabase() {

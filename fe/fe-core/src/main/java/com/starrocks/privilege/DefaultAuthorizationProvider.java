@@ -103,7 +103,6 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                     .put(ObjectType.PIPE, ImmutableList.of(
                             PrivilegeType.ALTER,
                             PrivilegeType.DROP,
-                            PrivilegeType.SELECT,
                             PrivilegeType.USAGE
                     ))
 

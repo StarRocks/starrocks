@@ -218,6 +218,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
@@ -2721,7 +2722,7 @@ public class ShowExecutor {
             // check privilege
             try {
                 Authorizer.checkAnyActionOnPipe(connectContext.getCurrentUserIdentity(),
-                        connectContext.getCurrentRoleIds(), pipe.getName());
+                        connectContext.getCurrentRoleIds(), new PipeName(dbName, pipe.getName()));
             } catch (AccessDeniedException e) {
                 continue;
             }

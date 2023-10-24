@@ -38,6 +38,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -299,7 +300,7 @@ public class PrivilegeCheckerTest {
             Assert.fail();
         } catch (Exception e) {
             System.out.println(e.getMessage() + ", sql: " + sql);
-            Assert.assertTrue(e.getMessage().contains(expectError));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains(expectError));
         }
 
         ctxToRoot();
@@ -3047,6 +3048,133 @@ public class PrivilegeCheckerTest {
                 "grant ALTER on all storage volumes to test",
                 "revoke ALTER on all storage volumes from test",
                 "Access denied;");
+    }
+
+    @Test
+    public void testPipe() throws Exception {
+        PipeManagerTest.mockRepoExecutorDML();
+
+        starRocksAssert.withTable("create table db1.tbl_pipe (id int, str string) properties('replication_num'='1') ");
+
+        String createSql = "create pipe p1 " +
+                "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        ctxToTestUser();
+        starRocksAssert.getCtx().setDatabase("db1");
+
+        // test actions use ROOT without authorize
+        {
+            ctxToRoot();
+            ShowResultSet res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+            Assert.assertEquals(0, res.getResultRows().size());
+            // create
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
+            // show
+            res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx)).execute();
+            // desc
+            new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx)).execute();
+            // alter
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("alter pipe p1 set('poll_interval'='10')", ctx),
+                    ctx);
+            // drop
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop pipe p1", ctx), ctx);
+        }
+        // test actions use user without authorize
+        {
+            ctxToTestUser();
+            ShowResultSet res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+            Assert.assertEquals(0, res.getResultRows().size());
+            // create
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
+            // show
+            res = new ShowExecutor(ctx,
+                    (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx)).execute();
+            // desc
+            new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx)).execute();
+            // alter
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("alter pipe p1 set('poll_interval'='10')", ctx),
+                    ctx);
+            // drop
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop pipe p1", ctx), ctx);
+        }
+
+        // create pipe
+        String dbName = connectContext.getDatabase();
+        verifyGrantRevoke(
+                createSql,
+                String.format("grant CREATE PIPE on DATABASE %s to test", dbName),
+                String.format("revoke CREATE PIPE on DATABASE %s from test", dbName),
+                "Access denied; you need (at least one of) the CREATE PIPE privilege(s) on DATABASE db1 " +
+                        "for this operation.");
+        verifyGrantRevoke(
+                createSql,
+                "grant CREATE PIPE on ALL DATABASES to test",
+                "revoke CREATE PIPE on ALL DATABASES from test",
+                "Access denied; you need (at least one of) the CREATE PIPE privilege(s) on DATABASE db1 " +
+                        "for this operation.");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
+
+        // test show pipes
+        ShowResultSet res =
+                new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+        Assert.assertEquals(0, res.getResultRows().size());
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant USAGE on PIPE db1.p1 to test", ctx), ctx);
+        res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+        Assert.assertEquals(1, res.getResultRows().size());
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke USAGE on PIPE db1.p1 from test", ctx), ctx);
+        res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+        Assert.assertEquals(0, res.getResultRows().size());
+
+        // test desc pipe
+        verifyGrantRevoke(
+                "desc pipe p1",
+                "grant USAGE on PIPE db1.p1 to test",
+                "revoke USAGE on PIPE db1.p1 from test",
+                "Access denied; you need (at least one of) the ANY privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+        verifyGrantRevoke(
+                "desc pipe p1",
+                "grant USAGE on ALL PIPES in DATABASE db1 to test",
+                "revoke USAGE on ALL PIPES in DATABASE db1 from test",
+                "Access denied; you need (at least one of) the ANY privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+
+        // alter pipe
+        verifyGrantRevoke(
+                "alter pipe p1 set ('poll_interval'='103') ",
+                "grant ALTER on PIPE p1 to test",
+                "revoke ALTER on PIPE p1 from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+        verifyGrantRevoke(
+                "alter pipe p1 set ('poll_interval'='103') ",
+                "grant ALTER on ALL PIPES in DATABASE db1 to test",
+                "revoke ALTER on ALL PIPES in DATABASE db1 from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+
+        // drop pipe
+        verifyGrantRevoke(
+                "drop pipe p1",
+                "grant DROP on PIPE db1.p1 to test",
+                "revoke DROP on PIPE db1.p1 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+        verifyGrantRevoke(
+                "drop pipe p1",
+                "grant DROP on ALL PIPES in DATABASE db1 to test",
+                "revoke DROP on ALL PIPES in DATABASE db1 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+
+        starRocksAssert.dropTable("tbl_pipe");
+        starRocksAssert.getCtx().setDatabase(null);
     }
 
     @Test

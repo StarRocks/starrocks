@@ -201,6 +201,7 @@ import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
 import java.util.List;
@@ -2427,7 +2428,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitDropPipeStatement(DropPipeStmt statement, ConnectContext context) {
-        String pipeName = statement.getPipeName().getPipeName();
+        PipeName pipeName = statement.getPipeName();
         try {
             Authorizer.checkPipeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     pipeName, PrivilegeType.DROP);
@@ -2435,14 +2436,14 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.DROP.name(), ObjectType.PIPE.name(), pipeName);
+                    PrivilegeType.DROP.name(), ObjectType.PIPE.name(), pipeName.toString());
         }
         return null;
     }
 
     @Override
     public Void visitAlterPipeStatement(AlterPipeStmt statement, ConnectContext context) {
-        String pipeName = statement.getPipeName().getPipeName();
+        PipeName pipeName = statement.getPipeName();
         try {
             Authorizer.checkPipeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), pipeName,
                     PrivilegeType.ALTER);
@@ -2450,21 +2451,21 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ALTER.name(), ObjectType.PIPE.name(), pipeName);
+                    PrivilegeType.ALTER.name(), ObjectType.PIPE.name(), pipeName.toString());
         }
         return null;
     }
 
     @Override
     public Void visitDescPipeStatement(DescPipeStmt statement, ConnectContext context) {
-        String pipeName = statement.getName().getPipeName();
+        PipeName pipeName = statement.getName();
         try {
             Authorizer.checkAnyActionOnPipe(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), pipeName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.PIPE.name(), pipeName);
+                    PrivilegeType.ANY.name(), ObjectType.PIPE.name(), pipeName.toString());
         }
         return null;
     }
