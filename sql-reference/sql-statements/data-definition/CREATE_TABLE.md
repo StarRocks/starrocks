@@ -658,7 +658,7 @@ SET ("replicated_storage" = "false");
 
 语法：
 
-``` sql
+```sql
 ROLLUP (rollup_name (column_name1, column_name2, ...)
 [FROM from_index_name]
 [PROPERTIES ("key" = "value", ...)],...)
