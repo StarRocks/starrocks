@@ -139,8 +139,8 @@ Broker load支持一次导入任务涉及多张表，每个Broker load导入任�
 可以使用的通配符有```? * [] {} ^```，[通配符使用规则参考](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/fs/FileSystem.html#globStatus-org.apache.hadoop.fs.Path-)。
 
 例如：
-通过 "hdfs://hdfs_host:hdfs_port/user/data/tablename/\*/\*" , 可以匹配tablename下所有分区内的所有文件；
-通过 "hdfs://hdfs_host:hdfs_port/user/data/tablename/dt=202104\*/\*" , 可以匹配tablename下所有4月分区的所有文件；
+通过 `hdfs://hdfs_host:hdfs_port/user/data/tablename/\*/\*` , 可以匹配tablename下所有分区内的所有文件；
+通过 `hdfs://hdfs_host:hdfs_port/user/data/tablename/dt=202104\*/\*` , 可以匹配tablename下所有4月分区的所有文件；
 
 * negative
 

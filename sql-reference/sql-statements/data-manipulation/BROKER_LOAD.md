@@ -395,9 +395,9 @@ WITH BROKER broker_name
     WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
     ```
 
-    hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing目录下包括如下文件：
+    `hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing`目录下包括如下文件：
 
-    [hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
+    `[hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]`
 
     则提取文件路径的中的city和utc_date字段
 

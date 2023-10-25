@@ -46,14 +46,14 @@ CONVERT_TZ(dt, from_tz, to_tz)
 
 示例一：将上海时间转化为洛杉矶时间。
 
-```Plain%20Text
+```Plain_Text
 MySQL > select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');
         -> 2019-07-31 22:21:03                                                       |
 ```
 
 示例二：将东八区时间转化为洛杉矶时间。
 
-```Plain%20Text
+```Plain_Text
 MySQL > select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 +--------------------------------------------------------------------+
 | convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles') |

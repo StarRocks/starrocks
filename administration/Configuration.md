@@ -21,7 +21,7 @@
 |audit_log_roll_interval|DAY|审计日志拆分的时间间隔, DAY 或者 HOUR|
 |audit_log_delete_age|30d|审计日志删除的间隔|
 |audit_log_roll_mode|TIME-DAY|审计日志拆分模式|
-|label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。<br> 保留时间在label_keep_max_second中进行设置。|
+|label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。<br /> 保留时间在label_keep_max_second中进行设置。|
 |label_keep_max_second|259200|label保留时长，默认3天，保留太久会消耗很多内存|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如schema change任务，默认7天|
 |label_clean_interval_second|14400|label清理的间隔|
@@ -114,9 +114,9 @@
 |report_disk_state_interval_seconds|60|汇报磁盘状态的间隔。汇报各个磁盘的状态，以及上面的数据量等等|
 |report_tablet_interval_seconds|60|汇报tablet的间隔。汇报所有的tablet的最新版本|
 |alter_tablet_timeout_seconds|86400|Schema change超时时间|
-|sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括INFO, WARNING, ERROR, FATAL等日志|
-|user_function_dir|${STARROKCS_HOME}/lib/udf|UDF程序存放的地方|
-|small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录|
+|sys_log_dir|`${STARROCKS_HOME}`/log|存放日志的地方，包括INFO, WARNING, ERROR, FATAL等日志|
+|user_function_dir|`${STARROCKS_HOME}`/lib/udf|UDF程序存放的地方|
+|small_file_dir|`${STARROCKS_HOME}`/lib/small_file|保存文件管理器下载的文件的目录|
 |sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL|
 |sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每1G拆分一个日志|
 |sys_log_roll_num|10|日志保留的数目|

@@ -67,7 +67,7 @@ ALTER DATABASE db_name SET DATA QUOTA quota;
 ALTER DATABASE example_db SET DATA QUOTA 10T;
 ```
 
-更多参考 [ALTER DATABASE](../sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)
+更多参考 [ALTER DATABASE](../sql-reference/sql-statements/data-definition/ALTER_DATABASE.md)
 
 ## 杀死查询
 

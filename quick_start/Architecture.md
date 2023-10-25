@@ -6,7 +6,7 @@
 
 ## 组件介绍
 
-StarRocks集群由FE和BE构成, 可以使用MySQL客户端访问StarRocks集群。
+StarRocks 集群由 FE 和 BE 构成, 可以使用 MySQL 客户端访问 StarRocks 集群。
 
 ### FE
 

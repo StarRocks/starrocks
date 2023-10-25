@@ -2,7 +2,7 @@
 
 ## description
 
-该语句用于创建资源。仅 root 或 admin 用户可以创建资源。目前仅支持 Spark 和 Hive 资源，可用于 [SPARK LOAD](/sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) 及 [Hive 外表](/data_source/External_table.md#hive外表) 功能。将来其他外部资源可能会加入到 StarRocks 中使用，如 Spark/GPU 用于查询，HDFS/S3 用于外部存储，MapReduce 用于 ETL 等。
+该语句用于创建资源。仅 root 或 admin 用户可以创建资源。目前仅支持 Spark 和 Hive 资源，可用于 [SPARK LOAD](/sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 及 [Hive 外表](/data_source/External_table.md#hive外表) 功能。将来其他外部资源可能会加入到 StarRocks 中使用，如 Spark/GPU 用于查询，HDFS/S3 用于外部存储，MapReduce 用于 ETL 等。
 
 语法：
 

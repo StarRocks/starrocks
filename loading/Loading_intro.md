@@ -242,7 +242,7 @@ StarRocks目前的导入方式分为两种：同步和异步。
 
 您可以设置如下[会话变量](../reference/System_variable.md)：
 
-- `query_timeout`
+* `query_timeout`
 
   用于设置查询超时时间。单位：秒。取值范围：`1` ~ `259200`。默认值：`300`，相当于 5 分钟。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。
 

@@ -57,7 +57,7 @@ http://<be_host>:<be_http_port>/api/health
 
 * 运行 `http://fe_host:fe_http_port/api/bootstrap` 确认FE启动状态。
 
-  * 返回 {"status":"OK","msg":"Success"} 表示启动正常。
+  * 返回 `{"status":"OK","msg":"Success"}` 表示启动正常。
 
 ```shell
 http://<fe_host>:<fe_http_port>/api/bootstrap
@@ -268,7 +268,7 @@ mysql> set global batch_size = 4096;
 
 4. 备份meta_dir元数据信息  
   
-    a. 将标准版的/fe/conf/fe.conf中设置的meta_dir目录进行备份，如未更改过配置文件中meta_dir属性，默认为“${DSDB_HOME}/doris-meta”；下例中设置为“${DSDB_HOME}/meta”,  
+    a. 将标准版的/fe/conf/fe.conf中设置的meta_dir目录进行备份，如未更改过配置文件中meta_dir属性，默认为`${DSDB_HOME}/doris-meta”`；下例中设置为`“${DSDB_HOME}/meta”`,  
   
     b. 注意保证“命令中元数据目录”和“元数据实际目录”还有“配置文件”中一致，如您原目录名为“doris-meta”，建议您将目录重命名，同步需要更改配置文件  
   

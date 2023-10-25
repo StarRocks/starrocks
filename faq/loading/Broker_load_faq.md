@@ -29,7 +29,7 @@ format as指定错误，改成文件对应类型重试导入任务。
 
 建表时去掉timezone就可以了。
 
-## 【Broker Load】 orc数据导入失败ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>
+## 【Broker Load】 orc数据导入失败`ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>`
 
 导入源文件和starrocks两边列名称不一致，set的时候系统内部会有一个类型推断，然后cast的时候失败了，设置成两边字段名一样，不需要set，就不会cast，导入就可以成功了
 

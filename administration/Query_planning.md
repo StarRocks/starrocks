@@ -2,7 +2,7 @@
 
 性能优化是StarRocks集群管理员经常遇到的问题，慢查询不仅影响用户体验，而且影响整个集群的服务能力，所以定期针对慢查询进行分析并优化是一项非常重要的工作。
 
-我们可以在fe/log/fe.audit.log中看到所有查询和慢查询信息，每个查询对应一个QueryID，我们可以在页面或者日志中查找到查询对应的QueryPlan和Profile，QueryPlan是FE通过解析SQL生成的执行计划，而Profile是BE执行后的结果，包含了每一步的耗时和数据处理量等数据，可以通过StarRocksManager的图形界面看到可视化的Profile执行树。<br>
+我们可以在fe/log/fe.audit.log中看到所有查询和慢查询信息，每个查询对应一个QueryID，我们可以在页面或者日志中查找到查询对应的QueryPlan和Profile，QueryPlan是FE通过解析SQL生成的执行计划，而Profile是BE执行后的结果，包含了每一步的耗时和数据处理量等数据，可以通过StarRocksManager的图形界面看到可视化的Profile执行树。<br />
 同时，StarRocks还支持对慢查询中的SQL语句进行归类，并为各类SQL语句计算出SQL指纹（即MD5哈希值，对应字段为`Digest`）。
 
 ## Plan分析

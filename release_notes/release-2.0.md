@@ -35,7 +35,7 @@
 修复了如下 Bug：
 
 - 在进行表压缩 (Compaction) 时，如果某列的任意一个值重复出现的次数超过 0x40000000，会导致 Compaction 卡住。[#6513](https://github.com/StarRocks/starrocks/issues/6513)
-- BDB JE v7.3.8 版本引入了一些问题，导致 FE 启动后磁盘 I/O 很高、磁盘使用率持续异常增长、且没有恢复迹象，回退到 BDB JE v7.3.7 版本后 FE 恢复正常。[#6634] (<https://github.com/StarRocks/starrocks/issues/6634>)
+- BDB JE v7.3.8 版本引入了一些问题，导致 FE 启动后磁盘 I/O 很高、磁盘使用率持续异常增长、且没有恢复迹象，回退到 BDB JE v7.3.7 版本后 FE 恢复正常。[#6634](https://github.com/StarRocks/starrocks/issues/6634)
 
 ## 2.0.6
 

@@ -108,14 +108,14 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 
 | **SQL syntax**   | **Elasticsearch syntax**   |
 | ---------------- | ---------------------------|
-| =                | term query                 |
-| in               | terms query                |
-| \>=,  <=, >, <   | range                      |
-| and              | bool.filter                |
-| or               | bool.should                |
-| not              | bool.must_not              |
-| not in           | bool.must_not + terms      |
-| esquery          | ES Query DSL               |
+| `=`                | term query                 |
+| `in`               | terms query                |
+| `\>=,  <=, >, <`   | range                      |
+| `and`              | bool.filter                |
+| `or`               | bool.should                |
+| `not`              | bool.must_not              |
+| `not in`           | bool.must_not + terms      |
+| `esquery`          | ES Query DSL               |
 
 ### 查询示例
 
@@ -511,7 +511,7 @@ PROPERTIES (
 |  ----  | ----  |
 | type  | 资源类型，固定取值为**iceberg**。 |
 | starrocks.catalog-type  | Iceberg的Catalog类型。目前仅支持为Hive Catalog，取值为HIVE。 |
-| iceberg.catalog.hive.metastore.uris | Hive Metastore的thrift URI。<br>Iceberg通过创建Hive Catalog，连接Hive Metastore，以创建并管理表。您需要传入该Hive Metastore的thrift URI。格式为**thrift://<Hive Metadata的IP地址>:<端口号>**，端口号默认为9083。 |
+| iceberg.catalog.hive.metastore.uris | Hive Metastore的thrift URI。<br />Iceberg通过创建Hive Catalog，连接Hive Metastore，以创建并管理表。您需要传入该Hive Metastore的thrift URI。格式为**`thrift://<Hive Metadata的IP地址>:<端口号>`**，端口号默认为9083。 |
 
 执行如下命令，查看StarRocks中的所有Iceberg资源。
 

@@ -16,7 +16,7 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 说明：
 
-1. op 的可选类型包括：=, >, <, >=, <=, !=, in, not in
+1. op 的可选类型包括：`=, >, <, >=, <=, !=, in, not in`
 2. 非 Duplicate 表只能指定 key 列上的条件。
 3. 当选定的 key 列不存在于某个 rollup 中时，无法进行 delete。
 4. 条件之间只能是“与”的关系。

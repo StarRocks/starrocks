@@ -85,7 +85,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 * 不包含FLOAT/DOUBLE类型的列;
 * VARCHAR类型列只能出现一次, 并且是末尾位置;
 * 当shortkey index的末尾列为CHAR或者VARCHAR类型时, shortkey的长度会超过36字节;
-* 当用户在建表语句中指定PROPERTIES {short\_key = "integer"}时, 可突破上述限制;
+* 当用户在建表语句中指定PROPERTIES `{short\_key = "integer"}`时, 可突破上述限制;
 
 ### 3.4.2 如何选择排序列
 

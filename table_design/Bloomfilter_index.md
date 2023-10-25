@@ -14,7 +14,7 @@ Bloom Filter（布隆过滤器）是用于判断某个元素是否在一个集�
 
 ### **2 什么是 Bloom Filter 索引**
 
-StarRocks的建表时, 可通过PROPERTIES{"bloom\_filter\_columns"="c1,c2,c3"}指定需要建BloomFilter索引的列，查询时, BloomFilter可快速判断某个列中是否存在某个值。如果Bloom Filter判定该列中不存在指定的值，就不需要读取数据文件；如果是全1情形，此时需要读取数据块确认目标值是否存在。另外，Bloom Filter索引无法确定具体是哪一行数据具有该指定的值。
+StarRocks的建表时, 可通过`PROPERTIES{"bloom\_filter\_columns"="c1,c2,c3"}`指定需要建BloomFilter索引的列，查询时, BloomFilter可快速判断某个列中是否存在某个值。如果Bloom Filter判定该列中不存在指定的值，就不需要读取数据文件；如果是全1情形，此时需要读取数据块确认目标值是否存在。另外，Bloom Filter索引无法确定具体是哪一行数据具有该指定的值。
 
 ## 适用场景
 

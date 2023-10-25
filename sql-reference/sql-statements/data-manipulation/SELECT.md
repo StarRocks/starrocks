@@ -472,7 +472,7 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
 ```
 
-2.不相关标量子查询，谓词为>,<等。例如输出比平均工资高的人的信息。
+2.不相关标量子查询，谓词为`>,<`等。例如输出比平均工资高的人的信息。
 
 ```sql
 SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
@@ -570,7 +570,7 @@ select c1 from t1 where month between 1 and 6;
 
 #### 比较操作符
 
-比较操作符用来判断列和列是否相等或者对列进行排序。=, !=, <=, >=可以适用所有数据类型。
+比较操作符用来判断列和列是否相等或者对列进行排序。`=, !=, <=, >=`可以适用所有数据类型。
 
 其中`<>`符号是不等于的意思，与!=的功能一致。IN和BETWEEN操作符提供更简短的表达来描述相等、小于、大于等关系的比较。
 
