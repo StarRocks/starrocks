@@ -134,7 +134,7 @@ void RuntimeFilterPort::publish_runtime_filters(std::list<RuntimeFilterBuildDesc
         VLOG_FILE << "RuntimeFilterPort::publish_runtime_filters. merge_node[0] = " << rf_desc->merge_nodes()[0]
                   << ", filter_size = " << filter->size() << ", query_id = " << params.query_id()
                   << ", finst_id = " << params.finst_id() << ", be_number = " << params.build_be_number()
-                  << ", is_pipeline = " << params.is_pipeline();
+                  << ", is_pipeline = " << params.is_pipeline() << ", can_use_bf = " << filter->can_use_bf();
 
         std::string* rf_data = params.mutable_data();
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(filter);
@@ -182,7 +182,8 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
     VLOG_FILE << "RuntimeFilterPort::receive_runtime_filter(shared). filter_id = " << filter_id
-              << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size();
+              << ", filter_size = " << rf->size() << ", wait_list_size = " << wait_list.size()
+              << ", can_use_bf = " << rf->can_use_bf();
     for (auto* rf_desc : wait_list) {
         rf_desc->set_shared_runtime_filter(rf);
     }
@@ -253,16 +254,19 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
         // something wrong with deserialization.
         return;
     }
+    if (!rf->can_use_bf()) {
+        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. some partial rf's size exceeds "
+                     "global_runtime_filter_build_max_size, stop building bf and only reserve min/max filter";
+        status->can_use_bf = false;
+    }
 
-    // exceeds max size, stop building it.
     status->current_size += rf->size();
     if (status->current_size > status->max_size) {
-        // alreay exceeds max size, no need to build it.
-        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building since size too "
+        // alreay exceeds max size, no need to build bloom filter, but still reserve min/max filter.
+        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. stop building bf since size too "
                      "large. filter_id = "
                   << filter_id << ", size = " << status->current_size;
-        status->stop = true;
-        return;
+        status->can_use_bf = false;
     }
 
     VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter. assembled filter_id = " << filter_id
@@ -272,6 +276,12 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
 
     // not ready. still have to wait more filters.
     if (status->filters.size() < status->expect_number) return;
+    if (!status->can_use_bf) {
+        VLOG_FILE << "RuntimeFilterMerger::merge_runtime_filter, clear bf in all filters";
+        for (auto& [be_number, rf] : status->filters) {
+            rf->clear_bf();
+        }
+    }
     _send_total_runtime_filter(rf_version, filter_id);
 }
 
@@ -321,6 +331,10 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     JoinRuntimeFilter* first = status->filters.begin()->second;
     ObjectPool* pool = &(status->pool);
     out = first->create_empty(pool);
+    if (!status->can_use_bf) {
+        out->clear_bf();
+    }
+
     for (auto it : status->filters) {
         out->concat(it.second);
     }
@@ -333,6 +347,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     }
     request.set_filter_id(filter_id);
     request.set_is_partial(false);
+
     PUniqueId* query_id = request.mutable_query_id();
     query_id->set_hi(_query_id.hi);
     query_id->set_lo(_query_id.lo);
