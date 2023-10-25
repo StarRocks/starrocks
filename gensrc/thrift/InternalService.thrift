@@ -222,6 +222,12 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
+<<<<<<< HEAD
+=======
+
+  106: optional bool enable_agg_spill_preaggregation;
+  107: optional i64 global_runtime_filter_build_max_size;
+>>>>>>> 4ba3e1b6f1 ([Enhancement] limit global runtime filter size (#32909))
 }
 
 
