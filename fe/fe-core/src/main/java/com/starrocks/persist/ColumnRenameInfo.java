@@ -49,24 +49,12 @@ public class ColumnRenameInfo implements Writable {
         return tableId;
     }
 
-    public void setTableId(long tableId) {
-        this.tableId = tableId;
-    }
-
     public String getColumnName() {
         return columnName;
     }
 
-    public void setColumnName(String columnName) {
-        this.columnName = columnName;
-    }
-
     public String getNewColumnName() {
         return newColumnName;
-    }
-
-    public void setNewColumnName(String newColumnName) {
-        this.newColumnName = newColumnName;
     }
 
     public ColumnRenameInfo(long dbId, long tableId, String columnName, String newColumnName) {
