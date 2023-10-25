@@ -4,7 +4,7 @@
 
 该语句用于创建索引。
 
-删除索引请参考 [DROP INDEX](../data-definition/DROP%20INDEX.md) 章节。
+删除索引请参考 [DROP INDEX](../data-definition/DROP_INDEX.md) 章节。
 
 ## 语法
 

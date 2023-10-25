@@ -4,7 +4,7 @@
 
 该语句用于删除一个逻辑视图 VIEW。
 
-创建 VIEW 操作请参考 [CREATE VIEW](../data-definition/CREATE%20VIEW.md) 章节。
+创建 VIEW 操作请参考 [CREATE VIEW](../data-definition/CREATE_VIEW.md) 章节。
 
 ## 语法
 

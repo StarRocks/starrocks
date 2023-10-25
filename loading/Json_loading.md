@@ -100,7 +100,7 @@ curl -v --location-trusted -u root: \
 +------+------+
 ~~~
 
-<br>
+<br />
 
 对于缺失的列 如果列的定义是nullable，那么会补上NULL，也可以通过ifnull补充默认值。
 

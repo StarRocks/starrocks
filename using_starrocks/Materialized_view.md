@@ -96,7 +96,7 @@ FROM sales_records
 GROUP BY store_id;
 ~~~
 
-更详细物化视图创建语法请参看SQL参考手册 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md) ，或者在 MySQL 客户端使用命令 `help create materialized view` 获得帮助。
+更详细物化视图创建语法请参看SQL参考手册 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md) ，或者在 MySQL 客户端使用命令 `help create materialized view` 获得帮助。
 
 <br/>
 

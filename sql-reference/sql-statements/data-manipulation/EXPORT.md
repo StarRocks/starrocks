@@ -66,7 +66,7 @@ broker
 
     这里需要指定具体的 broker name, 以及所需的 broker 属性。
 
-    对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以在 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 章节中搜索 broker_properties。
+    对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以在 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 章节中搜索 broker_properties。
 
 6 `broker_properties`
 

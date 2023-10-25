@@ -5,7 +5,7 @@
 
 ## 注意事项
 
-如果您在阅读文档时，发现文档里描述有误或不规范，可以直接在[官网文档](https://docs.starrocks.io/zh-cn/latest/introduction/StarRocks_intro) 右上角单击**反馈**，提交GitHub issue。在issue里提供必要的截图，问题描述和建议修改，然后提交问题。<br>
+如果您在阅读文档时，发现文档里描述有误或不规范，可以直接在[官网文档](https://docs.starrocks.io/zh-cn/latest/introduction/StarRocks_intro) 右上角单击**反馈**，提交GitHub issue。在issue里提供必要的截图，问题描述和建议修改，然后提交问题。<br />
 ![image](https://user-images.githubusercontent.com/98087056/183545340-205e3730-f2a7-4e45-bfef-63afb356b814.png)
 
 ## 编写流程
@@ -26,4 +26,4 @@
 
 ## 文档模板
 
-[函数文档模板](./sql-reference/sql-functions/How%20to%20Write%20Functions%20Documentation.md)
+[函数文档模板](./sql-reference/sql-functions/How_to_Write_Functions_Documentation.md)

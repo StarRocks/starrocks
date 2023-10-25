@@ -4,7 +4,7 @@
 
 该语句用于删除一个已创建的仓库。仅 root 或 superuser 用户可以删除仓库。
 
-创建 REPOSITORY 操作请参考 [CREATE REPOSITORY](../data-definition/CREATE%20REPOSITORY.md) 章节。
+创建 REPOSITORY 操作请参考 [CREATE REPOSITORY](../data-definition/CREATE_REPOSITORY.md) 章节。
 
 ## 语法
 

@@ -22,7 +22,7 @@ SHOW DATA [FROM db_name[.table_name]];
 
 4. 结果集中的 `Total` 行表示汇总行。`Quota` 行表示当前数据库设置的配额。`Left` 行表示剩余配额。
 
-5. 如果想查看各个 Partition 的大小，请参阅 [show partitions](../data-manipulation/SHOW%20PARTITIONS.md)。
+5. 如果想查看各个 Partition 的大小，请参阅 [show partitions](../data-manipulation/SHOW_PARTITIONS.md)。
 
 ## 示例
 

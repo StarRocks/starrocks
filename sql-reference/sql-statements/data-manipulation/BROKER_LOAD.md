@@ -2,9 +2,9 @@
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的前提条件、基本原理、以及支持的数据文件格式和外部存储系统等，请参见[从 HDFS 或外部云存储系统导入数据](/loading/BrokerLoad.md)。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的前提条件、基本原理、以及支持的数据文件格式和外部存储系统等，请参见[从 HDFS 或外部云存储系统导入数据](/loading/BrokerLoad.md)。
 
-在使用 Broker Load 导入数据前，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
+在使用 Broker Load 导入数据前，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
 
 ## 语法
 
@@ -210,8 +210,8 @@ INTO TABLE <table_name>
   | **参数名称**                         | **参数说明**                                                 |
   | ------------------------------------------------------- | --------------------------- |
   | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
-  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-  | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
+  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br />其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+  | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br />其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
   | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
 #### Amazon S3
@@ -327,7 +327,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
     >
     > 这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。
 
-  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
+  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
 
   **`max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]**
 

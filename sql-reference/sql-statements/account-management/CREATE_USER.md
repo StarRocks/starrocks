@@ -38,7 +38,7 @@ auth_option: {
 
 4. **DEFAULT ROLE**
 
-    如果指定了角色（ROLE），则会自动将该角色所拥有的权限赋予新创建的这个用户。如果不指定，则该用户默认没有任何权限。指定的 ROLE 必须已经存在。角色创建请参考 [CREATE ROLE](../account-management/CREATE%20ROLE.md) 章节。
+    如果指定了角色（ROLE），则会自动将该角色所拥有的权限赋予新创建的这个用户。如果不指定，则该用户默认没有任何权限。指定的 ROLE 必须已经存在。角色创建请参考 [CREATE ROLE](../account-management/CREATE_ROLE.md) 章节。
 
 ## 示例
 
