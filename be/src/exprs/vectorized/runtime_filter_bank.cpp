@@ -432,6 +432,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     if (filter->num_hash_partitions() == 0) {
         return;
     }
+
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_hash({column}, &eval_context.running_context);
     } else {
