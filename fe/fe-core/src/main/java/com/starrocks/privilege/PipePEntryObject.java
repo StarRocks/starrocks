@@ -88,7 +88,6 @@ public class PipePEntryObject implements PEntryObject {
         PipePEntryObject other = (PipePEntryObject) obj;
         if (Objects.equals(other.getDbUUID(), PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return true;
-            //            return Objects.equals(getName(), other.getName());
         }
         if (Objects.equals(other.getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
             return Objects.equals(getDbUUID(), other.getDbUUID());
