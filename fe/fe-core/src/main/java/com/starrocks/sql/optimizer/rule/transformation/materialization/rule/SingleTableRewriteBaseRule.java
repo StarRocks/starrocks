@@ -59,6 +59,7 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                         expressions.get(i), queryExpression.getOp() instanceof LogicalAggregationOperator, context);
                 Preconditions.checkState(mvContext != null);
                 mvContext.setIndex(i);
+                mvContext.setOutputStatistics(expressions.get(i).getStatistics());
                 contexts.add(mvContext);
             }
             // sort expressions based on statistics output row count and compute size
@@ -76,6 +77,7 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         // else set it to Integer.MAX_VALUE
         private int groupbyColumnNum;
         private int index;
+        private Statistics outputStatistics;
 
         public CandidateContext(Statistics mvStatistics, int schemaColumnNum) {
             this(mvStatistics, schemaColumnNum, 0);
@@ -111,6 +113,14 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         public void setIndex(int index) {
             this.index = index;
         }
+
+        public Statistics getOutputStatistics() {
+            return outputStatistics;
+        }
+
+        public void setOutputStatistics(Statistics outputStatistics) {
+            this.outputStatistics = outputStatistics;
+        }
     }
 
     @VisibleForTesting
@@ -135,6 +145,11 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
             }
 
             ret = Double.compare(context1.getMvStatistics().getComputeSize(), context2.getMvStatistics().getComputeSize());
+            if (ret != 0) {
+                return ret;
+            }
+            ret = Double.compare(context1.getOutputStatistics().getOutputRowCount(),
+                    context2.getOutputStatistics().getOutputRowCount());
             return ret != 0 ? ret : Integer.compare(context1.getIndex(), context2.getIndex());
         }
     }
