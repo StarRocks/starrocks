@@ -1308,8 +1308,8 @@ PARALLEL_TEST(MapColumnTest, test_remove_duplicated_keys) {
         nest_offsets->get_data().push_back(2);
         nest_offsets->get_data().push_back(4);
 
-        auto nest_map = MapColumn::create(std::move(nest_keys),
-                                          std::move(ColumnHelper::cast_to_nullable_column(column)), nest_offsets);
+        auto nest_map =
+                MapColumn::create(std::move(nest_keys), ColumnHelper::cast_to_nullable_column(column), nest_offsets);
         nest_map->remove_duplicated_keys(true);
 
         ASSERT_EQ("{1:{4:66}}", nest_map->debug_item(0));
