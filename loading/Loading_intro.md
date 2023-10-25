@@ -56,7 +56,7 @@ StarRocks 支持两种导入模式：同步导入和异步导入。
 
 Broker Load 和 Spark Load 导入作业的执行流程主要分为 5 个阶段，如下图所示。
 
-![Broker Load 和 Spark Load 流程图](/assets/4.1-1.png)
+![Broker Load 和 Spark Load 流程图](../assets/4.1-1.png)
 
 每个阶段的描述如下：
 
@@ -121,7 +121,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 
-![数据源与导入方式关系图](/assets/4.1-3.png)
+![数据源与导入方式关系图](../assets/4.1-3.png)
 
 ## 内存限制
 

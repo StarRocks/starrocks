@@ -54,7 +54,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 下图展示了 Broker Load 的主要流程：
 
-![Broker Load 原理图](/assets/4.3-1-zh.png)
+![Broker Load 原理图](../assets/4.3-1-zh.png)
 
 ## 基本操作
 
