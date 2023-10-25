@@ -69,4 +69,12 @@ public class StringUtils {
             return table.getName().equalsIgnoreCase(toCheck);
         }
     }
+
+    public static boolean areColumnNamesEqual(String columName, String toCheck) {
+        if (columName == null) {
+            return false;
+        }
+
+        return columName.equalsIgnoreCase(toCheck);
+    }
 }
