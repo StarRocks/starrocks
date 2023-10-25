@@ -266,7 +266,6 @@ JoinHashTable JoinHashTable::clone_readable_table() {
     JoinHashTable ht;
 
     ht._hash_map_type = this->_hash_map_type;
-    ht._need_create_tuple_columns = this->_need_create_tuple_columns;
 
     ht._table_items = this->_table_items;
     // Clone a new probe state.
@@ -289,12 +288,10 @@ JoinHashTable JoinHashTable::clone_readable_table() {
 
 void JoinHashTable::set_probe_profile(RuntimeProfile::Counter* search_ht_timer,
                                       RuntimeProfile::Counter* output_probe_column_timer,
-                                      RuntimeProfile::Counter* output_tuple_column_timer,
                                       RuntimeProfile::Counter* output_build_column_timer) {
     if (_probe_state == nullptr) return;
     _probe_state->search_ht_timer = search_ht_timer;
     _probe_state->output_probe_column_timer = output_probe_column_timer;
-    _probe_state->output_tuple_column_timer = output_tuple_column_timer;
     _probe_state->output_build_column_timer = output_build_column_timer;
 }
 
@@ -311,17 +308,14 @@ void JoinHashTable::close() {
 
 // may be called more than once if spill
 void JoinHashTable::create(const HashTableParam& param) {
-    _need_create_tuple_columns = param.need_create_tuple_columns;
     _table_items = std::make_shared<JoinHashTableItems>();
     if (_probe_state == nullptr) {
         _probe_state = std::make_unique<HashTableProbeState>();
         _probe_state->search_ht_timer = param.search_ht_timer;
         _probe_state->output_probe_column_timer = param.output_probe_column_timer;
-        _probe_state->output_tuple_column_timer = param.output_tuple_column_timer;
         _probe_state->output_build_column_timer = param.output_build_column_timer;
     }
 
-    _table_items->need_create_tuple_columns = _need_create_tuple_columns;
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
@@ -358,9 +352,6 @@ void JoinHashTable::create(const HashTableParam& param) {
             _table_items->probe_slots.emplace_back(hash_table_slot);
             _table_items->probe_column_count++;
         }
-        if (_table_items->row_desc->get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _table_items->output_probe_tuple_ids.emplace_back(tuple_desc->id());
-        }
     }
 
     const auto& build_desc = *param.build_row_desc;
@@ -388,9 +379,6 @@ void JoinHashTable::create(const HashTableParam& param) {
             }
             _table_items->build_chunk->append_column(std::move(column), slot->id());
             _table_items->build_column_count++;
-        }
-        if (_table_items->row_desc->get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _table_items->output_build_tuple_ids.emplace_back(tuple_desc->id());
         }
     }
 
@@ -509,7 +497,7 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
     return Status::OK();
 }
 
-void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns) {
+void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
     Columns& columns = _table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
@@ -537,24 +525,6 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
         }
     }
 
-    if (_need_create_tuple_columns) {
-        const auto& tuple_id_map = chunk->get_tuple_id_to_index_map();
-        for (auto iter : tuple_id_map) {
-            if (_table_items->row_desc->get_tuple_idx(iter.first) != RowDescriptor::INVALID_IDX) {
-                if (_table_items->build_chunk->is_tuple_exist(iter.first)) {
-                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter.first);
-                    ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter.first);
-                    dest_column->append(*src_column, 0, src_column->size());
-                } else {
-                    ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter.first);
-                    ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
-                    dest_column->append(*src_column, 0, src_column->size());
-                    _table_items->build_chunk->append_tuple_column(dest_column, iter.first);
-                }
-            }
-        }
-    }
-
     _table_items->row_count += chunk->num_rows();
 }
 
@@ -568,10 +538,6 @@ StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk)
             column = ColumnHelper::cast_to_nullable_column(column);
         }
         output->append_column(column, slot->id());
-    }
-
-    if (_need_create_tuple_columns) {
-        return Status::NotSupported("unreachable path");
     }
 
     return output;

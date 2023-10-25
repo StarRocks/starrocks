@@ -257,7 +257,7 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
         auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker));
         if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
             int64_t old_mem_usage = hash_table_mem_usage;
-            RETURN_IF_ERROR(builder->append_chunk(state, std::move(chunk_st.value())));
+            RETURN_IF_ERROR(builder->append_chunk(std::move(chunk_st.value())));
             hash_table_mem_usage = builder->hash_table_mem_usage();
             COUNTER_ADD(metrics.build_partition_peak_memory_usage, hash_table_mem_usage - old_mem_usage);
         } else if (chunk_st.status().is_end_of_file()) {

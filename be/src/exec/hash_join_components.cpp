@@ -74,7 +74,7 @@ void HashJoinBuilder::reset_probe(RuntimeState* state) {
     _ht.reset_probe_state(state);
 }
 
-Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status HashJoinBuilder::append_chunk(const ChunkPtr& chunk) {
     if (UNLIKELY(_ht.get_row_count() + chunk->num_rows() >= max_hash_table_element_size)) {
         return Status::NotSupported(strings::Substitute("row count of right table in hash join > $0", UINT32_MAX));
     }
@@ -82,7 +82,7 @@ Status HashJoinBuilder::append_chunk(RuntimeState* state, const ChunkPtr& chunk)
     RETURN_IF_ERROR(_hash_joiner.prepare_build_key_columns(&_key_columns, chunk));
     // copy chunk of right table
     SCOPED_TIMER(_hash_joiner.build_metrics().copy_right_table_chunk_timer);
-    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
+    TRY_CATCH_BAD_ALLOC(_ht.append_chunk(chunk, _key_columns));
     return Status::OK();
 }
 
