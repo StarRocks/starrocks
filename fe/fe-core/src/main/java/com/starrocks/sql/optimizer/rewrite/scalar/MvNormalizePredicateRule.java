@@ -47,7 +47,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             } else if (o2 == null) {
                 return 1;
             } else {
-                return o1.toString().compareTo(o2.toString());
+                return o1.toString().toLowerCase().compareTo(o2.toString().toLowerCase());
             }
         }
     };
