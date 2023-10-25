@@ -250,10 +250,22 @@ protected:
         return Status::OK();
     }
 
-    void _commit_compaction() {
+    Status _commit_compaction() {
         std::stringstream input_stream_info;
         {
             std::unique_lock wrlock(_tablet->get_header_lock());
+            // check input_rowsets exist. If not, tablet_meta maybe modify by some other thread, cancel this task
+            for (auto& rowset : _input_rowsets) {
+                if (_tablet->get_rowset_by_version(rowset->version()) == nullptr) {
+                    std::string msg = strings::Substitute(
+                            "rowset: $1 is not exist in tablet:$2, maybe tablet meta is modify by other thread. cancel "
+                            "this compaction task",
+                            rowset->version().to_string(), _tablet->tablet_id());
+                    LOG(WANRING) << msg;
+                    return Status::InternalError(msg);
+                }
+            }
+
             // after one success compaction, low cardinality dict will be generated.
             // so we can enable shortcut compaction.
             _tablet->tablet_meta()->set_enable_shortcut_compaction(true);

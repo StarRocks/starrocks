@@ -189,6 +189,12 @@ struct Version {
             return first > rhs.first;
         }
     }
+
+    std::string to_string() {
+        std::stringstream ss;
+        ss << "[" << version.first << "-" << version.second << "]";
+        return ss.str();
+    }
 };
 
 typedef std::vector<Version> Versions;
