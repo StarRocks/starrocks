@@ -223,7 +223,11 @@ public:
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
+<<<<<<< HEAD
         _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
+=======
+        _vectorized_schema = MemTable::convert_schema(_schema, _slots);
+>>>>>>> dbfa7e7955 ([Enhancement] raise code standard bar, turn a few warnings into error (#33609))
         _mem_table =
                 std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     }
