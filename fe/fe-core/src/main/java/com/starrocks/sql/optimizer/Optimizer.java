@@ -664,7 +664,8 @@ public class Optimizer {
         builder.setRequiredProperties(inputProperties)
                 .setStatistics(groupExpression.getGroup().getStatistics())
                 .setCost(groupExpression.getCost(requiredProperty))
-                .setLogicalProperty(rootGroup.getLogicalProperty());
+                .setLogicalProperty(rootGroup.getLogicalProperty())
+                .setOutputProperty(requiredProperty);
 
         return builder.build();
     }

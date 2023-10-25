@@ -2262,6 +2262,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
     }
+    public boolean isHashJoinInterpolatePassthrough() {
+        return hashJoinInterpolatePassthrough;
+    }
 
     public boolean isHashJoinInterpolatePassthrough() {
         return hashJoinInterpolatePassthrough;
