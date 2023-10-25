@@ -16,6 +16,7 @@
 #include "service/staros_worker.h"
 
 #include <fslib/fslib_all_initializer.h>
+#include <"fslib/fslib_config_manager.h">
 #include <starlet.h>
 #include <worker.h>
 
@@ -384,6 +385,43 @@ void update_staros_starcache() {
     if (fslib::FLAGS_use_star_cache != config::starlet_use_star_cache) {
         fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
         (void)fslib::star_cache_init(fslib::FLAGS_use_star_cache);
+    }
+}
+
+void update_starlet_gflag_config(const std::string& name) {
+    if (name == "starlet_cache_thread_num") {
+        auto size = config::starlet_cache_thread_num;
+        if (value > 0) {
+            FLAG_cachemgr_threadpool_size = size;
+            update_cachemgr_threadpool_size(size);
+            LOG(INFO) << "Update starlet cache manager's thread pool size to: " << size;
+        }
+        return;
+    }
+    if (name == "starlet_cache_evict_low_water") {
+        FLAG_cachemgr_evict_low_water = config::starlet_cache_evict_low_water;
+        return;
+    }
+    if (name == "starlet_cache_evict_high_water") {
+        FLAG_cachemgr_evict_high_water = config::starlet_cache_evict_high_water;
+        return;
+    }
+    if (name == "starlet_fs_stream_buffer_size_bytes") {
+        FLAG_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
+        return;
+    }
+    if (name == "starlet_fs_read_prefetch_threadpool_size") {
+        auto size = config::starlet_fs_read_prefetch_threadpool_size;
+        if (size > 0) {
+            FLAG_fs_buffer_prefetch_threadpool_size = size;
+            update_prefetch_threadpool_size(size);
+            LOG(INFO) << "Update starlet prefetch thread pool size to: " << size;
+        }
+        return;
+    }
+    if (name == "starlet_fs_read_prefetch_enable") {
+        FLAG_fs_enable_buffer_prefetch = config::starlet_fs_read_prefetch_enable;
+        return;
     }
 }
 

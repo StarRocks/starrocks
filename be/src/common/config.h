@@ -858,15 +858,16 @@ CONF_Int32(starlet_cache_check_interval, "900");
 // Cache backend cache evictor interval (in seconds)
 CONF_Int32(starlet_cache_evict_interval, "60");
 // Cache will start evict cache files if free space belows this value(percentage)
-CONF_Double(starlet_cache_evict_low_water, "0.1");
+CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 // Cache will stop evict cache files if free space is above this value(percentage)
-CONF_Double(starlet_cache_evict_high_water, "0.2");
+CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_mBool(starlet_use_star_cache, "false");
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -879,9 +880,9 @@ CONF_Int32(starlet_s3_client_max_cache_capacity, "8");
 // number of instances per cache item
 CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 // whether turn on read prefetch feature
-CONF_Bool(starlet_fs_read_prefetch_enable, "false");
+CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
-CONF_Int32(starlet_fs_read_prefetch_threadpool_size, "128");
+CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");

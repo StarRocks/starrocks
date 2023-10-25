@@ -177,6 +177,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         LOG(INFO) << "set_config " << name << "=" << value << " success";
         if (_config_callback.count(name)) {
             _config_callback[name]();
+        } else {
+            // update starlet related configs at runtime
+            if (name.compare(0, 8, "starlet_") == 0) {
+#ifdef USE_STAROS
+                update_starlet_gflag_config(name);
+#endif
+            }
         }
     }
     return s;
