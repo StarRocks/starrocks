@@ -715,6 +715,14 @@ public class GlobalTransactionMgr implements Writable {
         return txnNum;
     }
 
+    public int getFinishedTransactionNum() {
+        int txnNum = 0;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnNum += dbTransactionMgr.getFinishedTxnNums();
+        }
+        return txnNum;
+    }
+
     public TransactionIdGenerator getTransactionIDGenerator() {
         return this.idGenerator;
     }
