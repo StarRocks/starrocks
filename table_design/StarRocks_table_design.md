@@ -16,7 +16,7 @@ StarRocks 通过前缀索引 (Prefix Index) 和列级索引，能够快速找到
 
 StarRocks 表设计原理如下图所示。
 
-![稀疏索引](/assets/3.1-2.png)
+![稀疏索引](../assets/3.1-2.png)
 
 一张表中的数据组织主要由三部分构成：
 

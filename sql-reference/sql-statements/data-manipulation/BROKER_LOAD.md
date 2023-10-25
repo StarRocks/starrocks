@@ -256,7 +256,7 @@ INTO TABLE <table_name>
 
    如果还没有启用 Interoperability 特性，请单击 **Interoperable Access**。
 
-   ![Google GCS - Access Key Pair](/assets/8.2.2-1.png)
+   ![Google GCS - Access Key Pair](../../../assets/8.2.2-1.png)
 
 4. 单击 **Create new Key** 按钮，按界面提示完成密钥对的创建。
 
