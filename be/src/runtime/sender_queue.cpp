@@ -743,11 +743,6 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        if (_is_cancelled) {
-            LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
-            return Status::OK();
-        }
-
         // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
             if (_is_pipeline_level_shuffle &&
@@ -775,7 +770,7 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             _chunk_queue_states[index].blocked_closure_num += closure != nullptr;
             _total_chunks++;
             // Double check here for short circuit compatibility without introducing a critical section
-            if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
+            if (_is_cancelled || _chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
                 short_circuit(index);
             }
             _recvr->_num_buffered_bytes += chunk_bytes;
@@ -790,20 +785,18 @@ void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_se
     auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
     auto& metrics = _recvr->_metrics[driver_sequence];
     chunk_queue_state.is_short_circuited.store(true, std::memory_order_relaxed);
-    if (_is_pipeline_level_shuffle) {
-        auto& chunk_queue = _chunk_queues[driver_sequence];
-        ChunkItem item;
-        while (chunk_queue.size_approx() > 0) {
-            if (chunk_queue.try_dequeue(item)) {
-                if (item.closure != nullptr) {
-                    COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
-                    item.closure->Run();
-                    chunk_queue_state.blocked_closure_num--;
-                }
-                --_total_chunks;
-                _recvr->_num_buffered_bytes -= item.chunk_bytes;
-                COUNTER_ADD(metrics.peak_buffer_mem_bytes, item.chunk_bytes);
+    auto& chunk_queue = _chunk_queues[driver_sequence];
+    ChunkItem item;
+    while (chunk_queue.size_approx() > 0) {
+        if (chunk_queue.try_dequeue(item)) {
+            if (item.closure != nullptr) {
+                COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
+                item.closure->Run();
+                chunk_queue_state.blocked_closure_num--;
             }
+            --_total_chunks;
+            _recvr->_num_buffered_bytes -= item.chunk_bytes;
+            COUNTER_ADD(metrics.peak_buffer_mem_bytes, item.chunk_bytes);
         }
     }
 }
