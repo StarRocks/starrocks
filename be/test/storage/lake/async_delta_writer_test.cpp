@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <semaphore>
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
