@@ -606,12 +606,12 @@ public class JournalEntity implements Writable {
                 break;
             }
             case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
-                data = TransactionStateBatch.read(in);
+                data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionState.class);
                 isRead = true;
                 break;
             }
             case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
-                data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);
+                data = TransactionStateBatch.read(in);
                 isRead = true;
                 break;
             }
