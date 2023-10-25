@@ -27,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -64,7 +65,6 @@ import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SA
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
@@ -280,7 +280,7 @@ public class StorageVolumeTest {
         }
 
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put(HDFS_CONFIG_RESOURCES, confFile);
+        storageParams.put(HadoopExt.HDFS_CONFIG_RESOURCES, confFile);
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
