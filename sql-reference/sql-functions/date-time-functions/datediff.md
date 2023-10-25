@@ -6,7 +6,7 @@
 
 `expr1` 和 `expr2` 参数必须是合法的日期或日期/时间表达式。
 
-此函数与 [days_diff](../sql-refernce/sql-functions/date-time-functions/days_diff.md) 的区别是：
+此函数与 [days_diff](./days_diff.md) 的区别是：
 
 |函数名|行为|例子|
 |---|---|---|

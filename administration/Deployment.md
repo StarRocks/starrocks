@@ -120,5 +120,5 @@ IsMaster: false
 
 成功部署 StarRocks 集群后，您可以：
 
-* [创建表](Create_table.md)
-* [导入和查询数据](Import_and_query.md)
+* [创建表](../quick_start/Create_table.md)
+* [导入和查询数据](../quick_start/Import_and_query.md)

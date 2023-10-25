@@ -14,7 +14,7 @@
 
 使用 StarRocks 的 Java UDF 功能前，您需要在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true` 以开启 UDF 功能，并重启 FE 节点使配置项生效。
 
-详细操作以及配置项列表参考 [配置参数](../administration/Configuration.md)。
+详细操作以及配置项列表参考 [配置参数](../../administration/Configuration.md)。
 
 ## 开发并使用 UDF
 
@@ -291,7 +291,7 @@ public class WindowSumInt {
     </tr>
     <tr>
         <td>void windowUpdate(State state, int, int, int , int, ...)</td>
-        <td>更新窗口数据。窗口函数的详细说明，请参见<a href="../sql-reference/sql-functions/Window_function.md/">窗口函数</a>。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+        <td>更新窗口数据。窗口函数的详细说明，请参见[窗口函数](../../sql-reference/sql-functions/Window_function.md)。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
         <ul>
         <li>peer_group_start：是当前分区开始的位置。<br>分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。</li>
         <li>peer_group_end：当前分区结束的位置。</li>
@@ -509,7 +509,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-reference/sql-statements/data-definition/show-functions.md)。
+更多信息，请参见[SHOW FUNCTIONS](../../sql-reference/sql-statements/data-definition/show-functions.md)。
 
 ## 删除 UDF
 
@@ -519,7 +519,7 @@ SHOW FUNCTIONS;
 DROP FUNCTION function_name(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-reference/sql-statements/data-definition/drop-function.md)。
+更多信息，请参见[DROP FUNCTION](../../sql-reference/sql-statements/data-definition/drop-function.md)。
 
 ## 类型映射关系
 

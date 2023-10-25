@@ -8,9 +8,9 @@ JSON 构造函数可以构造 JSON 类型的数据。例如 JSON 类型的对象
 
 | 函数名称                                                     | 功能                                 | 示例                                                      | 返回结果                               |
 | ------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-| [json_object](../../sql-functions/json-functions/json-creation-functions/json_object.md) | 构造 JSON 类型的对象。                 | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25) | {"Daniel Smith": 26, "Lily Smith": 25} |
-| [json_array](../../sql-functions/json-functions/json-creation-functions/json_array.md)   | 构造 JSON 类型的数组。                | SELECT JSON_ARRAY(1, 2, 3)                                | [1,2,3]                                |
-| [parse_json](../../sql-functions/json-functions/json-creation-functions/parse_json.md)   | 从字符串解析并构造出 JSON 类型的数据。    | SELECT PARSE_JSON('{"a": 1}')                             | {"a": 1}                               |
+| [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md) | 构造 JSON 类型的对象。                 | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25) | {"Daniel Smith": 26, "Lily Smith": 25} |
+| [json_array](../../sql-functions/json-functions/json-constructor-functions/json_array.md)   | 构造 JSON 类型的数组。                | SELECT JSON_ARRAY(1, 2, 3)                                | [1,2,3]                                |
+| [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md)   | 从字符串解析并构造出 JSON 类型的数据。    | SELECT PARSE_JSON('{"a": 1}')                             | {"a": 1}                               |
 
 ## JSON 查询和处理函数
 

@@ -501,4 +501,4 @@ flink.starrocks.sink.properties.strip_outer_array=true
 
 ## 常见问题
 
-请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_faq.md)。
+请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。

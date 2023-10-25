@@ -16,7 +16,7 @@ mysql -h <fe_host> -P9030 -u root
 
 > **注意**
 >
-> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。
 
 ```sql
 CREATE DATABASE example_db;
@@ -101,7 +101,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 分区分桶
 
-`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/Data_distribution.md#动态分区管理)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
+`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/Data_distribution.md#管理动态分区)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
 
 `DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
@@ -113,7 +113,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](/table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](/table_design/Bitmap_index.md)，[Bloomfilter 索引](/table_design/Bloomfilter_index.md) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](/table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
 
 > 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
 
@@ -255,4 +255,4 @@ mysql -h 127.0.0.1 -P9030 -utest -p123456
 
 ## 下一步
 
-表创建成功后，您可以 [导入并查询数据](/quick_start/Import_and_query.md)。
+表创建成功后，您可以 [导入并查询数据](./Import_and_query.md)。

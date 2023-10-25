@@ -69,7 +69,7 @@ cd StarRocks-x.x.x/fe
 >
 > 将以上路径名修改为解压后的路径名。
 
-修改 FE 配置文件 **conf/fe.conf**。以下示例仅添加元数据目录和 Java 目录，以保证部署成功。如需在生产环境中对集群进行详细优化配置，参考 [FE 参数配置](../administration/Configuration.md#FE-配置项)。
+修改 FE 配置文件 **conf/fe.conf**。以下示例仅添加元数据目录和 Java 目录，以保证部署成功。如需在生产环境中对集群进行详细优化配置，参考 [FE 参数配置](../administration/Configuration.md#配置-fe-参数)。
 
 > **注意**
 >
@@ -215,7 +215,7 @@ cd StarRocks-x.x.x/be
 >
 > 将以上路径名修改为解压后的路径名。
 
-修改 BE 节点配置文件 **conf/be.conf**。因默认配置即可启动集群，以下示例并未修改 BE 节点配置。如需在生产环境中对集群进行详细优化配置，参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
+修改 BE 节点配置文件 **conf/be.conf**。因默认配置即可启动集群，以下示例并未修改 BE 节点配置。如需在生产环境中对集群进行详细优化配置，参考 [BE 参数配置](../administration/Configuration.md#be-配置项)。
 
 > **注意**
 >
@@ -334,5 +334,5 @@ ALTER SYSTEM DROP BACKEND "172.16.xxx.xx:9050";
 
 成功部署 StarRocks 集群后，您可以：
 
-* [创建表](Create_table.md)
-* [导入和查询数据](Import_and_query.md)
+* [创建表](./Create_table.md)
+* [导入和查询数据](./Import_and_query.md)

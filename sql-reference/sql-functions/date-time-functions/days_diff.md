@@ -2,7 +2,7 @@
 
 ## 功能
 
-计算开始时间和结束时间相差几天 （`expr1` - `expr2`），结果精确到天。此函数与 [datediff](../sql-refernce/sql-functions/date-time-functions/datediff.md) 的区别是：
+计算开始时间和结束时间相差几天 （`expr1` - `expr2`），结果精确到天。此函数与 [datediff](./datediff.md) 的区别是：
 
 |函数名|行为|例子|
 |---|---|---|

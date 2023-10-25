@@ -870,7 +870,7 @@ Hive 表 (Hive Table) 的 Partition 统计信息以及 Partition 下面的文件
 
 三. 重启 FE，BE。
 
-## (Deprecated) Iceberg 外部表
+## Iceberg 外部表
 
 如要查询 Iceberg 数据，需要在 StarRocks 中创建 Iceberg 外部表，并将外部表与需要查询的 Iceberg 表建立映射。
 

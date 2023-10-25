@@ -81,7 +81,7 @@ select * from detailDemo;
 select * from detailDemo order by region_num desc;
 ```
 
-StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#%E8%BF%9E%E6%8E%A5join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](/sql-reference/sql-statements/data-manipulation/SELECT.md#with%E5%AD%90%E5%8F%A5) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#%E8%BF%9E%E6%8E%A5join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](/sql-reference/sql-statements/data-manipulation/SELECT.md#with-子句) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
 ## 扩展支持
 
@@ -93,11 +93,11 @@ StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-fun
 
 ### 视图
 
-StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definition/CREATE%20VIEW.md#description) 和 [物化视图](/using_starrocks/Materialized_view.md#物化视图)。具体使用方式详见对应章节。
+StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definition/CREATE%20VIEW.md) 和 [物化视图](/using_starrocks/Materialized_view.md#物化视图)。具体使用方式详见对应章节。
 
 ### 外部表
 
-StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#mysql-外部表)，[Elasticsearch 外部表](/data_source/External_table.md#elasticsearch-外部表)，[Apache Hive™ 外表](/data_source/External_table.md#hive-外表)，[StarRocks 外部表](/data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/data_source/External_table.md#apache-iceberg-外表)，[Apache Hudi 外表](/data_source/External_table.md#apache-hudi-外表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
+StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#mysql-外部表)，[Elasticsearch 外部表](/data_source/External_table.md#elasticsearch-外部表)，[Apache Hive™ 外表](/data_source/External_table.md#hive-外表)，[StarRocks 外部表](/data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/data_source/External_table.md#iceberg-外部表)，[Apache Hudi 外表](/data_source/External_table.md#apache-hudi-外表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
 
 ## 慢查询分析
 

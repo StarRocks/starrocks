@@ -346,7 +346,7 @@ LoadFinishTime: 2019-07-27 11:50:16
     JobDetails: {"ScannedRows":28133395, "TaskNumber":1, "FileNumber":1,"FileSize":200000}
 ~~~
 
-返回结果集中参数的意义可参考 [查看导入状态](../loading/BrokerLoad#查看导入任务状态)。
+返回结果集中参数的意义可参考 [查看导入状态](../loading/BrokerLoad.md#查看导入作业)。
 
 ### 取消导入
 

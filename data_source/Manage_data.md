@@ -177,4 +177,4 @@ DROP CATALOG hive_catalog;
 
 ## 更新 external catalog 中表的元数据
 
-External catalog 中表的元数据缓存在 FE 中，因此表结构和分区文件等元数据的刷新机制和[缓存更新](../using_starrocks/External_table#缓存更新)相同。您可执行 `refresh external table catalog.db.table` 来进行刷新。
+External catalog 中表的元数据缓存在 FE 中，因此表结构和分区文件等元数据的刷新机制和[缓存更新](../data_source/External_table.md#更新缓存的-hive-表元数据)相同。您可执行 `refresh external table catalog.db.table` 来进行刷新。
