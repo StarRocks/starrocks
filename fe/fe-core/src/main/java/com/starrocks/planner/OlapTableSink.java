@@ -43,6 +43,7 @@ import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -235,9 +236,17 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
+<<<<<<< HEAD
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
+=======
+        tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
+        tSink.setPartition(
+                createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
+                                enableAutomaticPartition, automaticBucketSize, partitionIds));
+        tSink.setLocation(createLocation(dstTable, clusterId, partitionIds, enableReplicatedStorage));
+>>>>>>> 3b8380d0a6 ([BugFix] Fix automatic partition fail when insert column has expr on it (#33513))
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
     }
@@ -311,7 +320,26 @@ public class OlapTableSink extends DataSink {
         return distColumns;
     }
 
+<<<<<<< HEAD
     private TOlapTablePartitionParam createPartition(long dbId, OlapTable table) throws UserException {
+=======
+    public static boolean skipImmutablePartition(PhysicalPartition physicalPartition, long automaticBucketSize) {
+        if (physicalPartition.isImmutable()) {
+            return true;
+        }
+        if (automaticBucketSize > 0 && physicalPartition.getTabletMaxDataSize() > automaticBucketSize) {
+            physicalPartition.setImmutable(true);
+            return true;
+        }
+        return false;
+    }
+
+    public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
+                                                            TupleDescriptor tupleDescriptor,
+                                                            boolean enableAutomaticPartition,
+                                                            long automaticBucketSize,
+                                                            List<Long> partitionIds) throws UserException {
+>>>>>>> 3b8380d0a6 ([BugFix] Fix automatic partition fail when insert column has expr on it (#33513))
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -339,6 +367,22 @@ public class OlapTableSink extends DataSink {
                 }
                 if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
                     ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
+                    List<Expr> partitionExprs = exprPartitionInfo.getPartitionExprs();
+                    Preconditions.checkArgument(partitionExprs.size() == 1,
+                            "Number of partition expr is not 1 for automatic partition table, expr num="
+                                    + partitionExprs.size());
+                    Expr expr = partitionExprs.get(0);
+                    List<SlotRef> slotRefs = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slotRefs);
+                    Preconditions.checkState(slotRefs.size() == 1);
+                    // default slot is table column slot, when there are some expr on column
+                    // the slot desc will change, so we need to reset the slot desc
+                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
+                        Column column = slotDesc.getColumn();
+                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                            slotRefs.get(0).setDesc(slotDesc);
+                        }
+                    }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
