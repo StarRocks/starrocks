@@ -20,12 +20,14 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -37,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -208,7 +211,7 @@ public class StatisticsCollectJobFactory {
             Pattern checkRegex = Pattern.compile(regex);
             String name = db.getFullName() + "." + table.getName();
             if (checkRegex.matcher(name).find()) {
-                LOG.debug("statistics job exclude pattern {}, hit table: {}", regex, name);
+                LOG.info("statistics job exclude pattern {}, hit table: {}", regex, name);
                 return;
             }
         }
@@ -221,7 +224,7 @@ public class StatisticsCollectJobFactory {
             LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
             if (tableUpdateTime != null) {
                 if (statisticsUpdateTime.isAfter(tableUpdateTime)) {
-                    LOG.debug("statistics job doesn't work on non-update table: {}, " +
+                    LOG.info("statistics job doesn't work on non-update table: {}, " +
                                     "last update time: {}, last collect time: {}",
                             table.getName(), tableUpdateTime, statisticsUpdateTime);
                     return;
@@ -249,7 +252,7 @@ public class StatisticsCollectJobFactory {
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
             if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
-                LOG.debug("statistics job doesn't work on the interval table: {}, " +
+                LOG.info("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table rows: {}",
                         table.getName(), tableUpdateTime, timeInterval, tableRowCount);
                 return;
@@ -292,8 +295,15 @@ public class StatisticsCollectJobFactory {
                     }
                 }
             }
+        } else if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
+                updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
+                                statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()));
+            }
         }
-
+        LOG.info("create external full statistics job for table: {}, partitions: {}",
+                table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 updatedPartitions.isEmpty() ? null : updatedPartitions,
                 columns, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));

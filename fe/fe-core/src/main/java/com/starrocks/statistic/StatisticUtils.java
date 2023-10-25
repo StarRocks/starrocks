@@ -23,6 +23,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
@@ -51,6 +52,7 @@ import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -260,6 +262,11 @@ public class StatisticUtils {
             } else {
                 return null;
             }
+        } else if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()),
+                    Clock.systemDefaultZone().getZone())).orElse(null);
         } else {
             return null;
         }
