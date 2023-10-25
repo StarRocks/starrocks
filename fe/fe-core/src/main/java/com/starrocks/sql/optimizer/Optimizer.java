@@ -657,17 +657,7 @@ public class Optimizer {
             childPlans.add(childPlan);
         }
 
-<<<<<<< HEAD
         OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(groupExpression.getOp(), childPlans);
-=======
-        OptExpression expression = OptExpression.create(groupExpression.getOp(),
-                childPlans);
-        // record inputProperties at optExpression, used for planFragment builder to determine join type
-        expression.setRequiredProperties(inputProperties);
-        expression.setStatistics(groupExpression.getGroup().getStatistics());
-        expression.setCost(groupExpression.getCost(requiredProperty));
-        expression.setOutputProperty(requiredProperty);
->>>>>>> 7cff9fb0e7 ([Enhancement] Add local shuffle in partitioned hash join node to alleviate data skew (#33453))
 
 
         // record inputProperties used to determine join type when building planFragment
@@ -675,7 +665,8 @@ public class Optimizer {
         builder.setRequiredProperties(inputProperties)
                 .setStatistics(groupExpression.getGroup().getStatistics())
                 .setCost(groupExpression.getCost(requiredProperty))
-                .setLogicalProperty(rootGroup.getLogicalProperty());
+                .setLogicalProperty(rootGroup.getLogicalProperty()).
+                .setOutputProperty(requiredProperty);
 
         return builder.build();
     }

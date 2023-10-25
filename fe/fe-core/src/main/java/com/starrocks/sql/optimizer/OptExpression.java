@@ -234,6 +234,8 @@ public class OptExpression {
 
         private List<PhysicalPropertySet> requiredProperties;
 
+        private PhysicalPropertySet outputProperty;
+
 
         public Builder(Operator op, List<OptExpression> inputs) {
             this.op = op;
@@ -260,6 +262,11 @@ public class OptExpression {
             return this;
         }
 
+        public Builder setOutputProperty(PhysicalPropertySet outputProperty) {
+            this.outputProperty = outputProperty;
+            return this;
+        }
+
         public OptExpression build() {
             Preconditions.checkState(op != null);
             OptExpression result = OptExpression.create(op, inputs);
@@ -267,6 +274,7 @@ public class OptExpression {
             result.setCost(cost);
             result.setLogicalProperty(property);
             result.setRequiredProperties(requiredProperties);
+            result.setOutputProperty(outputProperty);
             return result;
         }
     }
