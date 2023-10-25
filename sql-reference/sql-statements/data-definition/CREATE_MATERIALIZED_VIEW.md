@@ -10,7 +10,7 @@
 
 在显示 FINISHED 后既可通过 `desc [table_name] all` 命令来查看物化视图的 schema 了。
 
-删除物化视图参考 [DROP MATERIALIZED](../data-definition/DROP%20MATERIALIZED%20VIEW.md) 章节。
+删除物化视图参考 [DROP MATERIALIZED](../data-definition/DROP_MATERIALIZED_VIEW.md) 章节。
 
 ## 语法
 

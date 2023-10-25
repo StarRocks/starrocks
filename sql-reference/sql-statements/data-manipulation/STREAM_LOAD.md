@@ -48,8 +48,8 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | 参数名称      | 是否必须 | 参数说明                                                     |
 | ------------- | -------- | ------------------------------------------------------------ |
-| fe_host       | 是       | 指定 StarRocks 集群中 FE 的 IP 地址。 <br>**说明**<br>如果您直接提交导入作业给某一个 BE 节点，则需要传入该 BE 的 IP 地址。 |
-| fe_http_port  | 是       | 指定 StarRocks 集群中 FE 的 HTTP 端口号。 默认端口号为 8030。 <br>**说明**<br>如果您直接提交导入作业给某一指定的 BE 节点，则需要传入该 BE 的 HTTP 端口号。默认端口号为 8040。 |
+| fe_host       | 是       | 指定 StarRocks 集群中 FE 的 IP 地址。 <br />**说明**<br />如果您直接提交导入作业给某一个 BE 节点，则需要传入该 BE 的 IP 地址。 |
+| fe_http_port  | 是       | 指定 StarRocks 集群中 FE 的 HTTP 端口号。 默认端口号为 8030。 <br />**说明**<br />如果您直接提交导入作业给某一指定的 BE 节点，则需要传入该 BE 的 HTTP 端口号。默认端口号为 8040。 |
 | database_name | 是       | 指定目标 StarRocks 表所在的数据库的名称。                    |
 | table_name    | 是       | 指定目标 StarRocks 表的名称。                                |
 
@@ -84,7 +84,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | **参数名称**     | **是否必选** | **参数说明**                                                 |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| column_separator | 否           | 用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致。<br>**说明**<br>StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
+| column_separator | 否           | 用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致。<br />**说明**<br />StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (\|)。 |
 | row_delimiter    | 否           | 用于指定待导入数据文件中的行分隔符。如果不指定该参数，则默认为 `\n`。 |
 
 #### JSON 适用参数
@@ -94,7 +94,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | jsonpaths         | 否           | 用于指定待导入的字段的名称。参数取值为 JSON 格式。Stream Load 支持通过如下模式之一来导入 JSON 数据：<ul><li>简单模式：不需要设置 `jsonpaths` 参数。这种模式适用于 JSON 数据结构相对简单、不需要通过转换来实现 JSON 数据跟 StarRocks 表数据之间的映射的场景。要求 JSON 数据是大括号 {} 表示的对象类型，例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是字段的名称，按名称直接对应目标 StarRocks 表中的 `category`、`author`、`price` 三列。</li><li>严格模式：需要设置 `jsonpaths` 参数。这种模式适用于 JSON 数据结构相对复杂、需要通过转换来实现 JSON 数据跟 StarRocks 表数据之间的映射的场景。具体请参见本文提供的示例 “[使用严格模式导入数据](#使用严格模式导入数据)。”</li></ul> |
 | strip_outer_array | 否           | 用于指定是否裁剪最外层的数组结构。取值范围：`true` 和 `false`。默认值：`false`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据文件解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标 StarRocks 表中对应的数据行。 |
 | json_root         | 否           | 用于指定待导入 JSON 数据的根元素。该参数仅用于通过严格模式导入 JSON 数据。参数取值为合法的 JsonPath 字符串。默认值为空，表示会导入整个 JSON 数据文件的数据。具体请参见本文提供的示例“[导入数据并指定 JSON 根节点](#指定-json-根节点使严格模式导入数据)。” |
-| ignore_json_size | 否   | 用于指定是否检查 HTTP 请求中 JSON Body 的大小。<br>**说明**<br>HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。 |
+| ignore_json_size | 否   | 用于指定是否检查 HTTP 请求中 JSON Body 的大小。<br />**说明**<br />HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。 |
 
 另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
 
@@ -118,10 +118,10 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | ---------------- | ------------ | ------------------------------------------------------------ |
 | label            | 否           | 用于指定导入作业的标签。如果您不指定标签，StarRocks 会自动为导入作业生成一个标签。相同标签的数据无法多次成功导入，这样可以避免一份数据重复导入。有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。StarRocks 默认保留最近 3 天内成功的导入作业的标签。您可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `label_keep_max_second` 设置默认保留时长。 |
 | where            | 否           | 用于指定过滤条件。如果指定该参数，StarRocks 会按照指定的过滤条件对转换后的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入。 |
-| max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。<br>建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。<br>如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br>**说明**<br>这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。 |
-| timeout          | 否           | 用于导入作业的超时时间。取值范围：1 ~ 259200。单位：秒。默认值：`600`。<br>**说明**<br>除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
+| max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。<br />建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。<br />如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br />**说明**<br />这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。 |
+| timeout          | 否           | 用于导入作业的超时时间。取值范围：1 ~ 259200。单位：秒。默认值：`600`。<br />**说明**<br />除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
 | strict_mode      | 否           | 用于指定是否开严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。 |
-| timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br>该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。 |
+| timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br />该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。 |
 | load_mem_limit   | 否           | 导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。 |
 <<<<<<< HEAD
 =======

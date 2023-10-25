@@ -32,7 +32,7 @@ StarRocks 支持在导入数据的过程中实现数据转换。
 
 ## 前提条件
 
-如果使用 Broker Load 导入数据，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文假设您已部署一个名为 `broker1` 的 Broker。
+如果使用 Broker Load 导入数据，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文假设您已部署一个名为 `broker1` 的 Broker。
 
 如果使用 Routine Load 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署两个 Topic，分别为 `topic1` 和 `topic2`。
 
@@ -130,7 +130,7 @@ curl --location-trusted -u root: \
 >
 > `columns` 参数用于对数据文件中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
@@ -152,7 +152,7 @@ WITH BROKER "broker1";
 >
 > `column_list` 参数用于对数据文件中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
@@ -174,7 +174,7 @@ FROM KAFKA
 >
 > `COLUMNS` 参数用于对数据中的列进行临时命名，从而映射到 StarRocks 表的列。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -225,7 +225,7 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
@@ -244,7 +244,7 @@ LOAD LABEL test_db.label2
 WITH BROKER "broker1";
 ```
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
@@ -263,7 +263,7 @@ FROM KAFKA
 );
 ```
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -317,7 +317,7 @@ curl --location-trusted -u root: \
 >
 > - 不支持 `column_name = function(column_name)` 的形式，需要时可以重命名衍生列之前的列，比如为 `column_name = func(``tempcolumn_name``)`。
 
-有关详细的语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 #### 从 HDFS 导入
 
@@ -340,7 +340,7 @@ WITH BROKER "broker1";
 >
 > 必须先通过 `column_list` 参数声明待导入数据文件中包含的所有列，然后再通过 SET 子句声明衍生列。如上述示例中，先通过 `column_list` 参数声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再通过 SET 子句声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 从 Kafka 导入
 
@@ -362,7 +362,7 @@ FROM KAFKA
 >
 > 必须通过 `COLUMNS` 参数先声明待导入数据文件中包含的所有列，然后再声明衍生列。如上述示例中，`COLUMNS` 参数中先声明 `file2.csv` 文件中包含的仅有的一列临时命名为 `date`，然后再声明需要调用函数经过转化才能生成的衍生列：`year=year(date)`、`month=month(date)` 和 `day=day(date)`。
 
-有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md)。
 
 ### 查询数据
 
@@ -420,7 +420,7 @@ WITH BROKER "broker1";
 >
 > 上述示例中，指定的文件路径中的分区字段 `date` 对应 `table1` 表中的 `event_date` 列，因此需要通过 SET 子句完成 `date` 到 `event_date` 的映射。如果指定的文件路径中的分区字段与其对应的 StarRocks 表中的列名称一样，则不需要通过 SET 子句来指定映射关系。
 
-有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+有关详细的语法和参数介绍，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### 查询数据
 

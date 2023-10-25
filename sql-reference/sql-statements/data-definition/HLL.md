@@ -34,7 +34,7 @@ set2 hll hll_union)
 distributed by hash(id) buckets 32;
 ```
 
-### 通过 [Stream load](../data-manipulation/STREAM%20LOAD.md) 导入数据
+### 通过 [Stream load](../data-manipulation/STREAM_LOAD.md) 导入数据
 
 ```bash
 a. 使用表中的列生成hll列

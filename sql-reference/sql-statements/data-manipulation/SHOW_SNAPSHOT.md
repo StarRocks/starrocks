@@ -2,7 +2,7 @@
 
 ## 功能
 
-该语句用于查看仓库中已存在的备份。查看仓库命令请参考 [SHOW REPOSITORIES](../data-manipulation/SHOW%20REPOSITORIES.md), 详细的备份恢复操作说明请参考: [备份恢复](/administration/Backup_and_restore.md) 章节。
+该语句用于查看仓库中已存在的备份。查看仓库命令请参考 [SHOW REPOSITORIES](../data-manipulation/SHOW_REPOSITORIES.md), 详细的备份恢复操作说明请参考: [备份恢复](/administration/Backup_and_restore.md) 章节。
 
 ## 语法
 

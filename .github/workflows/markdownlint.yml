@@ -13,3 +13,15 @@ jobs:
       with:
         config: .markdownlint.yaml
         ignore: assets
+    - name: docusaurus-mdx-checker
+      if: always()
+      run: |
+        npx docusaurus-mdx-checker
+    - name: link check
+      if: always()
+      uses: lycheeverse/lychee-action@v1.8.0
+      with:
+        fail: true
+        args: >
+          --config lychee.toml
+          --offline "./**/*.md"

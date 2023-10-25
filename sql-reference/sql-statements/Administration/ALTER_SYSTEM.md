@@ -40,7 +40,7 @@
 
 ### BE
 
-- 添加 BE。 添加后，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 查看新增 BE 的状态。
+- 添加 BE。 添加后，可通过 [SHOW BACKENDS](../Administration/SHOW_BACKENDS.md) 查看新增 BE 的状态。
 
     ```SQL
     ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[, ...];
@@ -58,7 +58,7 @@
     ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_service_port"[, ...];
     ```
 
-    下线前，该 BE 上的数据会迁移到其他 BE 上，过程中不影响数据导入和查询。下线 BE 为异步操作，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 语句查看是否下线成功，如下线成功，该 BE 不会在 SHOW BACKENDS 返回的信息中显示。您可以手动撤销下线操作，详情参见 [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md)。
+    下线前，该 BE 上的数据会迁移到其他 BE 上，过程中不影响数据导入和查询。下线 BE 为异步操作，可通过 [SHOW BACKENDS](../Administration/SHOW_BACKENDS.md) 语句查看是否下线成功，如下线成功，该 BE 不会在 SHOW BACKENDS 返回的信息中显示。您可以手动撤销下线操作，详情参见 [CANCEL DECOMMISSION](../Administration/CANCEL_DECOMMISSION.md)。
 
     参数说明如下：
 
@@ -74,7 +74,7 @@
     ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...];
     ```
 
-    在一条 SQL 语句中，如同时添加多个 Broker（一个 `host:port` 为一个 Broker），那么这些 Broker 共用同一个 `broker_name`。添加后，可通过 [SHOW BROKER](../Administration/SHOW%20BROKER.md) 语句查看 Broker 的详细信息。
+    在一条 SQL 语句中，如同时添加多个 Broker（一个 `host:port` 为一个 Broker），那么这些 Broker 共用同一个 `broker_name`。添加后，可通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句查看 Broker 的详细信息。
 
   - 删除 `broker_name` 下的一个或多个 Broker。
 

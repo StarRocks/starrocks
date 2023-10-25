@@ -4,7 +4,7 @@
 
 该语句用于删除一个已有的资源。仅 root 或 admin 用户可以删除资源。
 
-创建 RESOURCE 操作请参考 [CREATE RESOURCE](../data-definition/CREATE%20RESOURCE.md) 章节。
+创建 RESOURCE 操作请参考 [CREATE RESOURCE](../data-definition/CREATE_RESOURCE.md) 章节。
 
 ## 语法
 

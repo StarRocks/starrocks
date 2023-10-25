@@ -5,7 +5,7 @@
 该语句用于对已有的 table 进行修改。分为三种操作类型：**schema change** 、**rollup** 、**partition**。
 这三种操作类型 **不能同时** 出现在一条 `ALTER TABLE` 语句中。
 
-其中 schema change 和 rollup 是 **异步** 操作，任务提交成功则返回。之后可使用 [SHOW ALTER](../data-manipulation/SHOW%20ALTER.md) 命令查看进度。
+其中 schema change 和 rollup 是 **异步** 操作，任务提交成功则返回。之后可使用 [SHOW ALTER](../data-manipulation/SHOW_ALTER.md) 命令查看进度。
 
 partition 是 **同步** 操作，命令返回表示执行完毕。
 
@@ -49,7 +49,7 @@ partition_desc ["key"="value"]
 2. 分区为左闭右开区间，如果用户仅指定右边界，系统会自动确定左边界。
 3. 如果没有指定分桶方式，则自动使用建表使用的分桶方式。
 4. 如指定分桶方式，只能修改分桶数，不可修改分桶方式或分桶列。
-5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](../data-definition/CREATE%20TABLE.md)
+5. `["key" = "value"]` 部分可以设置分区的一些属性，具体说明见 [CREATE TABLE](../data-definition/CREATE_TABLE.md)
 
 #### 删除分区
 
@@ -134,7 +134,7 @@ ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 注意：
     1. 如果没有指定 from_index_name，则默认从 base index 创建。
     2. rollup 表中的列必须是 from_index 中已有的列。
-    3. 在 properties 中，可以指定存储格式。具体请参阅 [CREATE TABLE](../data-definition/CREATE%20TABLE.md) 章节。
+    3. 在 properties 中，可以指定存储格式。具体请参阅 [CREATE TABLE](../data-definition/CREATE_TABLE.md) 章节。
 
 #### 删除 rollup index
 
@@ -251,8 +251,8 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
     * VARCHAR 支持修改最大长度。
     * VARCHAR 转换成 TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
     * VARCHAR 转换成 DATE (目前支持 "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d " 六种格式化格式)
-    DATETIME 转换成 DATE(仅保留年-月-日信息, 例如: `2019-12-09 21:47:05` <--> `2019-12-09`)
-    DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` <--> `2019-12-09 00:00:00`)
+    DATETIME 转换成 DATE(仅保留年-月-日信息, 例如: `2019-12-09 21:47:05` `<-->` `2019-12-09`)
+    DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
     * FLOAT 转换成 DOUBLE。
     * INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变)
 
