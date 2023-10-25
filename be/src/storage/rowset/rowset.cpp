@@ -399,6 +399,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     }
     seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
+    seg_options.asc_hint = options.asc_hint;
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }

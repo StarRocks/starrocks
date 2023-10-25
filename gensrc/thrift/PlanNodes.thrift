@@ -461,6 +461,9 @@ struct TOlapScanNode {
   28: optional i32 max_parallel_scan_instance_num
   //29: optional list<TColumnAccessPath> column_access_paths
   30: optional bool use_pk_index
+
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TJDBCScanNode {

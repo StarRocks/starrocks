@@ -47,6 +47,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -144,6 +145,9 @@ public class OlapScanNode extends ScanNode {
     private boolean isSortedByKeyPerTablet = false;
 
     private final HashSet<Long> scanBackendIds = new HashSet<>();
+    private boolean outputAscHint = true;
+    private boolean sortKeyAscHint = true;
+    private Optional<Boolean> partitionKeyAscHint = Optional.empty();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -182,6 +186,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setIsSortedByKeyPerTablet(boolean isSortedByKeyPerTablet) {
         this.isSortedByKeyPerTablet = isSortedByKeyPerTablet;
+    }
+
+    public void setOrderHint(boolean isAsc) {
+        this.outputAscHint = isAsc;
     }
 
     public List<Long> getSelectedPartitionIds() {
@@ -746,6 +754,34 @@ public class OlapScanNode extends ScanNode {
         return result.size();
     }
 
+    private void assignOrderByHints(List<String> keyColumnNames) {
+        // assign order by hint
+        for (RuntimeFilterDescription probeRuntimeFilter : probeRuntimeFilters) {
+            if (RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER.equals(
+                    probeRuntimeFilter.runtimeFilterType())) {
+                Expr expr = probeRuntimeFilter.getNodeIdToProbeExpr().get(getId().asInt());
+                if (expr instanceof SlotRef) {
+                    // check key columns
+                    SlotId cid = ((SlotRef) expr).getSlotId();
+                    String columnName = desc.getSlot(cid.asInt()).getColumn().getName();
+                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
+                        sortKeyAscHint = outputAscHint;
+                    }
+                    // check partition column
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+                    if (partitionInfo instanceof RangePartitionInfo) {
+                        List<Column> partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
+                        if (!partitionColumns.isEmpty() && partitionColumns.get(0).getName().equals(columnName)) {
+                            partitionKeyAscHint = Optional.of(outputAscHint);
+                        }
+                    }
+                }
+                // we only care the first top-n filter
+                return;
+            }
+        }
+    }
+
     @Override
     protected void toThrift(TPlanNode msg) {
         List<String> keyColumnNames = new ArrayList<String>();
@@ -770,6 +806,8 @@ public class OlapScanNode extends ScanNode {
                 }
             }
         }
+
+        assignOrderByHints(keyColumnNames);
 
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
@@ -821,6 +859,8 @@ public class OlapScanNode extends ScanNode {
             }
             msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
 
+            msg.olap_scan_node.setOutput_asc_hint(sortKeyAscHint);
+            partitionKeyAscHint.ifPresent(aBoolean -> msg.olap_scan_node.setPartition_order_hint(aBoolean));
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
