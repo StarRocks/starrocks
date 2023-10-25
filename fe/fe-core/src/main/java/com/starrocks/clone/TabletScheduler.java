@@ -915,7 +915,7 @@ public class TabletScheduler extends FrontendDaemon {
 
         if (Config.recover_with_empty_tablet
                 && tabletCtx.getReplicas().size() == 1
-                && isDataLoss(tabletCtx.getReplicas())) {
+                && isDataLost(tabletCtx.getReplicas())) {
             batchTask.addTask(tabletCtx.createEmptyReplicaAndTask());
             return;
         }
@@ -927,14 +927,14 @@ public class TabletScheduler extends FrontendDaemon {
         batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
     }
 
-    private boolean isDataLoss(List<Replica> replicas) {
-        boolean allBackendDropped = true;
+    private boolean isDataLost(List<Replica> replicas) {
+        int unavailableCnt = 0;
         for (Replica replica : replicas) {
-            if (GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()) != null) {
-                allBackendDropped = false;
+            if (GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()) == null || replica.isBad()) {
+                unavailableCnt++;
             }
         }
-        return allBackendDropped;
+        return unavailableCnt == replicas.size();
     }
 
     /**
@@ -1676,8 +1676,8 @@ public class TabletScheduler extends FrontendDaemon {
                 replica.getLastFailedVersion(), replica.getLastSuccessVersion(),
                 replica.getMinReadableVersion());
         GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
-        finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.FINISHED, "finished");
-        LOG.info("create replica for recover successfully, tablet:{} backend:{}", tabletId, task.getBackendId());
+        finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.FINISHED, "create replica finished");
+        LOG.info("create replica for recovery successfully, tablet:{} backend:{}", tabletId, task.getBackendId());
     }
 
     /**

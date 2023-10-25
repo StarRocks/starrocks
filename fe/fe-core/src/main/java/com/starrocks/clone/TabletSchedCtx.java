@@ -62,6 +62,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
@@ -908,7 +909,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     olapTable.getPartitionInfo().getTabletType(partitionId),
                     olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
                     indexMeta.getSortKeyUniqueIds());
-            createReplicaTask.setIsFromScheduler(true);
+            createReplicaTask.setRecoverySource(RecoverySource.SCHEDULER);
             taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
             Replica emptyReplica =

@@ -110,6 +110,8 @@ public class CreateReplicaTask extends AgentTask {
     private long baseTabletId = -1;
     private int baseSchemaHash = -1;
 
+    private RecoverySource recoverySource;
+
     // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
     private boolean isRecoverTask = false;
 
@@ -232,24 +234,12 @@ public class CreateReplicaTask extends AgentTask {
         this.persistentIndexType = persistentIndexType;
     }
 
-    public void setIsRecoverTask(boolean isRecoverTask) {
-        this.isRecoverTask = isRecoverTask;
+    public void setRecoverySource(RecoverySource source) {
+        this.recoverySource = source;
     }
 
-    public boolean isRecoverTask() {
-        return isRecoverTask;
-    }
-
-    public void setSchemaVersion(int schemaVersion) {
-        this.schemaVersion = schemaVersion;
-    }
-
-    public void setIsFromScheduler(boolean isFromScheduler) {
-        this.isFromScheduler = isFromScheduler;
-    }
-
-    public boolean isFromScheduler() {
-        return isFromScheduler;
+    public RecoverySource getRecoverySource() {
+        return this.recoverySource;
     }
 
     public void countDownLatch(long backendId, long tabletId) {
