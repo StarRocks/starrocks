@@ -4576,4 +4576,92 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
     }
+
+    @Test
+    public void testViewDeltaJoinOnSubquery() throws Exception {
+        // test bushy join view delta join rewrite
+        starRocksAssert.withTable("CREATE TABLE `table_a` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_b` (\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `payroll_flag` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_c` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_type` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_d` (\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `custgroup_title` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_e` (\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv_view_delta_1`\n" +
+                "DISTRIBUTED BY HASH(`PAYROLL_FLAG`)\n" +
+                "REFRESH ASYNC START(\"2023-10-29 17:30:00\") EVERY(INTERVAL 60 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"unique_constraints\" = \"table_e.trace_id;\n" +
+                "table_b.becif_no;\n" +
+                "table_c.strategy_id;\n" +
+                "table_d.cust_group_name\n" +
+                "\",\n" +
+                "\"foreign_key_constraints\" = \"\n" +
+                "table_a(trace_id) REFERENCES table_e(trace_id);\n" +
+                "table_a(becif_no) REFERENCES table_b(becif_no);\n" +
+                "table_a(strategy_id) REFERENCES table_c(strategy_id);\n" +
+                "table_c(cust_group_name) REFERENCES table_d(cust_group_name)\n" +
+                "\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT\n" +
+                "            f1.PAYROLL_FLAG,\n" +
+                "            f2.STRATEGY_TYPE,\n" +
+                "            f2.CUSTGROUP_TITLE,\n" +
+                "            sum(f.pv) AS pv\n" +
+                "   FROM\n" +
+                "            table_a f\n" +
+                "   LEFT JOIN table_e dim1 ON f.TRACE_ID = dim1.TRACE_ID AND f.dt = dim1.dt\n" +
+                "   left join (select dt,BECIF_NO,PAYROLL_FLAG from  table_b ) f1 on f.BECIF_NO=f1.BECIF_NO and f.dt=f1.dt\n" +
+                "    left join (select dim0.dt,dim0.STRATEGY_ID,dim0.STRATEGY_TYPE,dim1.CUSTGROUP_TITLE from  table_c dim0\n" +
+                "           left join table_d dim1 on dim0.CUST_GROUP_NAME=dim1.CUST_GROUP_NAME and dim0.dt=dim1.dt ) f2\n" +
+                "       on  f.STRATEGY_ID=f2.STRATEGY_ID AND f.dt = f2.dt\n" +
+                "        WHERE\n" +
+                "            f.dt IN ('20230924')\n" +
+                "        GROUP BY\n" +
+                "            f1.PAYROLL_FLAG,\n" +
+                "            f2.STRATEGY_TYPE,\n" +
+                "            f2.CUSTGROUP_TITLE\n" +
+                "            ;");
+
+        String query = "explain logical SELECT\n" +
+                "            f1.PAYROLL_FLAG,\n" +
+                "            sum(f.pv) AS pv\n" +
+                "   from table_a f\n" +
+                "   left join table_e dim1 ON f.TRACE_ID = dim1.TRACE_ID AND f.dt = dim1.dt\n" +
+                "   left join (select dt,BECIF_NO,PAYROLL_FLAG from  table_b ) f1 on f.BECIF_NO=f1.BECIF_NO and f.dt=f1.dt\n" +
+                "   where f.dt='20230924'\n" +
+                "group by f1.PAYROLL_FLAG;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_view_delta_1");
+        starRocksAssert.dropTable("table_a");
+        starRocksAssert.dropTable("table_b");
+        starRocksAssert.dropTable("table_c");
+        starRocksAssert.dropTable("table_d");
+        starRocksAssert.dropTable("table_e");
+        starRocksAssert.dropMaterializedView("mv_view_delta_1");
+    }
 }
