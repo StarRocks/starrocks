@@ -96,7 +96,7 @@ public class Counter {
 
     public Counter(TUnit type, TCounterStrategy strategy, long value) {
         this.type = type.getValue();
-        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null) {
+        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null || strategy.min_max_type == null) {
             this.strategy = Counter.createStrategy(type);
         } else {
             this.strategy = strategy;
@@ -117,6 +117,7 @@ public class Counter {
         TCounterMergeType mergeType = TCounterMergeType.MERGE_ALL;
         strategy.aggregate_type = aggregateType;
         strategy.merge_type = mergeType;
+        strategy.min_max_type = TCounterMinMaxType.MIN_MAX_ALL;
         return strategy;
     }
 
