@@ -150,8 +150,13 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), query_ctx,
                  trace = TraceInfo(state)]() {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+<<<<<<< HEAD
         auto lcked = query_ctx.lock();
         RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
+=======
+        RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+        DEFER_GUARD_END(guard);
+>>>>>>> c0fc912e1f ([BugFix] Fix spiller scope timer use-after-free (#33676))
         SCOPED_TIMER(_spiller->metrics().flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
@@ -163,7 +168,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
             }
 
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            guard.scoped_end();
         });
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
@@ -204,9 +208,14 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         auto query_ctx = state->query_ctx()->weak_from_this();
         auto restore_task = [this, state, guard, query_ctx, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+<<<<<<< HEAD
             auto lcked = query_ctx.lock();
             RETURN_IF(!lcked || !guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
+=======
+            RETURN_IF(!guard.scoped_begin(), Status::OK());
+            DEFER_GUARD_END(guard);
+>>>>>>> c0fc912e1f ([BugFix] Fix spiller scope timer use-after-free (#33676))
             {
                 Status res;
                 SerdeContext ctx;
@@ -219,7 +228,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                     _finished_restore_tasks++;
                 }
             };
-            guard.scoped_end();
             return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
@@ -286,6 +294,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     auto task = [this, state, guard = guard, splitting_partitions = std::move(splitting_partitions),
                  spilling_partitions = std::move(spilling_partitions), query_ctx, trace = TraceInfo(state)]() {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
+<<<<<<< HEAD
         auto lcked = query_ctx.lock();
         RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
         RACE_DETECT(detect_flush, var1);
@@ -293,6 +302,13 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
             guard.scoped_end();
         });
+=======
+        RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+        DEFER_GUARD_END(guard);
+        RACE_DETECT(detect_flush, var1);
+        // concurrency test
+        auto defer = DeferOp([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
+>>>>>>> c0fc912e1f ([BugFix] Fix spiller scope timer use-after-free (#33676))
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
