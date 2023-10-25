@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.analysis.JoinOperator;
@@ -26,7 +25,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
-
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
@@ -79,6 +77,5 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
-
 
 }
