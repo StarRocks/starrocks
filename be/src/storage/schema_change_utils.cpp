@@ -527,7 +527,7 @@ Status ChunkChanger::prepare() {
     for (int i = 0; i < _schema_mapping.size(); ++i) {
         ColumnMapping* column_mapping = get_mutable_column_mapping(i);
         if (column_mapping == nullptr) {
-            return Status::InternalError("referenced column was missing: " + i);
+            return Status::InternalError(fmt::format("referenced column was missing: {}", i));
         }
         int32_t ref_column = column_mapping->ref_column;
         if (ref_column < 0) {
