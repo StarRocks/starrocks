@@ -8,9 +8,9 @@ JSON 构造函数可以构造 JSON 类型的数据。例如 JSON 类型的对象
 
 | 函数名称                                                     | 功能                                 | 示例                                                      | 返回结果                               |
 | ------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-| [json_object](../../sql-functions/json-functions/json-creation-functions/json_object.md) | 构造 JSON 类型的对象。                 | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25) | {"Daniel Smith": 26, "Lily Smith": 25} |
-| [json_array](../../sql-functions/json-functions/json-creation-functions/json_array.md)   | 构造 JSON 类型的数组。                | SELECT JSON_ARRAY(1, 2, 3)                                | [1,2,3]                                |
-| [parse_json](../../sql-functions/json-functions/json-creation-functions/parse_json.md)   | 从字符串解析并构造出 JSON 类型的数据。    | SELECT PARSE_JSON('{"a": 1}')                             | {"a": 1}                               |
+| [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md) | 构造 JSON 类型的对象。                 | SELECT JSON_OBJECT(' Daniel Smith', 26, 'Lily Smith', 25) | {"Daniel Smith": 26, "Lily Smith": 25} |
+| [json_array](../../sql-functions/json-functions/json-constructor-functions/json_array.md)   | 构造 JSON 类型的数组。                | SELECT JSON_ARRAY(1, 2, 3)                                | [1,2,3]                                |
+| [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md)   | 从字符串解析并构造出 JSON 类型的数据。    | SELECT PARSE_JSON('{"a": 1}')                             | {"a": 1}                               |
 
 ## JSON 查询和处理函数
 
@@ -18,18 +18,18 @@ JSON 查询和处理函数可以查询和处理 JSON 类型的数据。例如查
 
 | 函数名称                                                     | 功能                                 | 示例                                                      | 返回结果                              |
 | ------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------- | -------------------------------------- |
-| [箭头函数](../../sql-functions/json-functions/json-processing-functions/arrow-function.md) | 查询 JSON 对象中指定路径下的值。                       | SELECT {"a": {"b": 1}} -> '$.a.b'                         | 1                                                            |
-| [JSON 类型转换](../../sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)| 将实现 JSON 类型的数据与 SQL 类型间的互相转换。      | SELECT CAST(PARSE_JSON('1') as INT); |  1 |
-| [json_string](../../sql-functions/json-functions/json-processing-functions/json_string.md)   | 将JSON对象转化为JSON字符串。      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
-| [get_json_double](../../sql-functions/json-functions/json-processing-functions/get_json_double.md)| 解析并获取 json_str 内 json_path 的浮点型内容。      | SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1");|  1.3 |
-| [get_json_int](../../sql-functions/json-functions/json-processing-functions/get_json_int.md)| 解析并获取 json_str 内 json_path 的整型内容。      | SELECT get_json_int('{"k1":1, "k2":"2"}', "$.k1");|  1 |
-| [get_json_string](../../sql-functions/json-functions/json-processing-functions/get_json_string.md)| 解析并获取 json_str 内 json_path 指定的字符串。该函数别名为 get_json_object.      | SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");| v1 |
-| [json_each](../../sql-functions/json-functions/json-processing-functions/json_each.md)   | 将最外层的 JSON 对象展开为键值对。      | SELECT * FROM JSON_EACH('{"a": 1, "b":{"c": 3, "d": null}} | &ensp;key&ensp;&#124;&ensp;value<br>-----+----<br>&ensp;&ensp;a&ensp;&ensp;&#124;&ensp;&ensp;1<br>&ensp;&ensp;b&ensp;&ensp;&#124; &ensp;{"c": 3, "d": null}  |
-| [json_exists](../../sql-functions/json-functions/json-processing-functions/json_exist.md)| 查询 JSON 对象中是否存在某个值。如果存在，则返回 1；如果不存在，则返回 0。 | SELECT JSON_EXISTS({"a": 1}, '$.a')             | 1                                                            |
-| [json_keys](../../sql-functions/json-functions/json-processing-functions/json_keys.md) | 返回 JSON 对象中所有最上层成员 (key) 组成的数组。                     | SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}')            |
-| [json_length](../../sql-functions/json-functions/json-processing-functions/json_length.md) | 返回 JSON 字符串的长度。    | select json_length('{"Name": "Alice"}')           |
-| [json_query](../../sql-functions/json-functions/json-processing-functions/json_query.md) | 查询 JSON 对象中指定路径下的值。                             | SELECT JSON_QUERY({"a": 1}, '$.a')                        | 1                                                            |
-| [json_string](../../sql-functions/json-functions/json-processing-functions/json_string.md)   | 将 JSON 对象转化为 JSON 字符串。      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
+| [箭头函数](../../sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md) | 查询 JSON 对象中指定路径下的值。                       | SELECT {"a": {"b": 1}} -> '$.a.b'                         | 1                                                            |
+| [JSON 类型转换](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md)| 将实现 JSON 类型的数据与 SQL 类型间的互相转换。      | SELECT CAST(PARSE_JSON('1') as INT); |  1 |
+| [json_string](../../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)   | 将JSON对象转化为JSON字符串。      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
+| [get_json_double](../../sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 json_str 内 json_path 的浮点型内容。      | SELECT get_json_double('{"k1":1.3, "k2":"2"}', "$.k1");|  1.3 |
+| [get_json_int](../../sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 json_str 内 json_path 的整型内容。      | SELECT get_json_int('{"k1":1, "k2":"2"}', "$.k1");|  1 |
+| [get_json_string](../../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 json_str 内 json_path 指定的字符串。该函数别名为 get_json_object.      | SELECT get_json_string('{"k1":"v1", "k2":"v2"}', "$.k1");| v1 |
+| [json_each](../../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)   | 将最外层的 JSON 对象展开为键值对。      | SELECT * FROM JSON_EACH('{"a": 1, "b":{"c": 3, "d": null}} | &ensp;key&ensp;&#124;&ensp;value<br />-----+----<br />&ensp;&ensp;a&ensp;&ensp;&#124;&ensp;&ensp;1<br />&ensp;&ensp;b&ensp;&ensp;&#124; &ensp;{"c": 3, "d": null}  |
+| [json_exists](../../sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)| 查询 JSON 对象中是否存在某个值。如果存在，则返回 1；如果不存在，则返回 0。 | SELECT JSON_EXISTS({"a": 1}, '$.a')             | 1                                                            |
+| [json_keys](../../sql-functions/json-functions/json-query-and-processing-functions/json_keys.md) | 返回 JSON 对象中所有最上层成员 (key) 组成的数组。                     | SELECT JSON_KEYS('{"a": 1, "b": 2, "c": 3}')            |
+| [json_length](../../sql-functions/json-functions/json-query-and-processing-functions/json_length.md) | 返回 JSON 字符串的长度。    | select json_length('{"Name": "Alice"}')           |
+| [json_query](../../sql-functions/json-functions/json-query-and-processing-functions/json_query.md) | 查询 JSON 对象中指定路径下的值。                             | SELECT JSON_QUERY({"a": 1}, '$.a')                        | 1                                                            |
+| [json_string](../../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)   | 将 JSON 对象转化为 JSON 字符串。      | select json_string(parse_json('{"Name": "Alice"}')) | {"Name": "Alice"}  |
 
 ## JSON 运算符
 

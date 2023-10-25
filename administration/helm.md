@@ -4,7 +4,7 @@
 
 ## 环境准备
 
-- [创建 Kubernetes 集群](../sr_operator#创建-kubernetes-集群)。
+- [创建 Kubernetes 集群](./sr_operator.md#创建-kubernetes-集群)。
 - [安装 Helm](https://helm.sh/docs/intro/quickstart/)。
 
 ## 部署操作
@@ -86,7 +86,7 @@
 
 **访问 StarRocks 集群**
 
-支持从 Kubernetes 集群内外访问 StarRocks 集群，具体操作，请参见[访问 StarRocks 集群](../sr_operator#访问-starrocks-集群)。
+支持从 Kubernetes 集群内外访问 StarRocks 集群，具体操作，请参见[访问 StarRocks 集群](./sr_operator.md#访问-starrocks-集群)。
 
 > **注意**
 >

@@ -164,7 +164,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 AS (query)
 ```
 
-详细操作指南请见 [SQL 参考 - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)。
+详细操作指南请见 [SQL 参考 - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
 
 以下示例根据上述查询语句，为表 `sales_records` 创建一个”以售卖门店为分组，对每一个售卖门店里的所有交易额求和”的物化视图。
 
@@ -257,7 +257,7 @@ MySQL > EXPLAIN SELECT store_id, SUM(sale_amt) FROM sales_records GROUP BY store
 
 ### 查看单表同步物化视图构建状态
 
-创建物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) 命令查看当前数据库中物化视图的构建状态。
+创建物化视图是一个异步的操作。CREATE MATERIALIZED VIEW 命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中物化视图的构建状态。
 
 ```Plain
 MySQL > SHOW ALTER MATERIALIZED VIEW\G
@@ -320,7 +320,7 @@ CANCEL ALTER TABLE ROLLUP FROM sales_records (12090);
 
 #### 删除已创建的物化视图
 
-可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) 命令删除已创建的物化视图。
+可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的物化视图。
 
 ```SQL
 DROP MATERIALIZED VIEW store_amt;
@@ -496,7 +496,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 AS (query);
 ```
 
-详细操作指南请见 [SQL 参考 - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)。
+详细操作指南请见 [SQL 参考 - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
 
 以下示例根据上述查询语句，基于表 `order_list` 和表 `goods` 创建一个“以订单 ID 为分组，对订单中所有商品价格求和”的物化视图，并设定其刷新方式为异步，以相隔一天的频率自动刷新。
 
@@ -599,7 +599,7 @@ REFRESH MATERIALIZED VIEW order_mv;
 >
 > 您可以对异步刷新和手动刷新方式的物化视图手动调用物化视图，但不能通过该命令手动刷新单表同步刷新方式的物化视图。
 
-您可以通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) 命令取消异步或手动刷新物化视图的刷新任务。
+您可以通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW.md) 命令取消异步或手动刷新物化视图的刷新任务。
 
 ### 查看多表物化视图的执行状态
 
@@ -616,7 +616,7 @@ SELECT * FROM INFORMATION_SCHEMA.task_runs;
 
 ### 删除物化视图
 
-您可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) 命令删除已创建的物化视图。
+您可以通过 [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW.md) 命令删除已创建的物化视图。
 
 ```SQL
 DROP MATERIALIZED VIEW order_mv;

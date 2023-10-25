@@ -6,7 +6,7 @@
 
 - 将指定权限授予某用户或某角色。
 - 将指定角色授予某用户。注意，仅 StarRocks 2.4 及以上版本支持该功能。
-- 授予用户 `a` IMPERSONATE 用户 `b` 的权限。授予后，用户 `a` 即可执行 [EXECUTE AS](../account-management/EXECUTE%20AS.md) 语句以用户 `b` 的身份执行操作。注意，仅 StarRocks 2.4 及以上版本支持该功能。
+- 授予用户 `a` IMPERSONATE 用户 `b` 的权限。授予后，用户 `a` 即可执行 [EXECUTE AS](../account-management/EXECUTE_AS.md) 语句以用户 `b` 的身份执行操作。注意，仅 StarRocks 2.4 及以上版本支持该功能。
 
 ## 语法
 

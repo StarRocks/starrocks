@@ -111,7 +111,7 @@
 
 - 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](../loading/InsertInto.md)。
 
-- [公测中] 提供无状态的计算节点（Compute Node，简称 CN 节点）。计算节点支持无状态扩缩容，您可通过 StarRocks Operator 部署，并基于 Kubernetes 管理容器化的计算节点，以此实现自动感知系统负载并水平扩展计算节点。相关文档，请参见[使用 StarRocks Operator 在 Kubernetes 部署和管理 CN](../administration/k8s_operator_cn.md)。
+- [公测中] 提供无状态的计算节点（Compute Node，简称 CN 节点）。计算节点支持无状态扩缩容，您可通过 StarRocks Operator 部署，并基于 Kubernetes 管理容器化的计算节点，以此实现自动感知系统负载并水平扩展计算节点。相关文档，请参见使用 StarRocks Operator 在 Kubernetes 部署和管理 CN
 
 - Outer Join 支持通过 `<`、`<=`、`>`、`>=`、`<>` 等比较操作符对多表进行非等值关联。相关文档，请参见 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
@@ -121,7 +121,7 @@
 
 - 支持通过 DESC 语句查看外部数据的表结构。相关文档，请参见 [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md)。
 
-- 支持通过 GRANT 或 REVOKE 语句授予或撤销用户特定角色或 IMPERSONATE 权限，并支持通过 EXECUTE AS 语句使用 IMPERSONATE 权限执行当前会话。相关文档，请参见 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 、 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 和 [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md)。
+- 支持通过 GRANT 或 REVOKE 语句授予或撤销用户特定角色或 IMPERSONATE 权限，并支持通过 EXECUTE AS 语句使用 IMPERSONATE 权限执行当前会话。相关文档，请参见 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 、 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 和 [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE_AS.md)。
 
 - 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。相关文档，请参见 [启用 FQDN 访问](../administration/enable_fqdn.md)。
 

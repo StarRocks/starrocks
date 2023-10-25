@@ -87,13 +87,13 @@ bin/install.sh -h \
 |实例名称|端口名称|默认端口|通讯方向|说明|
 |---|---|---|---|---|
 |BE|be_port|9060|FE --> BE|BE 上 thrift server 的端口，<br/>用于接收来自 FE 的请求。|
-|BE|webserver_port|8040|BE <--> BE|BE 上的 http server 的端口。|
+|BE|webserver_port|8040|BE ``<-->`` BE|BE 上的 http server 的端口。|
 |BE|heartbeat_service_port|9050|FE --> BE|BE 上心跳服务端口（thrift），<br/>用于接收来自 FE 的心跳。|
-|BE|brpc_port|8060|BE <--> BE|BE 上的 brpc 端口，<br/>用于 BE 之间通讯。|
-|FE|**http_port**|**8030**|FE <--> 用户|FE 上的 http server 端口。|
-|FE|rpc_port|9020|BE --> FE<br/> FE <--> FE|FE 上的 thrift server 端口。|
-|FE|**query_port**|**9030**| FE <--> 用户|FE 上的 mysql server 端口。|
-|FE|edit_log_port|9010|FE <--> FE|FE 上的 BDBJE 之间通信端口。|
+|BE|brpc_port|8060|BE ``<-->`` BE|BE 上的 brpc 端口，<br/>用于 BE 之间通讯。|
+|FE|**http_port**|**8030**|FE ``<-->`` 用户|FE 上的 http server 端口。|
+|FE|rpc_port|9020|BE --> FE<br/> FE ``<-->`` FE|FE 上的 thrift server 端口。|
+|FE|**query_port**|**9030**| FE ``<-->`` 用户|FE 上的 mysql server 端口。|
+|FE|edit_log_port|9010|FE ``<-->`` FE|FE 上的 BDBJE 之间通信端口。|
 |Broker|broker_ipc_port|8000|FE --> Broker <br/>BE --> Broker|Broker 上的 thrift server，<br/>用于接收请求。|
 |Drms|admin_console_port|19321|Drms对外|对外Web端口，nginx做了端口转发|
 |Supervisor|supervisor_http_port|19320/19319|supervisor内部|supervisor管理进程|

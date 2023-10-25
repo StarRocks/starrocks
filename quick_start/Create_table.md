@@ -16,7 +16,7 @@ mysql -h <fe_host> -P9030 -u root
 
 > **注意**
 >
-> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../sql-reference/sql-statements/keywords.md#保留关键字)。
 
 ```sql
 CREATE DATABASE example_db;
@@ -45,7 +45,7 @@ MySQL [(none)]> SHOW DATABASES;
 
 StarRocks 支持 [多种数据模型](../table_design/table_types/table_types.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/table_types/duplicate_key_table.md) 编写建表语句。
 
-更多建表语法，参考 [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 。
+更多建表语法，参考 [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
 
 ```sql
 use example_db;
@@ -101,9 +101,9 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 分区分桶
 
-`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/Data_distribution.md#动态分区管理)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
+`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/Data_distribution.md#动态分区管理)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
 
-`DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
+`DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
 创建表时合理的分区和分桶设计可以优化表的查询性能。有关分区分桶列如何选择，详见 [数据分布](/table_design/Data_distribution.md)。
 
@@ -113,7 +113,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](/table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](/table_design/Bitmap_index.md)，[Bloomfilter 索引](/table_design/Bloomfilter_index.md) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](/table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
 
 > 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
 
@@ -161,7 +161,7 @@ SHOW CREATE TABLE detailDemo;
 
 StarRocks 支持多种 DDL 操作。
 
-您可以通过 [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+您可以通过 [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
 
 ### 增加列
 

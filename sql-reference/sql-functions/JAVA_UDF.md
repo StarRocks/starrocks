@@ -291,11 +291,11 @@ public class WindowSumInt {
     </tr>
     <tr>
         <td>void windowUpdate(State state, int, int, int , int, ...)</td>
-        <td>更新窗口数据。窗口函数的详细说明，请参见<a href="../sql-reference/sql-functions/Window_function.md/">窗口函数</a>。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
+        <td>[更新窗口数据。窗口函数的详细说明，请参见](../sql-reference/sql-functions/Window_function.md)>窗口函数</a>。输入每一行数据，都会获取到对应窗口信息来更新中间结果。
         <ul>
-        <li>peer_group_start：是当前分区开始的位置。<br>分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。</li>
+        <li>peer_group_start：是当前分区开始的位置。<br />分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。</li>
         <li>peer_group_end：当前分区结束的位置。</li>
-        <li>frame_start：当前窗口框架（window frame）起始位置。<br>窗口框架：window frame 子句指定了运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。例如 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING，表示运算范围为当前行和它前后各一行数据。</li>
+        <li>frame_start：当前窗口框架（window frame）起始位置。<br />窗口框架：window frame 子句指定了运算范围，以当前行为准，前后若干行作为窗口函数运算的对象。例如 ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING，表示运算范围为当前行和它前后各一行数据。</li>
         <li>frame_end：当前窗口框架（window frame）结束位置。</li>
         <li>inputs：表示一个窗口中输入的数据，为包装类数组。包装类需要对应输入数据的类型，本示例中输入数据类型为 INT，因此包装类数组为 Integer[]。</li>
         </ul>

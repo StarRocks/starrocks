@@ -26,7 +26,7 @@ SHOW TABLET FROM <table_name>;
 
 ### 创建仓库
 
-备份数据前，您需要在远端存储系统为数据创建仓库。详细使用方法参阅 [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE%20REPOSITORY.md)。
+备份数据前，您需要在远端存储系统为数据创建仓库。详细使用方法参阅 [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md)。
 
 ```sql
 CREATE REPOSITORY repo_name
@@ -63,7 +63,7 @@ PROPERTIES：
 * `type`：更新模式。默认为 `full`，即全量更新。
 * `timeout`：任务超时时间，默认值为 `86400`，即一天。单位为秒。
 
-数据备份为异步操作。您可以通过 [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md) 语句查看备份作业状态。
+数据备份为异步操作。您可以通过 [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md) 语句查看备份作业状态。
 
 ```sql
 SHOW BACKUP;
@@ -95,7 +95,7 @@ SHOW BACKUP;
 
 > 说明：只有当 `State` 为 `CANCELLED` 时说明作业被中止。返回 `TaskErrMsg` 并不一定会中止作业，当前作业仍会重试，直至成功或中止。
 
-您可以通过 [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md) 语句取消备份作业。
+您可以通过 [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md) 语句取消备份作业。
 
 ```sql
 CANCEL BACKUP FROM <db_name>;
@@ -116,7 +116,7 @@ CANCEL BACKUP FROM <db_name>;
 
 ### 查看备份
 
-开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW%20SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
+开始恢复或迁移前，您可以通过 [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md) 查看特定仓库对应的数据快照信息。
 
 ```sql
 SHOW SNAPSHOT ON <repo_name>;
@@ -154,7 +154,7 @@ PROPERTIES：
 * `timeout`：任务超时时间，默认值为 `86400`，即一天。单位为秒。
 * `meta_version`：使用指定的 `meta_version` 来读取之前备份的元数据。该参数作为临时方案，仅用于恢复老版本 StarRocks 备份的数据。最新版本的备份数据中已经包含 `meta_version`，无需指定。
 
-数据恢复为异步操作。您可以通过 [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW%20RESTORE.md) 语句查看恢复作业状态。
+数据恢复为异步操作。您可以通过 [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md) 语句查看恢复作业状态。
 
 ```sql
 SHOW RESTORE;
@@ -190,7 +190,7 @@ SHOW RESTORE;
 * Status：用于记录在整个作业过程中，可能出现的一些状态信息。
 * Timeout：作业的超时时间，单位是秒。
 
-您可以通过 [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md) 语句取消恢复作业。
+您可以通过 [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md) 语句取消恢复作业。
 
 ```sql
 CANCEL RESTORE FROM <db_name>;

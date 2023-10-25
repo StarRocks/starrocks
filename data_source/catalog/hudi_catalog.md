@@ -27,11 +27,11 @@ PROPERTIES ("key"="value", ...);
 
 参数说明：
 
-- `catalog_name`：Hudi catalog 的名称，必选参数。<br>命名要求如下：
+- `catalog_name`：Hudi catalog 的名称，必选参数。<br />命名要求如下：
   - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
-- `PROPERTIES`：Hudi catalog 的属性，必选参数。<br>支持配置如下：
+- `PROPERTIES`：Hudi catalog 的属性，必选参数。<br />支持配置如下：
 
     | **属性**            | **必选** | **说明**                                                     |
     | ------------------- | -------- | ------------------------------------------------------------ |
@@ -76,7 +76,7 @@ StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求�
     [PARTITION ('partition_name', ...)];
     ```
 
-有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
+有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md)。
 
 ## 使用 Catalog 查询 Hudi 数据
 
@@ -84,6 +84,6 @@ StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求�
 
 ## 相关操作
 
-- 如要查看有关创建 external catalog 的示例， 请参见 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
-- 如要看查看当前集群中的所有 catalog， 请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
-- 如要删除指定 external catalog， 请参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。
+- 如要查看有关创建 external catalog 的示例， 请参见 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md)。
+- 如要看查看当前集群中的所有 catalog， 请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)。
+- 如要删除指定 external catalog， 请参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md)。

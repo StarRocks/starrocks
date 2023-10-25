@@ -48,7 +48,7 @@ mysql> select array_concat(["sql","storage","execute"], ["Query"], ["Vectorized"
 
 **示例三：对不同元素类型的数组进行拼接。**
 
-```Plain%20Text
+```Plain_Text
 select array_concat([57,65], ["pear","apple"]);
 +-------------------------------------------+
 | array_concat([57, 65], ['pear', 'apple']) |

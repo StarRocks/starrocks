@@ -2,7 +2,7 @@
 
 ## 功能
 
-向 StarRocks 表中插入或覆盖写入数据。关于该种导入数据方式适用的场景请参考 [INSERT INTO 导入](../loading/InsertInto.md)。
+向 StarRocks 表中插入或覆盖写入数据。关于该种导入数据方式适用的场景请参考 [INSERT INTO 导入](../../../loading/InsertInto.md)。
 
 ## 语法
 

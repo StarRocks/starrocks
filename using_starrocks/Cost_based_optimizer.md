@@ -92,7 +92,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 - 当收集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
-自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 命令修改。
+自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令修改。
 
 配置项:
 
@@ -442,8 +442,8 @@ KILL ANALYZE <ID>;
 | statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。                                                                        |
 | statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。                                                                                            |
 | statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时(Too many tablet异常)，自动采集任务的休眠时间，单位：秒。                                                               |
-| statistic_sample_collect_rows               | LONG    | 200000       | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br>如果参数取值超过了实际的表行数，默认进行全量采集。                                               |
-| statistic_collect_concurrency               | INT     | 3            | 手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。<br>超出的任务处于 PENDING 状态，等待调度。                                              |
+| statistic_sample_collect_rows               | LONG    | 200000       | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br />如果参数取值超过了实际的表行数，默认进行全量采集。                                               |
+| statistic_collect_concurrency               | INT     | 3            | 手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。<br />超出的任务处于 PENDING 状态，等待调度。                                              |
 | histogram_buckets_size                      | LONG    | 64           | 直方图默认分桶数。                                                                                                         |
 | histogram_mcv_size                          | LONG    | 100          | 直方图默认 most common value 的数量。                                                                                      |
 | histogram_sample_ratio                      | FLOAT   | 0.1          | 直方图默认采样比例。                                                                                                        |
@@ -453,6 +453,6 @@ KILL ANALYZE <ID>;
 
 ## 更多信息
 
-- 如需查询 FE 配置项的取值，执行 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md)。
+- 如需查询 FE 配置项的取值，执行 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG.md)。
 
-- 如需修改 FE 配置项的取值，执行 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md)。
+- 如需修改 FE 配置项的取值，执行 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md)。

@@ -33,7 +33,7 @@ PROPERTIES ("key"="value", ...);
 
 ### 参数说明
 
-- `catalog_name`：Iceberg catalog 的名称，必选参数。<br>命名要求如下：
+- `catalog_name`：Iceberg catalog 的名称，必选参数。<br />命名要求如下：
   - 必须由字母 (a-z或A-Z)、数字 (0-9) 或下划线 (_)组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
@@ -73,6 +73,6 @@ StarRocks 不缓存 Iceberg 元数据，因此不需要维护元数据更新。�
 
 ## 相关操作
 
-- 如要查看有关创建 external catalog 的示例， 请参见 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
-- 如要看查看当前集群中的所有 catalog， 请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
-- 如要删除指定 external catalog， 请参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。
+- 如要查看有关创建 external catalog 的示例， 请参见 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG.md)。
+- 如要看查看当前集群中的所有 catalog， 请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)。
+- 如要删除指定 external catalog， 请参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md)。

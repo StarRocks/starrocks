@@ -9,7 +9,7 @@ StarRocks 2.3 及以上版本提供了 internal catalog（内部数据目录）�
 1. 连接 StarRocks。
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
-2. （可选）执行以下语句查看当前 StarRocks 集群中的所有数据库。关于返回值说明，请参见 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md)。
+2. （可选）执行以下语句查看当前 StarRocks 集群中的所有数据库。关于返回值说明，请参见 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md)。
 
     ```SQL
     SHOW DATABASES;

@@ -49,13 +49,13 @@ DISTRIBUTED BY HASH(ID) BUCKETS 32;
 
 您可以通过 Stream Load 或者 Broker Load 模式导入 **test.csv**。
 
-* [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 模式:
+* [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 模式:
 
 ~~~bash
 curl --location-trusted -u <username>:<password> -H "label:987654321" -H "column_separator:," -H "columns:dt,id,uv=hll_hash(id)" -T test.csv http://fe_host:http_port/api/db_name/test/_stream_load
 ~~~
 
-* [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 模式:
+* [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 模式:
 
 ~~~sql
 LOAD LABEL test_db.label

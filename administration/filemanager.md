@@ -12,7 +12,7 @@
 
 - FE 配置
   - `small_file_dir`：用于存放上传文件的目录。默认路径为 FE 运行目录的 small_files/ 目录。您需要在 **fe.conf** 文件中修改该配置项，然后重启 FE 后生效。
-  - `max_small_file_size_bytes`：单个文件大小限制。单位为字节，默认为 1 MB。大于该参数值的文件无法创建。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md) 语句在线修改该配置项。
+  - `max_small_file_size_bytes`：单个文件大小限制。单位为字节，默认为 1 MB。大于该参数值的文件无法创建。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 语句在线修改该配置项。
   - `max_small_file_number`：一个 StarRocks 集群支持的总文件数量。默认为 100。当创建的文件数量超过该参数值，后续的创建将会被拒绝。您可以通过 ADMIN SET CONFIG 语句在线修改该配置项。
 
 > 说明：文件数量和大小的增加会导致 FE 内存使用量增加，非必要不推荐增大 `max_small_file_size_bytes` 和 `max_small_file_number` 的参数值。
@@ -21,15 +21,15 @@
 
 ## 创建文件
 
-使用 CREATE FILE 语句创建文件。具体的语法和参数等信息，参见 [CREATE FILE](../sql-reference/sql-statements/Administration/CREATE%20FILE.md)。文件创建后会自动上传并持久化在 StarRocks 集群中。
+使用 CREATE FILE 语句创建文件。具体的语法和参数等信息，参见 [CREATE FILE](../sql-reference/sql-statements/Administration/CREATE_FILE.md)。文件创建后会自动上传并持久化在 StarRocks 集群中。
 
 ## 查看文件
 
-使用 SHOW FILE 语句查看保存在数据库中的文件的信息。具体的语法和参数等信息，参见 [SHOW FILE](../sql-reference/sql-statements/Administration/SHOW%20FILE.md)。
+使用 SHOW FILE 语句查看保存在数据库中的文件的信息。具体的语法和参数等信息，参见 [SHOW FILE](../sql-reference/sql-statements/Administration/SHOW_FILE.md)。
 
 ## 删除文件
 
-使用 DROP FILE 语句删除文件。具体的语法和参数等信息，参见 [DROP FILE](../sql-reference/sql-statements/Administration/DROP%20FILE.md)。
+使用 DROP FILE 语句删除文件。具体的语法和参数等信息，参见 [DROP FILE](../sql-reference/sql-statements/Administration/DROP_FILE.md)。
 
 ## 使用文件
 
