@@ -36,6 +36,7 @@ package com.starrocks.common.util;
 
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
+import com.starrocks.thrift.TCounterMinMaxType;
 import com.starrocks.thrift.TCounterStrategy;
 import com.starrocks.thrift.TUnit;
 
@@ -79,6 +80,10 @@ public class Counter {
     public boolean isSkipMerge() {
         return Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_ALL)
                 || Objects.equals(strategy.merge_type, TCounterMergeType.SKIP_SECOND_MERGE);
+    }
+
+    public boolean isSkipMinMax() {
+        return Objects.equals(strategy.min_max_type, TCounterMinMaxType.SKIP_ALL);
     }
 
     public void setStrategy(TCounterStrategy strategy) {
