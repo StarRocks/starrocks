@@ -359,7 +359,7 @@ SELECT MY_SUM_INT(col1);
        </tr>
        <tr>
           <td>void windowUpdate(State state, int, int, int , int, ...)</td>
-          <td>更新窗口数据。窗口函数的详细说明，请参见<a href="../sql-reference/sql-functions/Window_function.md/">窗口函数</a>。输入每一行数据，都会获取到对应窗口信息来更新中间        结果。
+          <td>更新窗口数据。窗口函数的详细说明，请参见[窗口函数](./Window_function.md)。输入每一行数据，都会获取到对应窗口信息来更新中间        结果。
         <ul>
           <li>peer_group_start：是当前分区开始的位置。<br>分区：OVER子句中 PARTITION BY 指定分区列， 分区列的值相同的行被视为在同一个分区内。</li>
           <li>peer_group_end：当前分区结束的位置。</li>
@@ -490,7 +490,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 
 ## 管理 UDF
 
-执行`SHOW FUNCTIONS`，查看函数信息。更多信息，请参见[SHOW FUNCTIONS](../sql-reference/sql-statements/data-definition/show-functions.md)。
+执行`SHOW FUNCTIONS`，查看函数信息。更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md)。
 
 ## 删除 UDF
 

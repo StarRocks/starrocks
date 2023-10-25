@@ -70,7 +70,7 @@ broker
 
 6 `broker_properties`
 
-   用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../loading/BrokerLoad.md)。
+   用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同，参考 [Broker Load](../../../loading/BrokerLoad.md)。
 
 ## 示例
 

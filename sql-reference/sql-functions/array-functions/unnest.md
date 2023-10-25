@@ -20,7 +20,7 @@ unnest(array0[, array1 ...])
 
 返回数组展开后的多行数据。返回值的数据类型取决于数组中的元素类型。
 
-有关 StarRocks 支持的数组元素类型，请参见 [ARRAY](../../sql-statements/data-types/Array.md)。
+有关 StarRocks 支持的数组元素类型，请参见 [ARRAY](../../../using_starrocks/Array.md)。
 
 ## 注意事项
 

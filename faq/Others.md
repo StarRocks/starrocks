@@ -148,7 +148,7 @@ ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscr
 解决方案有以下两种：
 
 - 将 StarRocks 升级到 2.2 或更高版本。
-- 手动刷新 Apache Hive™ 表。更多信息，参见[更新缓存](../using_starrocks/External_table#%E7%BC%93%E5%AD%98%E6%9B%B4%E6%96%B0)。
+- 手动刷新 Apache Hive™ 表。更多信息，参见[更新缓存](../data_source/External_table.md#缓存更新)。
 
 ## 连接 MySQL 外表报错 "caching_sha2_password cannot be loaded"
 

@@ -8,7 +8,7 @@ HLL 列是通过其它列或者导入数据里面的数据生成的，导入的�
 
 相关函数:
 
-**[HLL_UNION_AGG(hll)]((/sql-reference/sql-functions/aggregate-functions/hll_union_agg.md))**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持 window 从句。
+**[HLL_UNION_AGG(hll)](../../sql-functions/aggregate-functions/hll_union_agg.md)**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持 window 从句。
 
 **HLL_RAW_AGG(hll)**：此函数为聚合函数，用于聚合 hll 类型字段，并且返回的还是 hll 类型。
 
