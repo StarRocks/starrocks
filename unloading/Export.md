@@ -4,7 +4,7 @@
 
 ## 前提条件
 
-您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
+您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../quick_start/Deploy.md)完成 Broker 部署。
 
 本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
 
