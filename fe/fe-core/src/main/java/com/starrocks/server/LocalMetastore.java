@@ -3468,6 +3468,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 setLakeStorageInfo(materializedView, storageVolumeId, properties);
             }
 
+            // warehouse
+            if (materializedView.isCloudNativeMaterializedView()) {
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                    String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                    if (warehouse == null) {
+                        throw new AnalysisException(PropertyAnalyzer.PROPERTIES_WAREHOUSE
+                                + " " + warehouseName + " does not exist.");
+                    }
+                    materializedView.setWarehouseId(warehouse.getId());
+                }
+            }
+
             // session properties
             if (!properties.isEmpty()) {
                 // analyze properties
@@ -3490,6 +3503,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // set properties if there are no exceptions
                 materializedView.getTableProperty().getProperties().putAll(properties);
             }
+
         } catch (AnalysisException e) {
             if (materializedView.isCloudNativeMaterializedView()) {
                 GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
@@ -3547,6 +3561,9 @@ public class LocalMetastore implements ConnectorMetadata {
             if (optHints != null) {
                 Map<String, String> taskProperties = task.getProperties();
                 taskProperties.putAll(optHints);
+                if (materializedView.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+                    taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, String.valueOf(materializedView.getWarehouseId()));
+                }
             }
 
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();

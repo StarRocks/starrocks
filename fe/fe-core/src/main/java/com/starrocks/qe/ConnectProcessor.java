@@ -229,6 +229,8 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
 
+        ctx.getAuditEventBuilder().setWarehouse(ctx.getCurrentWarehouseName());
+
         GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 

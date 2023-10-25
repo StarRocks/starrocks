@@ -3,6 +3,7 @@
 package com.starrocks.epack.sql.analyzer;
 
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
@@ -109,6 +110,19 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
         super.visitCreateMaterializedViewStatement(statement, context);
         checkPolicyApply(new ArrayList<>(statement.getMaskingPolicyContextMap().values()),
                 statement.getWithRowAccessPolicies(), context);
+        // check warehouse privilege
+        Map<String, String> properties = statement.getProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            try {
+                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
+            }
+        }
         return null;
     }
 

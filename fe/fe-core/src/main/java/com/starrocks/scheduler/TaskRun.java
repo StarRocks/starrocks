@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -164,6 +165,11 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
+
+        // if there is "warehouse" field in properties, set it into runCtx
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            runCtx.setCurrentWarehouseId(Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE)));
+        }
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
