@@ -17,6 +17,7 @@ package com.starrocks.hudi.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.hadoop.conf.Configuration;
@@ -81,9 +82,6 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     public static final int MAX_DECIMAL32_PRECISION = 9;
     public static final int MAX_DECIMAL64_PRECISION = 18;
-
-    private static final String FS_OPTIONS_KV_SEPARATOR = "\u0001";
-    private static final String FS_OPTIONS_PROP_SEPARATOR = "\u0002";
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -205,17 +203,10 @@ public class HudiSliceScanner extends ConnectorScanner {
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
 
-        if (fsOptionsProps != null) {
-            String[] props = fsOptionsProps.split(FS_OPTIONS_PROP_SEPARATOR);
-            for (String prop : props) {
-                String[] kv = prop.split(FS_OPTIONS_KV_SEPARATOR);
-                if (kv.length == 2) {
-                    properties.put(kv[0], kv[1]);
-                } else {
-                    LOG.warn("Invalid hudi fs options props argument: " + prop);
-                }
-            }
-        }
+        ScannerHelper.parseFSOptionsProps(fsOptionsProps, properties, t -> {
+            LOG.warn("Invalid hudi scanner fs options props argument: " + t);
+            return null;
+        });
         return properties;
     }
 

@@ -15,16 +15,14 @@
 package com.starrocks.hudi.reader;
 
 import com.starrocks.jni.connector.ScannerFactory;
-import com.starrocks.utils.loader.ChildFirstClassLoader;
+import com.starrocks.jni.connector.ScannerHelper;
 
 import java.io.File;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
 public class HudiSliceScannerFactory implements ScannerFactory {
-    static ChildFirstClassLoader classLoader;
+    static ClassLoader classLoader;
 
     static {
         String basePath = System.getenv("STARROCKS_HOME");
@@ -35,16 +33,7 @@ public class HudiSliceScannerFactory implements ScannerFactory {
         for (File f : dir.listFiles()) {
             preloadFiles.add(f);
         }
-
-        URL[] jars = preloadFiles.stream().map(f -> {
-            try {
-                return f.toURI().toURL();
-            } catch (MalformedURLException e) {
-                e.printStackTrace();
-                throw new RuntimeException("Cannot init hudi slice classloader.", e);
-            }
-        }).toArray(URL[]::new);
-        classLoader = new ChildFirstClassLoader(jars, ClassLoader.getSystemClassLoader());
+        classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "hudi scanner");
     }
 
     /**

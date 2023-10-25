@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
@@ -70,9 +71,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String[] nestedFields;
 
-    private static final String FS_OPTIONS_KV_SEPARATOR = "\u0001";
-    private static final String FS_OPTIONS_PROP_SEPARATOR = "\u0002";
-
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.catalogType = params.get("catalog_type");
@@ -85,29 +83,14 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
 
-        {
-            String[] optionList = params.get("option_info").split(",");
-            for (String option : optionList) {
-                String[] kv = option.split("=");
-                if (kv.length == 2) {
-                    optionInfo.put(kv[0], kv[1]);
-                } else {
-                    LOG.warn("Invalid paimon option argument: " + option);
-                }
-            }
-        }
-        {
-            String[] props = params.get("fs_options_props").split(FS_OPTIONS_PROP_SEPARATOR);
-            for (String prop : props) {
-                String[] kv = prop.split(FS_OPTIONS_KV_SEPARATOR);
-                if (kv.length == 2) {
-                    optionInfo.put(kv[0], kv[1]);
-                } else {
-                    LOG.warn("Invalid paimon fs options props argument: " + prop);
-                }
-            }
-        }
-
+        ScannerHelper.parseOptions(params.get("option_info"), optionInfo, t -> {
+            LOG.warn("Invalid paimon scanner option argument: " + t);
+            return null;
+        });
+        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), optionInfo, t -> {
+            LOG.warn("Invalid paimon scanner fs options props argument: " + t);
+            return null;
+        });
         this.classLoader = this.getClass().getClassLoader();
     }
 
