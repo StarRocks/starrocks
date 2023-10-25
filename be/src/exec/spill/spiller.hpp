@@ -152,6 +152,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         auto lcked = query_ctx.lock();
         RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
+        DEFER_GUARD_END(guard);
         SCOPED_TIMER(_spiller->metrics().flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
@@ -163,7 +164,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
             }
 
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            guard.scoped_end();
         });
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
@@ -206,6 +206,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             auto lcked = query_ctx.lock();
             RETURN_IF(!lcked || !guard.scoped_begin(), Status::OK());
+            DEFER_GUARD_END(guard);
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
                 Status res;
@@ -219,7 +220,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                     _finished_restore_tasks++;
                 }
             };
-            guard.scoped_end();
             return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
@@ -288,11 +288,10 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         auto lcked = query_ctx.lock();
         RETURN_IF(!lcked || !guard.scoped_begin(), Status::Cancelled("cancelled"));
+        DEFER_GUARD_END(guard);
         RACE_DETECT(detect_flush, var1);
-        auto defer = DeferOp([&]() {
-            _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            guard.scoped_end();
-        });
+
+        auto defer = DeferOp([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
