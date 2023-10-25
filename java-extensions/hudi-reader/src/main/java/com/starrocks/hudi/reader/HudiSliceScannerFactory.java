@@ -20,24 +20,30 @@ import com.starrocks.utils.loader.ChildFirstClassLoader;
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 
 public class HudiSliceScannerFactory implements ScannerFactory {
     static ChildFirstClassLoader classLoader;
 
     static {
         String basePath = System.getenv("STARROCKS_HOME");
+        List<File> preloadFiles = new ArrayList();
+        // It does not work, because hudi scanner use hadoop 2.x
+        //        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
         File dir = new File(basePath + "/lib/hudi-reader-lib");
-        URL[] jars = Arrays.stream(Objects.requireNonNull(dir.listFiles()))
-                .map(f -> {
-                    try {
-                        return f.toURI().toURL();
-                    } catch (MalformedURLException e) {
-                        e.printStackTrace();
-                        throw new RuntimeException("Cannot init hudi slice classloader.", e);
-                    }
-                }).toArray(URL[]::new);
+        for (File f : dir.listFiles()) {
+            preloadFiles.add(f);
+        }
+
+        URL[] jars = preloadFiles.stream().map(f -> {
+            try {
+                return f.toURI().toURL();
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+                throw new RuntimeException("Cannot init hudi slice classloader.", e);
+            }
+        }).toArray(URL[]::new);
         classLoader = new ChildFirstClassLoader(jars, ClassLoader.getSystemClassLoader());
     }
 

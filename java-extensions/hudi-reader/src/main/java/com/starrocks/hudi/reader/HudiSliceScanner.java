@@ -77,9 +77,13 @@ public class HudiSliceScanner extends ConnectorScanner {
     private Deserializer deserializer;
     private final int fetchSize;
     private final ClassLoader classLoader;
+    private final String fsOptionsProps;
 
     public static final int MAX_DECIMAL32_PRECISION = 9;
     public static final int MAX_DECIMAL64_PRECISION = 18;
+
+    private static final String FS_OPTIONS_KV_SEPARATOR = "\u0001";
+    private static final String FS_OPTIONS_PROP_SEPARATOR = "\u0002";
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -101,6 +105,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
+        this.fsOptionsProps = params.get("fs_options_props");
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
@@ -199,6 +204,18 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
+
+        if (fsOptionsProps != null) {
+            String[] props = fsOptionsProps.split(FS_OPTIONS_PROP_SEPARATOR);
+            for (String prop : props) {
+                String[] kv = prop.split(FS_OPTIONS_KV_SEPARATOR);
+                if (kv.length == 2) {
+                    properties.put(kv[0], kv[1]);
+                } else {
+                    LOG.warn("Invalid hudi fs options props argument: " + prop);
+                }
+            }
+        }
         return properties;
     }
 

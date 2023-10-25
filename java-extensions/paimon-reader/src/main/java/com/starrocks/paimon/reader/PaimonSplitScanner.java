@@ -70,6 +70,9 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String[] nestedFields;
 
+    private static final String FS_OPTIONS_KV_SEPARATOR = "\u0001";
+    private static final String FS_OPTIONS_PROP_SEPARATOR = "\u0002";
+
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.catalogType = params.get("catalog_type");
@@ -82,13 +85,26 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
 
-        String[] optionList = params.get("option_info").split(",");
-        for (String option : optionList) {
-            String[] kv = option.split("=");
-            if (kv.length == 2) {
-                optionInfo.put(kv[0], kv[1]);
-            } else {
-                LOG.warn("Invalid paimon option argument: " + option);
+        {
+            String[] optionList = params.get("option_info").split(",");
+            for (String option : optionList) {
+                String[] kv = option.split("=");
+                if (kv.length == 2) {
+                    optionInfo.put(kv[0], kv[1]);
+                } else {
+                    LOG.warn("Invalid paimon option argument: " + option);
+                }
+            }
+        }
+        {
+            String[] props = params.get("fs_options_props").split(FS_OPTIONS_PROP_SEPARATOR);
+            for (String prop : props) {
+                String[] kv = prop.split(FS_OPTIONS_KV_SEPARATOR);
+                if (kv.length == 2) {
+                    optionInfo.put(kv[0], kv[1]);
+                } else {
+                    LOG.warn("Invalid paimon fs options props argument: " + prop);
+                }
             }
         }
 
