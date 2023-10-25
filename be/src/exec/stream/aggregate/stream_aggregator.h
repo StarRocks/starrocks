@@ -59,7 +59,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
 
-    Status open(RuntimeState* state);
+    Status open(RuntimeState* state) override;
 
     // Process input's chunks util `Epoch` chunk is received.
     Status process_chunk(StreamChunk* chunk);
