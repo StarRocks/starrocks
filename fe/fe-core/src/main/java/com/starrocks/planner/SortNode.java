@@ -141,7 +141,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         // only support the runtime filter in TopN when limit > 0
-        if (limit < 0 || !sessionVariable.getEnableGlobalRuntimeFilter() ||
+        if (limit < 0 || !sessionVariable.getEnableTopNRuntimeFilter() ||
                 getSortInfo().getOrderingExprs().isEmpty()) {
             return;
         }

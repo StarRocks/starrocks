@@ -81,6 +81,7 @@ public:
         _op_pull_chunks += 1;
         _op_pull_rows += res->num_rows();
     }
+    bool is_asc() const { return _is_asc; }
     void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
     virtual void begin_driver_process() {}
     virtual void end_driver_process(PipelineDriver* driver) {}
@@ -139,6 +140,7 @@ protected:
     ScanNode* _scan_node = nullptr;
     const int32_t _dop;
     const int _io_tasks_per_scan_operator;
+    const int _is_asc;
     // ScanOperator may do parallel scan, so each _chunk_sources[i] needs to hold
     // a profile indenpendently, to be more specificly, _chunk_sources[i] will go through
     // many ChunkSourcePtr in the entire life time, all these ChunkSources of _chunk_sources[i]
