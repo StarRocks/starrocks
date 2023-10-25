@@ -228,10 +228,6 @@ public class SyncPartitionUtils {
         return result;
     }
 
-    public static PartitionRange convertToDatePartitionRange(PartitionRange range) {
-        return new PartitionRange(range.getPartitionName(), convertToDatePartitionRange(range.getPartitionKeyRange()));
-    }
-
     public static Range<PartitionKey> convertToDatePartitionRange(Range<PartitionKey> range) {
         LiteralExpr lower = range.lowerEndpoint().getKeys().get(0);
         LiteralExpr upper = range.upperEndpoint().getKeys().get(0);

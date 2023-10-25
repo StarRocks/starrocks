@@ -105,6 +105,15 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
+    public static PartitionKey createMinPartition(List<PrimitiveType> types) {
+        try {
+            return createInfinityPartitionKeyWithType(types, false);
+        } catch (AnalysisException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
     public static PartitionKey createInfinityPartitionKeyWithType(List<PrimitiveType> types, boolean isMax)
             throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();

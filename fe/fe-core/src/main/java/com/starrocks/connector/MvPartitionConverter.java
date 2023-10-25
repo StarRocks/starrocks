@@ -40,10 +40,12 @@ import java.util.stream.Collectors;
  * But for MySQL external table, which supports native range-partition/range-column-partition/hash-partition.
  * <p>
  * Meanwhile, MV also supports various types of partitions, including RANGE/LIST...
+ * <p>
+ * As a result, we need a robust Converter, which could handle various partitions types
  */
-abstract class MvPartitionConverter {
+public abstract class MvPartitionConverter {
 
-    abstract Map<String, Range<PartitionKey>> convert(Map<String, PartitionKey> partitions);
+    public abstract Map<String, Range<PartitionKey>> convert(Map<String, PartitionKey> partitions);
 
     public static MvPartitionConverter buildConverter(Expr partitionExpr, Column partitionColumn) {
         boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionColumn);
@@ -62,7 +64,7 @@ abstract class MvPartitionConverter {
      */
     static class ArithmeticTypePartitionConverter extends MvPartitionConverter {
 
-        private PrimitiveType columnType;
+        private final PrimitiveType columnType;
 
         public ArithmeticTypePartitionConverter(PrimitiveType columnType) {
             this.columnType = columnType;
@@ -88,16 +90,12 @@ abstract class MvPartitionConverter {
 
             // create the null partition as [0000-00-00, MIN_VALUE) if has null
             if (hasNull) {
-                try {
-                    PartitionKey minLiteral = PartitionKey.createInfinityPartitionKeyWithType(
-                            ImmutableList.of(columnType), false);
-                    PartitionKey minValue = sourcePartitions.values().stream()
-                            .filter(x -> !x.isNullLiteral())
-                            .min(Comparator.naturalOrder())
-                            .orElseThrow(() -> new SemanticException("only null partition "));
-                    mvPartitionRangeMap.put(nullPartitionName, Range.closedOpen(minLiteral, minValue));
-                } catch (AnalysisException ignored) {
-                }
+                PartitionKey minLiteral = PartitionKey.createMinPartition(ImmutableList.of(columnType));
+                PartitionKey minValue = sourcePartitions.values().stream()
+                        .filter(x -> !x.isNullLiteral())
+                        .min(Comparator.naturalOrder())
+                        .orElseThrow(() -> new SemanticException("only null partition "));
+                mvPartitionRangeMap.put(nullPartitionName, Range.closedOpen(minLiteral, minValue));
             }
 
             return mvPartitionRangeMap;
@@ -153,11 +151,7 @@ abstract class MvPartitionConverter {
                     lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
                     if (lastPartitionKey.getKeys().get(0).isNullable()) {
                         // If partition key is NULL literal, rewrite it to min value.
-                        try {
-                            lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
-                                    ImmutableList.of(resultColumnType), false);
-                        } catch (Exception ignored) {
-                        }
+                        lastPartitionKey = PartitionKey.createMinPartition(ImmutableList.of(resultColumnType));
                     }
                     ++index;
                     continue;
