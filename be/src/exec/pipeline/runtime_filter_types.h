@@ -200,6 +200,7 @@ private:
 // not take effects on operators in front of LocalExchangeSourceOperators before they are merged into a total one.
 class PartialRuntimeFilterMerger {
 public:
+<<<<<<< HEAD
     PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit, size_t num_builders)
             : _pool(pool),
               _limit(limit),
@@ -207,6 +208,23 @@ public:
               _ht_row_counts(num_builders),
               _partial_in_filters(num_builders),
               _partial_bloom_filter_build_params(num_builders) {}
+=======
+    PartialRuntimeFilterMerger(ObjectPool* pool, size_t local_rf_limit, size_t global_rf_limit)
+            : _pool(pool), _local_rf_limit(local_rf_limit), _global_rf_limit(global_rf_limit) {}
+
+    void incr_builder() {
+        _ht_row_counts.emplace_back(0);
+        _partial_in_filters.emplace_back();
+        _partial_bloom_filter_build_params.emplace_back();
+        _num_active_builders++;
+    }
+
+    // mark runtime_filter as always true.
+    StatusOr<bool> set_always_true() {
+        _always_true = true;
+        return _try_do_merge({});
+    }
+>>>>>>> 4ba3e1b6f1 ([Enhancement] limit global runtime filter size (#32909))
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
@@ -304,17 +322,29 @@ public:
         for (auto count : _ht_row_counts) {
             row_count += count;
         }
+
         for (auto& desc : _bloom_filter_descriptors) {
             desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!desc->has_consumer()) continue;
             // skip if ht.size() > limit, and it's only for local.
+<<<<<<< HEAD
             if (!desc->has_remote_targets() && row_count > _limit) continue;
             PrimitiveType build_type = desc->build_expr_type();
             vectorized::JoinRuntimeFilter* filter =
                     vectorized::RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+=======
+            if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
+            LogicalType build_type = desc->build_expr_type();
+            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+>>>>>>> 4ba3e1b6f1 ([Enhancement] limit global runtime filter size (#32909))
             if (filter == nullptr) continue;
-            filter->init(row_count);
+
+            if (desc->has_remote_targets() && row_count > _global_rf_limit) {
+                filter->clear_bf();
+            } else {
+                filter->init(row_count);
+            }
             filter->set_join_mode(desc->join_mode());
             desc->set_runtime_filter(filter);
         }
@@ -373,10 +403,35 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
 private:
     ObjectPool* _pool;
     const size_t _limit;
     std::atomic<size_t> _num_active_builders;
+=======
+private:
+    StatusOr<bool> _try_do_merge(RuntimeBloomFilters&& bloom_filter_descriptors) {
+        if (1 == _num_active_builders--) {
+            if (_always_true) {
+                _partial_in_filters.clear();
+                _bloom_filter_descriptors.clear();
+                return true;
+            }
+            _bloom_filter_descriptors = std::move(bloom_filter_descriptors);
+            RETURN_IF_ERROR(merge_local_in_filters());
+            RETURN_IF_ERROR(merge_local_bloom_filters());
+            return true;
+        }
+        return false;
+    }
+
+private:
+    ObjectPool* _pool;
+    const size_t _local_rf_limit;
+    const size_t _global_rf_limit;
+    std::atomic<bool> _always_true = false;
+    std::atomic<size_t> _num_active_builders{0};
+>>>>>>> 4ba3e1b6f1 ([Enhancement] limit global runtime filter size (#32909))
     std::vector<size_t> _ht_row_counts;
     std::vector<RuntimeInFilters> _partial_in_filters;
     std::vector<OptRuntimeBloomFilterBuildParams> _partial_bloom_filter_build_params;
