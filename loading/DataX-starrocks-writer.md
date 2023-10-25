@@ -192,7 +192,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 * **loadProps**
 
-  * 描述：StreamLoad 的请求参数，详情参照 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 介绍页面。
+  * 描述：StreamLoad 的请求参数，详情参照 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 介绍页面。
 
   * 必选：否
 

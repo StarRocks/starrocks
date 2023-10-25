@@ -84,4 +84,4 @@ SELECT * FROM hive_catalog.hive_db.hive_tbl h JOIN default_catalog.olap_db.olap_
 
 ### Hive Connector元数据同步
 
-当前Hive Connector对于用户Hive Metastore中记录的表结构以及分区文件信息在FE中进行了缓存，当前实现方式与刷新方式与Hive外表保持相同，请参见[Hive 外表](../data_source//External_table#更新缓存的-hive-表元数据)。
+当前Hive Connector对于用户Hive Metastore中记录的表结构以及分区文件信息在FE中进行了缓存，当前实现方式与刷新方式与Hive外表保持相同，请参见[Hive 外表](../data_source/External_table.md#更新缓存的-hive-表元数据)。

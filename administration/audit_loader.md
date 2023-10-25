@@ -6,7 +6,7 @@ StarRocks 将其所有审计日志存储在本地文件 **fe/log/fe.audit.log** 
 
 ## 创建审计日志库表
 
-在 StarRocks 集群中为审计日志创建数据库和表。详细操作说明参阅 [CREATE DATABASE](../sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md) 和 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
+在 StarRocks 集群中为审计日志创建数据库和表。详细操作说明参阅 [CREATE DATABASE](../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 和 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
 因 StarRocks 各版本审计日志字段不同，其所对应的建表语句也不相同。您需要从以下示例中选择与您的 StarRocks 集群版本对应的建表语句。
 
@@ -261,11 +261,11 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 INSTALL PLUGIN FROM "<absolute_path_to_package>";
 ```
 
-详细操作说明参阅 [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)。
+详细操作说明参阅 [INSTALL PLUGIN](../sql-reference/sql-statements/Administration/INSTALL_PLUGIN.md)。
 
 ## 验证安装并查询审计日志
 
-1. 您可以通过 [SHOW PLUGINS](../sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md) 语句检查插件是否安装成功。
+1. 您可以通过 [SHOW PLUGINS](../sql-reference/sql-statements/Administration/SHOW_PLUGINS.md) 语句检查插件是否安装成功。
 
     以下示例中，插件 `AuditLoader` 的 `Status` 为 `INSTALLED`，即代表安装成功。
 

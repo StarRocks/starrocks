@@ -167,7 +167,7 @@ PROPERTIES (
 
 - 指标列：通过在列名后指定聚合函数，定义该列为指标列。一般为需要汇总统计的数据。
 
-- 聚合函数：指标列使用的聚合函数。聚合模型支持的聚合函数，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
+- 聚合函数：指标列使用的聚合函数。聚合模型支持的聚合函数，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
 - 查询时，排序键在多版聚合之前就能进行过滤，而指标列的过滤在多版本聚合之后。因此建议将频繁使用的过滤字段作为排序键，在聚合前就能过滤数据，从而提升查询性能。
 
@@ -265,7 +265,7 @@ StarRocks 1.19 版本推出了主键模型 (Primary Key Model) 。建表时，�
 - 如果开启持久化索引，主键模型大大降低了主键索引对内存的占用。因为导入时少部分主键索引存在内存中，大部分主键索引存在磁盘中。**单条主键编码后的最大长度为 64 字节。**
 - 如果不开启持久化索引，主键模型适用于主键占用空间相对可控的场景，因为导入时将主键索引加载至内存中。**单条主键编码后的最大长度和内存占用上限为 128 字节。** 如下两个场景中，主键占用空间相对可控：
 
-  - **数据有冷热特征**，即最近几天的热数据才经常被修改，老的冷数据很少被修改。例如，MySQL订单表实时同步到 StarRocks 中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新，因此导入时其主键索引就不会加载，也就不会占用内存，内存中仅会加载最近几天的索引。<br>
+  - **数据有冷热特征**，即最近几天的热数据才经常被修改，老的冷数据很少被修改。例如，MySQL订单表实时同步到 StarRocks 中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新，因此导入时其主键索引就不会加载，也就不会占用内存，内存中仅会加载最近几天的索引。<br />
     ![主键1](../assets/3.2-1.png)
     > 如图所示，数据按天分区，最新两个分区的数据更新比较频繁。
   - **大宽表**（数百到数千列）。主键只占整个数据的很小一部分，其内存开销比较低。比如用户状态和画像表，虽然列非常多，但总的用户数不大（千万至亿级别），主键索引内存占用相对可控。
@@ -358,7 +358,7 @@ PROPERTIES (
    > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
    > - 开启持久化索引，主键支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、DATE、DATETIME，**暂不支持为 VARCHAR/STRING**。并且不允许为 NULL。
    > - 开启持久化索引，**单条主键编码后的最大长度为 64 字节。**
-   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#修改-table-的属性) 。
+   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#修改-table-的属性) 。
 
 - 如果未开启持久化索引，导入时主键索引存在内存中，可能会导致占用内存较多。因此建议您遵循如下建议：
   - 合理设置主键的列数和长度，以节约内存。建议主键为占用内存空间较少的数据类型，例如 INT、BIGINT 等，暂时不建议为 VARCHAR/STRING。
@@ -370,7 +370,7 @@ PROPERTIES (
 - 自 2.3.0 版本起，指标列新增支持 BITMAP、HLL 数据类型。
 - 创建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 - 主键模型目前不支持物化视图。
-- 暂不支持使用 ALTER TABLE 修改列类型。 ALTER TABLE 的相关语法说明和示例，请参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md)。
+- 暂不支持使用 ALTER TABLE 修改列类型。 ALTER TABLE 的相关语法说明和示例，请参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
 
 ### 下一步
 

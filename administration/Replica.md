@@ -85,7 +85,7 @@ TabletChecker 作为常驻的后台进程，会定期检查所有分片的状态
     +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
     ```
 
-    结果展示所有副本的状态。其中 `IsBad` 列为 `true` 则表示副本已经损坏。而 `Status` 列则会显示另外的其他状态。更多信息，请参考 [ADMIN SHOW REPLICA STATUS](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20REPLICA%20STATUS.md)。
+    结果展示所有副本的状态。其中 `IsBad` 列为 `true` 则表示副本已经损坏。而 `Status` 列则会显示另外的其他状态。更多信息，请参考 [ADMIN SHOW REPLICA STATUS](../sql-reference/sql-statements/Administration/ADMIN_SHOW_REPLICA_STATUS.md)。
 
     您还可以通过以下命令查看指定表中副本的一些额外信息。
 

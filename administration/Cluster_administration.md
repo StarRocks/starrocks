@@ -14,7 +14,7 @@
 
 |配置项|描述|默认值|
 |---|---|---|
-|meta_dir|FE 节点存储元数据的路径，您需要提前创建相应路径。|${STARROCKS_HOME}/meta|
+|meta_dir|FE 节点存储元数据的路径，您需要提前创建相应路径。|`${STARROCKS_HOME}`/meta|
 |http_port|FE 节点的 HTTP Server 端口。|8030|
 |rpc_port|FE 节点的 Thrift Server 端口。|9020|
 |query_port|FE 节点的 MySQL Server 端口。|9030|
@@ -49,7 +49,7 @@ sh bin/start_fe.sh --daemon
 
 |配置项|描述|默认值|
 |---|---|---|
-|storage_root_path|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|${STARROCKS_HOME}/storage|
+|storage_root_path|BE 节点存储数据路径，您需要提前创建相应路径。建议您为每个磁盘创建一个路径。|`${STARROCKS_HOME}`/storage|
 |be_port|BE 上 Thrift Server 的端口，用于接收来自 FE 的请求。|9060|
 |webserver_port|BE 上的 HTTP Server 的端口。|8040|
 |heartbeat_service_port|BE 上 Thrift server 端口，用于接收来自 FE 的心跳。|9050|
@@ -327,7 +327,7 @@ Q：升级 StarRocks 2.0 至 2.1 及后期版本后，通过 Stream Load 将 JSO
 
 A：StarRocks 2.0 版本将所有字段作为字符串解析，然后进行类型转换。将执行格式为 JSON 且类型为 BOOLEAN 的数据（`true` 和 `false`）导入至整形列中时，StarRocks 2.0 会将数据转化为 `0` 和 `1` 后导入。StarRocks 2.1 及后期版本重制了 JSON Parser，直接按照目标列类型提取 JSON 字段，从而导致最终得到的数据为 NULL。
 
-您可以通过在 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md) 导入命令 `columns` 项中添加表达式 `tmp, target=if(tmp,1,0)` 解决该问题。完整导入命令如下：
+您可以通过在 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 导入命令 `columns` 项中添加表达式 `tmp, target=if(tmp,1,0)` 解决该问题。完整导入命令如下：
 
 ```shell
 curl --location-trusted -u <username>:<password> \

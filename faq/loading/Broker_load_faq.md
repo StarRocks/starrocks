@@ -2,7 +2,7 @@
 
 ## 1. Broker Load 是否支持再次执行已经执行成功、处于 FINISHED 状态的导入作业？
 
-Broker Load 不支持再次执行已经执行成功、处于 FINISHED 状态的导入作业。而且，为了保证数据不丢不重，每个执行成功的导入作业的标签 (Label) 均不可复用。可以使用 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句查看历史的导入记录，找到想要再次执行的导入作业，复制作业信息，并修改作业标签后，重新创建一个导入作业并执行。
+Broker Load 不支持再次执行已经执行成功、处于 FINISHED 状态的导入作业。而且，为了保证数据不丢不重，每个执行成功的导入作业的标签 (Label) 均不可复用。可以使用 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句查看历史的导入记录，找到想要再次执行的导入作业，复制作业信息，并修改作业标签后，重新创建一个导入作业并执行。
 
 ## 2. 通过 Broker Load 导入 HDFS 数据时，为什么数据的导入日期字段会出现异常，比正确的日期时间多加了 8 小时？这种情况应该怎么处理？
 
@@ -14,7 +14,7 @@ StarRocks 表在建表时设置的 `timezone` 为中国时区，创建 Broker Lo
 
 ## 4. 为什么 Broker Load 导入作业没报错，但是却查询不到数据？
 
-Broker Load 是一种异步的导入方式，创建导入作业的语句没报错，不代表导入作业成功了。可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句来查看导入作业的结果状态和 `errmsg` 信息，然后修改导入作业的参数配置后，再重试导入作业。
+Broker Load 是一种异步的导入方式，创建导入作业的语句没报错，不代表导入作业成功了。可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句来查看导入作业的结果状态和 `errmsg` 信息，然后修改导入作业的参数配置后，再重试导入作业。
 
 ## 5. 导入报 "failed to send batch" 或 "TabletWriter add batch with unknown id" 错误应该如何处理？
 
@@ -33,7 +33,7 @@ SET
 )
 ```
 
-上述示例，表示将 Parquet 或 ORC 文件中以 `tmp_c1` 和 `tmp_c2` 为列名的列，分别映射到 StarRocks 表中的 `name` 和 `id` 列。如果没有使用 `SET` 子句，则以 `column_list` 参数中指定的列作为映射。具体请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+上述示例，表示将 Parquet 或 ORC 文件中以 `tmp_c1` 和 `tmp_c2` 为列名的列，分别映射到 StarRocks 表中的 `name` 和 `id` 列。如果没有使用 `SET` 子句，则以 `column_list` 参数中指定的列作为映射。具体请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 > **注意**
 >

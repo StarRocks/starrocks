@@ -64,7 +64,7 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
 
-有关 Stream Load 的语法和参数说明，请参见 [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
+有关 Stream Load 的语法和参数说明，请参见 [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
 ### Broker Load
 
@@ -85,7 +85,7 @@ PROPERTIES
 )
 ```
 
-这里以 HDFS 数据源为例。有关 Broker Load 的语法和参数说明，请参见 [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+这里以 HDFS 数据源为例。有关 Broker Load 的语法和参数说明，请参见 [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 ### Routine Load
 
@@ -102,7 +102,7 @@ FROM KAFKA
 )
 ```
 
-这里以 Apache Kafka® 数据源为例。有关 Routine Load 的语法和参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
+这里以 Apache Kafka® 数据源为例。有关 Routine Load 的语法和参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
 
 ### Spark Load
 
@@ -124,7 +124,7 @@ PROPERTIES
 )
 ```
 
-这里以 HDFS 数据源为例。有关 Spark Load 的语法和参数说明，请参见 [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)。
+这里以 HDFS 数据源为例。有关 Spark Load 的语法和参数说明，请参见 [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md)。
 
 ### INSERT
 

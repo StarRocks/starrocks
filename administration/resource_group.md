@@ -87,7 +87,7 @@
 
 例如，多个与查询任务匹配的分类器中，分类器的条件数量越多，则其匹配度越高。
 
-```Plain%20Text
+```Plain_Text
 -- 因为分类器 B 的条件数量比 A 多，所以 B 的匹配度比 A 高。
 classifier A (user='Alice')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
@@ -95,7 +95,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 如果分类器的条件数量相等，则分类器的条件描述越精确，其匹配度越高。
 
-```Plain%20Text
+```Plain_Text
 因为分类器 B 限定的 `source_ip` 地址范围更小，所以 B 的匹配度比 A 高。
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
@@ -185,7 +185,7 @@ SHOW RESOURCE GROUP group_name；
 
 示例：
 
-```Plain%20Text
+```Plain_Text
 mysql> SHOW RESOURCE GROUPS ALL;
 
 +------+--------+--------------+----------+------------------+--------+------------------------------------------------------------------------------------------------------------------------+

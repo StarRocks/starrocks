@@ -147,7 +147,7 @@ DROP ANALYZE <ID>;
 
 您可以在FE配置文件 fe.conf 中，查询或修改统计信息采集的默认配置。
 
-```Plain%20Text
+```Plain_Text
 # 是否采集统计信息。
 enable_statistic_collect = true
 
