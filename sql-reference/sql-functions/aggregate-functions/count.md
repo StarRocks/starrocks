@@ -14,7 +14,7 @@
 
 该函数支持与WHERE，GROUP BY子句搭配使用。
 
-COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 精确去重](../using_starrocks/Bitmap_index.md)。
+COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 精确去重](../../../using_starrocks/Using_bitmap.md)。
 
 ## 语法
 

@@ -269,7 +269,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     1. 当前分区键仅支持日期类型和整数类型，分区类型需要与EVERY里的表达式匹配。
     2. 当分区键为日期类型的时候需要指定INTERVAL关键字来表示日期间隔，目前日期仅支持day、week、month、year，分区的命名规则同动态分区一样。
 
-    更详细的语法规则，请参见[批量创建分区](/table_design/Data_distribution#批量创建分区)。
+    更详细的语法规则，请参见[批量创建分区](../../../table_design/Data_distribution.md#4-建表后批量创建分区)。
 
 6. distribution_desc
 
@@ -277,7 +277,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
     ```
 
-    使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](/table_design/Data_distribution#确定分桶数量)。建议使用 Hash 分桶方式。
+    使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#4-分桶数如何确定)。建议使用 Hash 分桶方式。
 
 7. PROPERTIES
 
