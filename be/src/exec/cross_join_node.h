@@ -114,11 +114,8 @@ private:
     size_t _probe_rows_index = 0;
 
     bool _eos = false;
-    bool _need_create_tuple_columns = true;
 
     Buffer<SlotDescriptor*> _col_types;
-    Buffer<TupleId> _output_build_tuple_ids;
-    Buffer<TupleId> _output_probe_tuple_ids;
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 
