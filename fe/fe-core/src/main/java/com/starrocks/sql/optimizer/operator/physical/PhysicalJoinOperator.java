@@ -33,7 +33,6 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final JoinOperator joinType;
     protected final ScalarOperator onPredicate;
     protected final String joinHint;
-    protected boolean canShuffleOutput = false;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
                                    ScalarOperator onPredicate,
@@ -129,13 +128,5 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         if (onPredicate != null) {
             columnRefSet.union(onPredicate.getUsedColumns());
         }
-    }
-
-    public boolean getCanShuffleOutput() {
-        return canShuffleOutput;
-    }
-
-    public void setCanShuffleOutput(boolean v) {
-        canShuffleOutput = v;
     }
 }
