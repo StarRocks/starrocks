@@ -230,6 +230,7 @@ struct TQueryOptions {
   105: optional bool use_column_pool = true;
 
   106: optional bool enable_agg_spill_preaggregation;
+  107: optional i64 global_runtime_filter_build_max_size;
 }
 
 
