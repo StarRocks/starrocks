@@ -242,6 +242,10 @@ public class CreateReplicaTask extends AgentTask {
         return this.recoverySource;
     }
 
+    public void setSchemaVersion(int schemaVersion) {
+        this.schemaVersion = schemaVersion;
+    }
+
     public void countDownLatch(long backendId, long tabletId) {
         if (this.latch != null) {
             if (latch.markedCountDown(backendId, tabletId)) {
