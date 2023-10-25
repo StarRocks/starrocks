@@ -101,7 +101,7 @@
 
 4. 备份 meta_dir 元数据信息  
   
-    a. 将标准版的/fe/conf/fe.conf 中设置的 meta_dir 目录进行备份，如未更改过配置文件中 meta_dir 属性，默认为 "\${DSDB_HOME}/doris-meta"；下例中设置为 "\${DSDB_HOME}/meta",  
+    a. 将标准版的/fe/conf/fe.conf 中设置的 meta_dir 目录进行备份，如未更改过配置文件中 meta_dir 属性，默认为 `\${DSDB_HOME}/doris-meta`；下例中设置为 `\${DSDB_HOME}/meta`,  
   
     b. 注意保证 "命令中元数据目录" 和 "元数据实际目录" 还有 "配置文件" 中一致，如您原目录名为 "doris-meta"，建议您将目录重命名，同步需要更改配置文件  
   

@@ -169,4 +169,4 @@ JSON 函数和运算符可以用于构造和处理 JSON 数据。具体说明，
 - ORDER BY、GROUP BY、JOIN 子句不支持引用 JSON 类型的列。如果需要引用，您可以提前使用 CAST 函数，将 JSON 类型的列转为其他 SQL 类型。具体转换方式，请参见 [JSON 类型转换](../../sql-functions/json-functions/json-processing-functions/cast-from-or-to-json.md)。
 - JSON 类型的列仅支持存在于明细模型的表中，且该列不允许为排序键。
 - JSON 类型的列不支持用作分区键和分桶键。
-- StarRocks 支持使用 <，<=，>，>=， =，!= 运算符查询 JSON 数据，不支持使用 IN 运算符。
+- StarRocks 支持使用 `<，<=，>，>=， =，!=` 运算符查询 JSON 数据，不支持使用 IN 运算符。

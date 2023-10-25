@@ -280,7 +280,7 @@ nohup ./prometheus \
 
 **4.** 访问 Prometheus
 
-Prometheus 可以通过 web 页面进行简单的访问。通过浏览器打开 9090 端口，即可访问 Prometheus 的页面。点击导航栏中，`Status -> Targets`，可以看到所有分组 Job 的监控主机节点。正常情况下，所有节点都应为 UP，表示数据采集正常。如果节点状态不为 UP，可以先访问 StarRocks 的 metrics (<http://fe_host:fe_http_port/metrics>或<http://be_host:be_http_port/metrics>)接口检查是否可以访问，或查询 Prometheus 相关文档尝试解决。
+Prometheus 可以通过 web 页面进行简单的访问。通过浏览器打开 9090 端口，即可访问 Prometheus 的页面。点击导航栏中，`Status -> Targets`，可以看到所有分组 Job 的监控主机节点。正常情况下，所有节点都应为 UP，表示数据采集正常。如果节点状态不为 UP，可以先访问 StarRocks 的 metrics (`http://fe_host:fe_http_port/metrics`或`http://be_host:be_http_port/metrics`)接口检查是否可以访问，或查询 Prometheus 相关文档尝试解决。
 
 ![8.10.2-6](../assets/8.10.2-6.png)
 
@@ -320,7 +320,7 @@ nohup ./bin/grafana-server \
 
 #### DashBoard配置
 
-登录grafana，即上一步配置的地址<http://grafana_host:8000>，默认用户名/密码为admin/admin。
+登录grafana，即上一步配置的地址`http://grafana_host:8000`，默认用户名/密码为admin/admin。
 
 **1.** 数据源配置
 
@@ -331,7 +331,7 @@ Data Source配置简介
 ![8.10.2-2](../assets/8.10.2-2.png)
 
 * Name: 数据源的名称，自定义，比如 starrocks_monitor
-* URL: Prometheus 的 web 地址，如 <http://prometheus_host:9090>
+* URL: Prometheus 的 web 地址，如 `http://prometheus_host:9090`
 * Access: 选择 Server 方式，即通过 Grafana 进程所在服务器，访问 Prometheus。
 其余选项默认即可。
 

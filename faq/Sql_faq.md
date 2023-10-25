@@ -192,6 +192,8 @@ VARCHAR 是变长存储，存储跟数据实际长度有关，建表时指定不
 ## StarRocks on ES，创建 Elasticsearch 外表时，如果相关字符串长度过长，超过 256，同时 Elasticsearch 使用动态mapping， 那么使用select语句将会导致无法查询到该列
 
 动态mapping 时 Elasticsearch 的数据类型为
+  
+  ```shell
           "k4": {
                 "type": "text",
                 "fields": {
@@ -201,15 +203,19 @@ VARCHAR 是变长存储，存储跟数据实际长度有关，建表时指定不
                    }
                 }
              }
+  ```
 
 StarRocks 使用 keyword 数据类型对该查询语句进行转换。因为该列的数据 keyword 长度超过 256，所以无法查询该列。
 
 解决方案：去除该字段映射中的
+
+  ```shell
             "fields": {
                    "keyword": {
                       "type": "keyword",
                       "ignore_above": 256
                    }
                 }
+  ```
 
 让其使用 text 类型即可。

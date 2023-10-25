@@ -106,14 +106,14 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 
 | **SQL syntax**   | **Elasticsearch syntax**   |
 | ---------------- | ---------------------------|
-| =                | term query                 |
-| in               | terms query                |
-| \>=,  <=, >, <   | range                      |
-| and              | bool.filter                |
-| or               | bool.should                |
-| not              | bool.must_not              |
-| not in           | bool.must_not + terms      |
-| esquery          | ES Query DSL               |
+| `=`                | term query                 |
+| `in`               | terms query                |
+| `\>=,  <=, >, <`   | range                      |
+| `and`              | bool.filter                |
+| `or`               | bool.should                |
+| `not`              | bool.must_not              |
+| `not in`           | bool.must_not + terms      |
+| `esquery`          | ES Query DSL               |
 
 ### 查询示例
 
@@ -592,7 +592,7 @@ properties (
 
 > 说明：如果下载 JDBC 驱动程序失败，则创建资源也会失败。
 
-BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在相应的 JDBC 驱动程序 JAR 包，则会通过 `driver_url` 进行下载，所有的 JDBC 驱动程序 JAR 包都会保存在 **${STARROCKS_HOME}/lib/jdbc_drivers** 目录下。
+BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在相应的 JDBC 驱动程序 JAR 包，则会通过 `driver_url` 进行下载，所有的 JDBC 驱动程序 JAR 包都会保存在 **`${STARROCKS_HOME}/lib/jdbc_drivers`** 目录下。
 
 #### 查看 JDBC 资源
 
@@ -1065,7 +1065,7 @@ PROPERTIES (
 |  ----  | ----  |
 | type  | 资源类型，固定取值为**iceberg**。 |
 | starrocks.catalog-type  | Iceberg的Catalog类型。目前仅支持为Hive Catalog，取值为HIVE。 |
-| iceberg.catalog.hive.metastore.uris | Hive Metastore的thrift URI。<br />Iceberg通过创建Hive Catalog，连接Hive Metastore，以创建并管理表。您需要传入该Hive Metastore的thrift URI。格式为**thrift://<Hive Metadata的IP地址>:<端口号>**，端口号默认为9083。 |
+| iceberg.catalog.hive.metastore.uris | Hive Metastore的thrift URI。<br />Iceberg通过创建Hive Catalog，连接Hive Metastore，以创建并管理表。您需要传入该Hive Metastore的thrift URI。格式为**`thrift://<Hive Metadata的IP地址>:<端口号>`**，端口号默认为9083。 |
 
 执行如下命令，查看StarRocks中的所有Iceberg资源。
 
@@ -1181,7 +1181,7 @@ PROPERTIES (
 |  参数   | 说明  |
 |  ----  | ----  |
 | type  | 资源类型，固定取值为 **hudi**。 |
-| hive.metastore.uris | Hive Metastore 的 thrift URI。<br /> Hudi 通过连接 Hive Metastore，以创建并管理表。您需要传入该 Hive Metastore 的 thrift URI。格式为 **thrift://<Hudi元数据的IP地址>:<端口号>**，端口号默认为 9083。 |
+| hive.metastore.uris | Hive Metastore 的 thrift URI。<br /> Hudi 通过连接 Hive Metastore，以创建并管理表。您需要传入该 Hive Metastore 的 thrift URI。格式为 **`thrift://<Hudi元数据的IP地址>:<端口号>`**，端口号默认为 9083。 |
 
 执行如下命令，查看StarRocks中的所有Hudi资源。
 

@@ -8,7 +8,7 @@ Broker Load 不支持再次执行已经执行成功、处于 FINISHED 状态的�
 
 StarRocks 表在建表时设置的 `timezone` 为中国时区，创建 Broker Load 导入作业时设置的 `timezone` 也是中国时区，而服务器设置的是 UTC 时区。因此，日期字段在导入时，比正确的日期时间多加了 8 小时。为避免该问题，需要在建表时去掉 `timezone` 参数。
 
-## 3. 通过 Broker Load 导入 ORC 格式的数据时，发生 "ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>" 错误应该如何处理？
+## 3. 通过 Broker Load 导入 ORC 格式的数据时，发生 `ErrorMsg: type:ETL_RUN_FAIL; msg:Cannot cast '<slot 6>' from VARCHAR to ARRAY<VARCHAR(30)>` 错误应该如何处理？
 
 待导入数据文件和 Starrocks 表两侧的列名不一致，执行 `SET` 子句的时候系统内部会有一个类型推断，但是在调用 cast 函数执行数据类型转换的时候失败了。解决办法是确保两侧的列名一致，这样就不需要 `SET` 子句，也就不会调用 cast 函数执行数据类型转换，导入就可以成功了。
 

@@ -60,7 +60,7 @@ http://<be_host>:<be_http_port>/api/health
 
 * 运行 `http://fe_host:fe_http_port/api/bootstrap` 确认 FE 启动状态。
 
-  * 返回 {"status": "OK", "msg": "Success"} 表示启动正常。
+  * 返回 `{"status": "OK", "msg": "Success"}` 表示启动正常。
 
 ```shell
 http://<fe_host>:<fe_http_port>/api/bootstrap
