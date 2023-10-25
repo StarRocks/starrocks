@@ -284,6 +284,7 @@ public class WindowSumInt {
 > 说明
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
+```shell
 <table>
     <tr>
         <td>需要额外实现的方法</td>
@@ -302,6 +303,7 @@ public class WindowSumInt {
     </td>
     </tr>
 </table>
+```
 
 #### 开发 UDTF
 

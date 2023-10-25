@@ -70,7 +70,7 @@
 >
 > 如果没有匹配到分类器，那么会使用默认资源组 `default_wg`，它的资源配置如下：
 >
-> - `cpu_core_limit`：1 (<=2.3.7 版本) 或 BE 的 CPU 核数（>2.3.7版本）。
+> - `cpu_core_limit`：1 (`<=`2.3.7 版本) 或 BE 的 CPU 核数（`>`2.3.7版本）。
 > - `mem_limit`：100%。
 > - `concurrency_limit`：0。
 > - `big_query_cpu_second_limit`：0。

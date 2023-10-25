@@ -215,7 +215,7 @@ FROM data_source
 
     4. `property`
         指定自定义 Kafka 参数。功能等同于kafka shell中 `--property` 参数。
-        更多支持的自定义参数，请参阅 [librdkafka] (<https://github.com/edenhill/librdkafka>)  的官方 **CONFIGURATION** 文档中 client 端的配置项。
+        更多支持的自定义参数，请参阅 [librdkafka](https://github.com/edenhill/librdkafka)  的官方 **CONFIGURATION** 文档中 client 端的配置项。
         示例:
 
         ```plain text
@@ -373,11 +373,14 @@ FROM KAFKA
 ```
 
 支持两种 JSON 数据格式：
+
+```shell
 1）{"category":"a9jadhx","author":"test","price":895}
 2）[
 {"category":"a9jadhx","author":"test","price":895},
 {"category":"axdfa1","author":"EvelynWaugh","price":1299}
 ]
+```
 
 ### 示例5：指定 `jsonpaths` 导入 JSON 格式数据
 

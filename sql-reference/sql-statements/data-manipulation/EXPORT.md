@@ -45,7 +45,7 @@ WITH BROKER
     ```
 
     可以指定如下参数：
-    
+
     ```plain text
     column_separator: 指定导出的列分隔符，默认为\t。
     line_delimiter: 指定导出的行分隔符，默认为\n。

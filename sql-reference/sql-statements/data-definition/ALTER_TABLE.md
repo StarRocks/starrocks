@@ -287,8 +287,8 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
     * VARCHAR 支持修改最大长度。
     * VARCHAR 转换成 TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE。
     * VARCHAR 转换成 DATE (目前支持 "%Y-%m-%d"，"%y-%m-%d"， "%Y%m%d"，"%y%m%d"，"%Y/%m/%d，"%y/%m/%d " 六种格式化格式)
-    DATETIME 转换成 DATE(仅保留年-月-日信息，例如: `2019-12-09 21:47:05` `<-->` `2019-12-09`)
-    DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
+    DATETIME 转换成 DATE(仅保留年-月-日信息，例如: `2019-12-09 21:47:05` ```<-->``` `2019-12-09`)
+    DATE 转换成 DATETIME(时分秒自动补零，例如: `2019-12-09` ```<-->``` `2019-12-09 00:00:00`)
     * FLOAT 转换成 DOUBLE。
     * INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
 

@@ -152,7 +152,7 @@ FE 底层通过执行 `spark-submit` 的命令去提交 spark 任务，因此需
   
     spark_resource_path: Spark 客户端 jar 包压缩包。默认值 fe/lib/spark2x/jars/spark-2x.zip 文件，需要将 Spark 客户端下的 jars 文件夹内所有 jar 包归档打包成一个 zip 文件 spark-2x.zip `（默认以 spark-2x.zip 命名）`，若没有找到则会报文件不存在的错误。
 
-当提交 spark load 任务时，会将归档好的依赖文件上传至远端仓库，默认仓库路径挂在 `working_dir/{cluster_id}` 目录下，并以--spark-repository--{resource-name}命名，表示集群内的一个 resource 对应一个远端仓库，远端仓库目录结构参考如下：
+当提交 spark load 任务时，会将归档好的依赖文件上传至远端仓库，默认仓库路径挂在 `working_dir/{cluster_id}` 目录下，并以`--spark-repository--{resource-name}`命名，表示集群内的一个 resource 对应一个远端仓库，远端仓库目录结构参考如下：
 
 ~~~text
 ---spark-repository--spark0/
@@ -360,7 +360,7 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 ### 查看 Spark Launcher 提交日志
 
-有时用户需要查看 spark 任务提交过程中产生的详细日志，日志默认保存在 FE 根目录下 `log/spark_launcher_log` 路径下，并以 spark-launcher-{load-job-id}-{label}.log 命名，日志会在此目录下保存一段时间，当 FE 元数据中的导入信息被清理时，相应的日志也会被清理，默认保存时间为 3 天。
+有时用户需要查看 spark 任务提交过程中产生的详细日志，日志默认保存在 FE 根目录下 `log/spark_launcher_log` 路径下，并以 `spark-launcher-{load-job-id}-{label}.log` 命名，日志会在此目录下保存一段时间，当 FE 元数据中的导入信息被清理时，相应的日志也会被清理，默认保存时间为 3 天。
 
 ## 相关系统配置
 

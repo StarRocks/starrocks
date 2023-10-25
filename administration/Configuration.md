@@ -465,11 +465,11 @@ Broker 配置项暂不支持在线修改，您需要在 **broker.conf** 中修�
 | hdfs_write_buffer_size_kb | 1024 | KB | 用于向 HDFS 写入数据的内存的大小。 |
 | client_expire_seconds | 300 | Second | 客户端过期时间。如果在指定时间后未收到任何 ping，客户端会话将被删除。 |
 | broker_ipc_port | 8000 | N/A | HDFS thrift RPC 端口。 |
-| sys_log_dir | ${BROKER_HOME}/log | N/A | 用于存放系统日志（包括 INFO、WARNING、ERROR、FATAL）的目录。 |
+| sys_log_dir | `${BROKER_HOME}/log` | N/A | 用于存放系统日志（包括 INFO、WARNING、ERROR、FATAL）的目录。 |
 | sys_log_level | INFO | N/A | 日志级别。有效值包括 INFO、WARNING、ERROR 和 FATAL。 |
 | sys_log_roll_mode | SIZE-MB-1024 | N/A | 系统日志分卷方式。有效值包括 TIME-DAY、TIME-HOUR 和 SIZE-MB-nnn。默认值表示将日志拆分为每个 1 GB 的卷。 |
 | sys_log_roll_num | 30 | N/A | 要保留的系统日志卷数。 |
-| audit_log_dir | ${BROKER_HOME}/log | N/A | 存储审计日志文件的目录。 |
+| audit_log_dir | `${BROKER_HOME}/log` | N/A | 存储审计日志文件的目录。 |
 | audit_log_modules | Empty string | N/A | StarRocks 为其生成审核日志条目的模块。默认情况下，StarRocks 会为 slow_query 模块和 query 模块生成审计日志。您可以指定多个模块，使用逗号（,）和一个空格分隔。|
 | audit_log_roll_mode | TIME-DAY | N/A | 审计日志分卷方式。有效值包括 TIME-DAY、TIME-HOUR 和 SIZE-MB-nnn。 |
 | audit_log_roll_num | 10 | N/A | 要保留的升级日志卷数。如果 `audit_log_roll_mode` 设置为 `SIZE-MB-nnn`，则此配置无效。 |

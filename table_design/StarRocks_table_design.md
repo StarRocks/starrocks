@@ -2,7 +2,7 @@
 
 ## 列式存储
 
-![列式存储](/assets/3.1-1.png)
+![列式存储](../assets/3.1-1.png)
 
 StarRocks 中的表由行和列构成。每行数据对应用户一条记录，每列数据具有相同的数据类型。所有数据行的列数相同，可以动态增删列。在 StarRocks 中，一张表的列可以分为维度列（也称为 Key 列）和指标列（也称为 Value 列）。维度列用于分组和排序，指标列的值可以通过聚合函数 [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)、[count](/sql-reference/sql-functions/aggregate-functions/count.md)、[min](/sql-reference/sql-functions/aggregate-functions/min.md)、[max](/sql-reference/sql-functions/aggregate-functions/max.md)、[hll_union_agg](/sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) 和 [bitmap_union](/sql-reference/sql-functions/bitmap-functions/bitmap_union.md) 等累加起来。
 
