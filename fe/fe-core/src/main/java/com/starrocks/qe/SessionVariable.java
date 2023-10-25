@@ -1071,7 +1071,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean interpolatePassthrough = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
-    private boolean hashJoinInterpolatePassthrough = true;
+    private boolean hashJoinInterpolatePassthrough = false;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
