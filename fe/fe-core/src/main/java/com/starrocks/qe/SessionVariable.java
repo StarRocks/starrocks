@@ -359,6 +359,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
 
+    public static final String HASH_JOIN_INTERPOLATE_PASSTHROUGH = "hash_join_interpolate_passthrough";
+
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
@@ -1051,6 +1053,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
 
+    @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean hashJoinInterpolatePassthrough = false;
+
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
 
@@ -1415,7 +1420,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
+<<<<<<< HEAD
     
+=======
+
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
+
+>>>>>>> 7cff9fb0e7 ([Enhancement] Add local shuffle in partitioned hash join node to alleviate data skew (#33453))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2289,6 +2304,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
+    }
+    public boolean isHashJoinInterpolatePassthrough() {
+        return hashJoinInterpolatePassthrough;
     }
 
     public int getParseTokensLimit() {
