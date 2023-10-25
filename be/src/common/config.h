@@ -985,6 +985,8 @@ CONF_Int64(block_cache_lru_insertion_point, "1");
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
 CONF_String(block_cache_engine, "");
 CONF_Bool(block_cache_direct_io_enable, "false");
+// Whether to use block buffer to hold the datacache block data.
+CONF_Bool(block_cache_block_buffer_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

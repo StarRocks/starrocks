@@ -242,6 +242,7 @@ Status HdfsScanner::open_random_access_file() {
             _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename,
                                                                          file_size, _scanner_params.modification_time);
             _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_block_cache);
+            _cache_input_stream->set_enable_block_buffer(config::block_cache_block_buffer_enable);
             _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
             input_stream = _cache_input_stream;
         }

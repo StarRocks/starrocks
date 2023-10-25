@@ -101,7 +101,9 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
         if (res.ok()) {
             block.buffer.copy_to(out, size, shift);
             block.offset = block_offset;
-            _block_map[block_id] = block;
+            if (_enable_block_buffer) {
+                _block_map[block_id] = block;
+            }
             _stats.read_cache_count += 1;
             _stats.read_cache_bytes += load_size;
             return Status::OK();
@@ -151,6 +153,9 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
 }
 
 void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb) {
+    if (sb->size == 0 || _block_map.empty()) {
+        return;
+    }
     int64_t end_offset = sb->offset + sb->size;
     int64_t start_block_id = sb->offset / _block_size;
     int64_t end_block_id = (end_offset - 1) / _block_size;
