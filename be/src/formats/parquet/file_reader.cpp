@@ -217,6 +217,7 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 ColumnPtr& chunk_part_column = min_chunk->columns()[0];
                 JoinRuntimeFilter::RunningContext ctx;
                 ctx.use_merged_selection = false;
+                ctx.compatibility = false;
                 auto& selection = ctx.selection;
                 selection.assign(chunk_part_column->size(), 1);
                 filter->compute_hash({chunk_part_column.get()}, &ctx);
