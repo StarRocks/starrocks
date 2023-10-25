@@ -235,9 +235,11 @@ public class JoinAssociativityRule extends TransformationRule {
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
+            if (topJoinOperator.getProjection() == null) {
+                topJoinOperator.setProjection(buildTopJoinProjection(outputCols, newOp.getProjection(),
+                        newRightChildJoin.getOp().getProjection()));
+            }
 
-            topJoinOperator.setProjection(buildTopJoinProjection(outputCols, newOp.getProjection(),
-                    newRightChildJoin.getOp().getProjection()));
 
             OptExpression topJoin = OptExpression.create(topJoinOperator, left, newRightChildJoin);
             return Lists.newArrayList(topJoin);
@@ -257,8 +259,11 @@ public class JoinAssociativityRule extends TransformationRule {
                         .map(id -> context.getColumnRefFactory().getColumnRef(id))
                         .collect(Collectors.toMap(Function.identity(), Function.identity())));
             }
-            topJoinOperator.setProjection(buildTopJoinProjection(outputCols, leftProjection,
-                    newRightChildJoin.getOp().getProjection()));
+            if (topJoinOperator.getProjection() == null) {
+                topJoinOperator.setProjection(buildTopJoinProjection(outputCols, leftProjection,
+                        newRightChildJoin.getOp().getProjection()));
+            }
+
             OptExpression topJoin = OptExpression.create(topJoinOperator, leftChild1, newRightChildJoin);
             return Lists.newArrayList(topJoin);
         }
