@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/datum.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
@@ -30,6 +31,7 @@ public:
 private:
     Status get_materialized_views();
     Status fill_chunk(ChunkPtr* chunk);
+    inline DatumArray _build_row();
 
     int _db_index{0};
     int _table_index{0};
