@@ -17,6 +17,7 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include "column/chunk.h"
@@ -96,6 +97,8 @@ public:
     }
 
     bool output_chunk_by_bucket() const override { return _output_chunk_by_bucket; }
+    bool is_asc_hint() const override { return _output_asc_hint; }
+    std::optional<bool> partition_order_hint() const override { return _partition_order_hint; }
 
     const std::vector<ExprContext*>& bucket_exprs() const { return _bucket_exprs; }
 
@@ -201,6 +204,8 @@ private:
 
     bool _sorted_by_keys_per_tablet = false;
     bool _output_chunk_by_bucket = false;
+    bool _output_asc_hint = true;
+    std::optional<bool> _partition_order_hint;
 
     std::vector<ExprContext*> _bucket_exprs;
 

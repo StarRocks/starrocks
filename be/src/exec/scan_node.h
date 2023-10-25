@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include <string>
 
 #include "column/column_access_path.h"
@@ -120,6 +122,8 @@ public:
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
     virtual bool always_shared_scan() const { return false; }
     virtual bool output_chunk_by_bucket() const { return false; }
+    virtual bool is_asc_hint() const { return true; }
+    virtual std::optional<bool> partition_order_hint() const { return std::nullopt; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
