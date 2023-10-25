@@ -37,10 +37,10 @@ public class ShowPipeStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
-                    .addColumn(new Column("ID", ScalarType.BIGINT))
-                    .addColumn(new Column("NAME", ScalarType.createVarchar(64)))
-                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
+                    .addColumn(new Column("PIPE_ID", ScalarType.BIGINT))
+                    .addColumn(new Column("PIPE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
+                    .addColumn(new Column("TABLE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("LOAD_STATUS", ScalarType.createVarchar(512)))
                     .addColumn(new Column("LAST_ERROR", ScalarType.createVarchar(1024)))
                     .addColumn(new Column("CREATED_TIME", ScalarType.DATETIME))
