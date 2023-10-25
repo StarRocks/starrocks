@@ -257,12 +257,11 @@ protected:
             // check input_rowsets exist. If not, tablet_meta maybe modify by some other thread, cancel this task
             for (auto& rowset : _input_rowsets) {
                 if (_tablet->get_rowset_by_version(rowset->version()) == nullptr) {
-                    std::string msg = strings::Substitute(
-                            "rowset: $1 is not exist in tablet:$2, maybe tablet meta is modify by other thread. cancel "
-                            "this compaction task",
-                            rowset->version().to_string(), _tablet->tablet_id());
-                    LOG(WANRING) << msg;
-                    return Status::InternalError(msg);
+                    input_stream_info << "rowset:" << rowset->version()
+                                      << " is not exist in tablet:" << _tablet->tablet_id()
+                                      << ", maybe tablet meta is modify by other thread. cancel this compaction task";
+                    LOG(WARNING) << input_stream_info.str();
+                    return Status::InternalError(input_stream_info.str());
                 }
             }
 
