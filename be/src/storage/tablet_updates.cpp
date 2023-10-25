@@ -4257,7 +4257,6 @@ Status TabletUpdates::clear_meta() {
     std::lock_guard l1(_lock);
     std::lock_guard l2(_rowsets_lock);
     std::lock_guard l3(_rowset_stats_lock);
-    std::lock_guard l4(_drop_lock);
     // TODO: tablet is already marked to be deleted, so maybe don't need to clear unused rowsets here
     _remove_unused_rowsets();
     if (_unused_rowsets.get_size() != 0) {
@@ -4287,7 +4286,9 @@ Status TabletUpdates::clear_meta() {
         _clear_rowset_delta_column_group_cache(*rowset);
     }
     // Clear cached primary index.
-    StorageEngine::instance()->update_manager()->index_cache().remove_by_key(_tablet.tablet_id());
+    // There maybe other thread still use primary index for example ingestion and schema change concurrently
+    // If that, the primary index will be release by evict thread.
+    StorageEngine::instance()->update_manager()->index_cache().try_remove_by_key(_tablet.tablet_id());
     STLClearObject(&_rowsets);
     STLClearObject(&_rowset_stats);
     // If this get cleared, every other thread that uses variable should recheck it's valid state after acquiring _lock
