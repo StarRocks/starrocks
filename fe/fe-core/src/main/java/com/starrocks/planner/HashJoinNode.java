@@ -125,6 +125,11 @@ public class HashJoinNode extends JoinNode {
         if (outputSlots != null) {
             msg.hash_join_node.setOutput_columns(outputSlots);
         }
+
+        if (getCanShuffleOutput()) {
+            msg.hash_join_node.setInterpolate_passthrough(
+                    ConnectContext.get().getSessionVariable().isHashJoinInterpolatePassthrough());
+        }
     }
 
     @Override

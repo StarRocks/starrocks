@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Preconditions;
@@ -65,7 +64,6 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     public String getJoinHint() {
         return joinHint;
     }
-
 
     @Override
     public ColumnRefSet getUsedColumns() {
@@ -131,5 +129,4 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
             columnRefSet.union(onPredicate.getUsedColumns());
         }
     }
-
 }

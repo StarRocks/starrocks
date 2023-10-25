@@ -55,6 +55,7 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+    private PhysicalPropertySet outputProperty;
 
     public OptExpression(Operator op) {
         this.op = op;
@@ -143,6 +144,14 @@ public class OptExpression {
 
     public List<PhysicalPropertySet> getRequiredProperties() {
         return this.requiredProperties;
+    }
+
+    public void setOutputProperty(PhysicalPropertySet requiredProperties) {
+        this.outputProperty = requiredProperties;
+    }
+
+    public PhysicalPropertySet getOutputProperty() {
+        return this.outputProperty;
     }
 
     // This function assume the child expr logical property has been derived

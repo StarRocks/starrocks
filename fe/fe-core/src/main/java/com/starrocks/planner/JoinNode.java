@@ -90,6 +90,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
+    protected boolean canShuffleOutput = false;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -384,6 +385,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     public void setIsPushDown(boolean isPushDown) {
         this.isPushDown = isPushDown;
+    }
+
+    public boolean getCanShuffleOutput() {
+        return canShuffleOutput;
+    }
+
+    public void setCanShuffleOutput(boolean v) {
+        canShuffleOutput = v;
     }
 
     @Override
