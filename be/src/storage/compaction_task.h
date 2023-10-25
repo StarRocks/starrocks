@@ -236,10 +236,28 @@ protected:
         return Status::OK();
     }
 
-    void _commit_compaction() {
+    Status _commit_compaction() {
         std::stringstream input_stream_info;
         {
             std::unique_lock wrlock(_tablet->get_header_lock());
+<<<<<<< HEAD
+=======
+            // check input_rowsets exist. If not, tablet_meta maybe modify by some other thread, cancel this task
+            for (auto& rowset : _input_rowsets) {
+                if (_tablet->get_rowset_by_version(rowset->version()) == nullptr) {
+                    input_stream_info << "rowset:" << rowset->version()
+                                      << " is not exist in tablet:" << _tablet->tablet_id()
+                                      << ", maybe tablet meta is modify by other thread. cancel this compaction task";
+                    LOG(WARNING) << input_stream_info.str();
+                    return Status::InternalError(input_stream_info.str());
+                }
+            }
+
+            // after one success compaction, low cardinality dict will be generated.
+            // so we can enable shortcut compaction.
+            _tablet->tablet_meta()->set_enable_shortcut_compaction(true);
+
+>>>>>>> 7f9814e035 ([BugFix] Tablet may store overlapping rowset versions in the metadata. (#33563))
             for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
                 input_stream_info << _input_rowsets[i]->version() << ";";
             }
@@ -258,6 +276,8 @@ protected:
                 << ", output rowset version:" << _output_rowset->version()
                 << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
                 << ", max_version:" << _tablet->max_continuous_version();
+
+        return Status::OK();
     }
 
     void _success_callback();
