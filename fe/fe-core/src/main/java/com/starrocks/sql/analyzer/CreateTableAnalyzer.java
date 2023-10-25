@@ -169,12 +169,29 @@ public class CreateTableAnalyzer {
         KeysDesc keysDesc = statement.getKeysDesc();
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
-            if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
+            if (keysDesc == null) {
+                //TODO zhangqiang
+                throw new SemanticException("only OLAP Table support sort key");
+            } else {
+                List<String> columnNames = 
+                        statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+                for (String column : statement.getSortKeys()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                    }
+                    sortKeyIdxes.add(idx);
+                }
+            }
+
+            /*
+            if (keysDesc == null || (keysDesc.getKeysType() != KeysType.PRIMARY_KEYS &&
+                    keysDesc.getKeysType() != KeysType.DUP_KEYS)) {
                 NodePosition keysPos = NodePosition.ZERO;
                 if (keysDesc != null) {
                     keysPos = keysDesc.getPos();
                 }
-                throw new SemanticException("only primary key support sort key", keysPos);
+                throw new SemanticException("only primary key and duplicate key support sort key", keysPos);
             } else {
                 List<String> columnNames =
                         statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
@@ -187,6 +204,7 @@ public class CreateTableAnalyzer {
                     sortKeyIdxes.add(idx);
                 }
             }
+            */
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
         int autoIncrementColumnCount = 0;

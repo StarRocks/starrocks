@@ -343,6 +343,7 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog());
         Tracers.register(ctx);
 
+        LOG.info("originStmt:" + originStmt);
         // execute this query.
         StatementBase parsedStmt = null;
         try {
@@ -562,6 +563,7 @@ public class ConnectProcessor {
         ctx.setResourceGroup(null);
         ctx.setErrorCode("");
 
+        LOG.info("Command:" + command);
         switch (command) {
             case COM_INIT_DB:
                 handleInitDb();

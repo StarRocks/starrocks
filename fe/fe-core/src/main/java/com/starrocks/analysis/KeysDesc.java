@@ -48,7 +48,10 @@ import com.starrocks.sql.parser.NodePosition;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class KeysDesc implements ParseNode, Writable {
     private KeysType type;
@@ -203,6 +206,16 @@ public class KeysDesc implements ParseNode, Writable {
             throw new SemanticException("The number of key columns should be less than the number of columns.");
         }
 
+        List<Integer> keyColIdxes = Lists.newArrayList();
+        List<String> columnNames = cols.stream().map(ColumnDef::getName).collect(Collectors.toList());
+        for (String column : keysColumnNames) {
+            int idx = columnNames.indexOf(column);
+            if (idx == -1) {
+                throw new SemanticException("Invalid key column '%s' not exists in all columns", column);
+            } 
+            keyColIdxes.add(idx);
+        }
+
         for (int i = 0; i < keysColumnNames.size(); ++i) {
             String name = cols.get(i).getName();
             if (!keysColumnNames.get(i).equalsIgnoreCase(name)) {
@@ -241,14 +254,33 @@ public class KeysDesc implements ParseNode, Writable {
             }
         }
 
-        for (int i = 0; i < sortKeyIdxes.size(); i++) {
-            String name = cols.get(sortKeyIdxes.get(i)).getName();
-            ColumnDef cd = cols.get(sortKeyIdxes.get(i));
-            Type t = cd.getType();
-            if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
-                    t.isDatetime())) {
-                throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
+        // we should check sort key column type if table is primary key table
+        if (type == KeysType.PRIMARY_KEYS) {
+            for (int i = 0; i < sortKeyIdxes.size(); i++) {
+                String name = cols.get(sortKeyIdxes.get(i)).getName();
+                ColumnDef cd = cols.get(sortKeyIdxes.get(i));
+                Type t = cd.getType();
+                if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                        t.isDatetime())) {
+                    throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
+                }
             }
+        } else if (type == KeysType.DUP_KEYS) {
+            // do nothing
+        } else if (type == KeysType.AGG_KEYS) {
+            boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+            if (!res) {
+                throw new SemanticException("sort key column of AGG Table should be key column");
+            }
+        } else if (type == KeysType.UNIQUE_KEYS) {
+            // TODO zhangqiang
+            // support or not
+            boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+            if (!res) {
+                throw new SemanticException("sort key column of UNIQUE Table should be key column");
+            }
+        } else {
+            throw new SemanticException("sort key is not support:" + type.toSql());
         }
     }
 }

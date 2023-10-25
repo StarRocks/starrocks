@@ -30,6 +30,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -46,6 +47,7 @@ import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -148,6 +150,13 @@ public class DDLStmtExecutor {
      */
     public static ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
         try {
+            if (stmt instanceof AddColumnClause) {
+                LOG.info("execute add column");
+            } else if (stmt instanceof AlterTableClause) {
+                LOG.info("execute alter table clause");
+            } else {
+                LOG.info("execute DDL clause");
+            }
             return stmt.accept(StmtExecutorVisitor.getInstance(), context);
         } catch (RuntimeException re) {
             if (re.getCause() instanceof DdlException) {
@@ -335,6 +344,7 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
+            LOG.info("vist AlterTableStatement");
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterTable(stmt);
             });
