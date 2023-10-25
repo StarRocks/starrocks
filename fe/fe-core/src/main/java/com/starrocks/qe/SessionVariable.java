@@ -369,6 +369,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
 
+    public static final String HASH_JOIN_INTERPOLATE_PASSTHROUGH = "hash_join_interpolate_passthrough";
+
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
@@ -1054,6 +1056,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
 
+    @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean hashJoinInterpolatePassthrough = false;
+
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
 
@@ -1377,6 +1382,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
+
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
@@ -2265,6 +2271,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
+    }
+    public boolean isHashJoinInterpolatePassthrough() {
+        return hashJoinInterpolatePassthrough;
     }
 
     public int getParseTokensLimit() {
