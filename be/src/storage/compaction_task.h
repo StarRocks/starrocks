@@ -287,7 +287,7 @@ protected:
                 << ", output rowset version:" << _output_rowset->version()
                 << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
                 << ", max_version:" << _tablet->max_continuous_version();
-        
+
         return Status::OK();
     }
 
