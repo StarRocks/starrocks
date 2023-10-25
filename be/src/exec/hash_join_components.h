@@ -59,7 +59,7 @@ public:
 
     void reset(const HashTableParam& param);
 
-    Status append_chunk(RuntimeState* state, const ChunkPtr& chunk);
+    Status append_chunk(const ChunkPtr& chunk);
 
     Status build(RuntimeState* state);
 
