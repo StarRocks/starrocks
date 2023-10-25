@@ -27,7 +27,7 @@ public class PaimonSplitScannerFactory implements ScannerFactory {
     static {
         String basePath = System.getenv("STARROCKS_HOME");
         List<File> preloadFiles = new ArrayList();
-        //        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
+        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
         File dir = new File(basePath + "/lib/paimon-reader-lib");
         for (File f : dir.listFiles()) {
             preloadFiles.add(f);

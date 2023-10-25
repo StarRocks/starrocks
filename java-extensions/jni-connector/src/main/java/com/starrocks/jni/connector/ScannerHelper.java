@@ -20,7 +20,6 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Function;
 
 public class ScannerHelper {
@@ -39,7 +38,7 @@ public class ScannerHelper {
         return classLoader;
     }
 
-    private static void parseKeyValuePairs(String value, String itemSep, String pairSep, Map properties,
+    private static void parseKeyValuePairs(String value, String itemSep, String pairSep, Function<String[], Void> addHandler,
                                            Function<String, Void> errorHandler) {
         if (value == null) {
             return;
@@ -48,18 +47,20 @@ public class ScannerHelper {
         for (String prop : props) {
             String[] kv = prop.split(pairSep);
             if (kv.length == 2) {
-                properties.put(kv[0], kv[1]);
+                addHandler.apply(kv);
             } else {
                 errorHandler.apply(prop);
             }
         }
     }
 
-    public static void parseFSOptionsProps(String value, Map properties, Function<String, Void> errorHandler) {
-        parseKeyValuePairs(value, FS_OPTIONS_PROP_SEPARATOR, FS_OPTIONS_KV_SEPARATOR, properties, errorHandler);
+    public static void parseFSOptionsProps(String value, Function<String[], Void> addHandler,
+                                           Function<String, Void> errorHandler) {
+        parseKeyValuePairs(value, FS_OPTIONS_PROP_SEPARATOR, FS_OPTIONS_KV_SEPARATOR, addHandler, errorHandler);
     }
 
-    public static void parseOptions(String value, Map properties, Function<String, Void> errorHandler) {
-        parseKeyValuePairs(value, ",", "=", properties, errorHandler);
+    public static void parseOptions(String value, Function<String[], Void> addHandler,
+                                    Function<String, Void> errorHandler) {
+        parseKeyValuePairs(value, ",", "=", addHandler, errorHandler);
     }
 }

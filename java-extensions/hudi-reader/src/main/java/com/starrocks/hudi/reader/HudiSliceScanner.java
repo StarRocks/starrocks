@@ -203,7 +203,10 @@ public class HudiSliceScanner extends ConnectorScanner {
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
 
-        ScannerHelper.parseFSOptionsProps(fsOptionsProps, properties, t -> {
+        ScannerHelper.parseFSOptionsProps(fsOptionsProps, kv -> {
+            properties.put(kv[0], kv[1]);
+            return null;
+        }, t -> {
             LOG.warn("Invalid hudi scanner fs options props argument: " + t);
             return null;
         });

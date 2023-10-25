@@ -83,11 +83,18 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
 
-        ScannerHelper.parseOptions(params.get("option_info"), optionInfo, t -> {
+        ScannerHelper.parseOptions(params.get("option_info"), kv -> {
+            optionInfo.put(kv[0], kv[1]);
+            return null;
+        }, t -> {
             LOG.warn("Invalid paimon scanner option argument: " + t);
             return null;
         });
-        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), optionInfo, t -> {
+        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), kv -> {
+            // see org.apache.paimon.utils.HadoopUtils.CONFIG_PREFIXES ["hadoop."]
+            optionInfo.put("hadoop." + kv[0], kv[1]);
+            return null;
+        }, t -> {
             LOG.warn("Invalid paimon scanner fs options props argument: " + t);
             return null;
         });
