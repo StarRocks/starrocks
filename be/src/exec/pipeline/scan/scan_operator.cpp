@@ -38,6 +38,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
           _scan_node(scan_node),
           _dop(dop),
           _io_tasks_per_scan_operator(scan_node->io_tasks_per_scan_operator()),
+          _is_asc(scan_node->is_asc_hint()),
           _chunk_source_profiles(_io_tasks_per_scan_operator),
           _is_io_task_running(_io_tasks_per_scan_operator),
           _chunk_sources(_io_tasks_per_scan_operator) {

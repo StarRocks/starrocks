@@ -45,8 +45,6 @@ public class RuntimeFilterDescription {
         JOIN_FILTER
     }
 
-    ;
-
     private int filterId;
     private int buildPlanNodeId;
     private Expr buildExpr;
@@ -129,6 +127,9 @@ public class RuntimeFilterDescription {
         if (!canAcceptFilter(node)) {
             return false;
         }
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+            ((OlapScanNode) node).setOrderHint(isAscFilter());
+        }
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
         if (inLocalFragmentInstance()) {
@@ -165,6 +166,14 @@ public class RuntimeFilterDescription {
             return false;
         }
         return true;
+    }
+
+    public boolean isAscFilter() {
+        if (sortInfo != null) {
+            return sortInfo.getIsAscOrder().get(0);
+        } else {
+            return true;
+        }
     }
 
     public void enterExchangeNode() {

@@ -110,6 +110,7 @@ public:
             _tablet_id = _scan_range->internal_scan_range.tablet_id;
             auto str_version = _scan_range->internal_scan_range.version;
             _version = strtol(str_version.c_str(), nullptr, 10);
+            _partition_id = _scan_range->internal_scan_range.partition_id;
         }
         if (_scan_range->__isset.binlog_scan_range) {
             _tablet_id = _scan_range->binlog_scan_range.tablet_id;
@@ -129,10 +130,13 @@ public:
         return std::tuple<int64_t, int64_t>{_tablet_id, _version};
     }
 
+    int32_t partition_id() const { return _partition_id; }
+
 private:
     std::unique_ptr<TScanRange> _scan_range;
     int64_t _tablet_id = 0;
     int64_t _version = 0;
+    int64_t _partition_id = 0;
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {

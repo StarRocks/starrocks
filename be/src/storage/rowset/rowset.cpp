@@ -582,6 +582,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.rowsetid = rowset_meta()->rowset_id();
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
     seg_options.short_key_ranges = options.short_key_ranges;
+    seg_options.asc_hint = options.asc_hint;
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }

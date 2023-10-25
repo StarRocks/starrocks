@@ -14,7 +14,9 @@
 
 #include "exec/olap_scan_node.h"
 
+#include <algorithm>
 #include <chrono>
+#include <functional>
 #include <thread>
 
 #include "column/column_pool.h"
@@ -61,6 +63,17 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
+    }
+
+    // desc hint related optimize only takes effect when there is no order requirement
+    if (!_sorted_by_keys_per_tablet) {
+        if (tnode.olap_scan_node.__isset.output_asc_hint) {
+            _output_asc_hint = tnode.olap_scan_node.output_asc_hint;
+        }
+
+        if (tnode.olap_scan_node.__isset.partition_order_hint) {
+            _partition_order_hint = tnode.olap_scan_node.partition_order_hint;
+        }
     }
 
     if (_olap_scan_node.__isset.bucket_exprs) {
@@ -392,6 +405,29 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
     }
 
+<<<<<<< HEAD
+=======
+    if (partition_order_hint().has_value()) {
+        bool asc = partition_order_hint().value();
+        std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+            auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+            auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+            if (asc) {
+                return std::less()(l_partition_id, r_partition_id);
+            } else {
+                return std::greater()(l_partition_id, r_partition_id);
+            }
+        });
+    }
+
+    if (output_chunk_by_bucket()) {
+        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+        });
+    }
+
+>>>>>>> a49d2507a9 ([Enhancement] optimize TOPN Filter desc case (#33325))
     // None tablet to read shouldn't use tablet internal parallel.
     if (morsels.empty()) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));

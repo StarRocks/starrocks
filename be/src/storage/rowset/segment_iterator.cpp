@@ -414,6 +414,12 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_rewrite_predicates());
     RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
+
+    // reverse scan_range
+    if (!_opts.asc_hint) {
+        _scan_range.split_and_revese(config::desc_hint_split_range, config::vector_chunk_size);
+    }
+
     _range_iter = _scan_range.new_iterator();
 
     return Status::OK();
@@ -430,6 +436,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r));
                 size_t prev_size = _scan_range.span_size();
                 SparseRange res;
+                res.set_sorted(_scan_range.is_sorted());
                 _range_iter = _range_iter.intersection(r, &res);
                 std::swap(res, _scan_range);
                 _range_iter.set_range(&_scan_range);
@@ -989,6 +996,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_predicate = !_opts.predicates.empty();
+    const bool scan_range_normalized = _scan_range.is_sorted();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
     _context->_read_chunk->reset();
@@ -1010,6 +1018,10 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         chunk_start = next_start;
         DCHECK_EQ(chunk_start, chunk->num_rows());
+
+        if (chunk_start && !scan_range_normalized) {
+            break;
+        }
     }
 
     size_t raw_chunk_size = chunk->num_rows();

@@ -329,6 +329,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
+    public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
@@ -987,6 +988,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
+    private boolean enableTopNRuntimeFilter = true;
 
     // Parameters to determine the usage of runtime filter
     // Either the build_max or probe_min equal to 0 would force use the filter,
@@ -1905,6 +1909,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableGlobalRuntimeFilter(boolean value) {
         enableGlobalRuntimeFilter = value;
+    }
+
+    public boolean getEnableTopNRuntimeFilter() {
+        return enableTopNRuntimeFilter;
     }
 
     public void setGlobalRuntimeFilterBuildMaxSize(long globalRuntimeFilterBuildMaxSize) {

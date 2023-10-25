@@ -1073,5 +1073,7 @@ CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
 CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
+// TOPN RuntimeFilter parameters
+CONF_mInt32(desc_hint_split_range, "10");
 
 } // namespace starrocks::config
