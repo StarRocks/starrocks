@@ -1420,17 +1420,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
-<<<<<<< HEAD
     
-=======
-
-    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
-    private boolean enableIcebergIdentityColumnOptimize = true;
-
-    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
-    private boolean enablePlanSerializeConcurrently = true;
-
->>>>>>> 7cff9fb0e7 ([Enhancement] Add local shuffle in partitioned hash join node to alleviate data skew (#33453))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
