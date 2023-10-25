@@ -46,7 +46,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     /// Create function type.
     auto* size_type = b.getInt64Ty();
     // Same with JITColumn.
-    auto* data_type = llvm::StructType::get(b.getInt8PtrTy(), b.getInt8PtrTy());
+    auto* data_type = llvm::StructType::get(b.getInt1Ty(), b.getInt8PtrTy(), b.getInt8PtrTy());
     // Same with JITScalarFunction.
     auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
 
@@ -74,8 +74,9 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
         }
         columns[i].value_type = status.value();
 
-        columns[i].values = b.CreateExtractValue(jit_column, {0});
-        columns[i].null_flags = b.CreateExtractValue(jit_column, {1});
+        columns[i].is_constant = b.CreateExtractValue(jit_column, {0});
+        columns[i].values = b.CreateExtractValue(jit_column, {1});
+        columns[i].null_flags = b.CreateExtractValue(jit_column, {2});
         columns[i].nullable = b.CreateICmpNE(columns[i].null_flags, llvm::ConstantPointerNull::get(b.getInt8PtrTy()));
     }
 
@@ -101,8 +102,31 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
         auto& column = columns[i];
 
         LLVMDatum datum(b);
-        datum.value =
+        auto* constant_bb = llvm::BasicBlock::Create(b.getContext(), "constant", func);
+        auto* non_constant_bb = llvm::BasicBlock::Create(b.getContext(), "non_constant", func);
+        auto* end_bb = llvm::BasicBlock::Create(b.getContext(), "end_bb", func);
+        b.CreateCondBr(column.is_constant, constant_bb, non_constant_bb);
+
+        b.SetInsertPoint(constant_bb);
+        auto constant_value = b.CreateLoad(
+                column.value_type,
+                b.CreateInBoundsGEP(column.value_type, column.values, llvm::ConstantInt::get(size_type, 0)));
+        b.CreateBr(end_bb);
+
+        b.SetInsertPoint(non_constant_bb);
+        auto value =
                 b.CreateLoad(column.value_type, b.CreateInBoundsGEP(column.value_type, column.values, counter_phi));
+        b.CreateBr(end_bb);
+
+        b.SetInsertPoint(end_bb);
+        auto* phi = b.CreatePHI(column.value_type, 2, "if_constant");
+        phi->addIncoming(constant_value, constant_bb);
+        phi->addIncoming(value, non_constant_bb);
+
+        datum.value = phi;
+
+        // datum.value =
+        //         b.CreateLoad(column.value_type, b.CreateInBoundsGEP(column.value_type, column.values, counter_phi));
 
         if (!expr->is_nullable()) {
             datums.emplace_back(datum);
@@ -140,7 +164,9 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
 
     // assert(result.datum->getType() == columns.back().datum_type);
     b.CreateStore(result.value, b.CreateInBoundsGEP(columns.back().value_type, columns.back().values, counter_phi));
-    b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
+    if (expr->is_nullable()) {
+        b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
+    }
 
     /// End of loop.
     auto* current_block = b.GetInsertBlock();
@@ -201,15 +227,16 @@ Status JITFunction::llvm_function(FunctionContext* context, const Columns& colum
     jit_columns.reserve(columns.size());
     // Extract data and null_data pointers from columns to generate JIT columns.
     for (const auto& column : columns) {
+        auto data_column = FunctionHelper::get_data_column_of_nullable(column);
+        auto datums = reinterpret_cast<const int8_t*>(data_column->raw_data());
+
+        const int8_t* null_flags = nullptr;
         if (column->is_nullable()) {
-            const auto& nullable_column = down_cast<NullableColumn*>(column.get());
-            const auto& data_column = nullable_column->data_column();
-            const auto& null_column = nullable_column->null_column();
-            jit_columns.emplace_back(JITColumn{reinterpret_cast<const int8_t*>(data_column->raw_data()),
-                                               reinterpret_cast<const int8_t*>(null_column->raw_data())});
-        } else {
-            jit_columns.emplace_back(JITColumn{reinterpret_cast<const int8_t*>(column->raw_data()), nullptr});
+            null_flags = reinterpret_cast<const int8_t*>(
+                    ColumnHelper::as_raw_column<NullableColumn>(column)->null_column()->raw_data());
         }
+
+        jit_columns.emplace_back(JITColumn{data_column->is_constant(), datums, null_flags});
     }
 
     // Get compiled function.

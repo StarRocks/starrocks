@@ -108,7 +108,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         args.emplace_back(column);
     }
 
-    // #ifndef NDEBUG
+#ifndef NDEBUG
     if (ptr != nullptr) {
         size_t size = ptr->num_rows();
         // Ensure all columns have the same size
@@ -116,7 +116,13 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
             CHECK_EQ(size, c->size());
         }
     }
-    // #endif
+#endif
+
+    for (const auto& column : args) {
+        if (column->only_null()) {
+            return ColumnHelper::create_const_null_column(column->size());
+        }
+    }
 
     auto result_column = ColumnHelper::create_column(type(), is_nullable(), is_constant(), ptr->num_rows(), false);
     args.emplace_back(result_column);
