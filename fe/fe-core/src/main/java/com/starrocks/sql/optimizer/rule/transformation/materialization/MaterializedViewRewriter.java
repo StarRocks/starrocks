@@ -261,6 +261,9 @@ public class MaterializedViewRewriter {
         // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
         // of a materialized view (MV).
         if (!checkJoinOnPredicateFromOnPredicates(queryJoinOnPredicates, diffPredicates)) {
+            logMVRewrite(mvRewriteContext, "join predicate is different {}(query) != (mv){}, " +
+                            "diff: {}", queryJoinOnPredicate, mvJoinOnPredicate,
+                    Joiner.on(",").join(diffPredicates));
             return false;
         }
 
