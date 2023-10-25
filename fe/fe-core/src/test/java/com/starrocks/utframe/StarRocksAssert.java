@@ -42,7 +42,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -63,10 +62,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -88,8 +84,6 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.sql.ast.PartitionRangeDesc;
-import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -105,7 +99,6 @@ import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -350,29 +343,33 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert refreshMvPartition(String sql) throws Exception {
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        if (stmt instanceof RefreshMaterializedViewStatement) {
-            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
-
-            TableName mvName = refreshMaterializedViewStatement.getMvName();
-            Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
-            Table table = db.getTable(mvName.getTbl());
-            Assert.assertNotNull(table);
-            Assert.assertTrue(table instanceof MaterializedView);
-            MaterializedView mv = (MaterializedView) table;
-
-            HashMap<String, String> taskRunProperties = new HashMap<>();
-            PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
-            taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
-            taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
-            taskRunProperties.put(TaskRun.FORCE, "true");
-
-            Task task = TaskBuilder.rebuildMvTask(mv, "test", taskRunProperties);
-            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
-            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-            taskRun.executeTaskRun();
-            waitingTaskFinish(taskRun);
+        //        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        //        if (stmt instanceof RefreshMaterializedViewStatement) {
+        ////            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+        //
+        //            TableName mvName = refreshMaterializedViewStatement.getMvName();
+        //            Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
+        //            Table table = db.getTable(mvName.getTbl());
+        //            Assert.assertNotNull(table);
+        //            Assert.assertTrue(table instanceof MaterializedView);
+        //            MaterializedView mv = (MaterializedView) table;
+        //
+        //            HashMap<String, String> taskRunProperties = new HashMap<>();
+        //            PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
+        //            taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+        //            taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+        //            taskRunProperties.put(TaskRun.FORCE, "true");
+        //
+        //            Task task = TaskBuilder.rebuildMvTask(mv, "test", taskRunProperties);
+        //            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        //            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        //            taskRun.executeTaskRun();
+        //            waitingTaskFinish(taskRun);
+        //        }
+        if (!sql.contains("sync")) {
+            sql += " with sync mode";
         }
+        getCtx().executeSql(sql);
         return this;
     }
 
@@ -507,7 +504,8 @@ public class StarRocksAssert {
         }
 
         public void explainWithout(String s) throws Exception {
-            Assert.assertFalse(explainQuery().contains(s));
+            String explain = explainQuery();
+            Assert.assertFalse(explain, explain.contains(s));
         }
 
         public String explainQuery() throws Exception {

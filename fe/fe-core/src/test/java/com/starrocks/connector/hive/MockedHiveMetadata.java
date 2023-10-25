@@ -1390,6 +1390,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
 
         {
+            // Table: part_tbl1
             List<FieldSchema> cols = Lists.newArrayList();
             cols.add(new FieldSchema("c1", "int", null));
             cols.add(new FieldSchema("c2", "string", null));
@@ -1444,6 +1445,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         }
 
         {
+            // Table: part_tbl2
             List<FieldSchema> cols = Lists.newArrayList();
             cols.add(new FieldSchema("c1", "int", null));
             cols.add(new FieldSchema("c2", "string", null));
@@ -1495,6 +1497,56 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             mockTables.put(partTbl2.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl2,
                     MOCKED_HIVE_CATALOG_NAME),
                     partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
+        }
+        {
+            // Table: part_tbl3
+            String tableName = "part_tbl3_discrete";
+            String partitionColumn = "part_date";
+            List<FieldSchema> cols = Lists.newArrayList();
+            cols.add(new FieldSchema("c1", "int", null));
+            cols.add(new FieldSchema("c2", "string", null));
+            cols.add(new FieldSchema("c3", "string", null));
+            StorageDescriptor sd = new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS,
+                    "", false, -1, null, Lists.newArrayList(),
+                    Lists.newArrayList(), Maps.newHashMap());
+            Table partTbl1 = new Table(tableName, "partitioned_db", null, 0, 0, 0, sd,
+                    ImmutableList.of(new FieldSchema(partitionColumn, "date", null)), Maps.newHashMap(),
+                    null, null, "EXTERNAL_TABLE");
+            List<LocalDate> partitionValues = ImmutableList.of(
+                    LocalDate.parse("2020-01-01"),
+                    LocalDate.parse("2021-01-02"),
+                    LocalDate.parse("2022-03-03"),
+                    LocalDate.parse("2023-01-03")
+            );
+            List<String> partitionNames = partitionValues.stream()
+                    .map(x -> String.format("%s=%s", partitionColumn, x.format(DATE_FORMATTER_UNIX)))
+                    .collect(Collectors.toList());
+            List<PartitionKey> partitionKeyList = partitionValues.stream()
+                    .map(PartitionKey::ofDate)
+                    .collect(Collectors.toList());
+            Map<String, HivePartitionStats> hivePartitionStatsMap = Maps.newHashMap();
+            double avgNumPerPartition = (double) (100 / 3);
+            double rowCount = 100;
+
+            Column partitionCol = new Column(partitionColumn, Type.DATE);
+
+            List<String> partitionColumnNames = ImmutableList.of(partitionColumn);
+            ColumnStatistic partitionColStats = getPartitionColumnStatistic(partitionCol, partitionKeyList,
+                    partitionColumnNames, hivePartitionStatsMap, avgNumPerPartition, rowCount);
+
+            Map<String, ColumnStatistic> columnStatisticMap;
+            List<String> colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
+            columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                    col -> ColumnStatistic.unknown()));
+            columnStatisticMap.put(partitionColumn, partitionColStats);
+
+            List<RemoteFileInfo> remoteFileInfos = Lists.newArrayList();
+            partitionNames.forEach(k -> remoteFileInfos.add(new RemoteFileInfo(RemoteFileInputFormat.ORC,
+                    ImmutableList.of(), null)));
+
+            mockTables.put(partTbl1.getTableName(),
+                    new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partTbl1, MOCKED_HIVE_CATALOG_NAME),
+                            partitionNames, (long) rowCount, columnStatisticMap, remoteFileInfos));
         }
     }
 

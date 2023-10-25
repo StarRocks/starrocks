@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
@@ -57,7 +58,6 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Objects;
@@ -166,11 +166,20 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
-    public static PartitionKey ofDate(LocalDate date) throws AnalysisException {
+    public static PartitionKey ofDate(LocalDate date) {
         PartitionKey partitionKey = new PartitionKey();
-        partitionKey.keys.add(new DateLiteral(LocalDateTime.of(date, LocalTime.MIN), Type.DATE));
+        partitionKey.keys.add(new DateLiteral(date.getYear(), date.getMonthValue(), date.getDayOfMonth()));
         partitionKey.types.add(PrimitiveType.DATE);
         return partitionKey;
+    }
+
+    public static Range<PartitionKey> ofDateRange(LocalDate start, LocalDate end) {
+        return Range.closedOpen(PartitionKey.ofDate(start), PartitionKey.ofDate(end));
+    }
+
+    public static Range<PartitionKey> ofDateRange(String start, String end) {
+        return Range.closedOpen(PartitionKey.ofDate(
+                LocalDate.parse(start)), PartitionKey.ofDate(LocalDate.parse(end)));
     }
 
     public static PartitionKey ofString(String str) {
@@ -214,6 +223,15 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             }
         }
         return true;
+    }
+
+    public boolean isNullLiteral() {
+        for (LiteralExpr literalExpr : keys) {
+            if (literalExpr instanceof NullLiteral) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static int compareLiteralExpr(LiteralExpr key1, LiteralExpr key2) {
