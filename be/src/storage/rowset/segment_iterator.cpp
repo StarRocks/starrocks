@@ -1853,7 +1853,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
     _scan_range.add(Range<>(0, num_rows()));
 
     if (_opts.rowid_range_option != nullptr) {
-        _scan_range |= (*_opts.rowid_range_option);
+        _scan_range &= (*_opts.rowid_range_option);
 
         // The rowid range is already applied key ranges at the short key block level.
         // For example, as for the following N-rows segment,
