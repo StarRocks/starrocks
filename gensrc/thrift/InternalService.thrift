@@ -229,6 +229,7 @@ struct TQueryOptions {
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
 
+  107: optional i64 global_runtime_filter_build_max_size;
   109: optional i64 big_query_profile_second_threshold;
 }
 
