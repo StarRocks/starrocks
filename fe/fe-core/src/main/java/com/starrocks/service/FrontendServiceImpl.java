@@ -571,6 +571,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             row.setPipe_name(pipe.getName());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
+            row.setTable_name(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
+            row.setLast_error(pipe.getLastErrorInfo().toJson());
+            row.setCreated_time(pipe.getCreatedTime());
+
+            row.setLoad_status(pipe.getLoadStatus().toJson());
             row.setLoaded_files(pipe.getLoadStatus().loadedFiles);
             row.setLoaded_rows(pipe.getLoadStatus().loadRows);
             row.setLoaded_bytes(pipe.getLoadStatus().loadedBytes);

@@ -70,8 +70,8 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(String.valueOf(pipe.getPipeId().getDbId()));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
-        row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(String.valueOf(pipe.getState()));
+        row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
         if (pipe.getCreatedTime() == -1) {
