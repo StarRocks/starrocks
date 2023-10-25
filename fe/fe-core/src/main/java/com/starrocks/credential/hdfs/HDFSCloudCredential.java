@@ -31,26 +31,26 @@ public class HDFSCloudCredential implements CloudCredential {
     protected String authentication;
     private String userName;
     private String password;
-    private String kerberosPrincipal;
-    private String keytab;
-    private String keytabContent;
+    private String krbPrincipal;
+    private String krbKeyTabFile;
+    private String krbKeyTabData;
     private Map<String, String> hadoopConfiguration;
 
-    protected HDFSCloudCredential(String authentication, String username, String password, String kerberosPrincipal,
-                                  String keytab, String keytabContent, Map<String, String> hadoopConfiguration) {
+    protected HDFSCloudCredential(String authentication, String username, String password, String krbPrincipal,
+                                  String krbKeyTabFile, String krbKeyTabData, Map<String, String> hadoopConfiguration) {
         Preconditions.checkNotNull(authentication);
         Preconditions.checkNotNull(username);
         Preconditions.checkNotNull(password);
-        Preconditions.checkNotNull(kerberosPrincipal);
-        Preconditions.checkNotNull(keytab);
-        Preconditions.checkNotNull(keytabContent);
+        Preconditions.checkNotNull(krbPrincipal);
+        Preconditions.checkNotNull(krbKeyTabFile);
+        Preconditions.checkNotNull(krbKeyTabData);
         Preconditions.checkNotNull(hadoopConfiguration);
         this.authentication = authentication;
         this.userName = username;
         this.password = password;
-        this.kerberosPrincipal = kerberosPrincipal;
-        this.keytab = keytab;
-        this.keytabContent = keytabContent;
+        this.krbPrincipal = krbPrincipal;
+        this.krbKeyTabFile = krbKeyTabFile;
+        this.krbKeyTabData = krbKeyTabData;
         this.hadoopConfiguration = hadoopConfiguration;
     }
 
@@ -68,17 +68,14 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
-        if (!authentication.isEmpty()) {
-            if (authentication.equals(SIMPLE_AUTH)) {
-                return true;
+        if (SIMPLE_AUTH.equals(authentication)) {
+            return true;
+        }
+        if (KERBEROS_AUTH.equals(authentication)) {
+            if (krbPrincipal.isEmpty()) {
+                return false;
             }
-            if (authentication.equals(KERBEROS_AUTH)) {
-                if (kerberosPrincipal.isEmpty()) {
-                    return false;
-                }
-                return !(keytab.isEmpty() && keytabContent.isEmpty());
-            }
-            return false;
+            return !(krbKeyTabFile.isEmpty() && krbKeyTabData.isEmpty());
         }
 
         return false;
@@ -94,9 +91,9 @@ public class HDFSCloudCredential implements CloudCredential {
                 "authentication='" + authentication + '\'' +
                 ", username='" + userName + '\'' +
                 ", password='" + password + '\'' +
-                ", krbPrincipal='" + kerberosPrincipal + '\'' +
-                ", krbKeyTabFile='" + keytab + '\'' +
-                ", krbKeyTabData='" + keytabContent + '\'' +
+                ", krbPrincipal='" + krbPrincipal + '\'' +
+                ", krbKeyTabFile='" + krbKeyTabFile + '\'' +
+                ", krbKeyTabData='" + krbKeyTabData + '\'' +
                 '}';
     }
 
