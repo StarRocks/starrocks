@@ -73,3 +73,23 @@ select count(*) from t2 l join [broadcast] t3 r on l.c0 like concat('%',r.c0,'%'
 -- result:
 0
 -- !result
+create table t4 (
+    c0 int,
+    c1 bitmap BITMAP_UNION
+) AGGREGATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t4 values(1, to_bitmap(1));
+-- result:
+-- !result
+insert into t4 SELECT 2, to_bitmap(generate_series + 4096) FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+select count(*) from t0 l join [broadcast] t4 r on bitmap_contains(r.c1, l.c1) where r.c0 = 1;
+-- result:
+2
+-- !result
+select count(*) from t0 l join [broadcast] t4 r on bitmap_contains(r.c1, l.c1) where r.c0 = 2;
+-- result:
+0
+-- !result
