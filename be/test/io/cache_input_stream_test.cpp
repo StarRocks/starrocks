@@ -227,6 +227,7 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
             new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
     auto& stats = cache_stream.stats();
 
     // read from backend, cache the data

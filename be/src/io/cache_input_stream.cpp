@@ -89,14 +89,16 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     int64_t shift = offset - block_offset;
 
     SharedBufferedInputStream::SharedBuffer* sb = nullptr;
-    auto ret = _sb_stream->find_shared_buffer(offset, size);
-    if (ret.ok()) {
-        sb = ret.value();
-        if (sb->buffer.capacity() > 0) {
-            strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
-            _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
-                                                  block_offset, load_size);
-            return Status::OK();
+    if (_enable_block_buffer) {
+        auto ret = _sb_stream->find_shared_buffer(offset, size);
+        if (ret.ok()) {
+            sb = ret.value();
+            if (sb->buffer.capacity() > 0) {
+                strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
+                _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
+                                                      block_offset, load_size);
+                return Status::OK();
+            }
         }
     }
 
@@ -105,24 +107,33 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     int64_t read_cache_ns = 0;
     BlockBuffer block;
     ReadCacheOptions options;
+    size_t read_size = 0;
     {
         SCOPED_RAW_TIMER(&read_cache_ns);
-        res = _cache->read_cache(_cache_key, block_offset, load_size, &block.buffer, &options);
+        if (_enable_block_buffer) {
+            res = _cache->read_cache(_cache_key, block_offset, load_size, &block.buffer, &options);
+            read_size = load_size;
+        } else {
+            res = _cache->read_cache(_cache_key, offset, size, out, &options);
+            read_size = size;
+        }
     }
     if (res.ok()) {
-        block.buffer.copy_to(out, size, shift);
-        block.offset = block_offset;
-        _block_map[block_id] = block;
+        if (_enable_block_buffer) {
+            block.buffer.copy_to(out, size, shift);
+            block.offset = block_offset;
+            _block_map[block_id] = block;
+        }
+        _stats.read_cache_bytes += read_size;
         _stats.read_cache_count += 1;
-        _stats.read_cache_bytes += load_size;
         _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
         _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
         _stats.read_cache_ns += read_cache_ns;
-        _cache->record_read_cache(load_size, read_cache_ns / 1000);
+        _cache->record_read_cache(read_size, read_cache_ns / 1000);
         return Status::OK();
     } else if (res.is_resource_busy()) {
         _stats.skip_read_cache_count += 1;
-        _stats.skip_read_cache_bytes += load_size;
+        _stats.skip_read_cache_bytes += read_size;
     }
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
@@ -170,7 +181,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
 }
 
 void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb) {
-    if (sb->size == 0) {
+    if (sb->size == 0 || _block_map.empty()) {
         return;
     }
     int64_t end_offset = sb->offset + sb->size;
