@@ -797,4 +797,30 @@ public class ReplayFromDumpTest {
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
     }
+
+    @Test
+    public void testBuildJoinProjection() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/build_join_projection"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("22:Project\n" +
+                "  |  <slot 425> : 425: row_id\n" +
+                "  |  <slot 426> : 426: enter_time\n" +
+                "  |  <slot 433> : 433: telephone2\n" +
+                "  |  <slot 435> : 435: wo_id\n" +
+                "  |  <slot 437> : 437: product_id\n" +
+                "  |  <slot 455> : 455: fault_desc\n" +
+                "  |  <slot 515> : 515: callchannel\n" +
+                "  |  <slot 589> : 589: account_id\n" +
+                "  |  <slot 590> : 590: user_id\n" +
+                "  |  <slot 591> : 591: session_id\n" +
+                "  |  <slot 608> : 608: create_time\n" +
+                "  |  <slot 620> : 620: ter_user_phone\n" +
+                "  |  \n" +
+                "  21:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 590: user_id = 622: ter_user_id\n" +
+                "  |  equal join conjunct: 589: account_id = 623: terminal_id"));
+    }
 }
