@@ -3058,6 +3058,8 @@ public class PrivilegeCheckerTest {
 
         String createSql = "create pipe p1 " +
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
+        String createSql2 = "create pipe p2 " +
+                "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
         ConnectContext ctx = starRocksAssert.getCtx();
 
         ctxToTestUser();
@@ -3118,6 +3120,7 @@ public class PrivilegeCheckerTest {
                         "for this operation.");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql2, ctx), ctx);
 
         // test show pipes
         ShowResultSet res =
@@ -3144,6 +3147,18 @@ public class PrivilegeCheckerTest {
                 "revoke USAGE on ALL PIPES in DATABASE db1 from test",
                 "Access denied; you need (at least one of) the ANY privilege(s) on PIPE db1.p1 " +
                         "for this operation");
+        verifyGrantRevoke(
+                "desc pipe p1",
+                "grant USAGE on PIPE db1.* to test",
+                "revoke USAGE on PIPE db1.* from test",
+                "Access denied; you need (at least one of) the ANY privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+        verifyGrantRevoke(
+                "desc pipe p1",
+                "grant USAGE on PIPE p1,p2 to test",
+                "revoke USAGE on PIPE p1,p2 from test",
+                "Access denied; you need (at least one of) the ANY privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
 
         // alter pipe
         verifyGrantRevoke(
@@ -3158,6 +3173,12 @@ public class PrivilegeCheckerTest {
                 "revoke ALTER on ALL PIPES in DATABASE db1 from test",
                 "Access denied; you need (at least one of) the ALTER privilege(s) on PIPE db1.p1 " +
                         "for this operation");
+        verifyGrantRevoke(
+                "alter pipe p1 set ('poll_interval'='103') ",
+                "grant ALTER on PIPE db1.* to test",
+                "revoke ALTER on PIPE db1.* from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
 
         // drop pipe
         verifyGrantRevoke(
@@ -3170,6 +3191,14 @@ public class PrivilegeCheckerTest {
                 "drop pipe p1",
                 "grant DROP on ALL PIPES in DATABASE db1 to test",
                 "revoke DROP on ALL PIPES in DATABASE db1 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
+                        "for this operation");
+
+        // composited privilege
+        verifyGrantRevoke(
+                "drop pipe p1",
+                "grant USAGE,ALTER,DROP on ALL PIPES in DATABASE db1 to test",
+                "revoke USAGE,ALTER,DROP on ALL PIPES in DATABASE db1 from test",
                 "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
                         "for this operation");
 
