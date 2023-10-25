@@ -42,7 +42,7 @@ Status HorizontalCompactionTask::run_impl() {
     RETURN_IF_ERROR(_validate_compaction(statistics));
     TRACE("[Compaction] horizontal compaction validated");
 
-    _commit_compaction();
+    RETURN_IF_ERROR(_commit_compaction());
     TRACE("[Compaction] horizontal compaction committed");
 
     return Status::OK();
