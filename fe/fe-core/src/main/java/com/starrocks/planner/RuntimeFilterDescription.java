@@ -20,7 +20,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterBuildType;
@@ -44,8 +43,6 @@ public class RuntimeFilterDescription {
         TOPN_FILTER,
         JOIN_FILTER
     }
-
-    ;
 
     private int filterId;
     private int buildPlanNodeId;
@@ -139,6 +136,9 @@ public class RuntimeFilterDescription {
         if (!canAcceptFilter(node)) {
             return false;
         }
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+            ((OlapScanNode) node).setOrderHint(isAscFilter());
+        }
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
         if (inLocalFragmentInstance()) {
@@ -188,6 +188,14 @@ public class RuntimeFilterDescription {
             return !sortInfo.getNullsFirst().get(0);
         } else {
             return false;
+        }
+    }
+
+    public boolean isAscFilter() {
+        if (sortInfo != null) {
+            return sortInfo.getIsAscOrder().get(0);
+        } else {
+            return true;
         }
     }
 
