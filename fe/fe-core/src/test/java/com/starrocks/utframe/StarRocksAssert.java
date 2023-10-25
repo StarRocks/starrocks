@@ -343,29 +343,6 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert refreshMvPartition(String sql) throws Exception {
-        //        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        //        if (stmt instanceof RefreshMaterializedViewStatement) {
-        ////            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
-        //
-        //            TableName mvName = refreshMaterializedViewStatement.getMvName();
-        //            Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
-        //            Table table = db.getTable(mvName.getTbl());
-        //            Assert.assertNotNull(table);
-        //            Assert.assertTrue(table instanceof MaterializedView);
-        //            MaterializedView mv = (MaterializedView) table;
-        //
-        //            HashMap<String, String> taskRunProperties = new HashMap<>();
-        //            PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
-        //            taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
-        //            taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
-        //            taskRunProperties.put(TaskRun.FORCE, "true");
-        //
-        //            Task task = TaskBuilder.rebuildMvTask(mv, "test", taskRunProperties);
-        //            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
-        //            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        //            taskRun.executeTaskRun();
-        //            waitingTaskFinish(taskRun);
-        //        }
         if (!sql.contains("sync")) {
             sql += " with sync mode";
         }
