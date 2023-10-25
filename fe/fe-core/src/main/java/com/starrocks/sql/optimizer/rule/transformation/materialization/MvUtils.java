@@ -233,7 +233,6 @@ public class MvUtils {
                         LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                        LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc = new TableScanDesc(
                                 table, id, scanOperator, optExpression, i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
@@ -416,6 +415,30 @@ public class MvUtils {
         };
         expression.getOp().accept(scanCollector, expression, null);
         return scanExprs;
+    }
+
+    public static List<OptExpression> collectJoinExpr(OptExpression expression) {
+        List<OptExpression> joinExprs = Lists.newArrayList();
+        OptExpressionVisitor joinCollector = new OptExpressionVisitor<Void, Void>() {
+            @Override
+            public Void visit(OptExpression optExpression, Void context) {
+                for (OptExpression input : optExpression.getInputs()) {
+                    input.getOp().accept(this, input, null);
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitLogicalJoin(OptExpression optExpression, Void context) {
+                joinExprs.add(optExpression);
+                for (OptExpression input : optExpression.getInputs()) {
+                    input.getOp().accept(this, input, null);
+                }
+                return null;
+            }
+        };
+        expression.getOp().accept(joinCollector, expression, null);
+        return joinExprs;
     }
 
     // get all predicates within and below root
