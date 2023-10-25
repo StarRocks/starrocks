@@ -88,8 +88,8 @@ using starrocks::PageFooterPB;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
-              "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
+              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
+              "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -134,8 +134,9 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
-    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
-    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool --operation=print_lake_txn_log\n";
+    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
+    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
+    ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
     return ss.str();
 }
 
@@ -1072,6 +1073,21 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_schema") {
+        starrocks::TabletSchemaPB schema;
+        if (!schema.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse schema\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(schema, &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }
