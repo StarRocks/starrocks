@@ -57,7 +57,7 @@ import java.util.concurrent.Future;
 /**
  * Check the connectivity of a port, currently for edit log port and rpc_port
  */
-public class PortConnectivityChecker extends FrontendDaemon {
+public class PortConnectivityChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(PortConnectivityChecker.class);
     private final ExecutorService executor;
     private final Map<Pair<String, Integer>, Boolean> currentPortStates = new HashMap<>();
