@@ -20,11 +20,13 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -36,7 +38,7 @@ public class ShowPipeStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("DATABASE_ID", ScalarType.BIGINT))
+                    .addColumn(new Column("DATABASE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("PIPE_ID", ScalarType.BIGINT))
                     .addColumn(new Column("PIPE_NAME", ScalarType.createVarchar(64)))
                     .addColumn(new Column("STATE", ScalarType.createVarcharType(8)))
@@ -67,7 +69,8 @@ public class ShowPipeStmt extends ShowStmt {
      * NOTE: Must be consistent with the META_DATA
      */
     public static void handleShow(List<Comparable> row, Pipe pipe) {
-        row.add(String.valueOf(pipe.getPipeId().getDbId()));
+        Optional<Database> db = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId());
+        row.add(db.map(Database::getFullName).orElse(""));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());
         row.add(String.valueOf(pipe.getState()));
