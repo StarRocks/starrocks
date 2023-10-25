@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
+import com.starrocks.common.util.StringUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -172,7 +173,7 @@ public final class ColumnRefOperator extends ScalarOperator {
 
         ColumnRefOperator leftColumn = (ColumnRefOperator) this;
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
-        return leftColumn.getName().equals(rightColumn.getName())
+        return StringUtils.areColumnNamesEqual(leftColumn.getName(), rightColumn.getName())
                 && leftColumn.getType().equals(rightColumn.getType())
                 && leftColumn.isNullable() == rightColumn.isNullable();
     }
