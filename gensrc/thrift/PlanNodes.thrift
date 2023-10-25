@@ -504,6 +504,9 @@ struct TOlapScanNode {
   30: optional bool use_pk_index
   31: optional list<Descriptors.TColumn> columns_desc
   32: optional bool output_chunk_by_bucket
+  // order by hint for scan
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TJDBCScanNode {
