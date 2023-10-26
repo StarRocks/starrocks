@@ -447,8 +447,8 @@ void LakeTabletsChannel::_flush_stale_memtables() {
     for (auto& [tablet_id, writer] : _delta_writers) {
         bool log_flushed = false;
         auto last_write_ts = writer->last_write_ts();
-        auto cb = [=](Status err) {
-            LOG_IF(WARNING, !err.ok()) << "Fail to flush async delta writer of tablet " << tablet_id << ": " << err;
+        auto cb = [id=tablet_id](const Status& err) {
+            LOG_IF(WARNING, !err.ok()) << "Fail to flush async delta writer of tablet " << id << ": " << err;
         };
         if (last_write_ts > 0) {
             if (_immutable_partition_ids.count(writer->partition_id()) > 0) {

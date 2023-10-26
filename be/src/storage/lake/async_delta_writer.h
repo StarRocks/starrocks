@@ -55,7 +55,7 @@ public:
     };
 
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;
-    using Callback = std::function<void(Status st)>;
+    using Callback = std::function<void(const Status& st)>;
 
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 
