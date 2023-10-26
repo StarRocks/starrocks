@@ -64,6 +64,11 @@ import java.util.Set;
 public class CreateReplicaTask extends AgentTask {
     private static final Logger LOG = LogManager.getLogger(CreateReplicaTask.class);
 
+    public enum RecoverySource {
+        SCHEDULER,
+        REPORT
+    }
+
     private short shortKeyColumnCount;
     private int schemaHash;
 
@@ -103,8 +108,17 @@ public class CreateReplicaTask extends AgentTask {
     private long baseTabletId = -1;
     private int baseSchemaHash = -1;
 
+    private RecoverySource recoverySource;
+
     // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
     private boolean isRecoverTask = false;
+<<<<<<< HEAD
+=======
+
+    private boolean isFromScheduler = false;
+
+    private int primaryIndexCacheExpireSec = 0;
+>>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
     private boolean createSchemaFile = true;
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
@@ -196,12 +210,12 @@ public class CreateReplicaTask extends AgentTask {
         this.persistentIndexType = persistentIndexType;
     }
 
-    public void setIsRecoverTask(boolean isRecoverTask) {
-        this.isRecoverTask = isRecoverTask;
+    public void setRecoverySource(RecoverySource source) {
+        this.recoverySource = source;
     }
 
-    public boolean isRecoverTask() {
-        return isRecoverTask;
+    public RecoverySource getRecoverySource() {
+        return this.recoverySource;
     }
 
     public void countDownLatch(long backendId, long tabletId) {
