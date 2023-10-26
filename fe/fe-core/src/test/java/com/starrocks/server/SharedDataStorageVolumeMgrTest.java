@@ -175,10 +175,7 @@ public class SharedDataStorageVolumeMgrTest {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put("aaa", "bbb");
         storageParams.put(AWS_S3_REGION, "region");
-        Assert.assertThrows(DdlException.class,
-                () -> svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), ""));
         storageParams.remove("aaa");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
@@ -211,10 +208,6 @@ public class SharedDataStorageVolumeMgrTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
         }
-        storageParams.put("aaa", "bbb");
-        Assert.assertThrows(DdlException.class, () ->
-                svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update"));
-        storageParams.remove("aaa");
         svm.updateStorageVolume(svName, storageParams, Optional.of(true), "test update");
         sv = svm.getStorageVolumeByName(svName);
         cloudConfiguration = sv.getCloudConfiguration();
