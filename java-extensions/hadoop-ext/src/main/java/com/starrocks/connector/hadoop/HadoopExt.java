@@ -1,10 +1,25 @@
-package org.apache.hadoop.fs;
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-class HadoopExt {
+public class HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HadoopExt.class);
 
@@ -16,11 +31,15 @@ class HadoopExt {
     public static final String LOGGER_MESSAGE_PREFIX = "[hadoop-ext]";
 
     public static void addConfigResourcesToConfiguration(Configuration conf) {
-        if (conf.getBoolean(HDFS_CONFIG_RESOURCES_LOADED, false)) {
+        String configResources = conf.get(HDFS_CONFIG_RESOURCES);
+        addConfigResourcesToConfiguration(configResources, conf);
+    }
+
+    public static void addConfigResourcesToConfiguration(String configResources, Configuration conf) {
+        if (configResources == null || configResources.isEmpty()) {
             return;
         }
-        String configResources = conf.get(HDFS_CONFIG_RESOURCES);
-        if (configResources == null || configResources.isEmpty()) {
+        if (conf.getBoolean(HDFS_CONFIG_RESOURCES_LOADED, false)) {
             return;
         }
         final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
