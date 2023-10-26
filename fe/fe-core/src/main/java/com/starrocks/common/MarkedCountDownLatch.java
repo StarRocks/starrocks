@@ -37,12 +37,8 @@ package com.starrocks.common;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/MarkedCountDownLatch.java
-=======
-import com.starrocks.common.Status;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
->>>>>>> 68f7562472 ([Enhancement] Support asynchronous profile processes (#32917)):fe/fe-core/src/main/java/com/starrocks/common/util/concurrent/MarkedCountDownLatch.java
 
 import java.util.List;
 import java.util.Map.Entry;
