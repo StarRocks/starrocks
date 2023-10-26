@@ -163,7 +163,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE_GROUP,
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
-                    ObjectType.STORAGE_VOLUME)) {
+                    ObjectType.STORAGE_VOLUME,
+                    ObjectType.PIPE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
             rolePrivilegeCollection.disableMutable(); // not mutable
@@ -239,7 +240,8 @@ public class AuthorizationMgr {
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.VIEW.equals(objectType)
                 || ObjectType.MATERIALIZED_VIEW.equals(objectType)
-                || ObjectType.DATABASE.equals(objectType)) {
+                || ObjectType.DATABASE.equals(objectType)
+                || ObjectType.PIPE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*", "*"), globalStateMgr));
             collection.grant(objectType, actionList, objects, false);
