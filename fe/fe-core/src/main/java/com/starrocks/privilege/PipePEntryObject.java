@@ -108,7 +108,7 @@ public class PipePEntryObject implements PEntryObject {
         if (db == null) {
             return false;
         }
-        return globalStateMgr.getPipeManager().mayGetPipe(new PipeName(db.getUUID(), getName())).isPresent();
+        return globalStateMgr.getPipeManager().mayGetPipe(new PipeName(db.getFullName(), getName())).isPresent();
     }
 
     @Override
@@ -161,6 +161,9 @@ public class PipePEntryObject implements PEntryObject {
 
     public Optional<Database> getDatabase() {
         try {
+            if (getDbUUID().equals(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
+                return Optional.empty();
+            }
             long dbId = Long.parseLong(getDbUUID());
             return GlobalStateMgr.getCurrentState().mayGetDb(dbId);
         } catch (NumberFormatException e) {
