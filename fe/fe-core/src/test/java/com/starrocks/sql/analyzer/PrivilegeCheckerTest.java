@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -3129,10 +3130,15 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant USAGE on PIPE db1.p1 to test", ctx), ctx);
         res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
         Assert.assertEquals(1, res.getResultRows().size());
+        // test show grants
+        Assert.assertEquals(ImmutableList.of(
+                ImmutableList.of("'test'@'%'", "default_catalog", "GRANT USAGE ON PIPE db1.p1 TO USER 'test'@'%'")
+        ), starRocksAssert.show("show grants for test"));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke USAGE on PIPE db1.p1 from test", ctx), ctx);
         res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
         Assert.assertEquals(0, res.getResultRows().size());
+        Assert.assertEquals(ImmutableList.of(), starRocksAssert.show("show grants for test"));
 
         // test desc pipe
         verifyGrantRevoke(
