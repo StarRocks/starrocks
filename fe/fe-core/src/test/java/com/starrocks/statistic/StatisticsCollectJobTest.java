@@ -42,7 +42,9 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -56,14 +58,16 @@ import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     private static long t0StatsTableId = 0;
-
     private static LocalDateTime t0UpdateTime = LocalDateTime.of(2022, 1, 1, 1, 1, 1);
+
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        ConnectorPlanTestBase.mockCatalog(connectContext);
+        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
 
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
