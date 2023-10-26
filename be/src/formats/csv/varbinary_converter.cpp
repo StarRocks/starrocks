@@ -84,7 +84,8 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
             length_check_status = false;
         }
     } else {
-        if (config::enable_check_string_lengths && ((len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size != -1 && len > max_size)))  {
+        if (config::enable_check_string_lengths &&
+            ((len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size != -1 && len > max_size))) {
             length_check_status = false;
         }
     }

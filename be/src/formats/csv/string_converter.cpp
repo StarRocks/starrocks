@@ -63,10 +63,10 @@ bool StringConverter::read_string(Column* column, const Slice& s, const Options&
     bool length_check_status = true;
     // Hive table, not limit string length <= 1mb anymore
     if (options.is_hive) {
-        if (max_size > 0 && s.size > max_size) {
+        if (UNLIKELY(max_size > 0 && s.size > max_size)) {
             length_check_status = false;
         }
-    } else  {
+    } else {
         if ((config::enable_check_string_lengths &&
              ((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size)))) {
             length_check_status = false;
@@ -126,7 +126,7 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
         if (max_size > 0 && ext_size > max_size) {
             length_check_status = false;
         }
-    } else  {
+    } else {
         if (config::enable_check_string_lengths &&
             ((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
             length_check_status = false;
