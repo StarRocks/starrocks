@@ -15,6 +15,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -53,122 +54,141 @@ import java.util.function.Supplier;
 public abstract class ConnectorPartitionTraits {
 
     private static final Logger LOG = LoggerFactory.getLogger(ConnectorPartitionTraits.class);
-    protected static final Map<Table.TableType, Supplier<ConnectorPartitionTraits>> TRAITS_TABLE = Maps.newHashMap();
+    private static final Map<Table.TableType, Supplier<ConnectorPartitionTraits>> TRAITS_TABLE =
+            ImmutableMap.<Table.TableType, Supplier<ConnectorPartitionTraits>>builder()
+                    .put(Table.TableType.HIVE, HivePartitionTraits::new)
+                    .put(Table.TableType.HUDI, HudiPartitionTraits::new)
+                    .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
+                    .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
+                    .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
+                    .build();
 
     protected Table table;
 
-    /**
-     * Check if the table type support partition
-     */
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
     }
 
-    /**
-     * Build traits
-     */
     public static ConnectorPartitionTraits build(Table.TableType tableType) {
         return Preconditions.checkNotNull(TRAITS_TABLE.get(tableType),
                 "traits not supported: " + tableType).get();
     }
 
-    /**
-     * Build traits
-     */
     public static ConnectorPartitionTraits build(Table table) {
-        return build(table.getType());
+        ConnectorPartitionTraits res = build(table.getType());
+        res.table = table;
+        return res;
     }
 
     abstract PartitionKey createEmptyKey();
 
-    public PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException {
-        Preconditions.checkState(values.size() == types.size(),
-                "columns size is %s, but values size is %s", types.size(), values.size());
-
-        PartitionKey partitionKey = createEmptyKey();
-
-        // change string value to LiteralExpr,
-        for (int i = 0; i < values.size(); i++) {
-            String rawValue = values.get(i);
-            Type type = types.get(i);
-            LiteralExpr exprValue;
-            // rawValue could be null for delta table
-            if (rawValue == null) {
-                rawValue = "null";
-            }
-            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
-                partitionKey.setNullPartitionValue(rawValue);
-                exprValue = NullLiteral.create(type);
-            } else {
-                exprValue = LiteralExpr.create(rawValue, type);
-            }
-            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
-        }
-        return partitionKey;
-    }
-
-    /**
-     * Get name of database
-     */
     abstract String getDbName();
 
-    /**
-     * Get name of table
-     */
-    public String getTableName() {
-        return table.getName();
-    }
+    abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
 
-    public List<String> getPartitionNames() {
-        if (table.isUnPartitioned()) {
-            return Lists.newArrayList(table.getName());
-        }
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                table.getCatalogName(), getDbName(), getTableName());
-    }
+    abstract List<String> getPartitionNames();
 
-    public List<Column> getPartitionColumns() {
-        return table.getPartitionColumns();
-    }
+    abstract List<Column> getPartitionColumns();
 
-    public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
-            throws AnalysisException {
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getRangePartitionMap();
-        } else {
-            return PartitionUtil.getRangePartitionMapOfExternalTable(
-                    table, partitionColumn, getPartitionNames(), partitionExpr);
-        }
-    }
+    abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+            throws AnalysisException;
 
-    public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException {
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getListPartitionMap();
-        } else {
-            return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
-        }
-    }
+    abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
-    protected List<PartitionInfo> getPartitions(List<String> names) {
-        throw new NotImplementedException("Only support hive/jdbc");
-    }
-
-    public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
-        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
-        List<String> partitionNames = getPartitionNames();
-        List<PartitionInfo> partitions = getPartitions(partitionNames);
-        Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
-        for (int index = 0; index < partitionNames.size(); ++index) {
-            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
-        }
-        return partitionNameWithPartition;
-    }
+    abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
     // ========================================= Implementations ==============================================
 
-    static class HivePartitionTraits extends ConnectorPartitionTraits {
-        static {
-            TRAITS_TABLE.put(Table.TableType.HIVE, HivePartitionTraits::new);
+    static abstract class DefaultTraits extends ConnectorPartitionTraits {
+
+        @Override
+        public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
+            Preconditions.checkState(values.size() == columns.size(),
+                    "columns size is %s, but values size is %s", columns.size(), values.size());
+
+            PartitionKey partitionKey = createEmptyKey();
+
+            // change string value to LiteralExpr,
+            for (int i = 0; i < values.size(); i++) {
+                String rawValue = values.get(i);
+                Type type = columns.get(i).getType();
+                LiteralExpr exprValue;
+                // rawValue could be null for delta table
+                if (rawValue == null) {
+                    rawValue = "null";
+                }
+                if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
+                    partitionKey.setNullPartitionValue(rawValue);
+                    exprValue = NullLiteral.create(type);
+                } else {
+                    exprValue = LiteralExpr.create(rawValue, type);
+                }
+                partitionKey.pushColumn(exprValue, type.getPrimitiveType());
+            }
+            return partitionKey;
+        }
+
+        protected String getTableName() {
+            return table.getName();
+        }
+
+        @Override
+        public List<String> getPartitionNames() {
+            if (table.isUnPartitioned()) {
+                return Lists.newArrayList(table.getName());
+            }
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    table.getCatalogName(), getDbName(), getTableName());
+        }
+
+        @Override
+        public List<Column> getPartitionColumns() {
+            return table.getPartitionColumns();
+        }
+
+        @Override
+        public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+                throws AnalysisException {
+            if (table.isNativeTableOrMaterializedView()) {
+                return ((OlapTable) table).getRangePartitionMap();
+            } else {
+                return PartitionUtil.getRangePartitionMapOfExternalTable(
+                        table, partitionColumn, getPartitionNames(), partitionExpr);
+            }
+        }
+
+        @Override
+        public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException {
+            if (table.isNativeTableOrMaterializedView()) {
+                return ((OlapTable) table).getListPartitionMap();
+            } else {
+                return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
+            }
+        }
+
+        @Override
+        public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
+            Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
+            List<String> partitionNames = getPartitionNames();
+            List<PartitionInfo> partitions = getPartitions(partitionNames);
+            Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
+            for (int index = 0; index < partitionNames.size(); ++index) {
+                partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
+            }
+            return partitionNameWithPartition;
+        }
+
+        protected List<PartitionInfo> getPartitions(List<String> names) {
+            throw new NotImplementedException("Only support hive/jdbc");
+        }
+
+    }
+
+    // ========================================= Specific Implementations ======================================
+
+    static class HivePartitionTraits extends DefaultTraits {
+
+        static void init() {
         }
 
         @Override
@@ -189,10 +209,7 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
-    static class HudiPartitionTraits extends ConnectorPartitionTraits {
-        static {
-            TRAITS_TABLE.put(Table.TableType.HUDI, HudiPartitionTraits::new);
-        }
+    static class HudiPartitionTraits extends DefaultTraits {
 
         @Override
         public String getDbName() {
@@ -205,10 +222,7 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
-    static class IcebergPartitionTraits extends ConnectorPartitionTraits {
-        static {
-            TRAITS_TABLE.put(Table.TableType.ICEBERG, IcebergPartitionTraits::new);
-        }
+    static class IcebergPartitionTraits extends DefaultTraits {
 
         @Override
         public String getDbName() {
@@ -226,10 +240,7 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
-    static class PaimonPartitionTraits extends ConnectorPartitionTraits {
-        static {
-            TRAITS_TABLE.put(Table.TableType.PAIMON, PaimonPartitionTraits::new);
-        }
+    static class PaimonPartitionTraits extends DefaultTraits {
 
         @Override
         public String getDbName() {
@@ -242,11 +253,7 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
-    static class JDBCPartitionTraits extends ConnectorPartitionTraits {
-        static {
-            TRAITS_TABLE.put(Table.TableType.JDBC, JDBCPartitionTraits::new);
-        }
-
+    static class JDBCPartitionTraits extends DefaultTraits {
         @Override
         public String getDbName() {
             return ((JDBCTable) table).getDbName();
