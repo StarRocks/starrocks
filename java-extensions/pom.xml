@@ -17,6 +17,7 @@
         <module>udf-examples</module>
         <module>paimon-reader</module>
         <module>hadoop-ext</module>
+        <module>odps-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 

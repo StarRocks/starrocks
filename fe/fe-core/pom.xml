@@ -98,6 +98,16 @@ under the License.
     <dependencies>
         <dependency>
             <groupId>com.aliyun.odps</groupId>
+            <artifactId>odps-sdk-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.odps</groupId>
+            <artifactId>odps-sdk-table-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.odps</groupId>
             <artifactId>odps-jdbc</artifactId>
         </dependency>
 

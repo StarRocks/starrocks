@@ -153,6 +153,18 @@ under the License.
         <dependencies>
             <dependency>
                 <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-sdk-core</artifactId>
+                <version>0.45.2-public</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun.odps</groupId>
+                <artifactId>odps-sdk-table-api</artifactId>
+                <version>0.45.2-public</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-jdbc</artifactId>
                 <version>3.5.0</version>
             </dependency>

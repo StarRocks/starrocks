@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
+import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -37,10 +37,12 @@ public class RemoteFileDesc {
     // to reduce the memory usage of RemoteFileInfo
     private List<FileScanTask> icebergScanTasks = new ArrayList<>();
     private PaimonSplitsInfo paimonSplitsInfo;
+    private List<InputSplitWithRowRange> odpsSplitsInfo = new ArrayList<>();
 
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
-                          ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
-                          List<FileScanTask> icebergScanTasks, PaimonSplitsInfo paimonSplitsInfo) {
+                           ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
+                           List<FileScanTask> icebergScanTasks, PaimonSplitsInfo paimonSplitsInfo,
+                           List<InputSplitWithRowRange> odpsSplitsInfo) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
@@ -48,7 +50,7 @@ public class RemoteFileDesc {
         this.blockDescs = blockDescs;
         this.hudiDeltaLogs = hudiDeltaLogs;
         this.icebergScanTasks = icebergScanTasks;
-        this.paimonSplitsInfo = paimonSplitsInfo;
+        this.odpsSplitsInfo = odpsSplitsInfo;
     }
 
     public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
@@ -62,11 +64,15 @@ public class RemoteFileDesc {
     }
 
     public static RemoteFileDesc createIcebergRemoteFileDesc(List<FileScanTask> tasks) {
-        return new RemoteFileDesc(null, null, 0, 0, null, null, tasks, null);
+        return new RemoteFileDesc(null, null, 0, 0, null, null, tasks, null, null);
     }
 
     public static RemoteFileDesc createPamonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
-        return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo);
+        return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo, null);
+    }
+
+    public static RemoteFileDesc createOdpsRemoteFileDesc(List<InputSplitWithRowRange> odpsSplitsInfo) {
+        return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, odpsSplitsInfo);
     }
 
     public String getFileName() {
@@ -117,6 +123,9 @@ public class RemoteFileDesc {
 
     public PaimonSplitsInfo getPaimonSplitsInfo() {
         return paimonSplitsInfo;
+    }
+    public List<InputSplitWithRowRange> getOdpsSplitsInfo() {
+        return odpsSplitsInfo;
     }
 
     @Override

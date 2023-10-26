@@ -389,6 +389,7 @@ enum TTableType {
     HUDI_TABLE,
     JDBC_TABLE,
     PAIMON_TABLE,
+    ODPS_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
     FILE_TABLE,

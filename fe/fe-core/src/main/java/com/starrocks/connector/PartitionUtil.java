@@ -102,6 +102,7 @@ public class PartitionUtil {
         PartitionKey partitionKey = null;
         switch (tableType) {
             case HIVE:
+            case ODPS:
                 partitionKey = new HivePartitionKey();
                 break;
             case HUDI:

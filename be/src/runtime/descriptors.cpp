@@ -307,6 +307,22 @@ const std::string& PaimonTableDescriptor::get_table_name() const {
     return _table_name;
 }
 
+OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+    _database_name = tdesc.dbName;
+    _table_name = tdesc.tableName;
+}
+
+const std::string& OdpsTableDescriptor::get_database_name() const {
+    return _database_name;
+}
+
+const std::string& OdpsTableDescriptor::get_table_name() const {
+    return _table_name;
+}
+
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
 
 bool HiveTableDescriptor::is_partition_col(const SlotDescriptor* slot) const {
