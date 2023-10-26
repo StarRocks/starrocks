@@ -35,12 +35,49 @@ namespace starrocks::pipeline {
 
 const std::vector<RowsetSharedPtr> Morsel::kEmptyRowsets;
 
+class PhysicalSplitScanMorsel final : public ScanMorsel {
+public:
+    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
+            : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
+
+    ~PhysicalSplitScanMorsel() override = default;
+
+    void init_tablet_reader_params(TabletReaderParams* params) override;
+
+    const std::unordered_set<std::string>& skip_min_max_metrics() const override {
+        static const std::unordered_set<std::string> metrics{"ShortKeyFilterRows", "SegmentZoneMapFilterRows"};
+        return metrics;
+    }
+
+private:
+    RowidRangeOptionPtr _rowid_range_option;
+};
+
+class LogicalSplitScanMorsel final : public ScanMorsel {
+public:
+    LogicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
+                           ShortKeyRangesOptionPtr short_key_ranges_option)
+            : ScanMorsel(plan_node_id, scan_range), _short_key_ranges_option(std::move(short_key_ranges_option)) {}
+
+    ~LogicalSplitScanMorsel() override = default;
+
+    void init_tablet_reader_params(TabletReaderParams* params) override;
+
+    const std::unordered_set<std::string>& skip_min_max_metrics() const override {
+        static const std::unordered_set<std::string> metrics{"ShortKeyFilterRows", "SegmentZoneMapFilterRows"};
+        return metrics;
+    }
+
+private:
+    ShortKeyRangesOptionPtr _short_key_ranges_option;
+};
+
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
 }
 
 void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
-    params->short_key_ranges = _short_key_ranges;
+    params->short_key_ranges_option = _short_key_ranges_option;
 }
 
 /// MorselQueueFactory.
@@ -277,7 +314,9 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
                  << "[range=" << taken_range.to_string() << "] ";
 
         num_taken_rows += taken_range.span_size();
-        rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange<>>(std::move(taken_range)));
+        rowid_range->add(_cur_rowset(), _cur_segment(), std::make_shared<SparseRange<>>(std::move(taken_range)),
+                         _is_first_split_of_segment);
+        _is_first_split_of_segment = false;
 
         if (_is_last_split_of_current_morsel()) {
             return rowid_range;
@@ -403,6 +442,8 @@ bool PhysicalSplitMorselQueue::_next_segment() {
 }
 
 Status PhysicalSplitMorselQueue::_init_segment() {
+    _is_first_split_of_segment = true;
+
     // Load the meta of the new rowset and the index of the new segment。
     if (0 == _segment_idx) {
         // Read a new tablet.
@@ -588,7 +629,9 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
 
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
-            scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
+            scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()),
+            std::make_shared<ShortKeyRangesOption>(std::move(short_key_ranges), _is_first_split_of_tablet));
+    _is_first_split_of_tablet = false;
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
@@ -730,6 +773,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     _block_ranges_per_seek_range.clear();
     _num_rest_blocks_per_seek_range.clear();
     _range_idx = 0;
+    _is_first_split_of_tablet = true;
 
     if (_tablet_idx == 0) {
         // All the tablets have the same schema, so parse seek range with the first table schema.

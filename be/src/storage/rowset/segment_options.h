@@ -82,6 +82,9 @@ public:
 
     bool has_delete_pred = false;
 
+    /// Mark whether this is the first split of a segment.
+    /// A segment may be divided into multiple split to scan concurrently.
+    bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
 

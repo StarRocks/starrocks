@@ -91,6 +91,11 @@ public:
         }
     }
 
+    virtual const std::unordered_set<std::string>& skip_min_max_metrics() const {
+        static const std::unordered_set<std::string> metrics;
+        return metrics;
+    }
+
 private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
@@ -140,33 +145,6 @@ private:
     int64_t _owner_id = 0;
     int64_t _version = 0;
     int64_t _partition_id = 0;
-};
-
-class PhysicalSplitScanMorsel final : public ScanMorsel {
-public:
-    PhysicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, RowidRangeOptionPtr rowid_range_option)
-            : ScanMorsel(plan_node_id, scan_range), _rowid_range_option(std::move(rowid_range_option)) {}
-
-    ~PhysicalSplitScanMorsel() override = default;
-
-    void init_tablet_reader_params(TabletReaderParams* params) override;
-
-private:
-    RowidRangeOptionPtr _rowid_range_option;
-};
-
-class LogicalSplitScanMorsel final : public ScanMorsel {
-public:
-    LogicalSplitScanMorsel(int32_t plan_node_id, const TScanRange& scan_range,
-                           std::vector<ShortKeyRangeOptionPtr> short_key_ranges)
-            : ScanMorsel(plan_node_id, scan_range), _short_key_ranges(std::move(short_key_ranges)) {}
-
-    ~LogicalSplitScanMorsel() override = default;
-
-    void init_tablet_reader_params(TabletReaderParams* params) override;
-
-private:
-    std::vector<ShortKeyRangeOptionPtr> _short_key_ranges;
 };
 
 /// MorselQueueFactory.
@@ -421,6 +399,7 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _has_init_any_segment = false;
+    bool _is_first_split_of_segment = true;
 
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
@@ -483,6 +462,7 @@ private:
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _has_init_any_tablet = false;
+    bool _is_first_split_of_tablet = true;
 
     // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;

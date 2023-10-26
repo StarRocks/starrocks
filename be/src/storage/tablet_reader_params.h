@@ -33,8 +33,8 @@ class RuntimeState;
 class ColumnPredicate;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
-struct ShortKeyRangeOption;
-using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+struct ShortKeyRangesOption;
+using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 
@@ -77,7 +77,7 @@ struct TabletReaderParams {
     const std::unordered_set<uint32_t>* unused_output_column_ids = &EMPTY_FILTERED_COLUMN_IDS;
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
-    std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+    ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
     bool sorted_by_keys_per_tablet = false;
     OlapRuntimeScanRangePruner runtime_range_pruner;

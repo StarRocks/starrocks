@@ -46,6 +46,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->global_dictmaps = global_dictmaps;
     dst->rowid_range_option = rowid_range_option;
     dst->short_key_ranges = short_key_ranges;
+    dst->is_first_split_of_segment = is_first_split_of_segment;
 
     return Status::OK();
 }

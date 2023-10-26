@@ -209,7 +209,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         return Status::InternalError(strings::Substitute("segment_idx out of range tablet:$0 $1 >= $2",
                                                          _tablet->tablet_id(), segment_idx, rowset->num_segments()));
     }
-    rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range);
+    rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range, true);
 
     std::vector<ChunkIteratorPtr> iters;
     RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, &iters));
@@ -278,12 +278,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
-    rs_opts.short_key_ranges = params.short_key_ranges;
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
     rs_opts.asc_hint = _is_asc_hint;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        if (params.rowid_range_option != nullptr && !params.rowid_range_option->match_rowset(rowset.get())) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
