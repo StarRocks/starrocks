@@ -680,14 +680,6 @@ public class PartitionBasedMvRefreshProcessorTest {
         Assert.assertTrue(plan.contains("4:HASH JOIN"));
     }
 
-    private static void trigerRefreshPaimonMv(Database testDb, MaterializedView partitionedMaterializedView)
-            throws Exception {
-        Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
-    }
-
     @Test
     public void testRewriteNonPartitionedMVForOlapTable() throws Exception {
         starRocksAssert.useDatabase("test")

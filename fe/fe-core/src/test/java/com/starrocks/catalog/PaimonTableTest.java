@@ -60,7 +60,7 @@ public class PaimonTableTest {
             }
         };
         PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema, "filesystem", null,
-                "file:///home/wgcn", paimonNativeTable, 100L);
+                "file:///home/wgcn", paimonNativeTable);
         List<String> keys = new ArrayList<>();
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(expections);
