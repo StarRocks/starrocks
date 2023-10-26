@@ -60,3 +60,9 @@ select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l right outer join 
 
 select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l full outer join [bucket] empty_t r on l.c0 = r.c0;
 
+
+-- other conjuncts condition
+create table t2 like t0;
+insert into t2 SELECT generate_series, 40960 - generate_series FROM TABLE(generate_series(1,  409600));
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 > 400000;
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 < 400000;
