@@ -81,6 +81,7 @@ import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColocatePersistInfo;
+import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
@@ -361,6 +362,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_RENAME_ROLLUP_V2:
             case OperationType.OP_RENAME_PARTITION_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TableInfo.class);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_RENAME_COLUMN_V2: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), ColumnRenameInfo.class);
                 isRead = true;
                 break;
             }

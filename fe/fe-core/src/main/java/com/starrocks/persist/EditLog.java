@@ -386,6 +386,11 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
+                case OperationType.OP_RENAME_COLUMN_V2: {
+                    ColumnRenameInfo info = (ColumnRenameInfo) journal.getData();
+                    globalStateMgr.replayRenameColumn(info);
+                    break;
+                }
                 case OperationType.OP_BACKUP_JOB:
                 case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
@@ -2157,5 +2162,9 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
     }
 }
