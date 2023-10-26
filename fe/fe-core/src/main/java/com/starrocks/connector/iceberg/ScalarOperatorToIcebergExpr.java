@@ -42,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -60,6 +61,7 @@ import static org.apache.iceberg.expressions.Expressions.notIn;
 import static org.apache.iceberg.expressions.Expressions.notNull;
 import static org.apache.iceberg.expressions.Expressions.or;
 import static org.apache.iceberg.expressions.Expressions.startsWith;
+import static org.apache.iceberg.types.Type.TypeID.TIMESTAMP;
 
 /**
  * Expressions currently supported in Iceberg, maps to StarRocks:
@@ -122,9 +124,9 @@ public class ScalarOperatorToIcebergExpr {
 
     private static class IcebergExprVisitor extends ScalarOperatorVisitor<Expression, IcebergContext> {
 
-        private static Type.TypeID getResultTypeID(String columnName, IcebergContext context) {
+        private static Type getResultType(String columnName, IcebergContext context) {
             Preconditions.checkNotNull(context);
-            return getColumnType(columnName, context).typeId();
+            return getColumnType(columnName, context);
         }
 
         private static Type getColumnType(String qualifiedName, IcebergContext context) {
@@ -178,8 +180,9 @@ public class ScalarOperatorToIcebergExpr {
                 return null;
             }
 
-            Type.TypeID typeID = getResultTypeID(columnName, context);
-            Object literalValue = getLiteralValue(operator.getChild(1), typeID);
+            Type icebergType = getResultType(columnName, context);
+            Type.TypeID typeID = icebergType.typeId();
+            Object literalValue = getLiteralValue(operator.getChild(1), icebergType);
             if (literalValue == null) {
                 return null;
             }
@@ -213,8 +216,9 @@ public class ScalarOperatorToIcebergExpr {
 
             List<Object> literalValues = operator.getListChildren().stream()
                     .map(childoperator -> {
-                        Type.TypeID typeID = getResultTypeID(columnName, context);
-                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator, typeID);
+                        Type icebergType = getResultType(columnName, context);
+                        Type.TypeID typeID = icebergType.typeId();
+                        Object literalValue = ScalarOperatorToIcebergExpr.getLiteralValue(childoperator, icebergType);
                         if (typeID == Type.TypeID.BOOLEAN) {
                             literalValue = convertBoolLiteralValue(literalValue);
                         }
@@ -237,7 +241,7 @@ public class ScalarOperatorToIcebergExpr {
 
             if (operator.getLikeType() == LikePredicateOperator.LikeType.LIKE) {
                 if (operator.getChild(1).getType().isStringType()) {
-                    String literal = (String) getLiteralValue(operator.getChild(1), getResultTypeID(columnName, context));
+                    String literal = (String) getLiteralValue(operator.getChild(1), getResultType(columnName, context));
                     if (literal == null) {
                         return null;
                     }
@@ -255,12 +259,12 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static Object getLiteralValue(ScalarOperator operator, Type.TypeID resultTypeID) {
+    private static Object getLiteralValue(ScalarOperator operator, Type resultType) {
         if (operator == null) {
             return null;
         }
 
-        return operator.accept(new ExtractLiteralValue(), resultTypeID);
+        return operator.accept(new ExtractLiteralValue(), resultType);
     }
 
     private static Object convertBoolLiteralValue(Object literalValue) {
@@ -271,7 +275,7 @@ public class ScalarOperatorToIcebergExpr {
         }
     }
 
-    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Type.TypeID> {
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Type> {
         private boolean needCast(PrimitiveType sourceType, Type.TypeID dstTypeID) {
             switch (sourceType) {
                 case BOOLEAN:
@@ -298,7 +302,7 @@ public class ScalarOperatorToIcebergExpr {
                 case DATE:
                     return dstTypeID != Type.TypeID.DATE;
                 case DATETIME:
-                    return dstTypeID != Type.TypeID.TIMESTAMP;
+                    return dstTypeID != TIMESTAMP;
                 default:
                     return true;
             }
@@ -345,14 +349,14 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         @Override
-        public Object visit(ScalarOperator scalarOperator, Type.TypeID context) {
+        public Object visit(ScalarOperator scalarOperator, Type context) {
             return null;
         }
 
         @Override
-        public Object visitConstant(ConstantOperator operator, Type.TypeID context) {
-            if (context != null && needCast(operator.getType().getPrimitiveType(), context)) {
-                operator = tryCastToResultType(operator, context);
+        public Object visitConstant(ConstantOperator operator, Type context) {
+            if (context != null && needCast(operator.getType().getPrimitiveType(), context.typeId())) {
+                operator = tryCastToResultType(operator, context.typeId());
             }
             if (operator == null) {
                 return null;
@@ -384,7 +388,14 @@ public class ScalarOperatorToIcebergExpr {
                 case DATE:
                     return operator.getDate().toLocalDate().toEpochDay();
                 case DATETIME:
-                    long value = operator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset()) * 1000
+                    ZoneOffset offset;
+                    if (Types.TimestampType.withZone().equals(context)) {
+                        offset = OffsetDateTime.now().getOffset();
+                    } else {
+                        offset = ZoneOffset.UTC;
+                    }
+
+                    long value = operator.getDatetime().toEpochSecond(offset) * 1000
                             * 1000 * 1000 + operator.getDatetime().getNano();
                     return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
                 default:
