@@ -297,12 +297,12 @@ public class SubqueryTest extends PlanTestBase {
                 "AS t1_3 RIGHT ANTI JOIN t0 subt0 ON t1_3.v5 = subt0.v1 ),\n" +
                 "  t0_2.v1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "30:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+        assertContains(plan, "  30:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 16: v1\n" +
                 "  |  \n" +
-                "  |----29:EXCHANGE");
+                "  |----29:AGGREGATE (merge finalize)");
     }
 
     @Test
@@ -333,14 +333,14 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n" +
                 "  );";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "13:HASH JOIN\n" +
+        assertContains(plan, "20:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
                 "  |  \n" +
-                "  |----12:EXCHANGE");
-        assertContains(plan, "20:NESTLOOP JOIN\n" +
+                "  |----19:EXCHANGE");
+        assertContains(plan, "13:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
@@ -651,7 +651,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason:");
-            assertContains(plan, "  4:HASH JOIN\n" +
+            assertContains(plan, "  5:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 8: v5\n" +
@@ -691,8 +691,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 4: v4");
-            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  equal join conjunct: 4: v4 = 1: v1");
+            assertContains(plan, "  5:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 8: v5\n" +
@@ -718,7 +718,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "  4:HASH JOIN\n" +
+            assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 8: v5\n" +
@@ -755,7 +755,7 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  10:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "  4:HASH JOIN\n" +
+            assertContains(plan, "  5:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 8: v5");
@@ -768,8 +768,8 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  10:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 4: v4");
-            assertContains(plan, "  4:HASH JOIN\n" +
+                    "  |  equal join conjunct: 4: v4 = 1: v1");
+            assertContains(plan, "  5:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 8: v5");
@@ -781,11 +781,11 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  11:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "  5:HASH JOIN\n" +
+            assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 8: v5");
-            assertContains(plan, "  1:OlapScanNode\n" +
+            assertContains(plan, "OlapScanNode\n" +
                     "     TABLE: t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 8: v5 = 10, 9: v6 != 3\n");
@@ -978,14 +978,14 @@ public class SubqueryTest extends PlanTestBase {
                     "join t1 on t0.v1 = t1.v4 " +
                     "and t0.v1 = (exists (select v7 from t2 where t2.v8 = 1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  11:HASH JOIN\n" +
-                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+            assertContains(plan, "  12:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 1: v1 = 4: v4");
-            assertContains(plan, "  7:HASH JOIN\n" +
-                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+            assertContains(plan, "  8:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (PARTITIONED)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 12: cast = 1: v1");
+                    "  |  equal join conjunct: 1: v1 = 12: cast");
         }
         {
             // Uncorrelated 2
@@ -996,10 +996,10 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  11:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "  7:HASH JOIN\n" +
+            assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 12: cast = 1: v1");
+                    "  |  equal join conjunct: 1: v1 = 12: cast");
         }
         {
             // Uncorrelated 3, multi subqueries
@@ -1011,14 +1011,14 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  19:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "  7:HASH JOIN\n" +
+            assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 18: cast = 1: v1");
-            assertContains(plan, "  16:HASH JOIN\n" +
+                    "  |  equal join conjunct: 1: v1 = 18: cast");
+            assertContains(plan, "HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 17: cast = 4: v4");
+                    "  |  equal join conjunct: 4: v4 = 17: cast");
         }
         {
             // correlated 1
@@ -1061,8 +1061,8 @@ public class SubqueryTest extends PlanTestBase {
                     "and t0.v2 = (not exists(select v11 from t3 where t3.v10 = t0.v1))";
             String plan = getFragmentPlan(sql);
             System.out.println(plan);
-            assertContains(plan, "  14:HASH JOIN\n" +
-                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+            assertContains(plan, "HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 17: cast = 1: v1");
             assertContains(plan, "  4:HASH JOIN\n" +
@@ -1070,11 +1070,11 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +
                     "  |  other predicates: CAST(15: countRows IS NOT NULL AS BIGINT) IS NOT NULL");
-            assertContains(plan, "  |    12:HASH JOIN\n" +
-                    "  |    |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
-                    "  |    |  colocate: false, reason: \n" +
-                    "  |    |  equal join conjunct: 1: v1 = 11: v10\n" +
-                    "  |    |  other predicates: 2: v2 = CAST(16: countRows IS NULL AS BIGINT)");
+            assertContains(plan, "HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 1: v1 = 11: v10\n" +
+                    "  |  other predicates: 2: v2 = CAST(16: countRows IS NULL AS BIGINT)");
         }
     }
 
@@ -1828,17 +1828,17 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  \n" +
                 "  32:EXCHANGE");
         assertContains(plan, "27:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: v2 = 14: v4\n" +
+                "  |  equal join conjunct: 14: v4 = 2: v2\n" +
                 "  |  \n" +
-                "  |----26:AGGREGATE (merge finalize)\n" +
-                "  |    |  output: count(15: countRows), count(16: countNotNulls)\n" +
-                "  |    |  group by: 14: v4\n" +
-                "  |    |  \n" +
-                "  |    25:EXCHANGE\n" +
+                "  |----26:EXCHANGE\n" +
                 "  |    \n" +
-                "  21:EXCHANGE");
+                "  6:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(15: countRows), count(16: countNotNulls)\n" +
+                "  |  group by: 14: v4\n" +
+                "  |  \n" +
+                "  5:EXCHANGE");
     }
 
     @Test

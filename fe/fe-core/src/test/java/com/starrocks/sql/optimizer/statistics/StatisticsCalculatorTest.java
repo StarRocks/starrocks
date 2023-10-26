@@ -269,7 +269,8 @@ public class StatisticsCalculatorTest {
                     columnRefFactory, optimizerContext);
             statisticsCalculator.estimatorStats();
             Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
-            Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getComputeSize(), 0.001);
+            Assert.assertEquals(ref.getType().getTypeSize() * 1000 * partitions.size(),
+                    expressionContext.getStatistics().getComputeSize(), 0.001);
         }
     }
 
