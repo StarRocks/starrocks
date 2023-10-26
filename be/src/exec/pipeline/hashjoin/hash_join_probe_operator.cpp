@@ -116,7 +116,7 @@ Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
 }
 
 Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<ChunkPtr>& refill_chunks) {
-    _reference_builder_hash_table_once();
+    RETURN_IF_ERROR(_reference_builder_hash_table_once());
     // Reset probe state only when it has valid state after referencing the build hash table.
     if (_join_prober->has_referenced_hash_table()) {
         RETURN_IF_ERROR(_join_prober->reset_probe(state));

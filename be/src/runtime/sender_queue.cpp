@@ -40,11 +40,6 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         _chunk_meta.slot_id_to_index[pb_chunk.slot_id_map()[i]] = pb_chunk.slot_id_map()[i + 1];
     }
 
-    _chunk_meta.tuple_id_to_index.reserve(pb_chunk.tuple_id_map().size());
-    for (int i = 0; i < pb_chunk.tuple_id_map().size(); i += 2) {
-        _chunk_meta.tuple_id_to_index[pb_chunk.tuple_id_map()[i]] = pb_chunk.tuple_id_map()[i + 1];
-    }
-
     _chunk_meta.is_nulls.resize(pb_chunk.is_nulls().size());
     for (int i = 0; i < pb_chunk.is_nulls().size(); ++i) {
         _chunk_meta.is_nulls[i] = pb_chunk.is_nulls()[i];
@@ -70,10 +65,6 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
                 ++column_index;
             }
         }
-    }
-    for (const auto& kv : _chunk_meta.tuple_id_to_index) {
-        _chunk_meta.types[kv.second] = TypeDescriptor(LogicalType::TYPE_BOOLEAN);
-        ++column_index;
     }
 
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {

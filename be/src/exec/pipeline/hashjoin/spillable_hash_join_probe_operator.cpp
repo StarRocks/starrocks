@@ -223,12 +223,12 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         auto iter = _pid_to_process_id.find(probe_partition->partition_id);
         if (iter == _pid_to_process_id.end()) {
             auto mem_table = probe_partition->spill_writer->mem_table();
-            mem_table->append_selective(*chunk, selection.data(), from, size);
+            (void)mem_table->append_selective(*chunk, selection.data(), from, size);
         } else {
             // maybe has some small chunk problem
             // TODO: add chunk accumulator here
             auto partitioned_chunk = chunk->clone_empty();
-            partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
+            (void)partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
             (void)_probers[iter->second]->push_probe_chunk(state, std::move(partitioned_chunk));
         }
         probe_partition->num_rows += size;

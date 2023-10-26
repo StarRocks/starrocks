@@ -236,8 +236,7 @@ StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
 Status CacheInputStream::seek(int64_t offset) {
     if (offset < 0 || offset >= _size) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
     _offset = offset;
-    _sb_stream->seek(offset);
-    return Status::OK();
+    return _sb_stream->seek(offset);
 }
 
 StatusOr<int64_t> CacheInputStream::position() {
