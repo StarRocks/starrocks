@@ -298,7 +298,7 @@ Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, Chunk*
                                                      uint32_t from, uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
-        _chunk = chunk->clone_empty_with_tuple();
+        _chunk = chunk->clone_empty();
     }
 
     if (_chunk->num_rows() + size > state->chunk_size()) {
