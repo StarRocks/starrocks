@@ -52,6 +52,33 @@ public class ColumnRenameTest {
                         "    PARTITION p2 values less than('2020-03-01')\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl2\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY date_trunc('day', k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl3\n" +
+                        "(\n" +
+                        "    k1 date not null,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY LIST(k1)\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl4\n" +
+                        "(\n" +
+                        "    k1 varchar(200),\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(cast(substr(k1, 0, 1) as bigint))()\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');");
     }
 
@@ -60,6 +87,22 @@ public class ColumnRenameTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("tbl1");
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
+        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        Assert.assertEquals("k3", table.getColumn("k3").getName());
+
+
+        table = testDb.getTable("tbl2");
+        columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
+        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        Assert.assertEquals("k3", table.getColumn("k3").getName());
+
+        table = testDb.getTable("tbl3");
+        columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
+        GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
+        Assert.assertEquals("k3", table.getColumn("k3").getName());
+
+        table = testDb.getTable("tbl4");
+        columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
     }
