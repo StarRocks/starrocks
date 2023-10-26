@@ -279,10 +279,6 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaPB& schema_
     return std::make_shared<TabletSchema>(schema_pb, schema_map);
 }
 
-// Be careful
-// When you use this function to create a new partial tablet schema, please make sure `referenced_column_ids` include
-// all sort key column index of `src_tablet_schema`. Otherwise you need to recalculate the short key columns of the
-// partial tablet schema
 std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_tablet_schema,
                                                    const std::vector<int32_t>& referenced_column_ids) {
     TabletSchemaPB partial_tablet_schema_pb;
@@ -294,17 +290,10 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     if (src_tablet_schema.has_bf_fpp()) {
         partial_tablet_schema_pb.set_bf_fpp(src_tablet_schema.bf_fpp());
     }
-    std::vector<ColumnId> sort_key_idxes;
-    uint32_t cid = 0;
     for (const auto referenced_column_id : referenced_column_ids) {
         auto* tablet_column = partial_tablet_schema_pb.add_column();
         src_tablet_schema.column(referenced_column_id).to_schema_pb(tablet_column);
-        if (src_tablet_schema.column(referenced_column_id).is_sort_key()) {
-            sort_key_idxes.emplace_back(cid);
-        }
-        cid++;
     }
-    partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
 

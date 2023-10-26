@@ -43,8 +43,8 @@ insert into tab1 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
 select * from tab1;
 -- result:
 200	k2_200	200	200	200	v4_200	v5_200
-300	k3_300	300	300	300	v4_300	v5_300
 100	k2_100	100	100	100	v4_100	v5_100
+300	k3_300	300	300	300	v4_300	v5_300
 -- !result
 insert into tab2 values (100, 100, 100, 100);
 -- result:
@@ -67,17 +67,17 @@ E: (1064, 'Getting analyzing error. Detail message: must specify where clause to
 -- !result
 select * from tab1;
 -- result:
-300	k3_300	300	300	300	v4_300	v5_300
-100	k2_100	100	100	100	v4_100	v5_100
 200	k2_200	200	200	200	v4_200	v5_200
+100	k2_100	100	100	100	v4_100	v5_100
+300	k3_300	300	300	300	v4_300	v5_300
 -- !result
 update tab1 set v1 = (select sum(tab2.v1) from tab2), v2 = (select sum(tab2.v2) from tab2) where k1 = 100;
 -- result:
 -- !result
 select * from tab1;
 -- result:
-300	k3_300	300	300	300	v4_300	v5_300
 100	k2_100	600	600	100	v4_100	v5_100
+300	k3_300	300	300	300	v4_300	v5_300
 200	k2_200	200	200	200	v4_200	v5_200
 -- !result
 update tab1 set v1 = (select sum(tab2.v1) from tab2), v2 = (select sum(tab2.v2) from tab2);
@@ -85,49 +85,7 @@ update tab1 set v1 = (select sum(tab2.v1) from tab2), v2 = (select sum(tab2.v2) 
 -- !result
 select * from tab1;
 -- result:
-100	k2_100	600	600	100	v4_100	v5_100
 200	k2_200	600	600	200	v4_200	v5_200
+100	k2_100	600	600	100	v4_100	v5_100
 300	k3_300	600	600	300	v4_300	v5_300
--- !result
-CREATE table tab3 (
-      k1 INTEGER,
-      k2 VARCHAR(50),
-      v1 INTEGER,
-      v2 INTEGER,
-      v3 INTEGER,
-      v4 varchar(50),
-      v5 varchar(50)
-)
-ENGINE=OLAP
-PRIMARY KEY(`k1`,`k2`)
-DISTRIBUTED BY HASH(`k1`) BUCKETS 10
-ORDER BY (`v1`, `v2`)
-PROPERTIES (
-    "replication_num" = "1"
-);
--- result:
--- !result
-insert into tab3 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
--- result:
--- !result
-insert into tab3 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
--- result:
--- !result
-insert into tab3 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
--- result:
--- !result
-select * from tab3;
--- result:
-300	k3_300	300	300	300	v4_300	v5_300
-100	k2_100	100	100	100	v4_100	v5_100
-200	k2_200	200	200	200	v4_200	v5_200
--- !result
-update tab3 set v1 = 1111, v2 = (select sum(tab2.v2) from tab2);
--- result:
--- !result
-select * from tab3;
--- result:
-300	k3_300	1111	600	300	v4_300	v5_300
-100	k2_100	1111	600	100	v4_100	v5_100
-200	k2_200	1111	600	200	v4_200	v5_200
 -- !result
