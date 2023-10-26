@@ -589,6 +589,8 @@ CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 // The tablet map shard size, the value must be power of two.
 // this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
+// The value must be power of two.
+CONF_Int32(pk_index_map_shard_size, "4096");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
@@ -1015,6 +1017,8 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+// control the local persistent index in shared_data gc interval
+CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
