@@ -32,6 +32,12 @@ static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday"
                                    "Friday", "Saturday", "Sunday",    nullptr};
 static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
+TimestampValue TimestampValue::create_from_unixtime(int64_t ts, const cctz::time_zone& ctz) {
+    TimestampValue value;
+    value.from_unixtime(ts, ctz);
+    return value;
+}
+
 bool TimestampValue::from_timestamp_literal(uint64_t timestamp) {
     uint64_t date = timestamp / 1000000;
     uint64_t time = timestamp % 1000000;

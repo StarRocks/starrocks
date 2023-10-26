@@ -31,6 +31,10 @@ public class PipesSystemTable {
                         .column("PIPE_ID", ScalarType.BIGINT)
                         .column("PIPE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("STATE", ScalarType.createVarcharType(8))
+                        .column("TABLE_NAME", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("LOAD_STATUS", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("LAST_ERROR", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("CREATED_TIME", ScalarType.DATETIME)
                         .build(),
                 TSchemaTableType.SCH_PIPES);
     }
