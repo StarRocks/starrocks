@@ -2264,14 +2264,13 @@ public class OlapTable extends Table {
             tableProperty = new TableProperty(new HashMap<>());
         }
 
-        // only support LOCAL for now
-        if (persistentIndexType == TPersistentIndexType.LOCAL) {
-            tableProperty
-                    .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
-                            TableProperty.persistentIndexTypeToString(persistentIndexType));
+        // only support LOCAL and CLOUD_NATIVE for now
+        if (persistentIndexType == TPersistentIndexType.LOCAL || persistentIndexType == TPersistentIndexType.CLOUD_NATIVE) {
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                    TableProperty.persistentIndexTypeToString(persistentIndexType));
         } else {
             // do nothing
-            LOG.warn("Unknown TPersistentIndexType, only supports LOCAL at now");
+            LOG.warn("Unknown TPersistentIndexType");
             return;
         }
 
