@@ -64,6 +64,11 @@ import java.util.Set;
 public class CreateReplicaTask extends AgentTask {
     private static final Logger LOG = LogManager.getLogger(CreateReplicaTask.class);
 
+    public enum RecoverySource {
+        SCHEDULER,
+        REPORT
+    }
+
     private short shortKeyColumnCount;
     private int schemaHash;
 
@@ -101,11 +106,23 @@ public class CreateReplicaTask extends AgentTask {
     private long baseTabletId = -1;
     private int baseSchemaHash = -1;
 
+<<<<<<< HEAD
     private TStorageFormat storageFormat = null;
+=======
+    private RecoverySource recoverySource;
+>>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
 
     // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
     private boolean isRecoverTask = false;
 
+<<<<<<< HEAD
+=======
+    private boolean isFromScheduler = false;
+
+    private int primaryIndexCacheExpireSec = 0;
+    private boolean createSchemaFile = true;
+
+>>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                              short shortKeyColumnCount, int schemaHash, long version,
                              KeysType keysType, TStorageType storageType,
@@ -173,12 +190,37 @@ public class CreateReplicaTask extends AgentTask {
         this.compressionType = compressionType;
     }
 
+<<<<<<< HEAD
     public void setIsRecoverTask(boolean isRecoverTask) {
         this.isRecoverTask = isRecoverTask;
+=======
+    public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
+                             short shortKeyColumnCount, int schemaHash, long version,
+                             KeysType keysType, TStorageType storageType,
+                             TStorageMedium storageMedium, List<Column> columns,
+                             Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
+                             List<Index> indexes,
+                             boolean isInMemory,
+                             boolean enablePersistentIndex,
+                             int primaryIndexCacheExpireSec,
+                             TPersistentIndexType persistentIndexType,
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes,
+                             List<Integer> sortKeyUniqueIds,
+                             boolean createSchemaFile) {
+        this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount, schemaHash, version,
+                keysType, storageType, storageMedium, columns, bfColumns, bfFpp, latch, indexes, isInMemory,
+                enablePersistentIndex, primaryIndexCacheExpireSec, tabletType, compressionType, sortKeyIdxes, sortKeyUniqueIds,
+                createSchemaFile);
+        this.persistentIndexType = persistentIndexType;
     }
 
-    public boolean isRecoverTask() {
-        return isRecoverTask;
+    public void setRecoverySource(RecoverySource source) {
+        this.recoverySource = source;
+>>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
+    }
+
+    public RecoverySource getRecoverySource() {
+        return this.recoverySource;
     }
 
     public void countDownLatch(long backendId, long tabletId) {
