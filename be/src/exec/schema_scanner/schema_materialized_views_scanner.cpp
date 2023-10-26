@@ -83,11 +83,11 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
     return Status::OK();
 }
 
-inline DatumArray SchemaMaterializedViewsScanner::_build_row() {
+Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
+    auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
-
     std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-    return {
+    DatumArray datum_array{
             Slice(info.id),
             Slice(db_name),
             Slice(info.name),
@@ -111,11 +111,7 @@ inline DatumArray SchemaMaterializedViewsScanner::_build_row() {
             Slice(info.rows),
             Slice(info.text),
     };
-}
 
-Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
-    auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
-    auto datum_array = _build_row();
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);
