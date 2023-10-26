@@ -140,13 +140,6 @@ public:
                 CHECK_EQ(_schema.field(j)->to_string(), _children[i]->schema().field(j)->to_string());
             }
         }
-        // ensure that the key fields are the first |num_key_fields| and sorted by id.
-        for (size_t i = 0; i < _schema.num_key_fields(); i++) {
-            CHECK(_schema.field(i)->is_key());
-        }
-        for (size_t i = 0; i + 1 < _schema.num_key_fields(); i++) {
-            CHECK_LT(_schema.field(i)->id(), _schema.field(i + 1)->id());
-        }
 #endif
     }
 
