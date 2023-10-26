@@ -53,7 +53,6 @@ public:
     using ChunkPtr = std::shared_ptr<Chunk>;
     using SlotHashMap = phmap::flat_hash_map<SlotId, size_t, StdHash<SlotId>>;
     using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
-    using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
     Chunk(Columns columns, SchemaPtr schema);
