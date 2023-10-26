@@ -45,6 +45,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
+    std::set<SlotId> hit_flags;
     for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
@@ -53,6 +54,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
                 if (kv.first == slot->id()) {
                     _chunk_meta.types[kv.second] = slot->type();
                     ++column_index;
+                    hit_flags.insert(kv.first);
                     break;
                 }
             }
@@ -62,9 +64,22 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         _chunk_meta.types[kv.second] = TypeDescriptor(PrimitiveType::TYPE_BOOLEAN);
         ++column_index;
     }
-
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
-        return Status::InternalError("build chunk meta error");
+        std::vector<std::pair<SlotId, size_t>> missing_pairs;
+        for (const auto& kv : _chunk_meta.slot_id_to_index) {
+            if (hit_flags.find(kv.first) == hit_flags.end()) {
+                missing_pairs.emplace_back(kv.first, kv.second);
+            }
+        }
+        std::stringstream ss;
+        ss << "build chunk meta error";
+        ss << ", node_id=" << _recvr->_dest_node_id;
+        ss << ", missing pairs: ";
+        for (const auto& kv : missing_pairs) {
+            ss << "(slot:" << kv.first << ", index:" << kv.second << ") ";
+        }
+        std::string msg = ss.str();
+        return Status::InternalError(msg);
     }
     return Status::OK();
 }
