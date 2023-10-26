@@ -124,5 +124,12 @@ public class LoadStmtTest {
                 " PROPERTIES (\"strict_mode\"=\"true\")");
         Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('s3a://us-west-benchmark-data/tpch_100g/parquet/part/000004_0') INTO TABLE t0) WITH BROKER  " +
                 "(\"aws.s3.access_key\"  =  \"***\", \"aws.s3.secret_key\"  =  \"***\", \"aws.s3.use_instance_profile\"  =  \"false\", \"aws.s3.region\"  =  \"us-west-2\") PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"azure.blob.storage_account\" = \"some_account\",\n" +
+                "    \"azure.blob.shared_key\" = \"some_shared_key\") " +
+                " PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"azure.blob.storage_account\"  =  \"some_account\", \"azure.blob.shared_key\"  =  \"***\") PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
     }
 }
