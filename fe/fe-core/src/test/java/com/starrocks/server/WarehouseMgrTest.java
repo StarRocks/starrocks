@@ -95,7 +95,7 @@ public class WarehouseMgrTest {
         Assert.assertEquals(Warehouse.WarehouseState.AVAILABLE,
                 warehouseMgr.getWarehouse("warehouse_1").getState());
 
-        Deencapsulation.setField(warehouse, "state", Warehouse.WarehouseState.SUSPENDED);
+        warehouse.setState(Warehouse.WarehouseState.SUSPENDED);
 
         warehouseMgr.replayAlterWarehouse(warehouse);
         Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("warehouse_1").getState());

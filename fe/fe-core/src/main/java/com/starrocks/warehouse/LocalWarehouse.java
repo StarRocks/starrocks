@@ -112,7 +112,7 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void suspendSelf() {
-        this.state = WarehouseState.SUSPENDED;
+        this.state.set(WarehouseState.SUSPENDED);
         long currentTime = System.currentTimeMillis();
         setResumedTime(currentTime);
         setUpdatedTime(currentTime);
@@ -120,7 +120,7 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void resumeSelf() {
-        this.state = WarehouseState.AVAILABLE;
+        this.state.set(WarehouseState.AVAILABLE);
         long currentTime = System.currentTimeMillis();
         setUpdatedTime(currentTime);
     }

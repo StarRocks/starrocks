@@ -27,6 +27,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class Warehouse implements Writable {
 
@@ -41,7 +42,7 @@ public abstract class Warehouse implements Writable {
     }
 
     @SerializedName(value = "state")
-    protected WarehouseState state = WarehouseState.AVAILABLE;
+    protected AtomicReference<WarehouseState> state = new AtomicReference<>(WarehouseState.AVAILABLE);
 
     @SerializedName(value = "comment")
     private String comment;
@@ -79,15 +80,15 @@ public abstract class Warehouse implements Writable {
     }
 
     public void setState(WarehouseState state) {
-        this.state = state;
+        this.state.set(state);
     }
 
     public WarehouseState getState() {
-        return state;
+        return state.get();
     }
 
     public boolean isAvailable() {
-        return state == WarehouseState.AVAILABLE;
+        return this.state.get() == WarehouseState.AVAILABLE;
     }
 
     public abstract void getProcNodeData(BaseProcResult result);
