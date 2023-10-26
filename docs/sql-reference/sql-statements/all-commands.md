@@ -1,8 +1,8 @@
-# All commands
+# All statements
 
-This topic lists all the SQL commands supported by StarRocks and categorizes these commands by their functions.
+This topic lists all the SQL statements supported by StarRocks and categorizes these statements by their functions.
 
-- [All commands](#all-commands)
+- [All statements](#all-statements)
   - [User account management](#user-account-management)
   - [Cluster management](#cluster-management)
     - [FE, BE, CN, Broker, process](#fe-be-cn-broker-process)
