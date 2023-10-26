@@ -62,8 +62,8 @@ static void send_rpc_runtime_filter(TNetworkAddress dest, RuntimeFilterRpcClosur
         LOG(WARNING) << strings::Substitute("The brpc stub of {}: {} is null.", dest.hostname, dest.port);
         return;
     }
-    DeferOp defer([&] () {
-        if(via_http) {
+    DeferOp defer([&]() {
+        if (via_http) {
             delete stub;
         }
     });
