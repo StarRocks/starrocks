@@ -26,14 +26,25 @@ import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterBuildType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TRuntimeFilterDestination;
+import com.starrocks.thrift.TRuntimeFilterLayout;
+import com.starrocks.thrift.TRuntimeFilterLayoutMode;
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.planner.JoinNode.DistributionMode.BROADCAST;
+import static com.starrocks.planner.JoinNode.DistributionMode.COLOCATE;
+import static com.starrocks.planner.JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
+import static com.starrocks.planner.JoinNode.DistributionMode.PARTITIONED;
+import static com.starrocks.planner.JoinNode.DistributionMode.REPLICATED;
+import static com.starrocks.planner.JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
 
 // this class is to describe a runtime filter.
 // this class is almost identical to TRuntimeFilterDescription in PlanNodes.thrift
@@ -71,7 +82,11 @@ public class RuntimeFilterDescription {
 
     private RuntimeFilterType type;
 
+    int numInstances;
+    int numDriversPerInstance;
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
+    private List<Integer> bucketSeqToDriverSeq = Lists.newArrayList();
+    private List<Integer> bucketSeqToPartition = Lists.newArrayList();
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
@@ -225,8 +240,8 @@ public class RuntimeFilterDescription {
     }
 
     public boolean isColocateOrBucketShuffle() {
-        return joinMode.equals(JoinNode.DistributionMode.COLOCATE) ||
-                joinMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
+        return joinMode.equals(COLOCATE) ||
+                joinMode.equals(LOCAL_HASH_BUCKET);
     }
 
     public int getBuildPlanNodeId() {
@@ -242,23 +257,50 @@ public class RuntimeFilterDescription {
     }
 
     public boolean isLocalApplicable() {
-        return joinMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
-                joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
-                joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET) ||
-                joinMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET) ||
-                joinMode.equals(HashJoinNode.DistributionMode.REPLICATED);
+        return joinMode.equals(BROADCAST) ||
+                joinMode.equals(COLOCATE) ||
+                joinMode.equals(LOCAL_HASH_BUCKET) ||
+                joinMode.equals(SHUFFLE_HASH_BUCKET) ||
+                joinMode.equals(REPLICATED);
     }
 
     public boolean isBroadcastJoin() {
-        return joinMode.equals(JoinNode.DistributionMode.BROADCAST);
+        return joinMode.equals(BROADCAST);
     }
 
     public void setBucketSeqToInstance(List<Integer> bucketSeqToInstance) {
         this.bucketSeqToInstance = bucketSeqToInstance;
     }
 
+    public void setBucketSeqToDriverSeq(List<Integer> bucketSeqToDriverSeq) {
+        this.bucketSeqToDriverSeq = bucketSeqToDriverSeq;
+    }
+
+    public void setBucketSeqToPartition(List<Integer> bucketSeqToPartition) {
+        this.bucketSeqToPartition = bucketSeqToPartition;
+    }
+
     public List<Integer> getBucketSeqToInstance() {
         return this.bucketSeqToInstance;
+    }
+
+    public List<Integer> getBucketSeqToPartition() {
+        return this.bucketSeqToPartition;
+    }
+
+    public void setNumInstances(int numInstances) {
+        this.numInstances = numInstances;
+    }
+    public int getNumInstances() {
+        return numInstances;
+    }
+
+    public void setNumDriversPerInstance(int numDriversPerInstance){
+        this.numDriversPerInstance = numDriversPerInstance;
+    }
+
+    public int getNumDriversPerInstance(){
+        return numDriversPerInstance;
     }
 
     public boolean canPushAcrossExchangeNode() {
@@ -302,7 +344,7 @@ public class RuntimeFilterDescription {
 
     // Only use partition_by_exprs when the grf is remote and joinMode is partitioned.
     private boolean isCanUsePartitionByExprs() {
-        return hasRemoteTargets && joinMode != JoinNode.DistributionMode.BROADCAST;
+        return hasRemoteTargets && joinMode != BROADCAST;
     }
 
     public String toExplainString(int probeNodeId) {
@@ -331,6 +373,74 @@ public class RuntimeFilterDescription {
         return sb.toString();
     }
 
+    private TRuntimeFilterLayoutMode computeLocalLayout() {
+        if (sessionVariable.isEnablePipelineLevelMultiPartitionedRf()) {
+            if (joinMode == BROADCAST || joinMode == REPLICATED) {
+                return TRuntimeFilterLayoutMode.SINGLETON;
+            } else if (joinMode == PARTITIONED ||
+                    joinMode == SHUFFLE_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.PIPELINE_SHUFFLE;
+            } else if (joinMode == COLOCATE || joinMode == LOCAL_HASH_BUCKET) {
+                return (bucketSeqToDriverSeq == null || bucketSeqToDriverSeq.isEmpty()) ?
+                        TRuntimeFilterLayoutMode.PIPELINE_BUCKET_LX
+                        : TRuntimeFilterLayoutMode.PIPELINE_BUCKET;
+            } else {
+                return TRuntimeFilterLayoutMode.NONE;
+            }
+        } else {
+            return TRuntimeFilterLayoutMode.SINGLETON;
+        }
+    }
+
+    private TRuntimeFilterLayoutMode computeGlobalLayout() {
+        if (sessionVariable.isEnablePipelineLevelMultiPartitionedRf()) {
+            if (joinMode == BROADCAST || joinMode == REPLICATED) {
+                return TRuntimeFilterLayoutMode.SINGLETON;
+            } else if (joinMode == PARTITIONED || joinMode == SHUFFLE_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_2L;
+            } else if (joinMode == COLOCATE ||
+                    joinMode == LOCAL_HASH_BUCKET) {
+                return (bucketSeqToDriverSeq == null || bucketSeqToDriverSeq.isEmpty()) ?
+                        TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L_LX
+                        : TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L;
+            } else {
+                return TRuntimeFilterLayoutMode.NONE;
+            }
+        } else {
+            if (joinMode == BROADCAST || joinMode == REPLICATED) {
+                return TRuntimeFilterLayoutMode.SINGLETON;
+            } else if (joinMode == PARTITIONED ||
+                    joinMode == SHUFFLE_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_1L;
+            } else if (joinMode == COLOCATE ||
+                    joinMode == LOCAL_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.GLOBAL_BUCKET_1L;
+            } else {
+                return TRuntimeFilterLayoutMode.NONE;
+            }
+        }
+    }
+
+    TRuntimeFilterLayout toLayout() {
+        TRuntimeFilterLayout layout = new TRuntimeFilterLayout();
+        layout.setFilter_id(filterId);
+        layout.setLocal_layout(computeLocalLayout());
+        layout.setGlobal_layout(computeGlobalLayout());
+        layout.setPipeline_level_multi_partitioned(sessionVariable.isEnablePipelineLevelMultiPartitionedRf());
+        layout.setNum_instances(numInstances);
+        layout.setNum_drivers_per_instance(numDriversPerInstance);
+        if (bucketSeqToInstance != null && !bucketSeqToInstance.isEmpty()) {
+            layout.setBucketseq_to_instance(bucketSeqToInstance);
+        }
+        if (bucketSeqToDriverSeq != null && !bucketSeqToDriverSeq.isEmpty()) {
+            layout.setBucketseq_to_driverseq(bucketSeqToDriverSeq);
+        }
+        if (bucketSeqToPartition != null && !bucketSeqToPartition.isEmpty()) {
+            layout.setBucketseq_to_partition(bucketSeqToPartition);
+        }
+        return layout;
+    }
+
     public TRuntimeFilterDescription toThrift() {
         TRuntimeFilterDescription t = new TRuntimeFilterDescription();
         t.setFilter_id(filterId);
@@ -349,27 +459,29 @@ public class RuntimeFilterDescription {
         if (senderFragmentInstanceId != null) {
             t.setSender_finst_id(senderFragmentInstanceId);
         }
+
         if (broadcastGRFSenders != null && !broadcastGRFSenders.isEmpty()) {
             t.setBroadcast_grf_senders(broadcastGRFSenders.stream().collect(Collectors.toList()));
         }
+
         if (broadcastGRFDestinations != null && !broadcastGRFDestinations.isEmpty()) {
             t.setBroadcast_grf_destinations(broadcastGRFDestinations);
         }
-        if (isColocateOrBucketShuffle() && bucketSeqToInstance != null && !bucketSeqToInstance.isEmpty()) {
-            t.setBucketseq_to_instance(bucketSeqToInstance);
-        }
+
+        t.setLayout(toLayout());
+
         assert (joinMode != JoinNode.DistributionMode.NONE);
-        if (joinMode.equals(JoinNode.DistributionMode.BROADCAST)) {
+        if (joinMode.equals(BROADCAST)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BORADCAST);
-        } else if (joinMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET)) {
+        } else if (joinMode.equals(LOCAL_HASH_BUCKET)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET);
-        } else if (joinMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
+        } else if (joinMode.equals(PARTITIONED)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.PARTITIONED);
-        } else if (joinMode.equals(JoinNode.DistributionMode.COLOCATE)) {
+        } else if (joinMode.equals(COLOCATE)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.COLOCATE);
-        } else if (joinMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+        } else if (joinMode.equals(SHUFFLE_HASH_BUCKET)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET);
-        } else if (joinMode.equals(JoinNode.DistributionMode.REPLICATED)) {
+        } else if (joinMode.equals(REPLICATED)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.REPLICATED);
         }
         if (isCanUsePartitionByExprs()) {

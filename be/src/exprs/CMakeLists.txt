@@ -92,6 +92,12 @@ set(EXPR_FILES
   subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp
+<<<<<<< HEAD
+=======
+  substring_index.cpp
+  dict_query_expr.cpp
+  runtime_filter_layout.cpp
+>>>>>>> c17af30f5b ([Enhancement] Introduce pipeline-level multi-partitioned runtime filter (#33002))
 )
 
 add_library(Exprs ${EXPR_FILES})

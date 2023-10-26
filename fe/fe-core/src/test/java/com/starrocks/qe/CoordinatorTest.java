@@ -103,9 +103,14 @@ public class CoordinatorTest extends PlanTestBase {
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
+<<<<<<< HEAD
         coordinatorPreprocessor.computeBucketSeq2InstanceOrdinal(params, 6);
         params.setBucketSeqToInstanceForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
+=======
+        execFragment.setLayoutInfosForRuntimeFilters();
+        Assert.assertEquals(Arrays.asList(0, 1, 0, 2, 1, 2), rf.getBucketSeqToInstance());
+>>>>>>> c17af30f5b ([Enhancement] Introduce pipeline-level multi-partitioned runtime filter (#33002))
     }
 
     @Test
