@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <filesystem>
 
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -110,6 +111,37 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     memset(expect, 2, 50);
     memset(expect + 50, 3, 100);
     ASSERT_EQ(memcmp(result, expect, size), 0);
+}
+
+TEST_F(BlockCacheTest, parse_cache_space_str) {
+    uint64_t mem_size = 10;
+    ASSERT_EQ(parse_mem_size("10"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10K"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10M"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10G"), mem_size);
+    mem_size *= 1024;
+    ASSERT_EQ(parse_mem_size("10T"), mem_size);
+    ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
+
+    std::string disk_path = "./ut_dir/block_disk_cache";
+    uint64_t disk_size = 10;
+    ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10K"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10M"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10G"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(disk_path, "10T"), disk_size);
+
+    disk_size = parse_disk_size(disk_path, "10%");
+    std::error_code ec;
+    auto space_info = std::filesystem::space(disk_path, ec);
+    ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
 }
 
 #ifdef WITH_STARCACHE
@@ -215,8 +247,6 @@ TEST_F(BlockCacheTest, custom_lru_insertion_point) {
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "cachelib";
-    // insert in the 1/2 of the lru list
-    options.lru_insertion_point = 1;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 

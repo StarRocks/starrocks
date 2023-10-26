@@ -315,45 +315,63 @@ int main(int argc, char** argv) {
     starrocks::init_staros_worker();
 #endif
 
+    if (!starrocks::config::datacache_enable && starrocks::config::block_cache_enable) {
+        starrocks::config::datacache_enable = true;
+        starrocks::config::datacache_mem_size = std::to_string(starrocks::config::block_cache_mem_size);
+        starrocks::config::datacache_disk_size = std::to_string(starrocks::config::block_cache_disk_size);
+        starrocks::config::datacache_disk_path = starrocks::config::block_cache_disk_path;
+        starrocks::config::datacache_meta_path = starrocks::config::block_cache_meta_path;
+        starrocks::config::datacache_block_size = starrocks::config::block_cache_block_size;
+        starrocks::config::datacache_max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
+        starrocks::config::datacache_checksum_enable = starrocks::config::block_cache_checksum_enable;
+        starrocks::config::datacache_direct_io_enable = starrocks::config::block_cache_direct_io_enable;
+        starrocks::config::datacache_engine = starrocks::config::block_cache_engine;
+        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
+                     << ", you'd better use the configuration items prefixed `datacache` instead!";
+    }
+
 #if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
-    if (starrocks::config::block_cache_enable) {
-        starrocks::config::block_cache_enable = false;
+    if (starrocks::config::datacache_enable) {
+        starrocks::config::datacache_enable = false;
     }
 #endif
 
-    if (starrocks::config::block_cache_enable) {
-        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
-        starrocks::CacheOptions cache_options;
-        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
+   if (starrocks::config::datacache_enable) {
+        BlockCache* cache = BlockCache::instance();
+
+        CacheOptions cache_options;
+        int64_t mem_limit = MemInfo::physical_mem();
+        if (exec_env->process_mem_tracker()->has_limit()) {
+            mem_limit = exec_env->process_mem_tracker()->limit();
+        }
+        cache_options.mem_space_size = parse_mem_size(starrocks::config::datacache_mem_size, mem_limit);
 
         std::vector<std::string> paths;
-        auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
+        RETURN_IF_ERROR(parse_conf_datacache_paths(starrocks::config::datacache_disk_path, &paths));
         for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+            int64_t disk_size = parse_disk_size(p, starrocks::config::datacache_disk_size);
+            if (disk_size < 0) {
+                LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
+                return Status::InvalidArgument("invalid disk size for datacache");
+            }
+            cache_options.disk_spaces.push_back({.path = p, .size = static_cast<size_t>(disk_size)});
         }
 
         // Adjust the default engine based on build switches.
-        if (starrocks::config::block_cache_engine == "") {
+        if (starrocks::config::datacache_engine == "") {
 #if defined(WITH_STARCACHE)
-            starrocks::config::block_cache_engine = "starcache";
+            starrocks::config::datacache_engine = "starcache";
 #else
-            starrocks::config::block_cache_engine = "cachelib";
+            starrocks::config::datacache_engine = "cachelib";
 #endif
         }
-        cache_options.meta_path = starrocks::config::block_cache_meta_path;
-        cache_options.block_size = starrocks::config::block_cache_block_size;
-        cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
-        cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
-        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
-        cache_options.enable_checksum = starrocks::config::block_cache_checksum_enable;
-        cache_options.enable_direct_io = starrocks::config::block_cache_direct_io_enable;
-        cache_options.engine = starrocks::config::block_cache_engine;
+        cache_options.meta_path = starrocks::config::datacache_meta_path;
+        cache_options.block_size = starrocks::config::datacache_block_size;
+        cache_options.max_flying_memory_mb = starrocks::config::datacache_max_flying_memory_mb;
+        cache_options.max_concurrent_inserts = starrocks::config::datacache_max_concurrent_inserts;
+        cache_options.enable_checksum = starrocks::config::datacache_checksum_enable;
+        cache_options.enable_direct_io = starrocks::config::datacache_direct_io_enable;
+        cache_options.engine = starrocks::config::datacache_engine;
         EXIT_IF_ERROR(cache->init(cache_options));
     }
 
@@ -373,7 +391,7 @@ int main(int argc, char** argv) {
 #endif
 
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
-    if (starrocks::config::block_cache_enable) {
+    if (starrocks::config::datacache_enable) {
         starrocks::BlockCache::instance()->shutdown();
     }
 #endif
