@@ -129,15 +129,11 @@ private:
     // called by open() or incremental_open to build AsyncDeltaWriter for tablets
     Status _create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental);
 
-    Status _build_chunk_meta(const ChunkPB& pb_chunk);
-
     StatusOr<std::unique_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
-
-    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     void _flush_stale_memtables();
 
@@ -224,10 +220,14 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                    PTabletWriterAddBatchResult* response) {
-    constexpr static int64_t kDefaultTimeoutMs = 30L * 60 * 1000; // 30 minutes
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
     auto start_time_us = butil::gettimeofday_us();
-    auto timeout_deadline_ms = start_time_us / 1000 + request.timeout_ms() ? request.timeout_ms() : kDefaultTimeoutMs;
+
+    // The `request.timeout_ms()` may be inaccurate now, here we place a limit on it.
+    // TODO: make `request.timeout_ms()` more accurate and remove the config `async_write_min_timeout_s`
+    auto timeout_ms = std::max<int64_t>(request.timeout_ms(), config::async_write_min_timeout_s * 1000);
+
+    auto timeout_deadline_ms = start_time_us / 1000 + timeout_ms;
     int64_t wait_memtable_flush_time_us = 0;
 
     if (UNLIKELY(!request.has_sender_id())) {
@@ -442,7 +442,7 @@ void LakeTabletsChannel::_flush_stale_memtables() {
         high_mem_usage = true;
     }
 
-    AsyncDeltaWriter::Options options{.timeout_ms = /*10 minutes=*/10L * 60 * 1000};
+    AsyncDeltaWriter::Options options{.timeout_ms = config::async_write_min_timeout_s * 1000};
     int64_t now = butil::gettimeofday_s();
     for (auto& [tablet_id, writer] : _delta_writers) {
         bool log_flushed = false;

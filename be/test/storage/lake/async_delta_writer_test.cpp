@@ -579,6 +579,9 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
 }
 
 TEST_F(LakeAsyncDeltaWriterTest, test_concurrency_limit) {
+    auto backup = config::async_write_min_timeout_s;
+    config::async_write_min_timeout_s = 0;
+    DeferOp defer([=]() { config::async_write_min_timeout_s = backup; });
     run_in_bthread_and_join([this]() {
         // Prepare data for writing
         static const int kChunkSize = 128;
@@ -622,46 +625,55 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrency_limit) {
 }
 
 TEST_F(LakeAsyncDeltaWriterTest, test_timeout) {
+    auto backup = config::async_write_min_timeout_s;
+    config::async_write_min_timeout_s = 0;
+    DeferOp defer([=]() { config::async_write_min_timeout_s = backup; });
     run_in_bthread_and_join([this]() {
-        // Prepare data for writing
-        static const int kChunkSize = 128;
-        auto chunk0 = generate_data(kChunkSize);
-        auto indexes = std::vector<uint32_t>(kChunkSize);
-        std::iota(indexes.begin(), indexes.end(), 0);
+        for (auto timeout_ms : {1000, 0}) {
+            // Prepare data for writing
+            static const int kChunkSize = 128;
+            auto chunk0 = generate_data(kChunkSize);
+            auto indexes = std::vector<uint32_t>(kChunkSize);
+            std::iota(indexes.begin(), indexes.end(), 0);
 
-        SyncPoint::GetInstance()->SetCallBack("AsyncDeltaWriterImpl::execute:2", [&](void* arg) {
-            std::cerr << "Sleeping 2 seconds\n";
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-        });
-        SyncPoint::GetInstance()->EnableProcessing();
-        DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AsyncDeltaWriterImpl::execute:2");
-            SyncPoint::GetInstance()->DisableProcessing();
-        });
+            SyncPoint::GetInstance()->SetCallBack("AsyncDeltaWriterImpl::execute:2", [&](void* arg) {
+                std::cerr << "Sleeping 2 seconds\n";
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+            });
+            SyncPoint::GetInstance()->EnableProcessing();
+            DeferOp defer([]() {
+                SyncPoint::GetInstance()->ClearCallBack("AsyncDeltaWriterImpl::execute:2");
+                SyncPoint::GetInstance()->DisableProcessing();
+            });
 
-        // Create and open DeltaWriter
-        auto txn_id = next_id();
-        auto tablet_id = _tablet_metadata->id();
-        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_mgr.get())
-                                                   .set_tablet_id(tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_index_id(_tablet_schema->id())
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
+            // Create and open DeltaWriter
+            auto txn_id = next_id();
+            auto tablet_id = _tablet_metadata->id();
+            ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                       .set_tablet_manager(_tablet_mgr.get())
+                                                       .set_tablet_id(tablet_id)
+                                                       .set_txn_id(txn_id)
+                                                       .set_partition_id(_partition_id)
+                                                       .set_mem_tracker(_mem_tracker.get())
+                                                       .set_index_id(_tablet_schema->id())
+                                                       .build());
+            ASSERT_OK(delta_writer->open());
 
-        CountDownLatch latch(1);
-        Status res;
-        delta_writer->write(Options{.timeout_ms = 1000}, &chunk0, indexes.data(), indexes.size(),
-                            [&](const Status& st) {
-                                res = std::move(st);
-                                latch.count_down();
-                            });
-        latch.wait();
-        EXPECT_TRUE(res.is_time_out()) << res;
-        delta_writer->close();
+            CountDownLatch latch(1);
+            Status res;
+            delta_writer->write(Options{.timeout_ms = timeout_ms}, &chunk0, indexes.data(), indexes.size(),
+                                [&](const Status& st) {
+                                    res = std::move(st);
+                                    latch.count_down();
+                                });
+            latch.wait();
+            if (timeout_ms > 0) {
+                EXPECT_TRUE(res.is_time_out()) << res;
+            } else {
+                EXPECT_TRUE(res.ok()) << res;
+            }
+            delta_writer->close();
+        }
     });
 }
 
