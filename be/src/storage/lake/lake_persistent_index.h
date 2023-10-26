@@ -20,13 +20,13 @@ namespace starrocks::lake {
 
 class PersistentIndexMemtable;
 
-class CloudNativePersistentIndex : public PersistentIndex {
+class LakePersistentIndex : public PersistentIndex {
 public:
-    explicit CloudNativePersistentIndex(std::string path);
+    explicit LakePersistentIndex(std::string path);
 
-    ~CloudNativePersistentIndex();
+    ~LakePersistentIndex();
 
-    DISALLOW_COPY(CloudNativePersistentIndex);
+    DISALLOW_COPY(LakePersistentIndex);
 
     // batch get
     // |n|: size of key/value array

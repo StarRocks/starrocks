@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #include "storage/lake/cloud_native_persistent_index.h"
-#include "storage/lake/key_index.h"
 
 #include <gtest/gtest.h>
 
+#include "storage/lake/key_index.h"
 #include "testutil/assert.h"
 
 namespace starrocks::lake {
@@ -35,7 +35,7 @@ TEST(CloudNativePersistentIndexTest, test_basic_api) {
         values.emplace_back(i * 2);
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
-    auto index = std::make_unique<CloudNativePersistentIndex>("");
+    auto index = std::make_unique<LakePersistentIndex>("");
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
     // insert duplicate should return error
     ASSERT_FALSE(index->insert(N, key_slices.data(), values.data(), false).ok());
@@ -120,7 +120,7 @@ TEST(CloudNativePersistentIndexTest, test_replace) {
         replace_idxes.emplace_back(i);
     }
 
-    auto index = std::make_unique<CloudNativePersistentIndex>("");
+    auto index = std::make_unique<LakePersistentIndex>("");
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
 
     //replace

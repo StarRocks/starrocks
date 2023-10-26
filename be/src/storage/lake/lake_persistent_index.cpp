@@ -18,38 +18,38 @@
 
 namespace starrocks::lake {
 
-CloudNativePersistentIndex::CloudNativePersistentIndex(std::string path) : PersistentIndex(std::move(path)) {
+LakePersistentIndex::LakePersistentIndex(std::string path) : PersistentIndex(std::move(path)) {
     _memtable = std::make_unique<PersistentIndexMemtable>();
 }
 
-CloudNativePersistentIndex::~CloudNativePersistentIndex() {
+LakePersistentIndex::~LakePersistentIndex() {
     _memtable->clear();
 }
 
-Status CloudNativePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
+Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     KeyIndexesInfo not_founds;
     size_t num_found;
     return _memtable->get(n, keys, values, &not_founds, &num_found);
 }
 
-Status CloudNativePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                           IOStat* stat) {
     KeyIndexesInfo not_founds;
     size_t num_found;
     return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found);
 }
 
-Status CloudNativePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
+Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
     return _memtable->insert(n, keys, values);
 }
 
-Status CloudNativePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
+Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
     KeyIndexesInfo not_founds;
     size_t num_found;
     return _memtable->erase(n, keys, old_values, &not_founds, &num_found);
 }
 
-Status CloudNativePersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
+Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                                const uint32_t max_src_rssid, std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
     found_values.resize(n);
@@ -67,11 +67,11 @@ Status CloudNativePersistentIndex::try_replace(size_t n, const Slice* keys, cons
     return Status::OK();
 }
 
-Status CloudNativePersistentIndex::minor_compact() {
+Status LakePersistentIndex::minor_compact() {
     return Status::OK();
 }
 
-Status CloudNativePersistentIndex::major_compact(int64_t min_retain_version) {
+Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
     return Status::OK();
 }
 
