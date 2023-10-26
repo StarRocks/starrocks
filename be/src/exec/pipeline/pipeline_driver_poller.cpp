@@ -15,6 +15,10 @@
 #include "pipeline_driver_poller.h"
 
 #include <chrono>
+
+#include "common/config.h"
+#include "exec/pipeline/debug.h"
+
 namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
@@ -42,6 +46,7 @@ void PipelineDriverPoller::run_internal() {
     DriverList tmp_blocked_drivers;
     int spin_count = 0;
     std::vector<DriverRawPtr> ready_drivers;
+    std::vector<DriverRawPtr> dump_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
         {
             std::unique_lock<std::mutex> lock(_global_mutex);
@@ -70,8 +75,8 @@ void PipelineDriverPoller::run_internal() {
 
             auto driver_it = _local_blocked_drivers.begin();
             while (driver_it != _local_blocked_drivers.end()) {
+                //
                 auto* driver = *driver_it;
-
                 if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
                     // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
@@ -114,6 +119,11 @@ void PipelineDriverPoller::run_internal() {
                     // the profile report prcessing.
                     remove_blocked_driver(_local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
+
+                } else if (UNLIKELY(driver->query_ctx()->should_dump_stat())) {
+                    remove_blocked_driver(_local_blocked_drivers, driver_it);
+                    driver->query_ctx()->set_dump_timestamp(config::query_ctx_dump_interval_ns);
+                    dump_drivers.emplace_back(driver);
                 } else if (driver->pending_finish()) {
                     if (driver->is_still_pending_finish()) {
                         ++driver_it;
@@ -161,6 +171,23 @@ void PipelineDriverPoller::run_internal() {
 
             _driver_queue->put_back(ready_drivers);
             ready_drivers.clear();
+        }
+        if (UNLIKELY(!dump_drivers.empty())) {
+            using namespace starrocks::pipeline::debug;
+            QueryMap query_map;
+            for (auto driver : dump_drivers) {
+                DriverListAggregator()(query_map)(driver);
+            }
+            rapidjson::Document obj;
+            rapidjson::Document result = DumpQueryMapToJson(obj.GetAllocator())(query_map);
+
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            result.Accept(writer);
+            LOG(INFO) << "dump slow driver:" << buffer.GetString();
+
+            tmp_blocked_drivers.insert(tmp_blocked_drivers.end(), dump_drivers.begin(), dump_drivers.end());
+            dump_drivers.clear();
         }
 
         if (spin_count != 0 && spin_count % 64 == 0) {
