@@ -84,6 +84,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.PublishVersionTask;
@@ -816,8 +817,14 @@ public class ReportHandler extends Daemon {
                                             olapTable.isInMemory(),
                                             olapTable.enablePersistentIndex(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId),
+<<<<<<< HEAD
                                             olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
                                     createReplicaTask.setIsRecoverTask(true);
+=======
+                                            olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
+                                            indexMeta.getSortKeyUniqueIds());
+                                    createReplicaTask.setRecoverySource(RecoverySource.REPORT);
+>>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
                                     createReplicaBatchTask.addTask(createReplicaTask);
                                 } else {
                                     // just set this replica as bad
