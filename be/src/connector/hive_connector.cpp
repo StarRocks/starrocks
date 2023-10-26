@@ -515,7 +515,7 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) 
     jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
     jni_scanner_params["serde"] = hudi_table->get_serde_lib();
     jni_scanner_params["input_format"] = hudi_table->get_input_format();
-    jni_scanner_params["fs_options_props"] = std::move(build_fs_options_properties(options));
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
@@ -572,7 +572,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
         option_info += "s3.path.style.access=" + enable_path_style_access;
     }
     jni_scanner_params["option_info"] = option_info;
-    jni_scanner_params["fs_options_props"] = std::move(build_fs_options_properties(options));
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
