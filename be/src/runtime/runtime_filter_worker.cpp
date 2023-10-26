@@ -62,14 +62,16 @@ static void send_rpc_runtime_filter(TNetworkAddress dest, RuntimeFilterRpcClosur
         LOG(WARNING) << strings::Substitute("The brpc stub of {}: {} is null.", dest.hostname, dest.port);
         return;
     }
+    DeferOp defer([&] () {
+        if(via_http) {
+            delete stub;
+        }
+    });
 
     rpc_closure->ref();
     rpc_closure->cntl.Reset();
     rpc_closure->cntl.set_timeout_ms(timeout_ms);
     stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
-    if (via_http) {
-        delete stub;
-    }
 }
 
 void RuntimeFilterPort::add_listener(RuntimeFilterProbeDescriptor* rf_desc) {
