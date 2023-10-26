@@ -15,6 +15,9 @@ function: update_be_config("tablet_internal_parallel_min_scan_dop", "1")
 -- result:
 None
 -- !result
+set enable_async_profile=false;
+-- result:
+-- !result
 create table dup_t (
     k1 int,
     k2 int,

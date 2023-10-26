@@ -6,6 +6,9 @@ function: update_be_config("tablet_internal_parallel_max_splitted_scan_rows", "1
 function: update_be_config("tablet_internal_parallel_max_splitted_scan_bytes", "1")
 function: update_be_config("tablet_internal_parallel_min_scan_dop", "1")
 
+-- config.
+set enable_async_profile=false;
+
 -- prepare data.
 create table dup_t (
     k1 int,

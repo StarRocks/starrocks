@@ -134,6 +134,9 @@ show variables like 'enable_profile';
 -- result:
 enable_profile	true
 -- !result
+set enable_async_profile=false;
+-- result:
+-- !result
 set pipeline_dop='1';
 -- result:
 -- !result

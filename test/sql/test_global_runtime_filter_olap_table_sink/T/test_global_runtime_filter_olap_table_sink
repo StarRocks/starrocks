@@ -103,6 +103,7 @@ INSERT INTO t1
   select cast((rand()+rand())*10240000/2 as int) as __col_33, to_date(days_add('2023-01-31', cast((rand()+rand())*365/2 as int))) as __col_34, cast((rand()+rand())*10240000/2 as int) as __col_35 from (SELECT c FROM seed1) __tbl_24;
 set enable_profile='true';
 show variables like 'enable_profile';
+set enable_async_profile=false;
 set pipeline_dop='1';
 show variables like 'pipeline_dop';
 set runtime_filter_scan_wait_time = 10000;
