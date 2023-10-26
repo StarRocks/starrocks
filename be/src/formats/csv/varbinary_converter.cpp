@@ -77,8 +77,18 @@ bool VarBinaryConverter::read_string(Column* column, const Slice& s, const Optio
         len = s.size;
     }
 
+    bool length_check_status = true;
     // check if length exceed max varbinary length
-    if (UNLIKELY((len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size != -1 && len > max_size))) {
+    if (options.is_hive) {
+        if (UNLIKELY(max_size != -1 && len > max_size)) {
+            length_check_status = false;
+        }
+    } else {
+        if (config::enable_check_string_lengths && ((len > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size != -1 && len > max_size)))  {
+            length_check_status = false;
+        }
+    }
+    if (!length_check_status) {
         LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varbinary length.";
         return false;
     }
