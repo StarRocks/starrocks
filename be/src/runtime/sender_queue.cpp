@@ -525,14 +525,12 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
-    bool expected = false;
-    if (_is_cancelled.compare_exchange_strong(expected, true)) {
-        clean_buffer_queues();
-    }
+    _is_cancelled = true;
+    clean_buffer_queues();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::close() {
-    cancel();
+    clean_buffer_queues();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
@@ -715,10 +713,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        if (_is_cancelled) {
-            LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
-            return Status::OK();
-        }
+        // NOTICE: The enqueue process use a lock-free approach to avoid lock contention,
+        // and double check is introduced to handle the exception cases like short circuit and cancel.
+        // And it may lead to closure leak if it is not well handled.
 
         // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
@@ -749,6 +746,12 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             // Double check here for short circuit compatibility without introducing a critical section
             if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
                 short_circuit(index);
+                // We cannot early-return for short circuit, it may occur for parts of parallelism,
+                // and the other parallelism may need to proceed.
+            }
+            if (_is_cancelled) {
+                clean_buffer_queues();
+                return Status::OK();
             }
             _recvr->_num_buffered_bytes += chunk_bytes;
         }

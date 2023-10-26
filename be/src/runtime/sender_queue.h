@@ -138,7 +138,7 @@ private:
 class DataStreamRecvr::PipelineSenderQueue final : public DataStreamRecvr::SenderQueue {
 public:
     PipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders, int degree_of_parallism);
-    ~PipelineSenderQueue() override = default;
+    ~PipelineSenderQueue() override { close(); }
 
     Status get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence = -1) override;
 
