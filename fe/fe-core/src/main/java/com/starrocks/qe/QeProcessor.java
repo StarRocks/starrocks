@@ -45,6 +45,10 @@ public interface QeProcessor {
 
     void unregisterQuery(TUniqueId queryId);
 
+    void monitorQuery(TUniqueId queryId, long expireTime);
+
+    void unMonitorQuery(TUniqueId queryId);
+
     Map<String, QueryStatisticsItem> getQueryStatistics();
 
     Coordinator getCoordinator(TUniqueId queryId);
