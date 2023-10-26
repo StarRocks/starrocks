@@ -192,8 +192,8 @@ private:
     template <bool check_global_dict>
     Status _init_column_iterators(const Schema& schema);
     Status _get_row_ranges_by_keys();
-    Status _get_row_ranges_by_key_ranges();
-    Status _get_row_ranges_by_short_key_ranges();
+    StatusOr<SparseRange<>> _get_row_ranges_by_key_ranges();
+    StatusOr<SparseRange<>> _get_row_ranges_by_short_key_ranges();
     Status _get_row_ranges_by_zone_map();
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
@@ -412,8 +412,8 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
     // filter by index stage
     // Use indexes and predicates to filter some data page
-    RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
+    RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
@@ -660,28 +660,54 @@ void SegmentIterator::_init_column_predicates() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
-    StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
+    if (_opts.is_first_split_of_segment) {
+        StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
+    }
     SCOPED_RAW_TIMER(&_opts.stats->rows_key_range_filter_ns);
 
-    if (!_opts.short_key_ranges.empty()) {
-        RETURN_IF_ERROR(_get_row_ranges_by_short_key_ranges());
+    const uint32_t prev_num_rows = _scan_range.span_size();
+    const bool is_logical_split = !_opts.short_key_ranges.empty();
+
+    SparseRange<> scan_range_by_keys;
+    if (is_logical_split) {
+        ASSIGN_OR_RETURN(scan_range_by_keys, _get_row_ranges_by_short_key_ranges());
         _opts.stats->rows_key_range_num += _opts.short_key_ranges.size();
     } else {
-        RETURN_IF_ERROR(_get_row_ranges_by_key_ranges());
+        ASSIGN_OR_RETURN(scan_range_by_keys, _get_row_ranges_by_key_ranges());
     }
 
-    _opts.stats->rows_key_range_filtered += num_rows() - _scan_range.span_size();
+    _scan_range &= scan_range_by_keys;
+
+    if (!is_logical_split) {
+        _opts.stats->rows_key_range_filtered += prev_num_rows - _scan_range.span_size();
+    } else {
+        // For the multiple splits from the same segment, rows_key_range_filtered=N-n1-...-nk, where N denotes the
+        // number of rows of the segment, and ni denotes the number of rows of i-th split after short key index.
+        //             N rows
+        // ┌─────────────────────────────┐
+        // │  key range 1   key range 2  │ 2 key ranges
+        // │  ┌────┬────┐   ┌────┬────┐  │
+        // │  │ n1 │ n2 │   │ n3 │ n4 │  │ 4 splits
+        // └──┴────┴────┴───┴────┴────┴──┘
+        _opts.stats->rows_key_range_filtered += -static_cast<int64_t>(_scan_range.span_size());
+        if (_opts.is_first_split_of_segment) {
+            _opts.stats->rows_key_range_filtered += prev_num_rows;
+        }
+    }
+    _opts.stats->rows_after_key_range += _scan_range.span_size();
     StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
+
     return Status::OK();
 }
 
-Status SegmentIterator::_get_row_ranges_by_key_ranges() {
+StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
     DCHECK(_opts.short_key_ranges.empty());
-    DCHECK_EQ(0, _scan_range.span_size());
+
+    SparseRange<> res;
 
     if (_opts.ranges.empty()) {
-        _scan_range.add(Range<>(0, num_rows()));
-        return Status::OK();
+        res.add(Range<>(0, num_rows()));
+        return res;
     }
 
     RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
@@ -698,21 +724,22 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
             RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
         }
         if (lower_rowid <= upper_rowid) {
-            _scan_range.add(Range{lower_rowid, upper_rowid});
+            res.add(Range{lower_rowid, upper_rowid});
         }
     }
 
-    return Status::OK();
+    return res;
 }
 
-Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
+StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
     DCHECK(!_opts.short_key_ranges.empty());
-    DCHECK_EQ(0, _scan_range.span_size());
+
+    SparseRange<> res;
 
     if (_opts.short_key_ranges.size() == 1 && _opts.short_key_ranges[0]->lower->is_infinite() &&
         _opts.short_key_ranges[0]->upper->is_infinite()) {
-        _scan_range.add(Range<>(0, num_rows()));
-        return Status::OK();
+        res.add(Range<>(0, num_rows()));
+        return res;
     }
 
     RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
@@ -743,11 +770,11 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         }
 
         if (lower_rowid <= upper_rowid) {
-            _scan_range.add(Range{lower_rowid, upper_rowid});
+            res.add(Range{lower_rowid, upper_rowid});
         }
     }
 
-    return Status::OK();
+    return res;
 }
 
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
@@ -1821,8 +1848,44 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_rowid_range() {
-    RETURN_IF(_opts.rowid_range_option == nullptr || _scan_range.empty(), Status::OK());
-    _scan_range = _scan_range.intersection(*_opts.rowid_range_option);
+    DCHECK_EQ(0, _scan_range.span_size());
+
+    _scan_range.add(Range<>(0, num_rows()));
+
+    if (_opts.rowid_range_option != nullptr) {
+        _scan_range &= (*_opts.rowid_range_option);
+
+        // The rowid range is already applied key ranges at the short key block level.
+        // For example, as for the following N-rows segment,
+        // - after applying the rowid ranges, it contains n1+n2=b2+b3+b4=N-b1-b5 rows and filters out N-n1-n2 rows.
+        // - after applying the short key range index, it contains n1.2+n2.1=n1+n2-b2.1-b4.2 rows and filters out
+        //   n1+n2-n1.2-n2.1 rows.
+        // Therefore, here rowid range index accounts rows_key_range_filtered=N-n1-...-nk, where N denotes the
+        // number of rows of the segment, and ni denotes the number of rows of i-th split after rowid range index.
+        //
+        //                              N rows
+        // ┌──────────────────────────────────────────────────────────────┐
+        // │                                                              │
+        // │                  b2                    b4                    │
+        // │   ┌──────────┬────┬─────┬──────────┬────┬─────┬──────────┐   │
+        // │   │    b1    │b2.1│ b2.2│    b3    │b4.1│ b4.2│    b5    │   │ short key blocks
+        // │   └──────────┴────▲─────┴──────────┴────▲─────┴──────────┘   │
+        // │                   │                     │                    │
+        // │              ┌────┴──────────┬──────────┴─────┐              │
+        // │              │     n1        │      n2        │              │ rowid ranges
+        // │              └────▲──────────┴──────────▲─────┘              │
+        // │               n1.1│                     │ n2.2               │
+        // │                   ├──────────┬──────────┤                    │
+        // │                   │   n1.2   │   n2.1   │                    │ key ranges
+        // │                   └──────────┴──────────┘                    │
+        // │                                                              │
+        // └──────────────────────────────────────────────────────────────┘
+        _opts.stats->rows_key_range_filtered += -static_cast<int64_t>(_scan_range.span_size());
+        if (_opts.is_first_split_of_segment) {
+            _opts.stats->rows_key_range_filtered += num_rows();
+        }
+    }
+
     return Status::OK();
 }
 
