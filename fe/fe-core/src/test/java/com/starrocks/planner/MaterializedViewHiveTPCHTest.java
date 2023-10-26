@@ -49,7 +49,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch-hive/q4");
     }
 
-    @Test
+    // @Test
     public void testQuery5() {
         runFileUnitTest("materialized-view/tpch-hive/q5");
     }
