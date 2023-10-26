@@ -133,50 +133,50 @@ DISTRIBUTED BY HASH(id);
 
 1. Prepare statements for execution.
 
-```SQL
-PREPARE insert_stmt FROM 'INSERT INTO users (id, country, city, revenue) VALUES (?, ?, ?, ?)';
-PREPARE select_all_stmt FROM 'SELECT * FROM users';
-PREPARE select_by_id_stmt FROM 'SELECT * FROM users WHERE id = ?';
-PREPARE update_stmt FROM 'UPDATE users SET revenue = ? WHERE id = ?';
-PREPARE delete_stmt FROM 'DELETE FROM users WHERE id = ?';
-```
+    ```SQL
+    PREPARE insert_stmt FROM 'INSERT INTO users (id, country, city, revenue) VALUES (?, ?, ?, ?)';
+    PREPARE select_all_stmt FROM 'SELECT * FROM users';
+    PREPARE select_by_id_stmt FROM 'SELECT * FROM users WHERE id = ?';
+    PREPARE update_stmt FROM 'UPDATE users SET revenue = ? WHERE id = ?';
+    PREPARE delete_stmt FROM 'DELETE FROM users WHERE id = ?';
+    ```
 
-1. Declare variables in these statements.
+2. Declare variables in these statements.
 
-```SQL
-SET @id1 = 1, @id2 = 2;
-SET @country1 = 'USA', @country2 = 'Canada';
-SET @city1 = 'New York', @city2 = 'Toronto';
-SET @revenue1 = 1000000, @revenue2 = 1500000, @revenue3 = (SELECT (revenue) * 1.1 FROM users);
-```
+    ```SQL
+    SET @id1 = 1, @id2 = 2;
+    SET @country1 = 'USA', @country2 = 'Canada';
+    SET @city1 = 'New York', @city2 = 'Toronto';
+    SET @revenue1 = 1000000, @revenue2 = 1500000, @revenue3 = (SELECT (revenue) * 1.1 FROM users);
+    ```
 
-1. Use the declared variables to execute the statements.
+3. Use the declared variables to execute the statements.
 
-```SQL
--- Insert two rows of data.
-EXECUTE insert_stmt USING @id1, @country1, @city1, @revenue1;
-EXECUTE insert_stmt USING @id2, @country2, @city2, @revenue2;
+    ```SQL
+    -- Insert two rows of data.
+    EXECUTE insert_stmt USING @id1, @country1, @city1, @revenue1;
+    EXECUTE insert_stmt USING @id2, @country2, @city2, @revenue2;
 
--- Query all data from the table.
-EXECUTE select_all_stmt;
+    -- Query all data from the table.
+    EXECUTE select_all_stmt;
 
--- Query data with ID 1 or 2 separately.
-EXECUTE select_by_id_stmt USING @id1;
-EXECUTE select_by_id_stmt USING @id2;
+    -- Query data with ID 1 or 2 separately.
+    EXECUTE select_by_id_stmt USING @id1;
+    EXECUTE select_by_id_stmt USING @id2;
 
--- Partially update the row with ID 1. Only update the revenue column.
-EXECUTE update_stmt USING @revenue3, @id1;
+    -- Partially update the row with ID 1. Only update the revenue column.
+    EXECUTE update_stmt USING @revenue3, @id1;
 
--- Delete data with ID 1.
-EXECUTE delete_stmt USING @id1;
+    -- Delete data with ID 1.
+    EXECUTE delete_stmt USING @id1;
 
--- Delete prepared statements.
-DROP PREPARE insert_stmt;
-DROP PREPARE select_all_stmt;
-DROP PREPARE select_by_id_stmt;
-DROP PREPARE update_stmt;
-DROP PREPARE delete_stmt;
-```
+    -- Delete prepared statements.
+    DROP PREPARE insert_stmt;
+    DROP PREPARE select_all_stmt;
+    DROP PREPARE select_by_id_stmt;
+    DROP PREPARE update_stmt;
+    DROP PREPARE delete_stmt;
+    ```
 
 ### Using Prepared Statements in Java application
 
