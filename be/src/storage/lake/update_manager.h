@@ -98,6 +98,8 @@ public:
     // publish failed later, need to clear primary index.
     void remove_primary_index_cache(uint32_t tablet_id);
 
+    bool try_remove_primary_index_cache(uint32_t tablet_id);
+
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
 
@@ -135,6 +137,14 @@ public:
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
+    void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }
+
+    void unlock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock_shared(); }
+
+    bool try_lock_pk_index_shard(int64_t tablet_id) { return _get_pk_index_shard_lock(tablet_id).try_lock(); }
+
+    void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
+
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -149,6 +159,16 @@ private:
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
     Status _handle_index_op(Tablet* tablet, int64_t base_version, const std::function<void(LakePrimaryIndex&)>& op);
+
+    std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
+
+    struct PkIndexShard {
+        mutable std::shared_mutex lock;
+    };
+
+    PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
+        return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
+    }
 
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
@@ -168,6 +188,8 @@ private:
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
+
+    std::vector<PkIndexShard> _pk_index_shards;
 };
 
 } // namespace lake

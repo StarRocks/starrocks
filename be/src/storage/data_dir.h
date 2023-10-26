@@ -142,7 +142,7 @@ public:
 
     Status update_capacity();
 
-    std::string get_persistent_index_path() { return _path + "/" + PERSISTENT_INDEX_PREFIX; }
+    std::string get_persistent_index_path() { return _path + PERSISTENT_INDEX_PREFIX; }
     Status init_persistent_index_dir();
 
     // for test
