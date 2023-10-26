@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include <random>
-#include <semaphore>
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -653,14 +652,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_timeout) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
 
-        std::binary_semaphore sem(0);
+        CountDownLatch latch(1);
         Status res;
         delta_writer->write(Options{.timeout_ms = 1000}, &chunk0, indexes.data(), indexes.size(),
                             [&](const Status& st) {
                                 res = std::move(st);
-                                sem.release(1);
+                                latch.count_down();
                             });
-        sem.acquire();
+        latch.wait();
         EXPECT_TRUE(res.is_time_out()) << res;
         delta_writer->close();
     });
