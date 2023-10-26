@@ -36,18 +36,6 @@ In actual business scenarios, data volume and data distribution affect the memor
 
 1. Create a table with HLL columns `set1` and `set2`.
 
-<<<<<<< HEAD
-~~~sql
-CREATE TABLE hllDemo
-(
-    k1 TINYINT,
-    v1 HLL HLL_UNION
-)
-ENGINE=olap
-AGGREGATE KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 8;
-~~~
-=======
     ```sql
     create table test(
     dt date,
@@ -114,4 +102,3 @@ DISTRIBUTED BY HASH(k1) BUCKETS 8;
     select dt, HLL_CARDINALITY(uv) from (select dt, HLL_RAW_AGG(set1) as uv from test group by dt) tmp;
     select dt, HLL_UNION_AGG(set1) as uv from test group by dt;
     ```
->>>>>>> 197b5709ae ([Doc] optimize desc of keywords and merge hll (#33725))
