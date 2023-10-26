@@ -654,7 +654,7 @@ public class Explain {
 
         @Override
         public String visit(ScalarOperator scalarOperator, Void context) {
-            return scalarOperator.accept(this, null);
+            return scalarOperator.toString();
         }
 
         @Override
