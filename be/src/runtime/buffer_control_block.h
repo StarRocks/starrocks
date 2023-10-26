@@ -109,7 +109,7 @@ public:
     // called because data has been read or error happened.
     Status close(Status exec_status);
     // this is called by RPC, called from coordinator
-    Status cancel();
+    void cancel();
 
     const TUniqueId& fragment_id() const { return _fragment_id; }
 

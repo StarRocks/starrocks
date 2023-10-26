@@ -202,7 +202,9 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         _running_restore_tasks++;
         auto restore_task = [this, guard, trace = TraceInfo(state)]() {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
-            RETURN_IF(!guard.scoped_begin(), Status::OK());
+            if (!guard.scoped_begin()) {
+                return;
+            }
             DEFER_GUARD_END(guard);
             {
                 auto defer = DeferOp([&]() { _running_restore_tasks--; });
@@ -217,7 +219,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                     _finished_restore_tasks++;
                 }
             };
-            return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
@@ -243,7 +244,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
                                [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
                                         int32_t from, int32_t size) {
                                    auto mem_table = partition->spill_writer->mem_table();
-                                   mem_table->append_selective(*chunk, selection.data(), from, size);
+                                   (void)mem_table->append_selective(*chunk, selection.data(), from, size);
                                    partition->mem_size = mem_table->mem_usage();
                                    partition->num_rows += size;
                                });

@@ -23,7 +23,8 @@ class TStatus;
 
 template <typename T>
 class StatusOr;
-#ifdef STARROCKS_STATUS_NODISCARD
+// @TODO this should be removed later after fixing compile issues in ut
+#ifndef BE_TEST
 #define STATUS_ATTRIBUTE [[nodiscard]]
 #else
 #define STATUS_ATTRIBUTE
