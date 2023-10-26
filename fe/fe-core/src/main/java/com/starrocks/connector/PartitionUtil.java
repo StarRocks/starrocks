@@ -358,7 +358,7 @@ public class PartitionUtil {
         return mvPartitionKeySetMap;
     }
 
-    private static String transformMaxValueForJDBCTable(Column partitionColumn, String partitionName) {
+    private static String getPartitionNameForJDBCTable(Column partitionColumn, String partitionName) {
         if (partitionName.equalsIgnoreCase(MYSQL_PARTITION_MAXVALUE)) {
             // For the special handling of maxvalue, take the maximum value for int type and 9999-12-31 for date,
             // For varchar and char, due to the need to convert them to time partitions using str2date, they are also taken as 9999-12-31
@@ -452,9 +452,7 @@ public class PartitionUtil {
      * [1992-01-01,1992-01-02,1992-01-03]
      * ||
      * \/
-     * [0000-01-01, 1992-01-02),[1992-01-01, 1992-01-02),
-     * [1992-01-02, 1992-01-03),[1993-01-03, 1993-01-04),
-     * [1993-01-03, 9999-12-31)
+     * (0000-01-01, 1992-01-01],(1992-01-01, 1992-01-02], (1992-01-02, 1992-01-03]
      * <p>
      * NOTE:
      * External tables may contain multi partition columns, so the same mv partition name may contain multi external
@@ -473,7 +471,7 @@ public class PartitionUtil {
         List<PartitionKey> partitionKeys = new ArrayList<>();
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
         for (String partitionName : partitionNames) {
-            partitionName = transformMaxValueForJDBCTable(partitionColumn, partitionName);
+            partitionName = getPartitionNameForJDBCTable(partitionColumn, partitionName);
             putMvPartitionKeyIntoMap(table, partitionColumn, partitionKeys, mvPartitionKeyMap, partitionName);
         }
 
@@ -488,11 +486,10 @@ public class PartitionUtil {
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
             partitionName = entry.getKey();
-            // If the partition column type is int, it needs to start from 0, and if type is data, it needs to start from 0000-01-01
             if (index == 0) {
-                ++index;
                 lastPartitionKey = entry.getValue();
                 if (!lastPartitionKey.getKeys().get(0).isMinValue()) {
+                    // If partition key is not min value, rewrite it to min value.
                     lastPartitionKey = PartitionKey.createInfinityPartitionKeyWithType(
                             ImmutableList.of(isConvertToDate ?
                                     PrimitiveType.DATE : partitionColumn.getPrimitiveType()), false);
@@ -505,11 +502,13 @@ public class PartitionUtil {
                     } else {
                         lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
                     }
+                    ++index;
                     continue;
                 }
+                ++index;
             }
             PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
-            putRangeToMvPartitionRangeMap(mvPartitionRangeMap, partitionName, lastPartitionKey, upperBound);
+            putRangeToMvPartitionRangeMapForJDBCTable(mvPartitionRangeMap, partitionName, lastPartitionKey, upperBound);
             lastPartitionKey = upperBound;
         }
 
@@ -524,6 +523,13 @@ public class PartitionUtil {
         mvPartitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, upperBound));
     }
 
+    private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
+                                                      String lastPartitionName,
+                                                      PartitionKey lastPartitionKey,
+                                                      PartitionKey upperBound) {
+        Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
+        mvPartitionRangeMap.put(lastPartitionName, Range.openClosed(lastPartitionKey, upperBound));
+    }
     /**
      * If base table column type is string but partition type is date, we need to convert the string to date
      * @param partitionExpr   PARTITION BY expr
