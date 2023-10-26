@@ -80,30 +80,42 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     int64_t shift = offset - block_offset;
 
     SharedBufferedInputStream::SharedBuffer* sb = nullptr;
-    auto ret = _sb_stream->find_shared_buffer(offset, size);
-    if (ret.ok()) {
-        sb = ret.value();
-        if (sb->buffer.capacity() > 0) {
-            strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
-            _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
-                                                  block_offset, load_size);
-            return Status::OK();
+    if (_enable_block_buffer) {
+        auto ret = _sb_stream->find_shared_buffer(offset, size);
+        if (ret.ok()) {
+            sb = ret.value();
+            if (sb->buffer.capacity() > 0) {
+                strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
+                _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
+                                                      block_offset, load_size);
+                return Status::OK();
+            }
         }
     }
 
     // read cache
     BlockCache* cache = BlockCache::instance();
     Status res;
+    size_t read_size = 0;
     {
         SCOPED_RAW_TIMER(&_stats.read_cache_ns);
         BlockBuffer block;
-        res = cache->read_cache(_cache_key, block_offset, load_size, &block.buffer);
+        if (_enable_block_buffer) {
+            res = cache->read_cache(_cache_key, block_offset, load_size, &block.buffer);
+            read_size = load_size;
+        } else {
+            StatusOr<size_t> r = cache->read_cache(_cache_key, offset, size, out);
+            res = r.status();
+            read_size = size;
+        }
         if (res.ok()) {
-            block.buffer.copy_to(out, size, shift);
-            block.offset = block_offset;
-            _block_map[block_id] = block;
+            if (_enable_block_buffer) {
+                block.buffer.copy_to(out, size, shift);
+                block.offset = block_offset;
+                _block_map[block_id] = block;
+            }
             _stats.read_cache_count += 1;
-            _stats.read_cache_bytes += load_size;
+            _stats.read_cache_bytes += read_size;
             return Status::OK();
         }
     }
@@ -151,6 +163,9 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
 }
 
 void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb) {
+    if (sb->size == 0 || _block_map.empty()) {
+        return;
+    }
     int64_t end_offset = sb->offset + sb->size;
     int64_t start_block_id = sb->offset / _block_size;
     int64_t end_block_id = (end_offset - 1) / _block_size;
@@ -190,11 +205,11 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     int64_t end_offset = offset + count;
     int64_t start_block_id = offset / _block_size;
     int64_t end_block_id = (end_offset - 1) / _block_size;
-    bool can_zero_copy = p + _block_size < pe;
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
         size_t off = std::max(offset, i * _block_size);
         size_t end = std::min((i + 1) * _block_size, end_offset);
         size_t size = end - off;
+        bool can_zero_copy = p + _block_size <= pe;
         Status st = _read_block(off, size, p, can_zero_copy);
         if (!st.ok()) return st;
         offset += size;
