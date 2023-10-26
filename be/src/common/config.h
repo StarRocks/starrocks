@@ -604,6 +604,8 @@ CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 // The tablet map shard size, the value must be power of two.
 // this is an enhancement for better performance to manage tablet.
 CONF_Int32(tablet_map_shard_size, "32");
+// The value must be power of two.
+CONF_Int32(pk_index_map_shard_size, "4096");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 
@@ -1003,6 +1005,19 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 CONF_mInt64(pindex_major_compaction_num_threads, "0");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
+<<<<<<< HEAD
+=======
+// control the local persistent index in shared_data gc interval
+CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
+// enable use bloom filter for pindex or not
+CONF_mBool(enable_pindex_filter, "true");
+// use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
+// 1. The records to be found are in the index, bloom filter is no usage
+// 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io
+// So the bloom filter bytes should less than the index data we need to scan in disk, and the default strategy is if bloom
+// filter bytes is less or equal than 10% of pindex bytes, we will use bloom filter to filter some records
+CONF_mInt32(max_bf_read_bytes_percent, "10");
+>>>>>>> 8e4e211b4c ([Enhancement] Support gc local persistent index in shared data (#32184))
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

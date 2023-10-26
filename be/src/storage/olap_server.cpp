@@ -43,8 +43,10 @@
 #include <unordered_set>
 
 #include "common/status.h"
+#include "fs/fs_util.h"
 #include "storage/compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -53,6 +55,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
+#include "tablet_meta_manager.h"
 #include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
@@ -93,6 +96,18 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
+<<<<<<< HEAD
+=======
+    _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
+
+#ifdef USE_STAROS
+    _local_pk_index_shard_data_gc_thread =
+            std::thread([this] { _local_pk_index_shard_data_gc_thread_callback(nullptr); });
+    Thread::set_thread_name(_local_pk_index_shard_data_gc_thread, " pk_index_shard_data_gc");
+#endif
+
+>>>>>>> 8e4e211b4c ([Enhancement] Support gc local persistent index in shared data (#32184))
     // start thread for check finish publish version
     _finish_publish_version_thread = std::thread([this] { _finish_publish_version_thread_callback(nullptr); });
     Thread::set_thread_name(_finish_publish_version_thread, "finish_publish_version");
@@ -394,6 +409,90 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
 
     return nullptr;
 }
+
+#ifdef USE_STAROS
+void* StorageEngine::_local_pk_index_shard_data_gc_thread_callback(void* arg) {
+    if (is_as_cn()) {
+        return nullptr;
+    }
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    auto lake_update_manager = ExecEnv::GetInstance()->lake_update_manager();
+    auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(config::pindex_shard_data_gc_interval_seconds);
+
+        for (DataDir* data_dir : get_stores()) {
+            auto pk_path = data_dir->get_persistent_index_path();
+            LOG(INFO) << "start to gc local persistent index dir:" << pk_path;
+            int64_t t_start = MonotonicMillis();
+
+            std::set<std::string> tablet_ids;
+            Status ret = fs::list_dirs_files(pk_path, &tablet_ids, nullptr);
+            if (!ret.ok()) {
+                LOG(WARNING) << "fail to walk dir. path=[" + pk_path << "] error[" << ret.to_string() << "]";
+                continue;
+            }
+
+            std::vector<int64_t> not_in_worker_tablet_ids;
+            std::vector<int64_t> dir_changed_tablet_ids;
+            std::vector<int64_t> removed_dir_tablet_ids;
+
+            for (const auto& tablet_id : tablet_ids) {
+                auto tablet_pk_path = pk_path + "/" + tablet_id;
+                int64_t id = std::stoll(tablet_id);
+                // judge whether tablet should be in the data_dir or not,
+                // for data_dir may change if config:storage_path changed.
+                // just remove if not.
+                if (get_persistent_index_store(id) != data_dir) {
+                    dir_changed_tablet_ids.push_back(id);
+                    if (_clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+                        removed_dir_tablet_ids.push_back(id);
+                    }
+                } else if (!lake_tablet_manager->is_tablet_in_worker(id)) {
+                    // the shard may be scheduled to other nodes
+                    if (lake_update_manager->try_lock_pk_index_shard(id)) {
+                        not_in_worker_tablet_ids.emplace_back(id);
+                        // judge whether tablet is scheduled again,
+                        // and pk_index_shard write_lock has been hold, so no process will build the persistent index.
+                        if (!lake_tablet_manager->is_tablet_in_worker(id)) {
+                            // try to remove pk index cache to avoid continuing to use the index in the cache after deletion.
+                            if (lake_update_manager->try_remove_primary_index_cache(id)) {
+                                if (_clear_persistent_index(data_dir, id, tablet_pk_path).ok()) {
+                                    removed_dir_tablet_ids.push_back(id);
+                                }
+                            }
+                        }
+                        lake_update_manager->unlock_pk_index_shard(id);
+                    }
+                }
+            }
+
+            auto debug_vector_info = [](std::vector<int64_t> vector) -> std::string {
+                std::string result;
+                for (int i = 0; i < vector.size(); i++) {
+                    if (i != 0) {
+                        result.append(",");
+                    }
+                    result += std::to_string(vector[i]);
+                }
+                return result;
+            };
+
+            int64_t t_end = MonotonicMillis();
+            LOG(INFO) << "finish gc local persistent index dir: " << pk_path
+                      << ", found tablet not in the worker, tablet_ids: " << debug_vector_info(not_in_worker_tablet_ids)
+                      << ", data_dir changed tablet_ids: " << debug_vector_info(dir_changed_tablet_ids)
+                      << ", and removed dir successfully, tablet_ids: " << debug_vector_info(removed_dir_tablet_ids)
+                      << ", cost:" << t_end - t_start << "ms";
+        }
+    }
+
+    return nullptr;
+}
+#endif
 
 void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data_dir) {
 #ifdef GOOGLE_PROFILER
