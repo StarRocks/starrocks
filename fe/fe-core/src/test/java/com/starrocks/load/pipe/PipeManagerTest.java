@@ -620,11 +620,11 @@ public class PipeManagerTest {
         ShowExecutor showExecutor = new ShowExecutor(ctx, showPipeStmt);
         ShowResultSet result = showExecutor.execute();
         Assert.assertEquals(
-                Arrays.asList("show_1", "pipe_test_db.tbl1", "RUNNING",
+                Arrays.asList("show_1", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(0).subList(2, result.numColumns() - 1));
         Assert.assertEquals(
-                Arrays.asList("show_2", "pipe_test_db.tbl1", "RUNNING",
+                Arrays.asList("show_2", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
                 result.getResultRows().get(1).subList(2, result.numColumns() - 1));
 
