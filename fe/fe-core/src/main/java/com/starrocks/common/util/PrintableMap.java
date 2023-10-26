@@ -40,6 +40,8 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("bos_secret_accesskey");
         SENSITIVE_KEY.add("fs.s3a.access.key");
         SENSITIVE_KEY.add("fs.s3a.secret.key");
+        SENSITIVE_KEY.add("aws.s3.access_key");
+        SENSITIVE_KEY.add("aws.s3.secret_key");
         SENSITIVE_KEY.add("fs.oss.accessKeyId");
         SENSITIVE_KEY.add("fs.oss.accessKeySecret");
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretId");
