@@ -478,8 +478,23 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // In default query engine, we only build one hash table for join right child.
     // But for pipeline query engine, we will build `num_right_partitions` hash tables, so we need to enlarge the limit
+
+    const auto& query_options = runtime_state()->query_options();
+
+    size_t global_runtime_filter_build_max_size = UINT64_MAX;
+    if (query_options.__isset.global_runtime_filter_build_max_size &&
+        query_options.global_runtime_filter_build_max_size > 0) {
+        global_runtime_filter_build_max_size = query_options.global_runtime_filter_build_max_size;
+    }
+
+    size_t runtime_join_filter_pushdown_limit = UINT64_MAX;
+    // _runtime_join_filter_pushdown_limit can be set by user, here we should prevent overflow
+    if (_runtime_join_filter_pushdown_limit < UINT64_MAX / num_right_partitions) {
+        runtime_join_filter_pushdown_limit = _runtime_join_filter_pushdown_limit * num_right_partitions;
+    }
+
     std::unique_ptr<PartialRuntimeFilterMerger> partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
-            pool, _runtime_join_filter_pushdown_limit * num_right_partitions);
+            pool, runtime_join_filter_pushdown_limit, global_runtime_filter_build_max_size);
 
     auto build_op = std::make_shared<HashJoinBuilderFactory>(context->next_operator_id(), id(), hash_joiner_factory,
                                                              std::move(partial_rf_merger), _distribution_mode,
@@ -513,6 +528,11 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
     if (limit() != -1) {
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
+    if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough) {
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
+                                                                              context->degree_of_parallelism(), true);
     }
 
     // Use ChunkAccumulateOperator, when any following condition occurs:

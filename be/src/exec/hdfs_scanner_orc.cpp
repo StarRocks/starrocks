@@ -311,6 +311,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(s);
+        }
         return Status::InternalError(s);
     }
 

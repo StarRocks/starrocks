@@ -51,6 +51,7 @@
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -598,7 +599,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
-    seg_options.short_key_ranges = options.short_key_ranges;
+    if (options.short_key_ranges_option != nullptr) { // logical split.
+        seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
+    }
+    seg_options.asc_hint = options.asc_hint;
     if (options.runtime_state != nullptr) {
         seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
     }
@@ -625,11 +629,18 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             continue;
         }
 
-        if (options.rowid_range_option != nullptr) {
-            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
-            if (seg_options.rowid_range_option == nullptr) {
+        if (options.rowid_range_option != nullptr) { // physical split.
+            auto [rowid_range, is_first_split_of_segment] =
+                    options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+            if (rowid_range == nullptr) {
                 continue;
             }
+            seg_options.rowid_range_option = std::move(rowid_range);
+            seg_options.is_first_split_of_segment = is_first_split_of_segment;
+        } else if (options.short_key_ranges_option != nullptr) { // logical split.
+            seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
+        } else {
+            seg_options.is_first_split_of_segment = true;
         }
 
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);

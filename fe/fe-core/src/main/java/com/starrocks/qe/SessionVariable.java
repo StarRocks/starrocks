@@ -233,6 +233,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_PROFILE_REPORT_INTERVAL = "runtime_profile_report_interval";
     public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
+    public static final String ENABLE_ASYNC_PROFILE = "enable_async_profile";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
     public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
@@ -317,7 +318,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
+    public static final String GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT = "global_runtime_filter_wait_timeout";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
+    public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+
+    public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
+            "enable_pipeline_level_multi_partitioned_rf";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
@@ -363,6 +370,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
     public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
+
+    public static final String HASH_JOIN_INTERPOLATE_PASSTHROUGH = "hash_join_interpolate_passthrough";
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
@@ -834,6 +843,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
+    @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableAsyncProfile = true;
+
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
     private int resourceGroupId = 0;
@@ -1004,6 +1016,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
+    private boolean enableTopNRuntimeFilter = true;
+
     // Parameters to determine the usage of runtime filter
     // Either the build_max or probe_min equal to 0 would force use the filter,
     // otherwise would decide based on the cardinality
@@ -1016,8 +1031,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterWaitTimeout = 20;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterRpcTimeout = 400;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
+    private boolean enablePipelineLevelMultiPartitionedRf = false;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -1067,6 +1089,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
+
+    @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean hashJoinInterpolatePassthrough = false;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -1435,6 +1460,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
+
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
@@ -1984,6 +2010,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableGlobalRuntimeFilter = value;
     }
 
+    public boolean getEnableTopNRuntimeFilter() {
+        return enableTopNRuntimeFilter;
+    }
+
     public void setGlobalRuntimeFilterBuildMaxSize(long globalRuntimeFilterBuildMaxSize) {
         this.globalRuntimeFilterBuildMaxSize = globalRuntimeFilterBuildMaxSize;
     }
@@ -2010,6 +2040,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public void setEnablePipelineLevelMultiPartitionedRf(boolean on) {
+        enablePipelineLevelMultiPartitionedRf = on;
+        if (on) {
+            enableRuntimeAdaptiveDop = false;
+        }
+    }
+
+    public boolean isEnablePipelineLevelMultiPartitionedRf() {
+        return enablePipelineLevelMultiPartitionedRf && enablePipelineEngine;
     }
 
     public boolean isMVPlanner() {
@@ -2044,6 +2085,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine && pipelineDop <= 0;
     }
 
+    public void setEnableRuntimeAdaptiveDop(boolean on) {
+        enableRuntimeAdaptiveDop = on;
+        if (on) {
+            enablePipelineLevelMultiPartitionedRf = false;
+        }
+    }
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
     }
@@ -2138,6 +2185,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineProfileLevel() {
         return pipelineProfileLevel;
+    }
+
+    public boolean isEnableAsyncProfile() {
+        return enableAsyncProfile;
+    }
+
+    public void setEnableAsyncProfile(boolean enableAsyncProfile) {
+        this.enableAsyncProfile = enableAsyncProfile;
     }
 
     public boolean isEnableReplicationJoin() {
@@ -2330,6 +2385,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
+    }
+    public boolean isHashJoinInterpolatePassthrough() {
+        return hashJoinInterpolatePassthrough;
     }
 
     public int getParseTokensLimit() {
@@ -2763,10 +2821,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
-        final int global_runtime_filter_wait_timeout = 20;
-        final int global_runtime_filter_rpc_timeout = 400;
-        tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
-        tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
+        tResult.setGlobal_runtime_filter_build_max_size(globalRuntimeFilterBuildMaxSize);
+        tResult.setRuntime_filter_wait_timeout_ms(globalRuntimeFilterWaitTimeout);
+        tResult.setRuntime_filter_send_timeout_ms(globalRuntimeFilterRpcTimeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
