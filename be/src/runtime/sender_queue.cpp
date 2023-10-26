@@ -743,6 +743,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
+        // NOTICE: The enqueue process use a lock-free approach to avoid lock contention,
+        // and double check is introduced to handle the exception cases like short circuit and cancel.
+        // And it may lead to closure leak if it is not well handled.
+
         // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
             if (_is_pipeline_level_shuffle &&
@@ -772,6 +776,12 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             // Double check here for short circuit compatibility without introducing a critical section
             if (_is_cancelled || _chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
                 short_circuit(index);
+
+                // We can only early-return for cancellation, because for short circuit, it may occur for parts of parallelism,
+                // and the other parallelism may need to proceed.
+                if (_is_cancelled) {
+                    return Status::OK();
+                }
             }
             _recvr->_num_buffered_bytes += chunk_bytes;
             COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);
