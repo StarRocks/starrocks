@@ -62,6 +62,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
@@ -520,7 +521,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad() || replica.getState() == ReplicaState.DECOMMISSION) {
+            if (replica.isBad()
+                    || replica.getState() == ReplicaState.DECOMMISSION
+                    || replica.getState() == ReplicaState.RECOVER) {
                 continue;
             }
 
@@ -906,11 +909,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     olapTable.getPartitionInfo().getTabletType(partitionId),
                     olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
                     indexMeta.getSortKeyUniqueIds());
-            createReplicaTask.setIsRecoverTask(true);
+            createReplicaTask.setRecoverySource(RecoverySource.SCHEDULER);
             taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
             Replica emptyReplica =
-                    new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
+                    new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.RECOVER, visibleVersion,
                             indexMeta.getSchemaHash());
             // addReplica() method will add this replica to tablet inverted index too.
             tablet.addReplica(emptyReplica);

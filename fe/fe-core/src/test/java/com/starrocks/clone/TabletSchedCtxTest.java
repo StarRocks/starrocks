@@ -149,8 +149,13 @@ public class TabletSchedCtxTest {
 
     @Test
     public void testSingleReplicaRecover() throws SchedException {
-        // mock be1 down and TABLET_ID_1 missing
-        be1.setAlive(false);
+        // drop be1 and TABLET_ID_1 missing
+        GlobalStateMgr.getCurrentSystemInfo().dropBackend(be1);
+        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentSystemInfo(),
+                GlobalStateMgr.getCurrentInvertedIndex());
+        clusterLoadStatistic.init();
+        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
+
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
                 GlobalStateMgr.getCurrentInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
         TabletSchedCtx ctx =
