@@ -1,28 +1,35 @@
 # Keywords
 
-This topic describes non-reserved keywords and reserved keywords. It also provides a list of reserved keywords supported by StarRocks.
+This topic describes non-reserved keywords and reserved keywords. It provides a list of reserved keywords in StarRocks.
 
 ## Introduction
 
 Keywords in SQL statements, such as `CREATE` and `DROP`, have special meanings when parsed by StarRocks. Keywords are classified into non-reserved keywords and reserved keywords.
 
-- **Non-reserved keywords** can be directly used as identifiers, such as table names and column names. For example, DB is a non-reserved keyword. You can use the following statement to create a database named `DB`.
+- **Non-reserved keywords** can be directly used as identifiers without special treatment, such as table names and column names. For example, `DB` is a non-reserved keyword. You can create a database named `DB`.
 
     ```SQL
     CREATE DATABASE DB;
     Query OK, 0 rows affected (0.00 sec)
     ```
 
-- **Reserved keywords** can be used as identifiers only after special treatment. For example, LIKE is a reserved keyword. If you want to use it to identify a database, enclose it in a pair of backticks (\`).
+- **Reserved keywords** can be used as identifiers only after special treatment. For example, `LIKE` is a reserved keyword. If you want to use it to identify a database, enclose it in a pair of backticks (`\`).
 
     ```SQL
     CREATE DATABASE `LIKE`;
     Query OK, 0 rows affected (0.01 sec)
     ```
 
+  If it is not enclosed in backticks (`\`), an error is returned:
+
+    ```SQL
+    CREATE DATABASE LIKE;
+    ERROR 1064 (HY000): Getting syntax error at line 1, column 16. Detail message: Unexpected input 'like', the most similar input is {a legal identifier}.
+    ```
+
 ## Reserved keywords
 
-Following are the reserved keywords supported by StarRocks.
+Following are StarRocks reserved keywords arranged in alphabetical order. You must enclose them in backticks (`\`) if you want to use them as identifiers. The reserved keywords may vary with StarRocks versions.
 
 ### A
 
