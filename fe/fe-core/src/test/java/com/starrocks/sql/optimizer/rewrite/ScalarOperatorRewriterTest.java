@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
@@ -26,10 +25,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
+import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -117,5 +118,34 @@ public class ScalarOperatorRewriterTest {
         constFalse = ConstantOperator.NULL;
         assertEquals(new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, constFalse),
                 NegateFilterShuttle.getInstance().negateFilter(constFalse));
+    }
+
+    @Test
+    public void testNormalizePredicate() {
+        // b > a => a < b
+        {
+            BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GT,
+                    new ColumnRefOperator(0, Type.VARCHAR, "b", true),
+                    new ColumnRefOperator(1, Type.BIGINT, "a", true)
+            );
+
+            ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+            ScalarOperator result = operatorRewriter.rewrite(op, Lists.newArrayList(new MvNormalizePredicateRule()));
+
+            Assert.assertEquals("1: a < 0: b", result.toString());
+        }
+
+        // b:101 > b:2 => b:2 < b:101
+        {
+            BinaryPredicateOperator op = new BinaryPredicateOperator(BinaryType.GT,
+                    new ColumnRefOperator(101, Type.VARCHAR, "b", true),
+                    new ColumnRefOperator(2, Type.BIGINT, "b", true)
+            );
+
+            ScalarOperatorRewriter operatorRewriter = new ScalarOperatorRewriter();
+            ScalarOperator result = operatorRewriter.rewrite(op, Lists.newArrayList(new MvNormalizePredicateRule()));
+
+            Assert.assertEquals("2: b < 101: b", result.toString());
+        }
     }
 }
