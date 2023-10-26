@@ -1104,5 +1104,7 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
+// 20min
+CONF_mInt64(query_ctx_dump_interval_ns, "1200000000000");
 
 } // namespace starrocks::config

@@ -53,7 +53,7 @@ public:
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
-    int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
+    int64_t lifetime() const { return _lifetime_sw.elapsed_time(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -77,6 +77,10 @@ public:
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
         return now > _query_deadline;
     }
+
+    void set_dump_timestamp(int64_t interval_ns) { _query_next_dump_ts = lifetime() + interval_ns; }
+
+    bool should_dump_stat() const { return lifetime() > _query_next_dump_ts; }
 
     bool is_dead() const { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
     // add expired seconds to deadline
@@ -212,6 +216,7 @@ private:
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
+    int64_t _query_next_dump_ts = 0;
     std::atomic<int64_t> _total_cpu_cost_ns = 0;
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;
