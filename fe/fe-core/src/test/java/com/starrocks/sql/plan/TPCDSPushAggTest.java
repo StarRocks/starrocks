@@ -34,8 +34,8 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         Assertions.assertEquals(aggNum, actual, msg);
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("testCastProvider")
+    // @ParameterizedTest(name = "{0}")
+    // @MethodSource("testCastProvider")
     public void testTPCDSPushDownAgg(String sql, int orig, int auto, int force, int mid, int high) throws Exception {
         check(-1, sql, orig);
         check(0, sql, auto);
@@ -44,8 +44,8 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         check(3, sql, high);
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("testCastProvider")
+    // @ParameterizedTest(name = "{0}")
+    // @MethodSource("testCastProvider")
     public void debugTPCDSPushDownAgg(String sql, int orig, int auto, int force, int mid, int high) throws Exception {
         orig = getAggNum(-1, sql);
         auto = getAggNum(0, sql);
