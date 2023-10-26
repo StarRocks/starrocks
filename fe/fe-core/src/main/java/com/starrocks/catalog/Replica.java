@@ -62,7 +62,8 @@ public class Replica implements Writable {
         SCHEMA_CHANGE,
         CLONE,
         ALTER, // replica is under rollup or schema change
-        DECOMMISSION; // replica is ready to be deleted
+        DECOMMISSION, // replica is ready to be deleted
+        RECOVER;  // replica is recovering
 
         public boolean canLoad() {
             return this == NORMAL || this == SCHEMA_CHANGE || this == ALTER;
