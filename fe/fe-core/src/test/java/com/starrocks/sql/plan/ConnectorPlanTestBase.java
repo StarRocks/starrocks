@@ -72,11 +72,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
-<<<<<<< HEAD
         mockIcebergCatalogImpl(metadataMgr);
-=======
         mockPaimonCatalogImpl(metadataMgr, warehouse);
->>>>>>> 601559f82b ([Feature] Support paimon materialized view (#29476))
     }
 
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {

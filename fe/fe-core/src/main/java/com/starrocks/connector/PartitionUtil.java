@@ -340,15 +340,10 @@ public class PartitionUtil {
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
-<<<<<<< HEAD
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()
+                || table.isPaimonTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(
                     table, partitionColumn, getPartitionNames(table), partitionExpr);
-=======
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable() ||
-                table.isPaimonTable()) {
-            return PartitionUtil.getRangePartitionMapOfExternalTable(table, partitionColumn, getPartitionNames(table));
->>>>>>> 601559f82b ([Feature] Support paimon materialized view (#29476))
         } else {
             throw new DmlException("Can not get partition range from table with type : %s", table.getType());
         }

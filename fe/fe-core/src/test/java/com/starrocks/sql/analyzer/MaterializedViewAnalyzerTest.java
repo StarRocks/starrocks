@@ -14,13 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
-<<<<<<< HEAD
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-=======
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
->>>>>>> 601559f82b ([Feature] Support paimon materialized view (#29476))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -37,7 +34,6 @@ import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
