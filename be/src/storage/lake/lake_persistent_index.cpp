@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/cloud_native_persistent_index.h"
+#include "storage/lake/lake_persistent_index.h"
 
 #include "storage/lake/persistent_index_memtable.h"
 
@@ -33,7 +33,7 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                          IOStat* stat) {
+                                   IOStat* stat) {
     KeyIndexesInfo not_founds;
     size_t num_found;
     return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found);
@@ -50,7 +50,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
 }
 
 Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
-                                               const uint32_t max_src_rssid, std::vector<uint32_t>* failed) {
+                                        const uint32_t max_src_rssid, std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
     found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
