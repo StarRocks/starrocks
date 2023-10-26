@@ -94,6 +94,7 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
 
+<<<<<<< HEAD
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
     [[nodiscard]] Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
@@ -103,6 +104,11 @@ public:
     [[nodiscard]] Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
     [[nodiscard]] Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+=======
+#ifdef USE_STAROS
+    bool is_tablet_in_worker(int64_t tablet_id);
+#endif // USE_STAROS
+>>>>>>> 8e4e211b4c ([Enhancement] Support gc local persistent index in shared data (#32184))
 
     void prune_metacache();
 
