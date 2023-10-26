@@ -209,7 +209,7 @@ TEST_F(ChunkTest, get_column_by_index) {
 TEST_F(ChunkTest, test_copy_one_row) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
-    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_tuple();
+    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty();
     for (size_t i = 0; i < chunk->num_rows(); ++i) {
         new_chunk->append(*chunk, i, 1);
     }
