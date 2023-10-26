@@ -98,6 +98,7 @@ set(EXPR_FILES
   map_expr.cpp
   substring_index.cpp
   dict_query_expr.cpp
+  runtime_filter_layout.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

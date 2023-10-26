@@ -335,6 +335,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
         out->clear_bf();
     }
 
+    out->set_global();
     for (auto it : status->filters) {
         out->concat(it.second);
     }
@@ -642,6 +643,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     if (rf == nullptr) {
         return;
     }
+    rf->set_global();
     std::shared_ptr<JoinRuntimeFilter> shared_rf(rf);
     // for pipeline engine
     if (request.has_is_pipeline() && request.is_pipeline()) {

@@ -93,7 +93,7 @@ public class TFragmentInstanceFactory {
                                          TDescriptorTable descTable,
                                          int totalTableSinkDop) {
         // TODO(lzh): move to a more proper place.
-        execFragment.setBucketSeqToInstanceForRuntimeFilters();
+        execFragment.setLayoutInfosForRuntimeFilters();
 
         PlanFragment fragment = execFragment.getPlanFragment();
 

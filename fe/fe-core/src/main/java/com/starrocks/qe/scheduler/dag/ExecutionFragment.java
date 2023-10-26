@@ -37,14 +37,17 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TScanRangeParams;
-import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.stream.Collectors;
+
+import static com.starrocks.qe.scheduler.dag.FragmentInstance.ABSENT_DRIVER_SEQUENCE;
 
 /**
  * An {@code ExecutionFragment} is a part of the {@link ExecutionDAG}, and it corresponds one-to-one with a {@link PlanFragment}.
@@ -68,7 +71,12 @@ public class ExecutionFragment {
     private final FragmentScanRangeAssignment scanRangeAssignment;
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
 
-    private List<Integer> cachedBucketSeqToInstance = null;
+    public static class BucketSeqAssignment {
+        public List<Integer> bucketSeqToInstance;
+        public List<Integer> bucketSeqToDriverSeq;
+        public List<Integer> bucketSeqToPartition;
+    }
+    private BucketSeqAssignment cachedBucketSeqAssignment = null;
     private boolean bucketSeqToInstanceForFilterIsSet = false;
 
     private final TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
@@ -125,22 +133,23 @@ public class ExecutionFragment {
         return executionDAG;
     }
 
-    public void setBucketSeqToInstanceForRuntimeFilters() {
+    public void setLayoutInfosForRuntimeFilters() {
         if (bucketSeqToInstanceForFilterIsSet) {
             return;
         }
         bucketSeqToInstanceForFilterIsSet = true;
 
-        List<Integer> seqToInstance = getBucketSeqToInstance();
-        if (CollectionUtils.isEmpty(seqToInstance)) {
-            return;
-        }
-
+        BucketSeqAssignment bucketSeqAssignment = getBucketSeqAssignment();
         for (RuntimeFilterDescription rf : planFragment.getBuildRuntimeFilters().values()) {
-            if (!rf.isColocateOrBucketShuffle()) {
-                continue;
+            rf.setNumInstances(instances.size());
+            rf.setNumDriversPerInstance(planFragment.getPipelineDop());
+
+            if (bucketSeqAssignment == null) {
+                return;
             }
-            rf.setBucketSeqToInstance(seqToInstance);
+            rf.setBucketSeqToInstance(bucketSeqAssignment.bucketSeqToInstance);
+            rf.setBucketSeqToDriverSeq(bucketSeqAssignment.bucketSeqToDriverSeq);
+            rf.setBucketSeqToPartition(bucketSeqAssignment.bucketSeqToPartition);
         }
     }
 
@@ -166,31 +175,59 @@ public class ExecutionFragment {
         return colocatedAssignment.getBucketNum();
     }
 
-    public List<Integer> getBucketSeqToInstance() {
-        if (cachedBucketSeqToInstance != null) {
-            return cachedBucketSeqToInstance;
+    public BucketSeqAssignment getBucketSeqAssignment() {
+        if (cachedBucketSeqAssignment != null) {
+            return cachedBucketSeqAssignment;
         }
 
         if (colocatedAssignment == null) {
-            cachedBucketSeqToInstance = Collections.emptyList();
-            return cachedBucketSeqToInstance;
+            return null;
         }
 
         int numBuckets = getBucketNum();
         Integer[] bucketSeqToInstance = new Integer[numBuckets];
+        Integer[] bucketSeqToDriverSeq = new Integer[numBuckets];
+        Integer[] bucketSeqToPartition = new Integer[numBuckets];
         // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
         // absence of buckets.
         Arrays.fill(bucketSeqToInstance, CoordinatorPreprocessor.BUCKET_ABSENT);
+        Arrays.fill(bucketSeqToDriverSeq, CoordinatorPreprocessor.BUCKET_ABSENT);
+        Arrays.fill(bucketSeqToPartition, CoordinatorPreprocessor.BUCKET_ABSENT);
+        boolean assignBucketsAmongDrivers =
+                instances.stream().flatMap(instance -> instance.getBucketSeqToDriverSeq().values().stream())
+                        .noneMatch(driverSeq -> driverSeq.equals(ABSENT_DRIVER_SEQUENCE));
+
+        int nextPartition = 0;
         for (FragmentInstance instance : instances) {
-            for (Integer bucketSeq : instance.getBucketSeqs()) {
-                Preconditions.checkState(bucketSeq < numBuckets,
-                        "bucketSeq exceeds bucketNum in colocate Fragment");
-                bucketSeqToInstance[bucketSeq] = instance.getIndexInFragment();
+            if (assignBucketsAmongDrivers) {
+                List<Map.Entry<Integer, Integer>> sortedBucketSeqToDriverSeq =
+                        instance.getBucketSeqToDriverSeq().entrySet().stream()
+                                .sorted(Comparator.comparingInt(Map.Entry::getValue)).collect(Collectors.toList());
+                for (Map.Entry<Integer, Integer> entry : sortedBucketSeqToDriverSeq) {
+                    Integer bucketSeq = entry.getKey();
+                    Integer driverSeq = entry.getValue();
+                    Preconditions.checkState(bucketSeq < numBuckets,
+                            "bucketSeq exceeds bucketNum in colocate Fragment");
+                    bucketSeqToInstance[bucketSeq] = instance.getIndexInFragment();
+                    bucketSeqToDriverSeq[bucketSeq] = driverSeq;
+                    bucketSeqToPartition[bucketSeq] = nextPartition++;
+                }
+            } else {
+                for (Integer bucketSeq : instance.getBucketSeqs()) {
+                    Preconditions.checkState(bucketSeq < numBuckets,
+                            "bucketSeq exceeds bucketNum in colocate Fragment");
+                    bucketSeqToInstance[bucketSeq] = instance.getIndexInFragment();
+                }
             }
         }
 
-        cachedBucketSeqToInstance = Arrays.asList(bucketSeqToInstance);
-        return cachedBucketSeqToInstance;
+        cachedBucketSeqAssignment = new BucketSeqAssignment();
+        cachedBucketSeqAssignment.bucketSeqToInstance = Arrays.asList(bucketSeqToInstance);
+        if (assignBucketsAmongDrivers) {
+            cachedBucketSeqAssignment.bucketSeqToDriverSeq = Arrays.asList(bucketSeqToDriverSeq);
+            cachedBucketSeqAssignment.bucketSeqToPartition = Arrays.asList(bucketSeqToPartition);
+        }
+        return cachedBucketSeqAssignment;
     }
 
     public void addDestination(TPlanFragmentDestination destination) {
