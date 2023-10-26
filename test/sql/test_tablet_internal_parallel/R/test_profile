@@ -42,7 +42,7 @@ properties("replication_num" = "1");
 insert into uniq_t select * from dup_t;
 -- result:
 -- !result
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
 -- result:
 -31585402830
 -- !result
@@ -73,71 +73,7 @@ RemainingRowsAfterShortKeyFilter	991
 SegmentZoneMapFilterRows	0
 ShortKeyFilterRows	9009
 -- !result
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
--- result:
--31585402830
--- !result
-with 
-    profile as (
-        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
-    ), result as (
-        -- format: "ShortKeyFilterRows: 9.009K (9009)" or "ShortKeyFilterRows: 100"
-        select "ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- ShortKeyFilterRows%"
-        UNION ALL
-        select "__MAX_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_ShortKeyFilterRows%"
-        UNION ALL
-        select "__MIN_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_ShortKeyFilterRows%"
-        UNION ALL
-        
-        select "SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- SegmentZoneMapFilterRows%"
-        UNION ALL
-        select "__MAX_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_SegmentZoneMapFilterRows%"
-        UNION ALL
-        select "__MIN_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_SegmentZoneMapFilterRows%"
-        UNION ALL
-
-        select "RemainingRowsAfterShortKeyFilter" as `key`, regexp_extract(line, ".*- RemainingRowsAfterShortKeyFilter: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RemainingRowsAfterShortKeyFilter%"
-    )
-select * from result order by `key`, value;
--- result:
-RemainingRowsAfterShortKeyFilter	991
-SegmentZoneMapFilterRows	0
-ShortKeyFilterRows	9009
-__MAX_OF_ShortKeyFilterRows	3021
-__MIN_OF_ShortKeyFilterRows	2986
--- !result
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
--- result:
--31585402830
--- !result
-with 
-    profile as (
-        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
-    ), result as (
-        -- format: "ShortKeyFilterRows: 9.009K (9009)" or "ShortKeyFilterRows: 100"
-        select "ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- ShortKeyFilterRows%"
-        UNION ALL
-        select "__MAX_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_ShortKeyFilterRows%"
-        UNION ALL
-        select "__MIN_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_ShortKeyFilterRows%"
-        UNION ALL
-        
-        select "SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- SegmentZoneMapFilterRows%"
-        UNION ALL
-        select "__MAX_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_SegmentZoneMapFilterRows%"
-        UNION ALL
-        select "__MIN_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_SegmentZoneMapFilterRows%"
-        UNION ALL
-
-        select "RemainingRowsAfterShortKeyFilter" as `key`, regexp_extract(line, ".*- RemainingRowsAfterShortKeyFilter: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RemainingRowsAfterShortKeyFilter%"
-    )
-select * from result order by `key`, value;
--- result:
-RemainingRowsAfterShortKeyFilter	991
-SegmentZoneMapFilterRows	0
-ShortKeyFilterRows	9009
--- !result
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
 -- result:
 -31585402830
 -- !result
@@ -170,7 +106,71 @@ ShortKeyFilterRows	9009
 __MAX_OF_ShortKeyFilterRows	3021
 __MIN_OF_ShortKeyFilterRows	2986
 -- !result
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
+-- result:
+-31585402830
+-- !result
+with 
+    profile as (
+        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+    ), result as (
+        -- format: "ShortKeyFilterRows: 9.009K (9009)" or "ShortKeyFilterRows: 100"
+        select "ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- ShortKeyFilterRows%"
+        UNION ALL
+        select "__MAX_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_ShortKeyFilterRows%"
+        UNION ALL
+        select "__MIN_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_ShortKeyFilterRows%"
+        UNION ALL
+        
+        select "SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- SegmentZoneMapFilterRows%"
+        UNION ALL
+        select "__MAX_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_SegmentZoneMapFilterRows%"
+        UNION ALL
+        select "__MIN_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_SegmentZoneMapFilterRows%"
+        UNION ALL
+
+        select "RemainingRowsAfterShortKeyFilter" as `key`, regexp_extract(line, ".*- RemainingRowsAfterShortKeyFilter: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RemainingRowsAfterShortKeyFilter%"
+    )
+select * from result order by `key`, value;
+-- result:
+RemainingRowsAfterShortKeyFilter	991
+SegmentZoneMapFilterRows	0
+ShortKeyFilterRows	9009
+-- !result
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
+-- result:
+-31585402830
+-- !result
+with 
+    profile as (
+        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+    ), result as (
+        -- format: "ShortKeyFilterRows: 9.009K (9009)" or "ShortKeyFilterRows: 100"
+        select "ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- ShortKeyFilterRows%"
+        UNION ALL
+        select "__MAX_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_ShortKeyFilterRows%"
+        UNION ALL
+        select "__MIN_OF_ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_ShortKeyFilterRows%"
+        UNION ALL
+        
+        select "SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- SegmentZoneMapFilterRows%"
+        UNION ALL
+        select "__MAX_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MAX_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MAX_OF_SegmentZoneMapFilterRows%"
+        UNION ALL
+        select "__MIN_OF_SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- __MIN_OF_SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- __MIN_OF_SegmentZoneMapFilterRows%"
+        UNION ALL
+
+        select "RemainingRowsAfterShortKeyFilter" as `key`, regexp_extract(line, ".*- RemainingRowsAfterShortKeyFilter: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RemainingRowsAfterShortKeyFilter%"
+    )
+select * from result order by `key`, value;
+-- result:
+RemainingRowsAfterShortKeyFilter	991
+SegmentZoneMapFilterRows	0
+ShortKeyFilterRows	9009
+__MAX_OF_ShortKeyFilterRows	3021
+__MIN_OF_ShortKeyFilterRows	2986
+-- !result
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
 -- result:
 None
 -- !result
@@ -201,7 +201,7 @@ RemainingRowsAfterShortKeyFilter	0
 SegmentZoneMapFilterRows	10000
 ShortKeyFilterRows	0
 -- !result
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
 -- result:
 None
 -- !result
@@ -234,7 +234,7 @@ ShortKeyFilterRows	0
 __MAX_OF_SegmentZoneMapFilterRows	3365
 __MIN_OF_SegmentZoneMapFilterRows	3302
 -- !result
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
 -- result:
 None
 -- !result
@@ -265,7 +265,7 @@ RemainingRowsAfterShortKeyFilter	0
 SegmentZoneMapFilterRows	10000
 ShortKeyFilterRows	0
 -- !result
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
 -- result:
 None
 -- !result

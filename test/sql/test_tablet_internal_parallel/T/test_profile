@@ -31,7 +31,7 @@ properties("replication_num" = "1");
 insert into uniq_t select * from dup_t;
 
 -- 1. ShortKeyFilterRows for physical split.
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
 
 -- There are no min and max for "ShortKeyFilterRows".
 with 
@@ -58,7 +58,7 @@ with
 select * from result order by `key`, value;
 
 
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 10 and 1000;
 
 with 
     profile as (
@@ -84,7 +84,7 @@ with
 select * from result order by `key`, value;
 
 -- 2. ShortKeyFilterRows for logical split.
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
 
 -- There are no min and max for "ShortKeyFilterRows".
 with 
@@ -110,7 +110,7 @@ with
     )
 select * from result order by `key`, value;
 
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 10 and 1000;
 
 with 
     profile as (
@@ -137,7 +137,7 @@ select * from result order by `key`, value;
 
 
 -- 3. SegmentZoneMapFilterRows for physical split.
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
 
 -- There are no min and max for "SegmentZoneMapFilterRows".
 with 
@@ -164,7 +164,7 @@ with
 select * from result order by `key`, value;
 
 
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from dup_t where k1 between 20000 and 20100;
 
 with 
     profile as (
@@ -190,7 +190,7 @@ with
 select * from result order by `key`, value;
 
 -- 4. SegmentZoneMapFilterRows for logical split.
-select /*+SET_VAR(tablet_internal_parallel_mode="force_split")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
+select /*+SET_VAR(tablet_internal_parallel_mode="force_split",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
 
 -- There are no min and max for "SegmentZoneMapFilterRows".
 with 
@@ -216,7 +216,7 @@ with
     )
 select * from result order by `key`, value;
 
-select /*+SET_VAR(enable_tablet_internal_parallel="false")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
+select /*+SET_VAR(enable_tablet_internal_parallel="false",enable_profile="true")*/ sum(murmur_hash3_32(k2)) + sum(murmur_hash3_32(k1)) from uniq_t where k1 between 20000 and 20100;
 
 with 
     profile as (
