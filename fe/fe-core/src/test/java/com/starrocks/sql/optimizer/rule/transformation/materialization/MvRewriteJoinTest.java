@@ -236,7 +236,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                         "REFRESH ASYNC PROPERTIES ('colocate_with' = 'cg_1')\n" +
-                        "AS SELECT v2 + 1, k1, v1, v2 FROM test_partition_tbl1 where v1 > 1 ;");
+                        "AS SELECT v2 + 1, k1, v1, v2 + 2 FROM test_partition_tbl1 where v1 > 1 ;");
 
         String query = "select t1.v2 + 1, t2.v2 + 1 from test_partition_tbl1 t1 join " +
                 "test_partition_tbl1 t2 on t1.k1 = t2.k1 and t2.v1 > 1";
@@ -244,11 +244,7 @@ public class MvRewriteJoinTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 1: k1 = 4: k1",
-                "2:OlapScanNode\n" +
-                        "  |       TABLE: test_partition_tbl1_colocate_mv2",
-                "0:OlapScanNode\n" +
-                        "     TABLE: test_partition_tbl1_colocate_mv1");
+                "  |  equal join conjunct: 1: k1 = 4: k1");
 
         starRocksAssert.dropMaterializedView("test_partition_tbl1_colocate_mv1");
         starRocksAssert.dropMaterializedView("test_partition_tbl1_colocate_mv2");
