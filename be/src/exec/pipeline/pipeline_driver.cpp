@@ -37,7 +37,7 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
     }
     for (auto& op : _operators) {
         auto& op_state = _operator_stages[op->get_id()];
-        if (op_state != OperatorStage::CLOSED) {
+        if (op_state > OperatorStage::PREPARED && op_state != OperatorStage::CLOSED) {
             auto msg = fmt::format("{} close operator {} failed, may leak resources when {}, please reflect to SR",
                                    to_readable_string(), op->get_name(), func_name);
             LOG(ERROR) << msg;
