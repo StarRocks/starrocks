@@ -35,6 +35,7 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
 
 import java.util.List;
 import java.util.Map;
@@ -328,6 +329,18 @@ public class Authorizer {
                                                 PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkResourceGroupAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name,
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkPipeAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName name)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAnyActionOnPipe(currentUser, roleIds, name);
     }
 
     public static void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
