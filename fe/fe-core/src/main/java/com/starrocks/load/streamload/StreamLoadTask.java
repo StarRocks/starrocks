@@ -1057,7 +1057,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         profile.addChild(summaryProfile);
         if (coord.getQueryProfile() != null) {
             if (!isSyncStreamLoad()) {
-                coord.endProfile();
+                coord.collectProfileSync();
                 profile.addChild(coord.buildMergedQueryProfile());
             } else {
                 profile.addChild(coord.getQueryProfile());
