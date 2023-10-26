@@ -52,6 +52,10 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("gcp.gcs.service_account_private_key_id");
         SENSITIVE_KEY.add("gcp.gcs.service_account_private_key");
         SENSITIVE_KEY.add("azure.blob.shared_key");
+        SENSITIVE_KEY.add("azure.blob.sas_token");
+        SENSITIVE_KEY.add("azure.adls1.oauth2_credential");
+        SENSITIVE_KEY.add("azure.adls2.shared_key");
+        SENSITIVE_KEY.add("azure.adls2.oauth2_client_secret");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
