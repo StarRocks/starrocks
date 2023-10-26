@@ -314,6 +314,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "global_runtime_filter_probe_min_selectivity";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
 
+    public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
+            "enable_pipeline_level_multi_partitioned_rf";
+
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
     public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
@@ -1003,6 +1006,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
+    private boolean enablePipelineLevelMultiPartitionedRf = false;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -1976,6 +1982,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return globalRuntimeFilterProbeMinSelectivity;
     }
 
+    public void setEnablePipelineLevelMultiPartitionedRf(boolean on) {
+        enablePipelineLevelMultiPartitionedRf = on;
+        if (on) {
+            enableRuntimeAdaptiveDop = false;
+        }
+    }
+
+    public boolean isEnablePipelineLevelMultiPartitionedRf() {
+        return enablePipelineLevelMultiPartitionedRf && enablePipelineEngine;
+    }
+
     public boolean isMVPlanner() {
         return enableMVPlanner;
     }
@@ -2008,6 +2025,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine && pipelineDop <= 0;
     }
 
+    public void setEnableRuntimeAdaptiveDop(boolean on) {
+        enableRuntimeAdaptiveDop = on;
+        if (on) {
+            enablePipelineLevelMultiPartitionedRf = false;
+        }
+    }
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
     }
