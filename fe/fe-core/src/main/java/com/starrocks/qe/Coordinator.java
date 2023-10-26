@@ -48,6 +48,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.AuditStatisticsUtil;
@@ -126,12 +127,14 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -139,6 +142,16 @@ import java.util.stream.Collectors;
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
     private static final int DEFAULT_PROFILE_TIMEOUT_SECOND = 2;
+
+    /**
+     * Set the queue size to a large value. The decision to execute the profile process task asynchronously
+     * occurs when a listener is added to {@link Coordinator#profileDoneSignal}. The function
+     * {@link Coordinator#addListener} will then determine if the size of the queued task exceeds
+     * {@link Config#profile_process_blocking_queue_size}.
+     */
+    private static final ThreadPoolExecutor EXECUTOR =
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.profile_process_threads_num,
+                    Integer.MAX_VALUE, "profile-worker", false);
 
     // Overall status of the entire query; set to the first reported fragment error
     // status or to CANCELLED, if Cancel() is called.
@@ -1715,7 +1728,7 @@ public class Coordinator {
         }
     }
 
-    public void endProfile() {
+    public void collectProfileSync() {
         if (backendExecStates.isEmpty()) {
             return;
         }
@@ -1747,6 +1760,44 @@ public class Coordinator {
         } finally {
             unlock();
         }
+    }
+
+    public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
+        if (backendExecStates.isEmpty()) {
+            return false;
+        }
+        if (!needReport) {
+            return false;
+        }
+        boolean enableAsyncProfile = true;
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
+            enableAsyncProfile = connectContext.getSessionVariable().isEnableAsyncProfile();
+        }
+        TUniqueId queryId = null;
+        if (connectContext != null) {
+            queryId = connectContext.getExecutionId();
+        }
+
+        if (!enableAsyncProfile || !addListener(task)) {
+            if (enableAsyncProfile) {
+                LOG.info("Profile task is full, execute in sync mode, query id = {}", DebugUtil.printId(queryId));
+            }
+            collectProfileSync();
+            task.accept(false);
+            return false;
+        }
+        return true;
+    }
+
+    public boolean addListener(Consumer<Boolean> task) {
+        if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
+            return false;
+        }
+        // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
+        profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+            task.accept(true);
+        }));
+        return true;
     }
 
     /*

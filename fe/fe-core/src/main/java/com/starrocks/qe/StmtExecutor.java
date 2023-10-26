@@ -574,10 +574,10 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-<<<<<<< HEAD
+                        boolean isAsync = false;
                         if (!needRetry) {
                             if (context.getSessionVariable().isEnableProfile()) {
-                                writeProfile(execPlan, beginTimeInNanoSecond);
+                                isAsync = tryProcessProfileAsync(execPlan);
                                 if (parsedStmt.isExplain() &&
                                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                     handleExplainStmt(ExplainAnalyzer.analyze(
@@ -587,15 +587,6 @@ public class StmtExecutor {
 
                             if (!isStatisticsJob) {
                                 WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
-=======
-                        boolean isAsync = false;
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
-                            isAsync = tryProcessProfileAsync(execPlan);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
->>>>>>> 68f7562472 ([Enhancement] Support asynchronous profile processes (#32917))
                             }
                         }
                         if (isAsync) {
