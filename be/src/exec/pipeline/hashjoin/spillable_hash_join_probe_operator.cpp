@@ -399,6 +399,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     size_t eofs = std::accumulate(_probe_read_eofs.begin(), _probe_read_eofs.end(), 0);
     if (_need_post_probe && _has_probe_remain) {
         if (_is_finishing) {
+            bool has_remain = false;
             for (size_t i = 0; i < _probers.size(); ++i) {
                 if (!_probe_post_eofs[i] && _probe_read_eofs[i]) {
                     bool has_remain = false;
@@ -409,8 +410,9 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
                         return res;
                     }
                 }
+                has_remain |= !_probe_post_eofs[i];
             }
-            _has_probe_remain = false;
+            _has_probe_remain = has_remain;
         }
     } else {
         _has_probe_remain = false;
