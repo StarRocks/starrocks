@@ -981,6 +981,8 @@ CONF_Bool(datacache_adaptor_enable, "false");
 // the more requests will be sent to the network.
 // Usually there is no need to modify it.
 CONF_Int64(datacache_skip_read_factor, "1");
+// Whether to use block buffer to hold the datacache block data.
+CONF_Bool(datacache_block_buffer_enable, "true");
 // DataCache engines, alternatives: cachelib, starcache.
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
