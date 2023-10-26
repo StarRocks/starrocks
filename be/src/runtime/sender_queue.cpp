@@ -87,6 +87,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         }
         std::stringstream ss;
         ss << "build chunk meta error";
+        ss << ", fragment_instance_id" << _recvr->fragment_instance_id();
         ss << ", node_id=" << _recvr->_dest_node_id;
         ss << ", missing pairs: ";
         for (const auto& kv : missing_pairs) {
