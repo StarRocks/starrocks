@@ -1368,10 +1368,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             continue;
                         }
 
+                        Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
                         Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(snapshotTable, partitionColumn);
+                                getPartitionKeyRange(snapshotTable, partitionColumn, partitionExpr);
                         Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(table, partitionColumn);
+                                getPartitionKeyRange(table, partitionColumn, partitionExpr);
                         return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
                     }
                 }

@@ -53,12 +53,7 @@ import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.RowType;
-<<<<<<< HEAD
-=======
-import org.apache.paimon.types.TimestampType;
-import org.apache.paimon.utils.SerializationUtils;
 import org.assertj.core.api.Assertions;
->>>>>>> 601559f82b ([Feature] Support paimon materialized view (#29476))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

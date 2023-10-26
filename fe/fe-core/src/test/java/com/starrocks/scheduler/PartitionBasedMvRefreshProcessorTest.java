@@ -64,11 +64,8 @@ import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-<<<<<<< HEAD
-import org.junit.Ignore;
-=======
 import org.junit.ClassRule;
->>>>>>> 601559f82b ([Feature] Support paimon materialized view (#29476))
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
