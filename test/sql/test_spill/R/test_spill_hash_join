@@ -161,3 +161,17 @@ select count(*), count(l.c0), avg(l.c0), count(l.c1) from t1 l full outer join [
 -- result:
 4097	4097	6144.0	4097
 -- !result
+create table t2 like t0;
+-- result:
+-- !result
+insert into t2 SELECT generate_series, 40960 - generate_series FROM TABLE(generate_series(1,  409600));
+-- result:
+-- !result
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 > 400000;
+-- result:
+9600
+-- !result
+select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 < 400000;
+-- result:
+404095
+-- !result
