@@ -539,10 +539,8 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
-    bool expected = false;
-    if (_is_cancelled.compare_exchange_strong(expected, true)) {
-        clean_buffer_queues();
-    }
+    _is_cancelled = true;
+    clean_buffer_queues();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::close() {
