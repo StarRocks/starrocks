@@ -320,6 +320,7 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
 
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
+    ExecNode* node = fragment_ctx->plan();
 
     auto report_task = [=]() {
         auto status = ExecStateReporter::report_exec_status(params, exec_env, fe_addr);
@@ -332,7 +333,8 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
                              << ", status: " << status.to_string();
             }
         } else {
-            LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id);
+            LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id)
+                      << " node=" << node->debug_string();
         }
     };
 
