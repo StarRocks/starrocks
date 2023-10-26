@@ -161,9 +161,10 @@ enum TSchemaTableType {
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
     SCH_PIPES,
+    SCH_FE_METRICS,
 
     // Used by epack
-    STARROCKS_POLICY_REFERENCES = 20000,
+    STARROCKS_POLICY_REFERENCES = 20000
 }
 
 enum THdfsCompression {
