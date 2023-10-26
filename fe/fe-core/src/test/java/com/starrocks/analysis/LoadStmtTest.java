@@ -118,5 +118,11 @@ public class LoadStmtTest {
                 "INTO TABLE t0 (`v1`, `v2`, `v3`)) WITH BROKER hdfs_broker " +
                 "(\"password\"  =  \"***\", \"username\"  =  \"sr\") PROPERTIES (\"strict_mode\" = \"true\")",
                 AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"s3a://us-west-benchmark-data/tpch_100g/parquet/part/000004_0\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"aws.s3.use_instance_profile\" = \"false\",\"aws.s3.access_key\" = \"some_key\", \"aws.s3.secret_key\" = \"some_secret\", \"aws.s3.region\" = \"us-west-2\")" +
+                " PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('s3a://us-west-benchmark-data/tpch_100g/parquet/part/000004_0') INTO TABLE t0) WITH BROKER  " +
+                "(\"aws.s3.access_key\"  =  \"***\", \"aws.s3.secret_key\"  =  \"***\", \"aws.s3.use_instance_profile\"  =  \"false\", \"aws.s3.region\"  =  \"us-west-2\") PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
     }
 }
