@@ -18,8 +18,9 @@
         <slf4j.version>1.7.36</slf4j.version>
         <presto.hadoop.version>2.7.4-11</presto.hadoop.version>
         <presto.hive.version>3.0.0-8</presto.hive.version>
+        <hive-apache.version>3.1.2-13</hive-apache.version>
         <hadoop.version>3.3.6</hadoop.version>
-        <hudi.version>0.14.0</hudi.version>
+        <hudi.version>0.12.2</hudi.version>
         <fasterxml.version>2.13.4</fasterxml.version>
         <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
         <esotericsoftware.kryo.shaded.version>4.0.2</esotericsoftware.kryo.shaded.version>
@@ -37,57 +38,51 @@
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-presto-bundle</artifactId>
             <version>${hudi.version}</version>
-<!--            <exclusions>-->
-<!--                <exclusion>-->
-<!--                    <groupId>com.google.protobuf</groupId>-->
-<!--                    <artifactId>protobuf-java</artifactId>-->
-<!--                </exclusion>-->
-<!--                <exclusion>-->
-<!--                    <groupId>commons-lang</groupId>-->
-<!--                    <artifactId>commons-lang</artifactId>-->
-<!--                </exclusion>-->
-<!--                <exclusion>-->
-<!--                    <groupId>org.apache.hudi</groupId>-->
-<!--                    <artifactId>hudi-common</artifactId>-->
-<!--                </exclusion>-->
-<!--                <exclusion>-->
-<!--                    <groupId>org.apache.hudi</groupId>-->
-<!--                    <artifactId>hudi-hadoop-mr-bundle</artifactId>-->
-<!--                </exclusion>-->
-<!--                <exclusion>-->
-<!--                    <groupId>org.apache.parquet</groupId>-->
-<!--                    <artifactId>parquet-avro</artifactId>-->
-<!--                </exclusion>-->
-<!--                <exclusion>-->
-<!--                    <groupId>org.apache.avro</groupId>-->
-<!--                    <artifactId>avro</artifactId>-->
-<!--                </exclusion>-->
-<!--            </exclusions>-->
+            <!--            <exclusions>-->
+            <!--                <exclusion>-->
+            <!--                    <groupId>com.google.protobuf</groupId>-->
+            <!--                    <artifactId>protobuf-java</artifactId>-->
+            <!--                </exclusion>-->
+            <!--                <exclusion>-->
+            <!--                    <groupId>commons-lang</groupId>-->
+            <!--                    <artifactId>commons-lang</artifactId>-->
+            <!--                </exclusion>-->
+            <!--                <exclusion>-->
+            <!--                    <groupId>org.apache.hudi</groupId>-->
+            <!--                    <artifactId>hudi-common</artifactId>-->
+            <!--                </exclusion>-->
+            <!--                <exclusion>-->
+            <!--                    <groupId>org.apache.hudi</groupId>-->
+            <!--                    <artifactId>hudi-hadoop-mr-bundle</artifactId>-->
+            <!--                </exclusion>-->
+            <!--                <exclusion>-->
+            <!--                    <groupId>org.apache.parquet</groupId>-->
+            <!--                    <artifactId>parquet-avro</artifactId>-->
+            <!--                </exclusion>-->
+            <!--                <exclusion>-->
+            <!--                    <groupId>org.apache.avro</groupId>-->
+            <!--                    <artifactId>avro</artifactId>-->
+            <!--                </exclusion>-->
+            <!--            </exclusions>-->
         </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>com.facebook.presto.hive</groupId>-->
-<!--            <artifactId>hive-apache</artifactId>-->
-<!--            <version>${presto.hive.version}</version>-->
-<!--            <exclusions>-->
-<!--                <exclusion>-->
-<!--                    <groupId>org.slf4j</groupId>-->
-<!--                    <artifactId>slf4j-log4j12</artifactId>-->
-<!--                </exclusion>-->
-<!--            </exclusions>-->
-<!--        </dependency>-->
+        <dependency>
+            <groupId>io.trino.hive</groupId>
+            <artifactId>hive-apache</artifactId>
+            <version>${hive-apache.version}</version>
+        </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>com.facebook.presto.hadoop</groupId>-->
-<!--            <artifactId>hadoop-apache2</artifactId>-->
-<!--            <version>${presto.hadoop.version}</version>-->
-<!--            <exclusions>-->
-<!--                <exclusion>-->
-<!--                    <groupId>org.slf4j</groupId>-->
-<!--                    <artifactId>slf4j-log4j12</artifactId>-->
-<!--                </exclusion>-->
-<!--            </exclusions>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>com.facebook.presto.hadoop</groupId>-->
+        <!--            <artifactId>hadoop-apache2</artifactId>-->
+        <!--            <version>${presto.hadoop.version}</version>-->
+        <!--            <exclusions>-->
+        <!--                <exclusion>-->
+        <!--                    <groupId>org.slf4j</groupId>-->
+        <!--                    <artifactId>slf4j-log4j12</artifactId>-->
+        <!--                </exclusion>-->
+        <!--            </exclusions>-->
+        <!--        </dependency>-->
 
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -101,11 +96,11 @@
             </exclusions>
         </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>commons-lang</groupId>-->
-<!--            <artifactId>commons-lang</artifactId>-->
-<!--            <version>2.6</version>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>commons-lang</groupId>-->
+        <!--            <artifactId>commons-lang</artifactId>-->
+        <!--            <version>2.6</version>-->
+        <!--        </dependency>-->
 
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -113,23 +108,23 @@
             <version>${slf4j.version}</version>
         </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>com.fasterxml.jackson.core</groupId>-->
-<!--            <artifactId>jackson-annotations</artifactId>-->
-<!--            <version>${fasterxml.version}</version>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>com.fasterxml.jackson.core</groupId>-->
+        <!--            <artifactId>jackson-annotations</artifactId>-->
+        <!--            <version>${fasterxml.version}</version>-->
+        <!--        </dependency>-->
 
-<!--        <dependency>-->
-<!--            <groupId>com.fasterxml.jackson.core</groupId>-->
-<!--            <artifactId>jackson-core</artifactId>-->
-<!--            <version>${fasterxml.version}</version>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>com.fasterxml.jackson.core</groupId>-->
+        <!--            <artifactId>jackson-core</artifactId>-->
+        <!--            <version>${fasterxml.version}</version>-->
+        <!--        </dependency>-->
 
-<!--        <dependency>-->
-<!--            <groupId>com.fasterxml.jackson.core</groupId>-->
-<!--            <artifactId>jackson-databind</artifactId>-->
-<!--            <version>${fasterxml.jackson.databind.version}</version>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>com.fasterxml.jackson.core</groupId>-->
+        <!--            <artifactId>jackson-databind</artifactId>-->
+        <!--            <version>${fasterxml.jackson.databind.version}</version>-->
+        <!--        </dependency>-->
 
         <dependency>
             <groupId>com.github.luben</groupId>
@@ -137,11 +132,11 @@
             <version>${luben.zstd.jni.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.esotericsoftware</groupId>
-            <artifactId>kryo-shaded</artifactId>
-            <version>${esotericsoftware.kryo.shaded.version}</version>
-        </dependency>
+        <!--        <dependency>-->
+        <!--            <groupId>com.esotericsoftware</groupId>-->
+        <!--            <artifactId>kryo-shaded</artifactId>-->
+        <!--            <version>${esotericsoftware.kryo.shaded.version}</version>-->
+        <!--        </dependency>-->
 
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
