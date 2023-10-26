@@ -93,7 +93,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
     {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
         SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-        has_filter = _filter_chunk_with_dict_filter(&active_chunk, &chunk_filter);
+        ASSIGN_OR_RETURN(has_filter, _filter_chunk_with_dict_filter(&active_chunk, &chunk_filter));
     }
 
     // row id filter
@@ -294,8 +294,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
             SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
             SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
             for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-                _column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id), filter,
-                                                             sub_field_path, 0);
+                RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
+                                                                             filter, sub_field_path, 0));
                 hit_count = SIMD::count_nonzero(*filter);
                 if (hit_count == 0) {
                     return hit_count;
@@ -674,7 +674,7 @@ void GroupReader::_init_chunk_dict_column(ChunkPtr* chunk) {
     }
 }
 
-bool GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter) {
+StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter) {
     if (_dict_column_indices.size() == 0) {
         return false;
     }
@@ -682,8 +682,8 @@ bool GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-            _column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id), filter,
-                                                         sub_field_path, 0);
+            RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
+                                                                         filter, sub_field_path, 0));
         }
     }
     return true;

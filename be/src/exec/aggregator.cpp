@@ -612,9 +612,9 @@ void Aggregator::close(RuntimeState* state) {
     };
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
-        promise_st->get_future().get();
+        (void)promise_st->get_future().get();
     } else {
-        agg_close();
+        (void)agg_close();
     }
 }
 

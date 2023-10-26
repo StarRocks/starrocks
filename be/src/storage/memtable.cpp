@@ -178,7 +178,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         is_column_with_row = true;
         // add row column
         auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
-        row_encoder->encode_chunk_to_full_row_column(*schema_without_full_row_column, chunk, full_row_col.get());
+        (void)row_encoder->encode_chunk_to_full_row_column(*schema_without_full_row_column, chunk, full_row_col.get());
     } else {
         DCHECK_EQ(chunk.num_columns(), _vectorized_schema->num_fields());
     }

@@ -156,7 +156,7 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         if (_writer != nullptr) {
             _sender->update_num_written_rows(_writer->get_written_rows());
         }
-        _sender->close(final_status);
+        (void)_sender->close(final_status);
     }
     auto st = state->exec_env()->result_mgr()->cancel_at_time(
             time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());

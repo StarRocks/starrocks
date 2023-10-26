@@ -152,13 +152,12 @@ Status PartitionedSpillerWriter::acquire_stream(const SpillPartitionInfo* partit
     return Status::OK();
 }
 
-Status PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPartitionInfo*>* res) {
+void PartitionedSpillerWriter::get_spill_partitions(std::vector<const SpillPartitionInfo*>* res) {
     for (const auto& [level, partitions] : _level_to_partitions) {
         for (const auto& partition : partitions) {
             res->push_back(partition.get());
         }
     }
-    return Status::OK();
 }
 
 void PartitionedSpillerWriter::reset_partition(const std::vector<const SpillPartitionInfo*>& partitions) {
@@ -528,8 +527,8 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
     AccumulateWriter right_accumulate_writer(spill_right_partition, _runtime_state->chunk_size());
 
     auto defer = DeferOp([&]() {
-        left_accumulate_writer.flush();
-        right_accumulate_writer.flush();
+        WARN_IF_ERROR(left_accumulate_writer.flush(), "AccumulateWriter flush error");
+        WARN_IF_ERROR(right_accumulate_writer.flush(), "AccumulateWriter flush error");
     });
 
     TRY_CATCH_ALLOC_SCOPE_START()
@@ -580,13 +579,13 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
         if (left_channel_size > 0) {
             ChunkPtr left_chunk = chunk->clone_empty();
             left_chunk->append_selective(*chunk, selection.data(), 0, left_channel_size);
-            left_accumulate_writer.write(left_chunk);
+            RETURN_IF_ERROR(left_accumulate_writer.write(left_chunk));
         }
         if (hash_data.size() != left_channel_size) {
             ChunkPtr right_chunk = chunk->clone_empty();
             right_chunk->append_selective(*chunk, selection.data(), left_channel_size,
                                           hash_data.size() - left_channel_size);
-            right_accumulate_writer.write(right_chunk);
+            RETURN_IF_ERROR(right_accumulate_writer.write(right_chunk));
         }
     }
     TRY_CATCH_ALLOC_SCOPE_END()

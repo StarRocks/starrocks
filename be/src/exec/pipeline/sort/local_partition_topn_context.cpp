@@ -88,7 +88,7 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     _partition_num = _chunks_partitioner->num_partitions();
     RETURN_IF_ERROR(
             _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
-                _chunks_sorters[partition_idx]->update(state, chunk);
+                (void)_chunks_sorters[partition_idx]->update(state, chunk);
                 return true;
             }));
 

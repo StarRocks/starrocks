@@ -422,7 +422,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
 
     if (tablet->is_column_with_row_store()) {
-        _prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids);
+        RETURN_IF_ERROR(_prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids));
     }
     int64_t t_end = MonotonicMillis();
     _partial_update_states[idx].update_byte_size();
@@ -683,7 +683,7 @@ static void append_full_row_column(const Schema& tschema, const std::vector<uint
     }
     auto full_row_column = std::make_unique<BinaryColumn>();
     auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
-    row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column);
+    (void)row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column);
     state.write_columns.emplace_back(std::move(full_row_column));
 }
 

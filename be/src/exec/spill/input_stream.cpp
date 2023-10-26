@@ -65,7 +65,10 @@ Status UnionAllSpilledInputStream::prefetch(SerdeContext& ctx) {
     size_t num_eos = 0;
     for (auto& _stream : _streams) {
         if (!_stream->eof()) {
-            _stream->prefetch(ctx);
+            auto status = _stream->prefetch(ctx);
+            if (!status.ok() && !status.is_end_of_file()) {
+                return status;
+            }
         }
         num_eos += _stream->eof();
     }

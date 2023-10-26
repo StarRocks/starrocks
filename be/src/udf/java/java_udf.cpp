@@ -444,7 +444,7 @@ DirectByteBuffer::~DirectByteBuffer() {
             _handle = nullptr;
             return Status::OK();
         });
-        ret->get_future().get();
+        (void)ret->get_future().get();
     }
 }
 
@@ -459,7 +459,7 @@ void JavaGlobalRef::clear() {
             _handle = nullptr;
             return Status::OK();
         });
-        ret->get_future().get();
+        (void)ret->get_future().get();
     }
 }
 

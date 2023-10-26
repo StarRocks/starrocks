@@ -88,7 +88,7 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
 Status MergeTwoCursor::consume_all(const ChunkConsumer& output) {
     for (auto chunk = next(); chunk.ok() && !is_eos(); chunk = next()) {
         if (chunk.value()) {
-            output(std::move(chunk.value()));
+            RETURN_IF_ERROR(output(std::move(chunk.value())));
         }
     }
 
@@ -267,7 +267,7 @@ Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
     while (!is_eos()) {
         ChunkUniquePtr chunk = try_get_next();
         if (!!chunk) {
-            consumer(std::move(chunk));
+            RETURN_IF_ERROR(consumer(std::move(chunk)));
         }
     }
     return Status::OK();

@@ -256,7 +256,7 @@ Status HashJoinNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_build_conjunct_evaluate_timer);
-            _evaluate_build_keys(chunk);
+            RETURN_IF_ERROR(_evaluate_build_keys(chunk));
         }
 
         {

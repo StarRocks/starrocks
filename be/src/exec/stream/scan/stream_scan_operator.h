@@ -62,7 +62,7 @@ public:
     [[nodiscard]] Status set_epoch_finished(RuntimeState* state) override;
 
     [[nodiscard]] Status do_prepare(RuntimeState* state) override {
-        ConnectorScanOperator::do_prepare(state);
+        RETURN_IF_ERROR(ConnectorScanOperator::do_prepare(state));
         _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
         DCHECK(_stream_epoch_manager);
         return Status::OK();

@@ -311,7 +311,7 @@ Status BufferControlBlock::close(Status exec_status) {
     return Status::OK();
 }
 
-Status BufferControlBlock::cancel() {
+void BufferControlBlock::cancel() {
     std::unique_lock<std::mutex> l(_lock);
     _is_cancelled = true;
     _data_removal.notify_all();
@@ -320,7 +320,6 @@ Status BufferControlBlock::cancel() {
         ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::cancel"));
     }
     _waiting_rpc.clear();
-    return Status::OK();
 }
 
 } // namespace starrocks

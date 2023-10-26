@@ -263,8 +263,8 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
             } else {
                 int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                 if (r > 0) {
-                    index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                 idx_begin + upsert_idx_step, new_deletes);
+                    RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                 idx_begin + upsert_idx_step, new_deletes));
 
                     idx_begin = j + 1;
                     upsert_idx_step = 0;

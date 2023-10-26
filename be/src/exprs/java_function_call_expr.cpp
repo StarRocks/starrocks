@@ -108,7 +108,7 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
     };
-    call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+    (void)call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
     return res;
 }
 
@@ -120,7 +120,7 @@ JavaFunctionCallExpr::~JavaFunctionCallExpr() {
         this->_call_helper.reset();
         return Status::OK();
     });
-    promise->get_future().get();
+    (void)promise->get_future().get();
 }
 
 // TODO support prepare UDF
@@ -255,7 +255,7 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
         }
         return Status::OK();
     };
-    call_function_in_pthread(state, function_close)->get_future().get();
+    (void)call_function_in_pthread(state, function_close)->get_future().get();
     Expr::close(state, context, scope);
 }
 
