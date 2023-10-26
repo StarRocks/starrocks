@@ -100,9 +100,9 @@ public class ScanTest extends PlanTestBase {
 
         sql = "select 0 from baseall inner join t0 on v1 = k1 group by (v2 + k2),k1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall");
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join");
     }
 
     @Test

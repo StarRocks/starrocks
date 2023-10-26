@@ -8,16 +8,16 @@
   },
   "table_row_count": {
     "db_mock_000.tbl_mock_007": {
-      "t2": 2
+      "t2": 200000
     },
     "db_mock_000.tbl_mock_013": {
-      "mv1": 2
+      "mv1": 20000
     },
     "db_mock_000.tbl_mock_010": {
-      "t3": 2
+      "t3": 200000
     },
     "db_mock_000.tbl_mock_001": {
-      "t1": 3
+      "t1": 300000
     }
   },
   "column_statistics": {
