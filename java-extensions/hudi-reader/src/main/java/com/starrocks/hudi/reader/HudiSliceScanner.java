@@ -91,10 +91,12 @@ public class HudiSliceScanner extends ConnectorScanner {
         if (params.get("delta_file_paths").length() == 0) {
             this.deltaFilePaths = new String[0];
         } else {
-            this.deltaFilePaths = params.get("delta_file_paths").split(",");
+            this.deltaFilePaths =
+                    (String[]) Arrays.stream(params.get("delta_file_paths").split(",")).map(x -> x.replaceAll("oss://", "s3://"))
+                            .toArray();
         }
-        this.basePath = params.get("base_path");
-        this.dataFilePath = params.get("data_file_path");
+        this.basePath = params.get("base_path").replaceAll("oss://", "s3://");
+        this.dataFilePath = params.get("data_file_path").replaceAll("oss://", "s3://");
         this.dataFileLength = Long.parseLong(params.get("data_file_length"));
         this.serde = params.get("serde");
         this.inputFormat = params.get("input_format");
