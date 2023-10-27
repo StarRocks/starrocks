@@ -118,7 +118,10 @@ public class OdpsMetadata implements ConnectorMetadata {
                             .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
                             .buildBatchReadSession();
             InputSplitAssigner assigner = scan.getInputSplitAssigner();
-            long totalRowCount = Math.min(assigner.getTotalRowCount(), limit);
+            long totalRowCount = assigner.getTotalRowCount();
+            if (limit != -1) {
+                totalRowCount = Math.min(assigner.getTotalRowCount(), limit);
+            }
             int numRecord = 0;
             for (int i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
                 InputSplitWithRowRange splitByRowOffset =

@@ -34,6 +34,7 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -116,6 +117,9 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof OdpsScanNode) {
+                OdpsScanNode node = (OdpsScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
             } else {
                 Preconditions.checkState(false);
             }
@@ -251,7 +255,8 @@ public class HDFSBackendSelector implements BackendSelector {
                     }
                     backends.addAll(servers);
                 }
-                ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
+                ComputeNode node =
+                        reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
                 if (node == null) {
                     remoteScanRangeLocations.add(scanRangeLocations);
                 } else {
