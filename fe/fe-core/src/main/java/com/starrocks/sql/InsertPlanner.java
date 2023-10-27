@@ -26,9 +26,11 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -402,6 +404,28 @@ public class InsertPlanner {
                 Preconditions.checkState(optOriginColumn.isPresent());
                 Column originColumn = optOriginColumn.get();
                 ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+                if (targetColumn.getDefineExpr() == null) {
+                    Table targetTable = insertStatement.getTargetTable();
+                    // Only olap table can have the synchronized materialized view.
+                    OlapTable targetOlapTable = (OlapTable) targetTable;
+                    MaterializedIndexMeta targetIndexMeta = null;
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
+                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                            continue;
+                        }
+                        for (Column column : indexMeta.getSchema()) {
+                            if (column.getName().equals(targetColumn.getName())) {
+                                targetIndexMeta = indexMeta;
+                                break;
+                            }
+                        }
+                    }
+                    String targetIndexMetaName = targetIndexMeta == null ? "" :
+                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                    throw new SemanticException("The define expr of shadow column " + targetColumn.getName() + " is null, " +
+                            "please check the associated materialized view " + targetIndexMetaName
+                            + " of target table:" + insertStatement.getTargetTable().getName());
+                }
 
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),
