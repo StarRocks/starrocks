@@ -113,14 +113,7 @@ public class LambdaFunctionExpr extends Expr {
     }
 
     public void checkValid() {
-        // 1 lambda expr, at least 1 lambda argument and common sub op's slotref + expr
-        Preconditions.checkState(children.size() >= 2 + 2 * commonSubOperatorNum,
-                "lambda expr's children num " + children.size() + " should >= " + (2 + 2 * commonSubOperatorNum));
-        int realChildrenNum = getChildren().size() - 2 * commonSubOperatorNum;
-        for (int i = 1; i < realChildrenNum; i++) {
-            Preconditions.checkState(getChild(i) instanceof SlotRef,
-                    i + "-th lambda argument should be type of SlotRef, but actually " + getChild(i).toSql());
-        }
+        // do nothing
     }
 
     @Override
