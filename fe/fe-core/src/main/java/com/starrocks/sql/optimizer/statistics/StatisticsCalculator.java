@@ -26,7 +26,6 @@ import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
