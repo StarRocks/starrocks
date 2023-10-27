@@ -18,13 +18,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,11 +80,6 @@ public class LocalWarehouse extends Warehouse {
     }
 
     @Override
-    public void setClusters(Map<Long, Cluster> clusters) throws DdlException {
-        throw new SemanticException("not implemented");
-    }
-
-    @Override
     public Cluster getAnyAvailableCluster() {
         return cluster;
     }
@@ -112,17 +107,21 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void suspendSelf() {
-        this.state.set(WarehouseState.SUSPENDED);
-        long currentTime = System.currentTimeMillis();
-        setResumedTime(currentTime);
-        setUpdatedTime(currentTime);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            this.state = WarehouseState.SUSPENDED;
+            long currentTime = System.currentTimeMillis();
+            setResumedTime(currentTime);
+            setUpdatedTime(currentTime);
+        }
     }
 
     @Override
     public void resumeSelf() {
-        this.state.set(WarehouseState.AVAILABLE);
-        long currentTime = System.currentTimeMillis();
-        setUpdatedTime(currentTime);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            this.state = WarehouseState.AVAILABLE;
+            long currentTime = System.currentTimeMillis();
+            setUpdatedTime(currentTime);
+        }
     }
 
     private void deleteWorkerFromStarMgr() throws DdlException {

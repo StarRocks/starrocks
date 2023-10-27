@@ -15,6 +15,7 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
+import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -27,7 +28,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public abstract class Warehouse implements Writable {
 
@@ -42,7 +44,7 @@ public abstract class Warehouse implements Writable {
     }
 
     @SerializedName(value = "state")
-    protected AtomicReference<WarehouseState> state = new AtomicReference<>(WarehouseState.AVAILABLE);
+    protected WarehouseState state = WarehouseState.AVAILABLE;
 
     @SerializedName(value = "comment")
     private String comment;
@@ -55,6 +57,8 @@ public abstract class Warehouse implements Writable {
 
     @SerializedName(value = "mtime")
     private volatile long updatedTime;
+
+    protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public Warehouse(long id, String name, String comment) {
         this.id = id;
@@ -80,15 +84,19 @@ public abstract class Warehouse implements Writable {
     }
 
     public void setState(WarehouseState state) {
-        this.state.set(state);
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            this.state = state;
+        }
     }
 
     public WarehouseState getState() {
-        return state.get();
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return state;
+        }
     }
 
     public boolean isAvailable() {
-        return this.state.get() == WarehouseState.AVAILABLE;
+        return getState() == WarehouseState.AVAILABLE;
     }
 
     public abstract void getProcNodeData(BaseProcResult result);
@@ -96,8 +104,6 @@ public abstract class Warehouse implements Writable {
     public abstract Map<Long, Cluster> getClusters() throws DdlException;
 
     public abstract Cluster getAnyAvailableCluster();
-
-    public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
 
     public List<List<String>> getClusterInfo() {
         return getClusterProcData().getRows();
