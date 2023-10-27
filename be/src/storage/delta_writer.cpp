@@ -230,7 +230,7 @@ Status DeltaWriter::_init() {
         // tablet schema
         if (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
             _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-            std::vector<ColumnId> sort_key_idxes(_tablet->tablet_schema()->num_key_columns());
+            std::vector<ColumnId> sort_key_idxes(_tablet->tablet_schema().num_key_columns());
             std::iota(sort_key_idxes.begin(), sort_key_idxes.end(), 0);
             partial_update_schema->set_num_short_key_columns(1);
             partial_update_schema->set_sort_key_idxes(sort_key_idxes);
