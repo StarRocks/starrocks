@@ -525,8 +525,8 @@ size_t HashJoiner::runtime_in_filter_max_hash_table_cardinality() const {
 Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
 
-    const int max_build_rows = runtime_in_filter_max_build_rows();
-    const int max_ht_cardinality = runtime_in_filter_max_hash_table_cardinality();
+    const size_t max_build_rows = runtime_in_filter_max_build_rows();
+    const size_t max_ht_cardinality = runtime_in_filter_max_hash_table_cardinality();
 
     const size_t ht_row_count = get_ht_row_count();
     auto& ht = _hash_join_builder->hash_table();
