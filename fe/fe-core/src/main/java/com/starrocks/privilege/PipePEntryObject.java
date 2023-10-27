@@ -14,16 +14,23 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Pair;
 import com.starrocks.load.pipe.Pipe;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaNotFoundException;
+import org.apache.commons.collections4.ListUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class PipePEntryObject implements PEntryObject {
 
@@ -109,6 +116,40 @@ public class PipePEntryObject implements PEntryObject {
             return false;
         }
         return globalStateMgr.getPipeManager().mayGetPipe(getId()).isPresent();
+    }
+
+    public List<List<String>> expandObjectNames() {
+        List<List<String>> objects = new ArrayList<>();
+
+        String dbUUID = getDbUUID();
+        long pipeId = getId();
+        PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+        if (dbUUID.equals(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
+            List<Pair<Long, String>> dbAndNames = pipeManager.getAllPipes().stream()
+                    .map(Pipe::getDbAndName)
+                    .collect(Collectors.toList());
+            for (Pair<Long, String> dbAndName : ListUtils.emptyIfNull(dbAndNames)) {
+                Optional<Database> db = GlobalStateMgr.getCurrentState().mayGetDb(dbAndName.first);
+                db.ifPresent(database -> objects.add(
+                        Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                database.getFullName(), dbAndName.second)));
+            }
+        } else {
+            Optional<Database> db = getDatabase();
+            if (db.isPresent()) {
+                List<Pipe> pipes = new ArrayList<>();
+                if (pipeId == PrivilegeBuiltinConstants.ALL_PIPES_ID) {
+                    pipes.addAll(pipeManager.getAllPipesOfDb(db.get().getId()));
+                } else {
+                    pipeManager.mayGetPipe(pipeId).ifPresent(pipes::add);
+                }
+                for (Pipe p : pipes) {
+                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.get().getFullName(), p.getName()));
+                }
+            }
+        }
+        return objects;
     }
 
     @Override
