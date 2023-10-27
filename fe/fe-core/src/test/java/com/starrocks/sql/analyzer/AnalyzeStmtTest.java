@@ -122,6 +122,14 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testAnalyzeHiveTable()  {
+        String sql = "analyze table hive0.tpch.customer";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+
+        Assert.assertTrue(analyzeStmt.isExternal());
+    }
+
+    @Test
     public void testProperties() {
         String sql = "analyze full table db.tbl properties('expire_sec' = '30')";
         analyzeFail(sql, "Property 'expire_sec' is not valid");
