@@ -79,6 +79,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
      */
     private final boolean usedComputeNode;
 
+    private final boolean preferComputeNode;
+
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
@@ -106,9 +108,6 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
 
-            // Backends and compute nodes are identical in the SHARED_DATA mode.
-            preferComputeNode = preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA;
-
             return new DefaultWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
                     preferComputeNode);
@@ -130,7 +129,9 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
 
         this.hasComputeNode = MapUtils.isNotEmpty(availableID2ComputeNode);
-        this.usedComputeNode = hasComputeNode && preferComputeNode;
+        // Backends and compute nodes are identical in the SHARED_DATA mode.
+        this.usedComputeNode = hasComputeNode && (preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA);
+        this.preferComputeNode = preferComputeNode;
     }
 
     @Override
@@ -214,6 +215,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
     @Override
     public List<Long> getSelectedWorkerIds() {
         return new ArrayList<>(selectedWorkerIds);
+    }
+
+    @Override
+    public boolean isPreferComputeNode() {
+        return preferComputeNode;
     }
 
     @Override
