@@ -2828,4 +2828,53 @@ TEST_F(TabletUpdatesTest, multiple_delete_and_upsert) {
     ASSERT_TRUE(count == keys.size());
 }
 
+TEST_F(TabletUpdatesTest, test_partial_update_with_lsc) {
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    int N = 100;
+    for (int i = 0 ; i < N; i++) {
+        keys.push_back(i);
+    }
+    {
+        auto rs0 = create_rowset(_tablet, keys);
+        int32_t version = 2;
+        auto st = _tablet->rowset_commit(version, rs0);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+
+    {
+        int32_t version = 3;
+        _tablet->updates()->stop_apply(true);
+        std::vector<int32_t> column_indexes = {0, 1};
+        std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
+        StorageEngine::instance()->update_manager()->on_rowset_finished(_tablet.get(), partial_rowset.get());
+        auto st = _tablet->rowset_commit(version, partial_rowset);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        TabletSchemaSPtr new_tablet_schema = std::make_shared<TabletSchema>();
+        new_tablet_schema->copy_from(_tablet->tablet_schema());
+        auto cur_schema_version = new_tablet_schema->schema_version();
+        TabletColumn add_col;
+        add_col.set_unique_id(3);
+        add_col.set_name("v3");
+        add_col.set_type(LogicalType::TYPE_INT);
+        add_col.set_default_value("0");
+        add_col.set_length(4);
+        add_col.set_is_nullable(true);
+        new_tablet_schema->append_column(add_col);
+        new_tablet_schema->set_schema_version(cur_schema_version + 1);
+        _tablet->update_max_version_schema(new_tablet_schema);
+
+        _tablet->updates()->stop_apply(false);
+        _tablet->updates()->check_for_apply();
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        ASSERT_EQ(N, read_tablet(_tablet, version));
+    }
+}
+
 } // namespace starrocks
