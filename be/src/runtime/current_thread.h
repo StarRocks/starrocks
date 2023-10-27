@@ -2,12 +2,6 @@
 
 #pragma once
 
-<<<<<<< HEAD
-=======
-#include <bthread/bthread.h>
-
-#include <cstdint>
->>>>>>> 430f58225c ([BugFix] Make sure all bthread only has process level memtracker (#32580))
 #include <string>
 
 #include "fmt/format.h"
@@ -33,23 +27,6 @@
             RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg));          \
         }                                                                                     \
     } while (0)
-
-// Multiple bthread may share a single pthread, and thereby share a single thread local variable(i.e. tls_thread_status).
-// Using bthread::Mutex will trigger bthread context switch, but still holding the same thread local variable, and
-// different brpc process may come from different instances of a same query or evern different queries. And holding
-// the MemTracker of another instance may lead to be crash because the MemTracker has been released.
-#define RETURN_NULL_IF_BTHREAD() \
-    do {                         \
-        if (bthread_self()) {    \
-            return nullptr;      \
-        }                        \
-    } while (false)
-#define RETURN_IF_BTHREAD()   \
-    do {                      \
-        if (bthread_self()) { \
-            return;           \
-        }                     \
-    } while (false)
 
 namespace starrocks {
 
@@ -84,30 +61,12 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-<<<<<<< HEAD
         commit();
-=======
-        RETURN_NULL_IF_BTHREAD();
-        release_reserved();
-        mem_tracker_ctx_shift();
->>>>>>> 430f58225c ([BugFix] Make sure all bthread only has process level memtracker (#32580))
         auto* prev = tls_mem_tracker;
         tls_mem_tracker = mem_tracker;
         return prev;
     }
 
-<<<<<<< HEAD
-=======
-    // Return prev memory tracker.
-    starrocks::MemTracker* set_operator_mem_tracker(starrocks::MemTracker* operator_mem_tracker) {
-        RETURN_NULL_IF_BTHREAD();
-        operator_mem_tracker_ctx_shift();
-        auto* prev = tls_operator_mem_tracker;
-        tls_operator_mem_tracker = operator_mem_tracker;
-        return prev;
-    }
-
->>>>>>> 430f58225c ([BugFix] Make sure all bthread only has process level memtracker (#32580))
     bool set_check_mem_limit(bool check) {
         bool prev_check = _check;
         _check = check;
@@ -120,10 +79,7 @@ public:
 
     static CurrentThread& current();
 
-    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        RETURN_IF_BTHREAD();
-        tls_exceed_mem_tracker = mem_tracker;
-    }
+    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
 
     bool set_is_catched(bool is_catched) {
         bool old = _is_catched;
