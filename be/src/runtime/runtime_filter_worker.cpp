@@ -47,7 +47,7 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
     }
 }
 
-static void send_rpc_runtime_filter(TNetworkAddress dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
+static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
     doris::PBackendService_Stub* stub = nullptr;
     bool via_http = request.data().size() >= http_min_size;
