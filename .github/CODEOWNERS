@@ -4,6 +4,19 @@
 # /docs/ belong to docs-maintainer
 /docs/  @StarRocks/docs-maintainer
 
+# parser
+/fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
+/fe/fe-core/src/main/java/com/starrocks/sql/ast/ @StarRocks/parser
+/fe/fe-core/src/main/java/com/starrocks/sql/parser/ @StarRocks/parser
+
+# analyzer
+/fe/fe-core/src/main/java/com/starrocks/sql/analyzer/ @StarRocks/analyzer
+/fe/fe-core/src/main/java/com/starrocks/analysis/ @StarRocks/analyzer
+
+# optimizer
+/fe/fe-core/src/main/java/com/starrocks/sql/optimizer/ @StarRocks/optimizer
+/fe/fe-core/src/main/java/com/starrocks/statistic/ @StarRocks/optimizer
+
 # sql/parser/StarRocksLex.g4 sql/parser/StarRocks.g4 belong to syntax-committer
 /fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocksLex.g4  @StarRocks/syntax-committer
 /fe/fe-core/src/main/java/com/starrocks/sql/parser/StarRocks.g4  @StarRocks/syntax-committer
