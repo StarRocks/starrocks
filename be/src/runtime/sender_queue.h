@@ -17,7 +17,6 @@
 #include <condition_variable>
 #include <utility>
 
-#include "bthread/mutex.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
@@ -227,7 +226,7 @@ private:
     std::atomic<bool> _is_cancelled{false};
     std::atomic<int> _num_remaining_senders;
 
-    typedef bthread::Mutex Mutex;
+    typedef SpinLock Mutex;
     Mutex _lock;
 
     // if _is_pipeline_level_shuffle=true, we will create a queue for each driver sequence to avoid competition
