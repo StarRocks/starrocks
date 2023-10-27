@@ -1081,4 +1081,7 @@ CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 
+// 20min
+CONF_mInt64(query_ctx_dump_interval_ns, "1200000000000");
+
 } // namespace starrocks::config
