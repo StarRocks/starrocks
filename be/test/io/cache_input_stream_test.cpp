@@ -227,6 +227,7 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
             new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
     cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
     auto& stats = cache_stream.stats();
 
     // read from backend, cache the data
@@ -245,6 +246,27 @@ TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
     read_stream_data(&cache_stream, 1024, 1024, buffer);
     ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
     ASSERT_EQ(stats.read_block_buffer_count, 1);
+}
+
+TEST_F(CacheInputStreamTest, test_read_zero_copy) {
+    int64_t data_size = block_size + 1024;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file3";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(false);
+
+    // read from backend, cache the data
+    size_t count = data_size - 10;
+    char buffer[count];
+    read_stream_data(&cache_stream, 10, count, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size - 10, 'a'));
+    ASSERT_TRUE(check_data_content(buffer + block_size - 10, 1024, 'b'));
 }
 
 } // namespace starrocks::io
