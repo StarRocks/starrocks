@@ -67,12 +67,7 @@ SinkBuffer::~SinkBuffer() {
 
     DCHECK(is_finished());
 
-    {
-        // Since the deallocation of _buffers may happen inside bthread, make sure all the allocations and
-        // deallocations are executed using the process level MemTracker
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-        _buffers.clear();
-    }
+    _buffers.clear();
 }
 
 void SinkBuffer::incr_sinker(RuntimeState* state) {
@@ -94,12 +89,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     }
     {
         auto& instance_id = request.fragment_instance_id;
-        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() {
-            // Since the deallocation of _buffers may happen inside bthread, make sure all the allocations and
-            // deallocations are executed using the process level MemTracker
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            _buffers[instance_id.lo].push(request);
-        }));
+        RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
 
     return Status::OK();
@@ -296,17 +286,16 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         TransmitChunkInfo& request = buffer.front();
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer]() {
+        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
             if (need_wait) {
                 return;
             }
 
-            {
-                // Since the deallocation of _buffers may happen inside bthread, make sure all the allocations and
-                // deallocations are executed using the process level MemTracker
-                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-                buffer.pop();
-            }
+            // The request memory is acquired by ExchangeSinkOperator,
+            // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
+            // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            buffer.pop();
         });
 
         // The order of data transmiting in IO level may not be strictly the same as
@@ -422,7 +411,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         if (bthread_self()) {
             st = _send_rpc(closure, request);
         } else {
-            // Since the deallocation of protobuf request must be done in the bthread.
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
