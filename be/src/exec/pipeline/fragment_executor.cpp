@@ -121,6 +121,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
+    _query_ctx->set_dump_timestamp(config::query_ctx_dump_interval_ns);
 
     _query_ctx->set_delivery_expire_seconds(_calc_delivery_expired_seconds(request));
     _query_ctx->set_query_expire_seconds(_calc_query_expired_seconds(request));
