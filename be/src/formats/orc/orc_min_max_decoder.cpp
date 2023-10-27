@@ -18,7 +18,6 @@
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
-#include "column/struct_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/utils.h"
@@ -119,9 +118,17 @@ static Status decode_date_min_max(LogicalType ltype, const orc::proto::ColumnSta
 // It's quite odd that, timestamp statistics stores milliseconds since unix epoch time.
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
-static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
-                                      int64_t tz_offset_in_seconds, const ColumnPtr& min_col,
-                                      const ColumnPtr& max_col) {
+static Status decode_datetime_min_max(LogicalType ltype, const orc::Type* orc_type,
+                                      const orc::proto::ColumnStatistics& colStats, int64_t tz_offset_in_seconds,
+                                      const ColumnPtr& min_col, const ColumnPtr& max_col) {
+    bool is_instant = false;
+    if (orc_type->getKind() == orc::TypeKind::TIMESTAMP_INSTANT) {
+        is_instant = true;
+    } else if (orc_type->getKind() == orc::TypeKind::TIMESTAMP) {
+        is_instant = false;
+    } else {
+        DCHECK(false) << "shouldn't happen";
+    }
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
@@ -135,7 +142,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
+            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
         }
 
         {
@@ -146,7 +153,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
+            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
         }
 
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATETIME);
@@ -154,8 +161,8 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
     return Status::NotFound("date column stats not found");
 }
 
-Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats, ColumnPtr min_col,
-                                ColumnPtr max_col, int64_t tz_offset_in_seconds) {
+Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::Type* type, const orc::proto::ColumnStatistics& stats,
+                                ColumnPtr min_col, ColumnPtr max_col, int64_t tz_offset_in_seconds) {
     if (slot->is_nullable()) {
         auto* a = ColumnHelper::as_raw_column<NullableColumn>(min_col);
         auto* b = ColumnHelper::as_raw_column<NullableColumn>(max_col);
@@ -185,7 +192,7 @@ Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::proto::ColumnSt
         return decode_date_min_max(ltype, stats, min_col, max_col);
 
     case LogicalType::TYPE_DATETIME:
-        return decode_datetime_min_max(ltype, stats, tz_offset_in_seconds, min_col, max_col);
+        return decode_datetime_min_max(ltype, type, stats, tz_offset_in_seconds, min_col, max_col);
 
     default:
         return Status::NotSupported("Not support to decode min/max from orc column stats. type = " +
