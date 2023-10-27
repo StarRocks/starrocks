@@ -50,6 +50,7 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     build_buckets_counter = ADD_COUNTER(runtime_profile, "BuildBuckets", TUnit::UNIT);
     runtime_filter_num = ADD_COUNTER(runtime_profile, "RuntimeFilterNum", TUnit::UNIT);
     build_keys_per_bucket = ADD_COUNTER(runtime_profile, "BuildKeysPerBucket%", TUnit::UNIT);
+    used_build_buckets_counter = ADD_COUNTER(runtime_profile, "UsedBuildBuckets", TUnit::UNIT);
     hash_table_memory_usage = ADD_COUNTER(runtime_profile, "HashTableMemoryUsage", TUnit::BYTES);
 }
 
@@ -204,8 +205,11 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
 Status HashJoiner::build_ht(RuntimeState* state) {
     if (_phase == HashJoinPhase::BUILD) {
         RETURN_IF_ERROR(_hash_join_builder->build(state));
-        size_t bucket_size = _hash_join_builder->hash_table().get_bucket_size();
+
+        const size_t bucket_size = _hash_join_builder->hash_table().get_bucket_size();
+        const size_t used_bucket_size = _hash_join_builder->hash_table().get_num_used_buckets();
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
+        COUNTER_SET(build_metrics().used_build_buckets_counter, static_cast<int64_t>(used_bucket_size));
         COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket()));
     }
 
@@ -506,43 +510,73 @@ Status HashJoiner::_process_where_conjunct(ChunkPtr* chunk) {
     return ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 }
 
+size_t HashJoiner::runtime_in_filter_max_build_rows() const {
+    size_t val = 128L * 1024L;
+    if (_runtime_state->query_options().__isset.runtime_in_filter_build_max_size) {
+        val = _runtime_state->query_options().runtime_in_filter_build_max_size;
+    }
+    return val;
+}
+
+size_t HashJoiner::runtime_in_filter_max_hash_table_cardinality() const {
+    return config::max_pushdown_conditions_per_column;
+}
+
 Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
     SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
-    size_t ht_row_count = get_ht_row_count();
+
+    const int max_build_rows = runtime_in_filter_max_build_rows();
+    const int max_ht_cardinality = runtime_in_filter_max_hash_table_cardinality();
+
+    const size_t ht_row_count = get_ht_row_count();
     auto& ht = _hash_join_builder->hash_table();
 
-    if (ht_row_count > config::max_pushdown_conditions_per_column) {
+    if (ht_row_count <= 0) {
         return Status::OK();
     }
 
-    if (ht_row_count > 0) {
-        // there is a bug (DSDB-3860) in old planner if probe_expr is not slot-ref, and this fix is workaround.
-        size_t size = _build_expr_ctxs.size();
-        std::vector<bool> to_build(size, true);
-        for (int i = 0; i < size; i++) {
-            ExprContext* expr_ctx = _probe_expr_ctxs[i];
-            to_build[i] = (expr_ctx->root()->is_slotref());
+    if (ht_row_count > max_build_rows || ht.get_num_used_buckets() > max_ht_cardinality) {
+        return Status::OK();
+    }
+
+    // there is a bug (DSDB-3860) in old planner if probe_expr is not slot-ref, and this fix is workaround.
+    size_t size = _build_expr_ctxs.size();
+    std::vector<bool> to_build(size, true);
+    for (int i = 0; i < size; i++) {
+        ExprContext* expr_ctx = _probe_expr_ctxs[i];
+        to_build[i] = (expr_ctx->root()->is_slotref());
+    }
+
+    for (size_t i = 0; i < size; i++) {
+        if (!to_build[i]) {
+            _runtime_in_filters.push_back(nullptr);
+            continue;
         }
 
-        for (size_t i = 0; i < size; i++) {
-            if (!to_build[i]) continue;
-            ColumnPtr column = ht.get_key_columns()[i];
-            Expr* probe_expr = _probe_expr_ctxs[i]->root();
-            // create and fill runtime in filter.
-            VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
-            builder.set_eq_null(_is_null_safes[i]);
-            builder.use_as_join_runtime_filter();
-            Status st = builder.create();
-            if (!st.ok()) {
-                _runtime_in_filters.push_back(nullptr);
-                continue;
-            }
-            if (probe_expr->type().is_string_type()) {
-                _string_key_columns.emplace_back(column);
-            }
-            builder.add_values(column, kHashJoinKeyColumnOffset);
-            _runtime_in_filters.push_back(builder.get_in_const_predicate());
+        ColumnPtr column = ht.get_key_columns()[i];
+        Expr* probe_expr = _probe_expr_ctxs[i]->root();
+
+        // create and fill runtime in filter.
+        VectorizedInConstPredicateBuilder builder(state, _pool, probe_expr);
+        builder.set_eq_null(_is_null_safes[i]);
+        builder.use_as_join_runtime_filter();
+        Status st = builder.create();
+        if (!st.ok()) {
+            _runtime_in_filters.push_back(nullptr);
+            continue;
         }
+
+        if (probe_expr->type().is_string_type()) {
+            _string_key_columns.emplace_back(column);
+        }
+
+        builder.add_values(column, kHashJoinKeyColumnOffset);
+        if (builder.num_values() > max_ht_cardinality) {
+            _runtime_in_filters.push_back(nullptr);
+            continue;
+        }
+
+        _runtime_in_filters.push_back(builder.get_in_const_predicate());
     }
 
     COUNTER_UPDATE(build_metrics().runtime_filter_num, static_cast<int64_t>(_runtime_in_filters.size()));

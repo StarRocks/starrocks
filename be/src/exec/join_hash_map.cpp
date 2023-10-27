@@ -299,6 +299,10 @@ float JoinHashTable::get_keys_per_bucket() const {
     return _table_items->get_keys_per_bucket();
 }
 
+size_t JoinHashTable::get_num_used_buckets() const {
+    return _table_items->used_buckets;
+}
+
 void JoinHashTable::close() {
     _table_items.reset();
     _probe_state.reset();

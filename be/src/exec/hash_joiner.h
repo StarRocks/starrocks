@@ -154,6 +154,7 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* build_runtime_filter_timer = nullptr;
     RuntimeProfile::Counter* build_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* build_buckets_counter = nullptr;
+    RuntimeProfile::Counter* used_build_buckets_counter = nullptr;
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
     RuntimeProfile::Counter* build_keys_per_bucket = nullptr;
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
@@ -238,8 +239,6 @@ public:
     const HashJoinBuildMetrics& build_metrics() { return *_build_metrics; }
     const HashJoinProbeMetrics& probe_metrics() { return *_probe_metrics; }
 
-    size_t runtime_in_filter_row_limit() const { return 1024; }
-
     size_t runtime_bloom_filter_row_limit() const {
         uint64_t runtime_join_filter_pushdown_limit = 1024000;
         if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
@@ -247,6 +246,9 @@ public:
         }
         return runtime_join_filter_pushdown_limit;
     }
+
+    size_t runtime_in_filter_max_build_rows() const;
+    size_t runtime_in_filter_max_hash_table_cardinality() const;
 
     // hash table param.
     // this function only valid in hash_joiner_builder
