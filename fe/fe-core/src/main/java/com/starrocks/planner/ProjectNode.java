@@ -174,6 +174,19 @@ public class ProjectNode extends PlanNode {
         }
         return newExprs.size() > 0 ? Optional.of(newExprs) : Optional.empty();
     }
+
+    @Override
+    public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs, Function<Expr, Boolean> couldBound) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr, couldBound).isPresent())) {
+            // NOTE: This is necessary, when expr is partition_by_epxr because
+            // partition_by_exprs may exist in JoinNode below the ProjectNode.
+            return Optional.of(ImmutableList.of(exprs));
+        }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExpr(expr, couldBound).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
+    }
+
     @Override
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description,
                                           Expr probeExpr,
