@@ -59,6 +59,12 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    DeferOp defer([&]() {
+        if (this->_state != DriverState::READY) {
+            LOG(WARNING) << to_readable_string() << " prepare failed";
+        }
+    });
+
     _runtime_state = runtime_state;
 
     auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
