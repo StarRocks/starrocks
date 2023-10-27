@@ -27,6 +27,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -63,29 +64,33 @@ import java.util.List;
  */
 public class ShowRoutineLoadStmt extends ShowStmt {
 
-    private static final ImmutableList<String> TITLE_NAMES =
-            new ImmutableList.Builder<String>()
-                    .add("Id")
-                    .add("Name")
-                    .add("CreateTime")
-                    .add("PauseTime")
-                    .add("EndTime")
-                    .add("DbName")
-                    .add("TableName")
-                    .add("State")
-                    .add("DataSourceType")
-                    .add("CurrentTaskNum")
-                    .add("JobProperties")
-                    .add("DataSourceProperties")
-                    .add("CustomProperties")
-                    .add("Statistic")
-                    .add("Progress")
-                    .add("ReasonOfStateChanged")
-                    .add("ErrorLogUrls")
-                    .add("TrackingSQL")
-                    .add("OtherMsg")
-                    .add("Warehouse")
-                    .build();
+    private static final ImmutableList<String> TITLE_NAMES;
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("Id")
+                .add("Name")
+                .add("CreateTime")
+                .add("PauseTime")
+                .add("EndTime")
+                .add("DbName")
+                .add("TableName")
+                .add("State")
+                .add("DataSourceType")
+                .add("CurrentTaskNum")
+                .add("JobProperties")
+                .add("DataSourceProperties")
+                .add("CustomProperties")
+                .add("Statistic")
+                .add("Progress")
+                .add("ReasonOfStateChanged")
+                .add("ErrorLogUrls")
+                .add("TrackingSQL")
+                .add("OtherMsg");
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            builder.add("Warehouse");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     private final LabelName labelName;
     private boolean includeHistory = false;

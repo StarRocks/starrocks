@@ -43,6 +43,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -286,7 +287,16 @@ public abstract class RoutineLoadTaskInfo {
         } else {
             row.add(msg);
         }
-        row.add(String.valueOf(warehouseId));
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            // add warehouse in task info
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse == null) {
+                row.add("NULL");
+            } else {
+                row.add(warehouse.getName());
+            }
+        }
 
         return row;
     }

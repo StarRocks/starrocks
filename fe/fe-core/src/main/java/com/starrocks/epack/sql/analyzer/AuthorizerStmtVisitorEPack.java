@@ -49,8 +49,10 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -513,6 +515,47 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
             }
         }
 
+        return null;
+    }
+
+    // --------------------------------- LOAD Statement ---------------------------------
+    @Override
+    public Void visitLoadStatement(LoadStmt statement, ConnectContext context) {
+        super.visitLoadStatement(statement, context);
+        // check warehouse privilege
+        Map<String, String> properties = statement.getProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            try {
+                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
+            }
+        }
+
+        return null;
+    }
+
+    // --------------------------------- Routine Load Statement ---------------------------------
+    @Override
+    public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext context) {
+        super.visitCreateRoutineLoadStatement(statement, context);
+        // check warehouse privilege
+        Map<String, String> properties = statement.getJobProperties();
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            try {
+                AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), ObjectTypeEPack.WAREHOUSE.name(), warehouseName);
+            }
+        }
         return null;
     }
 }

@@ -62,6 +62,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.LoadJobWithWarehouse;
 import com.starrocks.load.RoutineLoadDesc;
@@ -81,6 +82,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -415,6 +417,22 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         }
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
+
+        // set warehouse
+        Map<String, String> prop = stmt.getJobProperties();
+        if (prop.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            String warehouseName = prop.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+            jobProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouseName);
+
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+            if (warehouse == null) {
+                throw new UserException("Warehouse " + warehouseName + " not exists.");
+            }
+
+            setWarehouseId(warehouse.getId());
+        } else {
+            setWarehouseId(ConnectContext.get().getCurrentWarehouseId());
+        }
     }
 
     private void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
@@ -1502,11 +1520,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             row.add(otherMsg);
 
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
-            if (warehouse != null) {
-                row.add(warehouse.getName());
-            } else {
-                row.add("");
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+                if (warehouse != null) {
+                    row.add(warehouse.getName());
+                } else {
+                    row.add("");
+                }
+
             }
 
             return row;
@@ -1641,7 +1662,20 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         sb.append(StringEscapeUtils.escapeJava(String.valueOf(escape))).append("\",\n");
 
         sb.append("\"").append(CreateRoutineLoadStmt.LOG_REJECTED_RECORD_NUM_PROPERTY).append("\"=\"");
-        sb.append(String.valueOf(getLogRejectedRecordNum())).append("\"\n");
+        sb.append(String.valueOf(getLogRejectedRecordNum()));
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            sb.append("\",\n");
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE).append("\"=\"");
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            if (warehouse != null) {
+                sb.append(warehouse.getName()).append("\"\n");
+            } else {
+                sb.append("NULL").append("\"\n");
+            }
+        } else {
+            sb.append("\"\n");
+        }
 
         sb.append(")\n");
         return sb.toString();

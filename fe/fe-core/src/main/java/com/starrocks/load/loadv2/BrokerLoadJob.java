@@ -34,7 +34,6 @@
 
 package com.starrocks.load.loadv2;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
@@ -105,14 +104,6 @@ public class BrokerLoadJob extends BulkLoadJob {
     public BrokerLoadJob() {
         super();
         this.jobType = EtlJobType.BROKER;
-    }
-
-    @VisibleForTesting
-    public void setConnectContext(ConnectContext context) {
-        this.context = context;
-        if (context != null) {
-            this.warehouseId = context.getCurrentWarehouseId();
-        }
     }
 
     public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)

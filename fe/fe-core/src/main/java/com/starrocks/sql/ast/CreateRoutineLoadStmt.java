@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -138,6 +139,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
     private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
 
+
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
             .add(MAX_ERROR_NUMBER_PROPERTY)
@@ -159,6 +161,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()

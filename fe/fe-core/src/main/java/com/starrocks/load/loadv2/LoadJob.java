@@ -56,6 +56,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
@@ -230,6 +231,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @Override
     public long getCurrentWarehouseId() {
         return warehouseId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     @Override
@@ -408,6 +413,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
                 logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
+            }
+
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                String warehouseName = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+                if (warehouse == null) {
+                    throw new DdlException("Warehouse " + warehouseName + " not exists.");
+                }
+                warehouseId = warehouse.getId();
             }
         }
     }
