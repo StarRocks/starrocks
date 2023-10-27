@@ -64,14 +64,28 @@
 
 namespace starrocks {
 
+namespace {
+static size_t collect_readers_mem_usage(const std::vector<std::unique_ptr<ColumnReader>>* readers) {
+    if (readers == nullptr) {
+        return 0;
+    }
+    size_t total = 0;
+    for (auto& reader : *readers) {
+        total += reader->mem_usage();
+    }
+    return total;
+}
+} // namespace
+
 StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
-ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
+ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment), _meta_mem_usage(0) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+    _meta_mem_usage.fetch_add(sizeof(ColumnReader), std::memory_order_relaxed);
 }
 
 ColumnReader::~ColumnReader() {
@@ -178,100 +192,106 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
         }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_ARRAY) {
-        _sub_readers = std::make_unique<SubReaderList>();
+        auto readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
-            _sub_readers->reserve(3);
+            readers->reserve(3);
 
             // elements
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
         } else {
             if (meta->children_columns_size() != 2) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
-            _sub_readers->reserve(2);
+            readers->reserve(2);
 
             // elements
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
         }
+        _meta_mem_usage.fetch_add(collect_readers_mem_usage(readers.get()), std::memory_order_relaxed);
+        _sub_readers.swap(readers);
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_MAP) {
-        _sub_readers = std::make_unique<SubReaderList>();
+        auto readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
             if (meta->children_columns_size() != 4) {
                 return Status::InvalidArgument("nullable array should have 3 children columns");
             }
-            _sub_readers->reserve(4);
+            readers->reserve(4);
 
             // keys
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // values
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // null flags
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
         } else {
             if (meta->children_columns_size() != 3) {
                 return Status::InvalidArgument("non-nullable array should have 2 children columns");
             }
-            _sub_readers->reserve(3);
+            readers->reserve(3);
 
             // keys
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // values
             res = ColumnReader::create(meta->mutable_children_columns(1), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
 
             // offsets
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
         }
+        _meta_mem_usage.fetch_add(collect_readers_mem_usage(readers.get()), std::memory_order_relaxed);
+        _sub_readers.swap(readers);
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
-        _sub_readers = std::make_unique<SubReaderList>();
+        auto readers = std::make_unique<SubReaderList>();
         for (int i = 0; i < meta->children_columns_size(); ++i) {
             auto res = ColumnReader::create(meta->mutable_children_columns(i), _segment);
             RETURN_IF_ERROR(res);
-            _sub_readers->emplace_back(std::move(res).value());
+            readers->emplace_back(std::move(res).value());
         }
+        _meta_mem_usage.fetch_add(collect_readers_mem_usage(readers.get()), std::memory_order_relaxed);
+        _sub_readers.swap(readers);
         return Status::OK();
     } else {
         return Status::NotSupported(fmt::format("unsupported field type {}", (int)_column_type));
@@ -568,18 +588,6 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
-}
-
-size_t ColumnReader::mem_usage() const {
-    size_t size = sizeof(ColumnReader) + _meta_mem_usage.load(std::memory_order_relaxed);
-
-    if (_sub_readers != nullptr) {
-        for (auto& reader : *_sub_readers) {
-            size += reader->mem_usage();
-        }
-    }
-
-    return size;
 }
 
 } // namespace starrocks

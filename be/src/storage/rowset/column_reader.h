@@ -154,7 +154,7 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    size_t mem_usage() const;
+    inline size_t mem_usage() const { return _meta_mem_usage.load(std::memory_order_relaxed); }
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
@@ -213,7 +213,7 @@ private:
 
     uint8_t _flags = 0;
     // counter to record the reader's mem usage, sub readers excluded.
-    std::atomic<size_t> _meta_mem_usage = 0;
+    std::atomic<size_t> _meta_mem_usage;
 };
 
 } // namespace starrocks
