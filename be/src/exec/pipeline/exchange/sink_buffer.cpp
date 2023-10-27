@@ -194,6 +194,19 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+        if (_total_in_flight_rpc > 0) {
+            std::stringstream ss;
+            auto remain_rpc_num = 0;
+            for (auto& remain_rpc : _num_in_flight_rpcs) {
+                std::lock_guard<Mutex> l(*_mutexes[remain_rpc.first]);
+                if (remain_rpc.second > 0) {
+                    ss << (remain_rpc_num > 0 ? ", " : "") << print_id(_instance_id2finst_id[remain_rpc.first]);
+                    remain_rpc_num++;
+                }
+            }
+            LOG(WARNING) << "Finishing fragment " << print_id(_fragment_ctx->fragment_instance_id())
+                         << " SinkBuffer remains " << remain_rpc_num << " rpcs, dest are " << ss.str();
+        }
     }
     if (state != nullptr) {
         LOG(INFO) << fmt::format(
