@@ -87,6 +87,9 @@ PROPERTIES (
 set enable_profile=true;
 -- result:
 -- !result
+set enable_async_profile=false;
+-- result:
+-- !result
 select count(*) from t1;
 -- result:
 0
