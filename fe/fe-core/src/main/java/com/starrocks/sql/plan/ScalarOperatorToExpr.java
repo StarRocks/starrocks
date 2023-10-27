@@ -554,9 +554,8 @@ public class ScalarOperatorToExpr {
             newArguments.add(lambdaExpr);
             newArguments.addAll(arguments);
 
-            LambdaFunctionExpr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
+            Expr result = new LambdaFunctionExpr(newArguments, commonSubOperatorMap);
             result.setType(Type.FUNCTION);
-            result.checkValid();
             return result;
         }
 

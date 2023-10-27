@@ -53,8 +53,6 @@ public class LambdaFunctionExpr extends Expr {
 
     public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
-        this.commonSubOperatorNum = rhs.commonSubOperatorNum;
-        this.checkValid();
     }
 
     @Override
@@ -110,10 +108,6 @@ public class LambdaFunctionExpr extends Expr {
             commonSubOp.append("\n        ");
         }
         return String.format("%s -> %s%s", names, getChild(0).explain(), commonSubOp);
-    }
-
-    public void checkValid() {
-        // do nothing
     }
 
     @Override
