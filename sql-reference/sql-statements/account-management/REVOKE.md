@@ -81,7 +81,7 @@ REVOKE
 ```SQL
 REVOKE 
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
-    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
+    ON { {DATABASE <database_name> [, <database_name>,...]} | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
@@ -94,7 +94,7 @@ REVOKE
     { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
     ON { TABLE <table_name> [, < table_name >,...]
        | ALL TABLES} IN 
-           { DATABASE <database_name> | ALL DATABASES }
+           { { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }}
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
@@ -111,7 +111,7 @@ REVOKE
     { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
-           { DATABASE <database_name> | ALL DATABASES }
+           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
@@ -128,7 +128,7 @@ REVOKE
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
-           { DATABASE <database_name> | ALL [DATABASES] }
+           { { DATABASE <database_name> [,<database_name>,...] } | ALL [DATABASES] }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
@@ -145,7 +145,7 @@ REVOKE
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS } IN 
-           { DATABASE <database_name> | ALL DATABASES }
+           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 

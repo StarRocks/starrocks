@@ -80,7 +80,7 @@ GRANT
 ```SQL
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
-    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
+    ON { {DATABASE <database_name> [, <database_name>,...]} | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -123,7 +123,7 @@ GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_nam
 #### Materialized view 相关
 
 ```SQL
-GRANT { 
+GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
     ON { MATERIALIZED_VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED_VIEWS IN 
@@ -140,12 +140,12 @@ GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USE
 #### Function 相关
 
 ```SQL
-GRANT { 
+GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
     ON { FUNCTION <function_name> [, < function_name >,...]
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+    TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
 注意：需要执行 SET CATALOG 之后才能使用。function 还可以用 `<db_name>.<function_name>` 的方式来进行表示。
