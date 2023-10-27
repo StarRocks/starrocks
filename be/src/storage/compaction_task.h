@@ -9,6 +9,7 @@
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
