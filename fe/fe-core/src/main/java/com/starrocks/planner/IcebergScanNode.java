@@ -210,7 +210,47 @@ public class IcebergScanNode extends ScanNode {
         return result;
     }
 
+<<<<<<< HEAD
     public void setupScanRangeLocations() throws UserException {
+=======
+    public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
+        // TODO: expose transform information in Iceberg library
+        BiMap<Integer, PartitionField> columns = HashBiMap.create();
+        if (!ConnectContext.get().getSessionVariable().getEnableIcebergIdentityColumnOptimize()) {
+            return columns;
+        }
+        for (int i = 0; i < partitionSpec.fields().size(); i++) {
+            PartitionField field = partitionSpec.fields().get(i);
+            if (field.transform().isIdentity()) {
+                columns.put(i, field);
+            }
+        }
+        return columns;
+    }
+
+    private PartitionKey getPartitionKey(StructLike partition, PartitionSpec spec, List<Integer> indexes,
+                                         BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
+        List<String> partitionValues = new ArrayList<>();
+        List<Column> cols = new ArrayList<>();
+        indexes.forEach((index) -> {
+            PartitionField field = indexToField.get(index);
+            int id = field.sourceId();
+            org.apache.iceberg.types.Type type = spec.schema().findType(id);
+            Class<?> javaClass = type.typeId().javaClass();
+
+            String partitionValue;
+            partitionValue = field.transform().toHumanString(type,
+                    PartitionUtil.getPartitionValue(partition, index, javaClass));
+            partitionValues.add(partitionValue);
+
+            cols.add(srIcebergTable.getColumn(field.name()));
+        });
+
+        return PartitionUtil.createPartitionKey(partitionValues, cols, Table.TableType.ICEBERG);
+    }
+
+    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+>>>>>>> da20056bab ([BugFix] Fix possible memory leak when using Util#compress (#33836))
         Optional<Snapshot> snapshot = Optional.ofNullable(srIcebergTable.getNativeTable().currentSnapshot());
         if (!snapshot.isPresent()) {
             LOG.warn(String.format("Table %s has no snapshot!", srIcebergTable.getRemoteTableName()));
