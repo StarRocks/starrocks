@@ -161,9 +161,7 @@ public class IcebergScanNode extends ScanNode {
         return result;
     }
 
-    public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec)
-    {
-
+    public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
         // TODO: expose transform information in Iceberg library
         BiMap<Integer, PartitionField> columns = HashBiMap.create();
         if (!ConnectContext.get().getSessionVariable().getEnableIcebergIdentityColumnOptimize()) {

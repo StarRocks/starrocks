@@ -63,7 +63,6 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
-import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 
 public class Util {
@@ -462,8 +461,7 @@ public class Util {
 
     public static byte[] compress(byte[] input) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        Deflater deflater = new Deflater();
-        try (DeflaterOutputStream dos = new DeflaterOutputStream(outputStream, deflater)) {
+        try (DeflaterOutputStream dos = new DeflaterOutputStream(outputStream)) {
             dos.write(input);
         }
         return outputStream.toByteArray();
