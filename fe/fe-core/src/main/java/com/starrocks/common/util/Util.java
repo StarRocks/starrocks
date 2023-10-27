@@ -62,6 +62,10 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
+<<<<<<< HEAD
+=======
+import java.util.zip.DeflaterOutputStream;
+>>>>>>> da20056bab ([BugFix] Fix possible memory leak when using Util#compress (#33836))
 
 public class Util {
     private static final Logger LOG = LogManager.getLogger(Util.class);
@@ -456,4 +460,15 @@ public class Util {
     public static String deriveAliasFromOrdinal(int ordinal) {
         return AUTO_GENERATED_EXPR_ALIAS_PREFIX + ordinal;
     }
+<<<<<<< HEAD
+=======
+
+    public static byte[] compress(byte[] input) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        try (DeflaterOutputStream dos = new DeflaterOutputStream(outputStream)) {
+            dos.write(input);
+        }
+        return outputStream.toByteArray();
+    }
+>>>>>>> da20056bab ([BugFix] Fix possible memory leak when using Util#compress (#33836))
 }
