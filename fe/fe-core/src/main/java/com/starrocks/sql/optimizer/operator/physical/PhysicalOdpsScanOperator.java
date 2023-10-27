@@ -20,12 +20,12 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
-import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 
 public class PhysicalOdpsScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
-    public PhysicalOdpsScanOperator(LogicalHiveScanOperator scanOperator) {
+    public PhysicalOdpsScanOperator(LogicalOdpsScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ODPS_SCAN, scanOperator);
         this.predicates = scanOperator.getScanOperatorPredicates();
     }
