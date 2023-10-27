@@ -548,7 +548,6 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
 }
 
 HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
-    const auto& scan_range = _scan_range;
     const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
 
     std::string required_fields;
@@ -582,7 +581,7 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
                 CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
         AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
         if (!aliyun_cloud_credential.endpoint.empty()) {
-            jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoit;
+            jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
         }
         if (!aliyun_cloud_credential.access_key.empty()) {
             jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;

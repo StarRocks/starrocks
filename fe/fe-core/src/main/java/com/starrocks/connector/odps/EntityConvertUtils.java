@@ -16,6 +16,7 @@ package com.starrocks.connector.odps;
 
 import com.aliyun.odps.type.TypeInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 
 /**
@@ -41,7 +42,7 @@ public class EntityConvertUtils {
             case CHAR:
             case VARCHAR:
             case STRING:
-                return Type.VARCHAR;
+                return ScalarType.createVarcharType(65533);
             case BOOLEAN:
                 return Type.BOOLEAN;
             case DATE:

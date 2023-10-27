@@ -26,6 +26,7 @@ import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
@@ -106,6 +107,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
@@ -367,6 +369,22 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             context.setStatistics(stats);
         }
 
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalOdpsScan(PhysicalOdpsScanOperator node, ExpressionContext context) {
+        return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = ((OdpsTable) table).getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+            context.setStatistics(stats);
+        }
         return visitOperator(node, context);
     }
 

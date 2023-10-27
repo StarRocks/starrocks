@@ -14,14 +14,14 @@
 
 package com.starrocks.odps.reader;
 
+import com.starrocks.jni.connector.ScannerFactory;
+import com.starrocks.utils.loader.ChildFirstClassLoader;
+
 import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.Objects;
-
-import com.starrocks.jni.connector.ScannerFactory;
-import com.starrocks.utils.loader.ChildFirstClassLoader;
 
 public class OdpsSplitScannerFactory implements ScannerFactory {
     static ChildFirstClassLoader classLoader;
