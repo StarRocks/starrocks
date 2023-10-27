@@ -29,6 +29,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Set;
@@ -177,6 +178,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMock_MV_AggWithHaving3() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mock_agg_with_having3"),

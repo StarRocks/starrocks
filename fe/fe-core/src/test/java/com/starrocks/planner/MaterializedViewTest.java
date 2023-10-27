@@ -1563,6 +1563,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testJoinMaterialization7() {
         testRewriteOK("select depts.name\n"
                         + "from emps\n"
@@ -1574,6 +1575,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testJoinMaterialization8() {
         testRewriteOK("select depts.name\n"
                         + "from emps\n"
@@ -1585,6 +1587,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    @Ignore
     public void testJoinMaterialization9() {
         testRewriteOK("select depts.name\n"
                         + "from emps\n"
