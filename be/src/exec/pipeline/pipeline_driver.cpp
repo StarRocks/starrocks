@@ -598,9 +598,10 @@ void PipelineDriver::_update_overhead_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
-    ss << "query_id=" << print_id(this->query_ctx()->query_id())
-       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << _driver_id
-       << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+    ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+       << " fragment_id="
+       << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
+       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
