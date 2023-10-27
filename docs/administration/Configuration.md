@@ -1449,6 +1449,11 @@ BE dynamic parameters are as follows.
 - **Default:** 86,400 seconds
 - **Description:** The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction.
 
+#### event_based_compaction_check_interval_seconds
+
+- **Default:** 1800 seconds
+- **Description:** The time interval of checking for a Event Based Compaction.
+
 #### cumulative_compaction_check_interval_seconds
 
 - **Default:** 1 second

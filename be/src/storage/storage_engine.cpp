@@ -690,7 +690,7 @@ void StorageEngine::_start_clean_fd_cache() {
 }
 
 void StorageEngine::compaction_check() {
-    int checker_one_round_sleep_time_s = 1800;
+    int checker_one_round_sleep_time_s = config::event_based_compaction_check_interval_seconds;
     while (!bg_worker_stopped()) {
         MonotonicStopWatch stop_watch;
         stop_watch.start();
