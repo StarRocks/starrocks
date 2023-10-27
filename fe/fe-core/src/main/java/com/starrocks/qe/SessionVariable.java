@@ -330,6 +330,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
+
+    public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
+            "enable_pipeline_level_multi_partitioned_rf";
+>>>>>>> a52fad6e05 ([Enhancement] support transmit runtime filter via http (#31631))
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
@@ -1008,6 +1016,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterRpcHttpMinSize = 64L * 1024 * 1024;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -2705,6 +2715,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
+        tResult.setRuntime_filter_rpc_http_min_size(globalRuntimeFilterRpcHttpMinSize);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
