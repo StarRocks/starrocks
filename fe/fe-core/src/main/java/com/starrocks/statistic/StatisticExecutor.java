@@ -22,6 +22,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
@@ -243,6 +244,7 @@ public class StatisticExecutor {
         Table table = statsJob.getTable();
 
         try {
+            statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
