@@ -322,6 +322,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
     public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
 
     public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
             "enable_pipeline_level_multi_partitioned_rf";
@@ -1037,6 +1038,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int globalRuntimeFilterRpcTimeout = 400;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterRpcHttpMinSize = 64L * 1024 * 1024;
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
     private boolean enablePipelineLevelMultiPartitionedRf = false;
@@ -2825,6 +2828,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(globalRuntimeFilterWaitTimeout);
         tResult.setRuntime_filter_send_timeout_ms(globalRuntimeFilterRpcTimeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
+        tResult.setRuntime_filter_rpc_http_min_size(globalRuntimeFilterRpcHttpMinSize);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
