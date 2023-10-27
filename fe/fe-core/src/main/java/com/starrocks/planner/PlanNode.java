@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -756,7 +757,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     public Optional<List<List<Expr>>> candidatesOfSlotExprs(List<Expr> exprs, Function<Expr, Boolean> couldBound) {
         if (!exprs.stream().allMatch(expr -> candidatesOfSlotExpr(expr, couldBound).isPresent())) {
-            return Optional.empty();
+            // NOTE: This is necessary, when expr is partition_by_epxr because
+            // partition_by_exprs may exist in JoinNode below the ProjectNode.
+            return Optional.of(ImmutableList.of(exprs));
         }
         List<List<Expr>> candidatesOfSlotExprs =
                 exprs.stream().map(expr -> candidatesOfSlotExpr(expr, couldBound).get()).collect(Collectors.toList());
@@ -904,16 +907,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                                                             boolean addProbeInfo) {
         boolean accept = tryPushdownRuntimeFilterToChild(descTbl, description, optProbeExprCandidates,
                 optPartitionByExprsCandidates, childIdx);
-        RoaringBitmap slotIds = getSlotIds(descTbl);
-        boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
-                partitionByExprs.stream().allMatch(expr->slotIds.contains(expr.getUsedSlotIds()));
+        boolean isBound = probeExpr.isBoundByTupleIds(getTupleIds());
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }
         if (accept) {
             return true;
         }
-        if (isBound && addProbeInfo && description.canProbeUse(this)) {
+        if (addProbeInfo && description.canProbeUse(this)) {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
