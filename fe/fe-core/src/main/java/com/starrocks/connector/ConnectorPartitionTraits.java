@@ -99,7 +99,7 @@ public abstract class ConnectorPartitionTraits {
 
     // ========================================= Implementations ==============================================
 
-    static abstract class DefaultTraits extends ConnectorPartitionTraits {
+    abstract static class DefaultTraits extends ConnectorPartitionTraits {
 
         @Override
         public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
