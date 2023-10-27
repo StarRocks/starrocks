@@ -177,6 +177,10 @@ public class Partition extends MetaObject implements Writable {
         return this.shardGroupId;
     }
 
+    public void setShardGroupId(long newShardGroupId) {
+        this.shardGroupId = newShardGroupId;
+    }
+
     public void setName(String newName) {
         this.name = newName;
     }

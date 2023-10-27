@@ -19,6 +19,8 @@ import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
 import com.google.common.base.Preconditions;
 import com.staros.proto.ShardGroupInfo;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -66,6 +68,27 @@ public class ShardDeleter extends LeaderDaemon {
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
+                        // 1. get shadow shard groups
+                        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                                                              .getUnfinishedAlterJobV2ByTableId(table.getId());
+                        // if job is finished, then shadow shard groups will be normal shard groups,
+                        // guranteed by db lock;
+                        // if job is not finished, collect them below so that they will not be deleted
+                        for (AlterJobV2 job : jobs) {
+                            if (!(job instanceof LakeTableSchemaChangeJob)) {
+                                // only cloud schema change has shadow shard group
+                                continue;
+                            }
+                            LakeTableSchemaChangeJob realJob = (LakeTableSchemaChangeJob) job;
+                            if (realJob.getShardGroupIdMap() != null) {
+                                realJob.getShardGroupIdMap()
+                                       .entrySet()
+                                       .stream()
+                                       .map(e -> e.getValue()).forEach(groupIds::add);
+                            }
+                        }
+
+                        // 2. get normal shard groups
                         GlobalStateMgr.getCurrentState()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
@@ -183,6 +206,7 @@ public class ShardDeleter extends LeaderDaemon {
         LOG.debug("emptyShardGroup.size is {}", emptyShardGroup.size());
         if (!emptyShardGroup.isEmpty()) {
             starOSAgent.deleteShardGroup(emptyShardGroup);
+            LOG.info("delete shard group: {}", emptyShardGroup);
         }
     }
 

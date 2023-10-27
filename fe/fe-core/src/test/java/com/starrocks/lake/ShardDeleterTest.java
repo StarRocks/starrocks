@@ -18,6 +18,9 @@ package com.starrocks.lake;
 import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -70,6 +73,18 @@ public class ShardDeleterTest {
         long tableId = 2L;
         long partitionId = 3L;
         long shardGroupId = 12L;
+        long shadowShardGroupId = 13L;
+
+        new MockUp<SchemaChangeHandler>() {
+            @Mock
+            public List<AlterJobV2> getUnfinishedAlterJobV2ByTableId(long tblId) {
+                List<AlterJobV2> jobs = new ArrayList<>();
+                LakeTableSchemaChangeJob job = new LakeTableSchemaChangeJob(100, dbId, tableId, "test_alter", 10000);
+                job.getShardGroupIdMap().put(partitionId, shadowShardGroupId);
+                jobs.add(job);
+                return jobs;
+            }
+        };
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -80,6 +95,11 @@ public class ShardDeleterTest {
             @Mock
             public StarOSAgent getStarOSAgent() {
                 return starOSAgent;
+            }
+
+            @Mock
+            public SchemaChangeHandler getSchemaChangeHandler() {
+                return new SchemaChangeHandler();
             }
 
             @Mock
