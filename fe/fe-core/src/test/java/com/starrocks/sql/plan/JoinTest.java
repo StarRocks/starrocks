@@ -406,12 +406,12 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:Project\n" +
+        assertContains(plan, "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
                 "  |  <slot 26> : CAST(49 AS VARCHAR(1048576))\n" +
                 "  |  \n" +
-                "  1:OlapScanNode");
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -2082,7 +2082,7 @@ public class JoinTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "equal join conjunct: 4: v4 = 1: v1");
+        assertContains(plan, "|  equal join conjunct: 1: v1 = 4: v4");
         assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +

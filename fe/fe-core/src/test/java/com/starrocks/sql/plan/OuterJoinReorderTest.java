@@ -70,12 +70,12 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "on (ref_2.v8 = ref_3.v10) inner join t4 as ref_4 on (ref_2.v9 = ref_4.v14) " +
                 "where (space(cast(ref_4.v15 as INT)) <= ref_4.v14) or ( ref_1.v5 = tan(cast(ref_1.v6 as DOUBLE))) " +
                 "limit 111;");
-        planList.add("13:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+        planList.add("16:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 8: v7 = 17: cast\n" +
-                "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE))" +
-                " OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
+                "  |  equal join conjunct: 10: v9 = 15: v14\n" +
+                "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE)) " +
+                "OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
 
         sqlList.add("select tmp.a, t0.v3 from t0 left join (select * from test_all_type, unnest(split(t1a, ',')) " +
                 "as unnest_tbl(a)) tmp on t0.v1 = tmp.a join t1 on t0.v2 = t1.v4");

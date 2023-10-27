@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -394,10 +393,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
-
-        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("emps");
-        setTableStatistics(t7, 6000000);
     }
 
     @Test
@@ -3922,39 +3917,35 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testJoinWithToBitmapRewrite() throws Exception {
-        try {
-            String table1 = "CREATE TABLE test_sr_table_join(\n" +
-                    "fdate int,\n" +
-                    "fetl_time BIGINT ,\n" +
-                    "facct_type BIGINT ,\n" +
-                    "userid STRING ,\n" +
-                    "fplat_form_itg2 BIGINT ,\n" +
-                    "funit BIGINT ,\n" +
-                    "flcnt BIGINT\n" +
-                    ")PARTITION BY range(fdate) (\n" +
-                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
-                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
-                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
-                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
-                    ")\n" +
-                    "DISTRIBUTED BY HASH(userid)\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\"\n" +
-                    ");";
-            starRocksAssert.withTable(table1);
-            String table2 = "create table dim_test_sr_table (\n" +
-                    "fplat_form_itg2 bigint,\n" +
-                    "fplat_form_itg2_name string\n" +
-                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
-                    "PROPERTIES (\n" +
-                    "\"replication_num\" = \"1\"\n" +
-                    ");";
-            starRocksAssert.withTable(table2);
+        String table1 = "CREATE TABLE test_sr_table_join(\n" +
+                "fdate int,\n" +
+                "fetl_time BIGINT ,\n" +
+                "facct_type BIGINT ,\n" +
+                "userid STRING ,\n" +
+                "fplat_form_itg2 BIGINT ,\n" +
+                "funit BIGINT ,\n" +
+                "flcnt BIGINT\n" +
+                ")PARTITION BY range(fdate) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(userid)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(table1);
+        String table2 = "create table dim_test_sr_table (\n" +
+                "fplat_form_itg2 bigint,\n" +
+                "fplat_form_itg2_name string\n" +
+                ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(table2);
 
-            OlapTable t4 = (OlapTable) GlobalStateMgr.getCurrentState().getDb(MATERIALIZED_DB_NAME)
-                    .getTable("test_sr_table_join");
-            setTableStatistics(t4, 150000);
-
+        {
             String mv = "select t1.fdate, t2.fplat_form_itg2_name," +
                     " BITMAP_UNION(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228," +
                     " sum(t1.flcnt)as index_xxx\n" +
@@ -3971,11 +3962,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
                     "GROUP BY fplat_form_itg2_name;";
             testRewriteOK(mv, query);
-        } finally {
-            starRocksAssert.dropTable("test_sr_table_join");
-            starRocksAssert.dropTable("dim_test_sr_table");
         }
-    }    
+        starRocksAssert.dropTable("test_sr_table_join");
+        starRocksAssert.dropTable("dim_test_sr_table");
+    }
 
     @Test
     public void testOrPredicates() {
@@ -4096,7 +4086,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggWithoutRollup() throws Exception {
-        try {
+        {
             starRocksAssert.withTable("create table dim_test_sr_table (\n" +
                     "fplat_form_itg2 bigint,\n" +
                     "fplat_form_itg2_name string\n" +
@@ -4140,9 +4130,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "ON t1.fplat_form_itg2 = t2.fplat_form_itg2\n" +
                     "WHERE t1.fdate = 20230705\n" +
                     "GROUP BY fplat_form_itg2_name;";
-        } finally {
-            starRocksAssert.dropTable("test_sr_table_join");
-            starRocksAssert.dropTable("dim_test_sr_table");
+            testRewriteOK(mv, query);
         }
     }
 

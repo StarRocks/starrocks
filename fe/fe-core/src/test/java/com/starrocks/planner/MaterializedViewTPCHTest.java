@@ -14,9 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -34,14 +31,6 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
-
-        int scale = 1;
-        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
-        setTableStatistics(t4, 150000 * scale);
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
-        setTableStatistics(t7, 6000000 * scale);
     }
 
     @Test

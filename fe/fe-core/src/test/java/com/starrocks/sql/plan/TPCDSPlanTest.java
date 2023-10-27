@@ -656,8 +656,8 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     public void testQuery48LeftDeepJoinReorderAvoidInnerJoinOnSameTable() throws Exception {
         setTPCDSFactor(1);
         String plan = getFragmentPlan(Q48);
-        assertContains(plan, "8:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+        assertContains(plan, "7:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: ss_cdemo_sk = 53: cd_demo_sk\n" +
                 "  |  other join predicates: ((((55: cd_marital_status = 'M') AND (56: cd_education_status = '4 yr Degree')) " +
@@ -667,6 +667,6 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "AND (56: cd_education_status = 'College')) " +
                 "AND ((14: ss_sales_price >= 150.00) AND (14: ss_sales_price <= 200.00)))\n" +
                 "  |  \n" +
-                "  |----7:EXCHANGE");
+                "  |----6:EXCHANGE");
     }
 }

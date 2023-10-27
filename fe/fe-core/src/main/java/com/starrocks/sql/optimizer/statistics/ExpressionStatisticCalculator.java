@@ -86,8 +86,7 @@ public class ExpressionStatisticCalculator {
                 return new ColumnStatistic(value.getAsDouble(), value.getAsDouble(), 0,
                         operator.getType().getTypeSize(), 1);
             } else if (operator.getType().isStringType()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0,
-                        operator.toString().length(), 1);
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
             } else {
                 return ColumnStatistic.unknown();
             }
@@ -159,7 +158,7 @@ public class ExpressionStatisticCalculator {
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
                     .setNullsFraction(childStatistic.getNullsFraction())
-                    .setAverageRowSize(cast.getType().getTypeSize())
+                    .setAverageRowSize(childStatistic.getAverageRowSize())
                     .setDistinctValuesCount(childStatistic.getDistinctValuesCount())
                     .build();
         }
@@ -474,8 +473,7 @@ public class ExpressionStatisticCalculator {
                     || callOperator.getType().isDateType() || callOperator.getType().isBitmapType()) {
                 averageRowSize = callOperator.getType().getTypeSize();
             } else {
-                averageRowSize = columnStatistic.isUnknown() ? callOperator.getType().getTypeSize() :
-                        columnStatistic.getAverageRowSize();
+                averageRowSize = columnStatistic.getAverageRowSize();
             }
 
             return ColumnStatistic.builder()

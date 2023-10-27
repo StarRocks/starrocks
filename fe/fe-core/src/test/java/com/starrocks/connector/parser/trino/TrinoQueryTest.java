@@ -547,7 +547,7 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "    o_year\n" +
                 "order by\n" +
                 "    o_year ";
-        assertPlanContains(sql, "  40:Project\n" +
+        assertPlanContains(sql, "  41:Project\n" +
                 "  |  <slot 69> : 69: year\n" +
                 "  |  <slot 74> : 72: sum / 73: sum");
     }
@@ -869,9 +869,9 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
         Assert.assertTrue(getExplain(sql), StringUtils.containsIgnoreCase(getExplain(sql),
                 "SCAN [t1] => [8:auto_fill_col]\n" +
-                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4.50}\n" +
-                        "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
-                        "                    8:auto_fill_col := 1"));
+                "                    Estimates: {row: 1, cpu: 2.00, memory: 0.00, network: 0.00, cost: 1.00}\n" +
+                "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
+                "                    8:auto_fill_col := 1"));
 
         sql = "explain select v1, v2 from t0,t1";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getExplain(sql),
