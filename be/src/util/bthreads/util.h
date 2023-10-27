@@ -37,6 +37,8 @@ static void* bthread_func(void* arg) {
 }
 } // namespace
 
+// Starts a new bthread that runs the specified function.
+// Note: The function provided must not throw any exceptions.
 StatusOr<bthread_t> start_bthread(std::function<void()> func) {
     auto arg = std::make_unique<FunctorArg>(std::move(func));
     bthread_t bid;
@@ -48,6 +50,9 @@ StatusOr<bthread_t> start_bthread(std::function<void()> func) {
     return bid;
 }
 
+// Starts a new bthread that runs the specified function, then waits for the new bthread
+// to complete before returning to the caller.
+// Note: The function provided must not throw any exceptions.
 Status start_bthread_and_join(std::function<void()> func) {
     ASSIGN_OR_RETURN(auto bid, start_bthread(std::move(func)));
     int rc = bthread_join(bid, nullptr);
