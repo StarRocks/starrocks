@@ -107,9 +107,9 @@ public:
     }
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
 
-    static void build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
-                                                const std::vector<std::string>* hive_column_names,
-                                                const orc::Type& root_type, bool case_sensitive);
+    static void build_column_name_to_orc_type_mapping(std::unordered_map<std::string, const orc::Type*>* mapping,
+                                                      const std::vector<std::string>* hive_column_names,
+                                                      const orc::Type& root_type, bool case_sensitive);
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
                                       bool case_sensitive);
@@ -123,7 +123,7 @@ public:
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
-    int get_column_id_by_slot_name(const std::string& name) const;
+    const orc::Type* get_orc_type_by_slot_name(const std::string& name) const;
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
@@ -198,7 +198,7 @@ private:
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
     // Key is slot name formatted with case sensitive
-    std::unordered_map<std::string, int> _formatted_slot_name_to_column_id;
+    std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
     RuntimeState* _state = nullptr;
     SlotDescriptor* _current_slot = nullptr;
     std::string _current_file_name;
