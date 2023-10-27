@@ -60,11 +60,12 @@ public class OdpsTable extends Table {
         super(TableType.ODPS);
     }
 
-    public OdpsTable(com.aliyun.odps.Table odpsTable) {
+    public OdpsTable(String catalogName, com.aliyun.odps.Table odpsTable) {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), odpsTable.getName(), TableType.ODPS,
                 odpsTable.getSchema().getColumns().stream().map(EntityConvertUtils::convertColumn).collect(
                         Collectors.toList()));
         this.odpsTable = odpsTable;
+        this.catalogName = catalogName;
         this.partitionColumns =
                 odpsTable.getSchema().getPartitionColumns().stream().map(EntityConvertUtils::convertColumn).collect(
                         Collectors.toList());

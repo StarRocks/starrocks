@@ -88,7 +88,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         com.aliyun.odps.Table table = odps.tables().get(dbName, tblName);
-        return new OdpsTable(table);
+        return new OdpsTable(catalogName, table);
     }
 
     @Override
