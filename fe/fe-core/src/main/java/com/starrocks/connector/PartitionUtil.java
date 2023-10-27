@@ -334,7 +334,7 @@ public class PartitionUtil {
         Map<String, Set<String>> mvPartitionKeySetMap = Maps.newHashMap();
         if (table.isJDBCTable()) {
             for (String partitionName : partitionNames) {
-                partitionName = transformMaxValueForJDBCTable(partitionColumn, partitionName);
+                partitionName = getPartitionNameForJDBCTable(partitionColumn, partitionName);
                 PartitionKey partitionKey = createPartitionKey(
                         ImmutableList.of(partitionName),
                         ImmutableList.of(partitionColumn),
