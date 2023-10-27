@@ -41,7 +41,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -105,6 +104,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> columnNames, long limit) {
+        int rowsPerSplit = 5000;
+        List<InputSplitWithRowRange> splits = Lists.newArrayList();
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
@@ -117,8 +118,18 @@ public class OdpsMetadata implements ConnectorMetadata {
                             .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
                             .buildBatchReadSession();
             InputSplitAssigner assigner = scan.getInputSplitAssigner();
-            InputSplitWithRowRange[] allSplits = (InputSplitWithRowRange[]) assigner.getAllSplits();
-            RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(Arrays.asList(allSplits));
+            long totalRowCount = Math.min(assigner.getTotalRowCount(), limit);
+            int numRecord = 0;
+            for (int i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
+                InputSplitWithRowRange splitByRowOffset =
+                        (InputSplitWithRowRange) assigner.getSplitByRowOffset(numRecord, i);
+                splits.add(splitByRowOffset);
+                numRecord = i;
+            }
+            InputSplitWithRowRange splitByRowOffset =
+                    (InputSplitWithRowRange) assigner.getSplitByRowOffset(numRecord, totalRowCount);
+            splits.add(splitByRowOffset);
+            RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(splits);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(odpsRemoteFileDesc);
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
