@@ -49,6 +49,13 @@ public class IcebergConnector implements Connector {
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
+    /**
+     * TODO(POC code)
+     * We can't cache iceberg's table for too long, otherwise RestCatalog will using stale credentials to access aws
+     * service.
+     * 30 minutes is enough to make sure aws credential not to expired
+     */
+    private static final Integer ICEBERG_TABLE_CACHE_TTL_S = 30 * 60;
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
@@ -61,7 +68,7 @@ public class IcebergConnector implements Connector {
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.icebergTableCache = CacheBuilder.newBuilder().
-                expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS).
+                expireAfterWrite(ICEBERG_TABLE_CACHE_TTL_S, SECONDS).
                 maximumSize(1000000).build();
     }
 
