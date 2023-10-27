@@ -28,9 +28,6 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
-import com.starrocks.load.pipe.Pipe;
-import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.CatalogPEntryObject;
@@ -51,13 +48,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
-import org.apache.commons.collections4.ListUtils;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -398,39 +393,7 @@ public class GrantsTo {
 
                 } else if (ObjectType.PIPE.equals(privEntry.getKey())) {
                     PipePEntryObject pipePEntryObject = (PipePEntryObject) privilegeEntry.getObject();
-                    String dbUUID = pipePEntryObject.getDbUUID();
-                    String pipeName = pipePEntryObject.getName();
-                    PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
-                    if (dbUUID.equals(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
-                        List<Pair<Long, String>> dbAndNames = pipeManager.getAllPipes().stream()
-                                .map(Pipe::getDbAndName)
-                                .collect(Collectors.toList());
-                        for (Pair<Long, String> dbAndName : ListUtils.emptyIfNull(dbAndNames)) {
-                            Optional<Database> db = GlobalStateMgr.getCurrentState().mayGetDb(dbAndName.first);
-                            if (db.isPresent()) {
-                                objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                        db.get().getFullName(), dbAndName.second));
-                            }
-                        }
-                    } else {
-                        Optional<Database> db = pipePEntryObject.getDatabase();
-                        if (db.isPresent()) {
-                            if (pipeName.equals(PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
-                                if (db.isPresent()) {
-                                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                            db.get().getFullName(), pipeName));
-                                }
-                            } else {
-                                Optional<Pipe> pipe =
-                                        pipeManager.mayGetPipe(new PipeName(db.get().getFullName(), pipeName));
-                                if (pipe.isPresent()) {
-                                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                                            db.get().getFullName(),
-                                            pipe.get().getName()));
-                                }
-                            }
-                        }
-                    }
+                    objects.addAll(pipePEntryObject.expandObjectNames());
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();
