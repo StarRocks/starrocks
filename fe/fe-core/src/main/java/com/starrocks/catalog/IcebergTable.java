@@ -212,6 +212,7 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
 
+    @Override
     public boolean isUnPartitioned() {
         return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
     }

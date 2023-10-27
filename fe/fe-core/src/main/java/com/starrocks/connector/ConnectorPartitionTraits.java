@@ -80,6 +80,11 @@ public abstract class ConnectorPartitionTraits {
         return res;
     }
 
+    /**
+     * Check whether this table is partitioned
+     */
+    abstract boolean isPartitioned();
+
     abstract PartitionKey createEmptyKey();
 
     abstract String getDbName();
@@ -100,6 +105,11 @@ public abstract class ConnectorPartitionTraits {
     // ========================================= Implementations ==============================================
 
     abstract static class DefaultTraits extends ConnectorPartitionTraits {
+
+        @Override
+        public boolean isPartitioned() {
+            return !table.isUnPartitioned();
+        }
 
         @Override
         public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
@@ -187,9 +197,6 @@ public abstract class ConnectorPartitionTraits {
     // ========================================= Specific Implementations ======================================
 
     static class HivePartitionTraits extends DefaultTraits {
-
-        static void init() {
-        }
 
         @Override
         public String getDbName() {
