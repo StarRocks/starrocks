@@ -614,6 +614,10 @@ public class ExpressionTest extends PlanTestBase {
                 "(SELECT [1,2] a, 1 AS b) AS A) AS B";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS SMALLINT)}"));
+
+        sql = "SELECT [array_map(x -> ((x * x) + (x * b)), a)] AS g from (SELECT [1,2] a, 1 AS b) AS A";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 7> <-> CAST(<slot 4> AS SMALLINT)}"));
     }
 
     @Test
