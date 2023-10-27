@@ -23,6 +23,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DeltaLakePartitionKey;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
@@ -56,11 +58,19 @@ public abstract class ConnectorPartitionTraits {
     private static final Logger LOG = LoggerFactory.getLogger(ConnectorPartitionTraits.class);
     private static final Map<Table.TableType, Supplier<ConnectorPartitionTraits>> TRAITS_TABLE =
             ImmutableMap.<Table.TableType, Supplier<ConnectorPartitionTraits>>builder()
+                    // Consider all native table as OLA
+                    .put(Table.TableType.OLAP, OlapPartitionTraits::new)
+                    .put(Table.TableType.MATERIALIZED_VIEW, OlapPartitionTraits::new)
+                    .put(Table.TableType.CLOUD_NATIVE, OlapPartitionTraits::new)
+                    .put(Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW, OlapPartitionTraits::new)
+
+                    // external tables
                     .put(Table.TableType.HIVE, HivePartitionTraits::new)
                     .put(Table.TableType.HUDI, HudiPartitionTraits::new)
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
                     .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
+                    .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
 
     protected Table table;
@@ -79,11 +89,6 @@ public abstract class ConnectorPartitionTraits {
         res.table = table;
         return res;
     }
-
-    /**
-     * Check whether this table is partitioned
-     */
-    abstract boolean isPartitioned();
 
     abstract PartitionKey createEmptyKey();
 
@@ -105,11 +110,6 @@ public abstract class ConnectorPartitionTraits {
     // ========================================= Implementations ==============================================
 
     abstract static class DefaultTraits extends ConnectorPartitionTraits {
-
-        @Override
-        public boolean isPartitioned() {
-            return !table.isUnPartitioned();
-        }
 
         @Override
         public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
@@ -159,21 +159,13 @@ public abstract class ConnectorPartitionTraits {
         @Override
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
                 throws AnalysisException {
-            if (table.isNativeTableOrMaterializedView()) {
-                return ((OlapTable) table).getRangePartitionMap();
-            } else {
-                return PartitionUtil.getRangePartitionMapOfExternalTable(
-                        table, partitionColumn, getPartitionNames(), partitionExpr);
-            }
+            return PartitionUtil.getRangePartitionMapOfExternalTable(
+                    table, partitionColumn, getPartitionNames(), partitionExpr);
         }
 
         @Override
         public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException {
-            if (table.isNativeTableOrMaterializedView()) {
-                return ((OlapTable) table).getListPartitionMap();
-            } else {
-                return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
-            }
+            return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
         }
 
         @Override
@@ -195,6 +187,32 @@ public abstract class ConnectorPartitionTraits {
     }
 
     // ========================================= Specific Implementations ======================================
+
+    static class OlapPartitionTraits extends DefaultTraits {
+
+        @Override
+        PartitionKey createEmptyKey() {
+            throw new NotImplementedException("not support olap table");
+        }
+
+        @Override
+        String getDbName() {
+            throw new NotImplementedException("not support olap table");
+        }
+
+        @Override
+        public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
+            // TODO: check partition type
+            return ((OlapTable) table).getRangePartitionMap();
+        }
+
+        @Override
+        public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
+            // TODO: check partition type
+            return ((OlapTable) table).getListPartitionMap();
+        }
+
+    }
 
     static class HivePartitionTraits extends DefaultTraits {
 
@@ -281,6 +299,19 @@ public abstract class ConnectorPartitionTraits {
         @Override
         PartitionKey createEmptyKey() {
             return new JDBCPartitionKey();
+        }
+    }
+
+    static class DeltaLakePartitionTraits extends DefaultTraits {
+
+        @Override
+        PartitionKey createEmptyKey() {
+            return new DeltaLakePartitionKey();
+        }
+
+        @Override
+        String getDbName() {
+            return ((DeltaLakeTable) table).getDbName();
         }
     }
 }
