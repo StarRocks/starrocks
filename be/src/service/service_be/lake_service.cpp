@@ -162,7 +162,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::MAKE_SNAPSHOT);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
