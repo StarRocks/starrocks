@@ -329,7 +329,8 @@ public class HiveMetastoreApiConverter {
             // RCTEXT and RCBINARY has same input/output format class, but serde lib is not same
             // In RemoteFileInputFormat, we use RCBINARY to represent RCFileInputFormat
             // and set RCTEXT's serde lib explictly here
-            if (metastoreTable.getSd().getSerdeInfo().getSerializationLib().equals(COLUMNAR_SERDE_CLASS)) {
+            if (metastoreTable.getSd() != null && metastoreTable.getSd().getSerdeInfo() != null &&
+                    metastoreTable.getSd().getSerdeInfo().getSerializationLib().equals(COLUMNAR_SERDE_CLASS)) {
                 serdeLib = COLUMNAR_SERDE_CLASS;
             }
             hiveProperties.put(HIVE_TABLE_SERDE_LIB, serdeLib);
@@ -354,7 +355,9 @@ public class HiveMetastoreApiConverter {
             hiveProperties.put(HIVE_TABLE_COLUMN_TYPES, dataColumnTypes);
         }
 
-        hiveProperties.putAll(metastoreTable.getParameters());
+        if (metastoreTable.getParameters() != null) {
+            hiveProperties.putAll(metastoreTable.getParameters());
+        }
 
         return hiveProperties;
     }

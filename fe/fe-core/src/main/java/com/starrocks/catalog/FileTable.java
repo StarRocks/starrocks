@@ -24,11 +24,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
@@ -44,6 +46,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class FileTable extends Table {
     public static final String JSON_KEY_FILE_PATH = "path";
@@ -83,7 +86,10 @@ public class FileTable extends Table {
         if (Strings.isNullOrEmpty(format)) {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
-        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc") && !format.equalsIgnoreCase("text")) {
+        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc") &&
+                !format.equalsIgnoreCase("text") && !format.equalsIgnoreCase("avro") &&
+                !format.equalsIgnoreCase("rctext") && !format.equalsIgnoreCase("rcbinary") &&
+                !format.equalsIgnoreCase("sequence")) {
             throw new DdlException("not supported format: " + format);
         }
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
@@ -101,6 +107,14 @@ public class FileTable extends Table {
             return RemoteFileInputFormat.ORC;
         } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("text")) {
             return RemoteFileInputFormat.TEXT;
+        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("avro")) {
+            return RemoteFileInputFormat.AVRO;
+        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("rctext")) {
+            return RemoteFileInputFormat.RCTEXT;
+        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("rcbinary")) {
+            return RemoteFileInputFormat.RCBINARY;
+        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("sequence")) {
+            return RemoteFileInputFormat.SEQUENCE;
         } else {
             return RemoteFileInputFormat.UNKNOWN;
         }
@@ -177,6 +191,17 @@ public class FileTable extends Table {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.FILE_TABLE, fullSchema.size(),
                 0, "", "");
         tTableDescriptor.setFileTable(tFileTable);
+
+        HiveStorageFormat storageFormat = HiveStorageFormat.get(fileProperties.get(JSON_KEY_FORMAT));
+        tFileTable.setSerde_lib(storageFormat.getSerde());
+        tFileTable.setInput_format(storageFormat.getInputFormat());
+
+        String columnNames = fullSchema.stream().map(Column::getName).collect(Collectors.joining(","));
+        String columnTypes = fullSchema.stream().map(Column::getType).map(ColumnTypeConverter::toHiveType)
+                .collect(Collectors.joining("#"));
+        tFileTable.setHive_column_names(columnNames);
+        tFileTable.setHive_column_types(columnTypes);
+
         return tTableDescriptor;
     }
 

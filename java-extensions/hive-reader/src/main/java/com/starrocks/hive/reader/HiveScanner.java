@@ -199,8 +199,8 @@ public class HiveScanner extends ConnectorScanner {
                 reader.close();
             }
         } catch (IOException e) {
-            LOG.error("Failed to close the hudi MOR slice reader.", e);
-            throw new IOException("Failed to close the hudi MOR slice reader.", e);
+            LOG.error("Failed to close the hive reader.", e);
+            throw new IOException("Failed to close the hive reader.", e);
         }
     }
 

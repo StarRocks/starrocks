@@ -65,15 +65,15 @@ struct TTupleDescriptor {
 enum THdfsFileFormat {
   TEXT = 0,
   LZO_TEXT = 1,
-  RC_FILE = 2,
-  SEQUENCE_FILE = 3,
+  RC_BINARY = 2,
+  RC_TEXT = 3,
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
+  SEQUENCE_FILE = 7,
 
   UNKNOWN = 100
 }
-
 
 // Text file desc
 struct TTextFileDesc {
@@ -392,6 +392,14 @@ struct TFileTable {
 
     // Schema columns
     2: optional list<TColumn> columns
+
+    3: optional string hive_column_names
+
+    4: optional string hive_column_types
+
+    5: optional string input_format
+
+    6: optional string serde_lib
 }
 
 struct TTableFunctionTable {
