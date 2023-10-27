@@ -138,4 +138,8 @@ public abstract class ScanNode extends PlanNode {
 
         return columnAccessPaths.stream().map(ColumnAccessPath::toThrift).collect(Collectors.toList());
     }
+    
+    public boolean isOlapScanNode() {
+        return this instanceof OlapScanNode;
+    }
 }

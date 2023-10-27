@@ -91,6 +91,7 @@ public:
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     RowsetId rowsetid;
+    bool asc_hint = true;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;

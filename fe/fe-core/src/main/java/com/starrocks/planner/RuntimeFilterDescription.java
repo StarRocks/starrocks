@@ -45,8 +45,6 @@ public class RuntimeFilterDescription {
         JOIN_FILTER
     }
 
-    ;
-
     private int filterId;
     private int buildPlanNodeId;
     private Expr buildExpr;
@@ -75,6 +73,8 @@ public class RuntimeFilterDescription {
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
+
+    private SortInfo sortInfo;
 
     public RuntimeFilterDescription(SessionVariable sv) {
         nodeIdToProbeExpr = new HashMap<>();
@@ -125,9 +125,20 @@ public class RuntimeFilterDescription {
         this.type = type;
     }
 
+    public SortInfo getSortInfo() {
+        return sortInfo;
+    }
+
+    public void setSortInfo(SortInfo sortInfo) {
+        this.sortInfo = sortInfo;
+    }
+
     public boolean canProbeUse(PlanNode node) {
         if (!canAcceptFilter(node)) {
             return false;
+        }
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
+            ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
         // if we don't across exchange node, that's to say this is in local fragment instance.
         // we don't need to use adaptive strategy now. we are using a conservative way.
@@ -161,10 +172,32 @@ public class RuntimeFilterDescription {
 
     // return true if Node could accept the Filter
     public boolean canAcceptFilter(PlanNode node) {
-        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && !(node instanceof OlapScanNode)) {
+        if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
+            if (node instanceof ScanNode) {
+                ScanNode scanNode = (ScanNode) node;
+                return scanNode.isOlapScanNode();
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public boolean isNullLast() {
+        if (sortInfo != null) {
+            return !sortInfo.getNullsFirst().get(0);
+        } else {
             return false;
         }
-        return true;
+    }
+
+    public boolean isAscFilter() {
+        if (sortInfo != null) {
+            return sortInfo.getIsAscOrder().get(0);
+        } else {
+            return true;
+        }
     }
 
     public void enterExchangeNode() {
