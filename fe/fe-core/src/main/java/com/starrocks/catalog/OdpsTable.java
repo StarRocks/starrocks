@@ -66,6 +66,8 @@ public class OdpsTable extends Table {
                         Collectors.toList()));
         this.odpsTable = odpsTable;
         this.catalogName = catalogName;
+        this.dbName = odpsTable.getProject();
+        this.tableName = odpsTable.getName();
         this.partitionColumns =
                 odpsTable.getSchema().getPartitionColumns().stream().map(EntityConvertUtils::convertColumn).collect(
                         Collectors.toList());
