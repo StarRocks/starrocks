@@ -103,24 +103,39 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(int maxLevel, Set<Table> tablesToCheck) {
+    public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
+                                                      int maxLevel,
+                                                      Set<Table> tablesToCheck) {
+        if (tablesToCheck.isEmpty()) {
+            return Sets.newHashSet();
+        }
         Set<MaterializedView> mvs = Sets.newHashSet();
-        getRelatedMvs(maxLevel, 0, tablesToCheck, mvs);
+        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
-    public static void getRelatedMvs(int maxLevel, int currentLevel, Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
+    public static void getRelatedMvs(ConnectContext connectContext,
+                                     int maxLevel, int currentLevel,
+                                     Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
         if (currentLevel >= maxLevel) {
+            logMVPrepare(connectContext, "Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
         }
         Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
             Set<MvId> mvIds = table.getRelatedMaterializedViews();
             if (mvIds != null && !mvIds.isEmpty()) {
+                logMVPrepare(connectContext, "Table/MaterializedView {} has related materialized views: {}",
+                        table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
+            } else {
+                logMVPrepare(connectContext, "Table/MaterializedView {} has no related materialized views, " +
+                                "identifier:{}", table.getName(), table.getTableIdentifier());
             }
         }
         if (newMvIds.isEmpty()) {
@@ -130,16 +145,18 @@ public class MvUtils {
         for (MvId mvId : newMvIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             if (db == null) {
+                logMVPrepare(connectContext, "Cannot find database from mvId:{}", mvId);
                 continue;
             }
             Table table = db.getTable(mvId.getId());
             if (table == null) {
+                logMVPrepare(connectContext, "Cannot find materialized view from mvId:{}", mvId);
                 continue;
             }
             newMvs.add(table);
             mvs.add((MaterializedView) table);
         }
-        getRelatedMvs(maxLevel, currentLevel + 1, newMvs, mvs);
+        getRelatedMvs(connectContext, maxLevel, currentLevel + 1, newMvs, mvs);
     }
 
     // get all ref tables within and below root
