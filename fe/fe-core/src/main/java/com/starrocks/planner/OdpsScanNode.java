@@ -27,6 +27,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -48,12 +49,18 @@ public class OdpsScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OdpsScanNode.class);
     private OdpsTable table;
     private CloudConfiguration cloudConfiguration = null;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
 
     public OdpsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         table = (OdpsTable) desc.getTable();
         setupCloudCredential();
+    }
+
+    public HDFSScanNodePredicates getScanNodePredicates() {
+        return scanNodePredicates;
     }
 
     private void setupCloudCredential() {

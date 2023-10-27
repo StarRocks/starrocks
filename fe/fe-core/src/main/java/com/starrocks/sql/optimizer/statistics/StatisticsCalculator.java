@@ -351,8 +351,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalOdpsScan(LogicalOdpsScanOperator node, ExpressionContext context) {
-        return computeNormalExternalTableScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap(),
-                StatisticsEstimateCoefficient.DEFAULT_ES_OUTPUT_ROWS);
+        LOG.info("[debug] visit logical odps scan");
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
     }
 
     @Override
@@ -374,18 +374,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalOdpsScan(PhysicalOdpsScanOperator node, ExpressionContext context) {
-        return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
-    }
-
-    private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
-                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
-        if (context.getStatistics() == null) {
-            String catalogName = ((OdpsTable) table).getCatalogName();
-            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
-            context.setStatistics(stats);
-        }
-        return visitOperator(node, context);
+        LOG.info("[debug] visit physical odps scan");
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
     }
 
     public Void visitLogicalHudiScan(LogicalHudiScanOperator node, ExpressionContext context) {

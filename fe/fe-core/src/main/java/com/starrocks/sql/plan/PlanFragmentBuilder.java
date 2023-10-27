@@ -1152,7 +1152,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalOdpsScan(OptExpression optExpression, ExecPlan context) {
-            LOG.info("start visit physical odps scan");
+            LOG.info("[debug] start visit physical odps scan");
             PhysicalOdpsScanOperator node = (PhysicalOdpsScanOperator) optExpression.getOp();
 
             Table referenceTable = node.getTable();
@@ -1176,6 +1176,9 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 odpsScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
+                HDFSScanNodePredicates scanNodePredicates = odpsScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (Exception e) {
                 LOG.warn("Odps scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -1189,7 +1192,7 @@ public class PlanFragmentBuilder {
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
-            LOG.info("finish visit physical odps scan");
+            LOG.info("[debug] finish visit physical odps scan");
             return fragment;
         }
 
