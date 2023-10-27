@@ -15,11 +15,11 @@
 #pragma once
 
 #include <bthread/butex.h>
+#include <bthread/processor.h> // cpu_relax()
 
 #include <chrono>
 #include <climits>
 
-#include "bthread/processor.h" // cpu_relax()
 #include "util/time.h"
 
 namespace starrocks::bthreads {
