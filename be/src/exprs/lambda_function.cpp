@@ -105,4 +105,20 @@ StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk
     return get_child(0)->evaluate_checked(context, chunk);
 }
 
+void LambdaFunction::close() {
+    _captured_slot_ids.clear();
+    _arguments_ids.clear();
+    _common_sub_expr_ids.clear();
+    _common_sub_expr.clear();
+    Expr::close();
+}
+
+void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    _captured_slot_ids.clear();
+    _arguments_ids.clear();
+    _common_sub_expr_ids.clear();
+    _common_sub_expr.clear();
+    Expr::close(state, context, scope);
+}
+
 } // namespace starrocks
