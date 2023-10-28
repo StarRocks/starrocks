@@ -139,7 +139,10 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
 void JITExpr::close() {
     auto* jit_wapper = JITWapper::get_instance();
     if (jit_wapper->initialized()) {
-        jit_wapper->remove_function(_expr->debug_string());
+        auto status = jit_wapper->remove_function(_expr->debug_string());
+        if (!status.ok()) {
+            LOG(WARNING) << "JIT: remove function failed, reason: " << status;
+        }
     }
 
     Expr::close();
