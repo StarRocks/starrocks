@@ -573,27 +573,19 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
     jni_scanner_params["table_name"] = odps_table->get_table_name();
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["session_id"] = _scan_range.relative_path;
-    jni_scanner_params["start_index"] = _scan_range.offset;
-    jni_scanner_params["num_record"] = _scan_range.length;
+    jni_scanner_params["start_index"] = std::to_string(_scan_range.offset);
+    jni_scanner_params["num_record"] = std::to_string(_scan_range.length);
     jni_scanner_params["nested_fields"] = nested_fields;
 
     LOG(INFO) << "get jni scanner params";
 
-    string option_info = "";
-    if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::ALIYUN) {
-        const AliyunCloudConfiguration aliyun_cloud_configuration =
-                CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
-        AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
-        if (!aliyun_cloud_credential.endpoint.empty()) {
-            jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
-        }
-        if (!aliyun_cloud_credential.access_key.empty()) {
-            jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
-        }
-        if (!aliyun_cloud_credential.secret_key.empty()) {
-            jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
-        }
-    }
+    const AliyunCloudConfiguration aliyun_cloud_configuration =
+            CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
+    AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
+    jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
+    jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
+    jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
+    
     for (const auto& pair : jni_scanner_params) {
         LOG(INFO) << pair.first << ": " << pair.second;
     }
