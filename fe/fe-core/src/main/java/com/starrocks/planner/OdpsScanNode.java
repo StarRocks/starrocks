@@ -28,6 +28,8 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -156,7 +158,10 @@ public class OdpsScanNode extends ScanNode {
             tHdfsScanNode.setTable_name(table.getTableName());
         }
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        cloudConfiguration.toThrift(tCloudConfiguration);
+        tCloudConfiguration.setCloud_type(TCloudType.ALIYUN);
+        tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
         msg.hdfs_scan_node = tHdfsScanNode;
     }
 
