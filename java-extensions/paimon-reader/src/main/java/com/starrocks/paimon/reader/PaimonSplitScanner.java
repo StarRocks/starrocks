@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,16 +79,21 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
 
-        String[] optionList = params.get("option_info").split(",");
-        for (String option : optionList) {
-            String[] kv = option.split("=");
-            if (kv.length == 2) {
-                optionInfo.put(kv[0], kv[1]);
-            } else {
-                LOG.warn("Invalid paimon option argument: " + option);
-            }
-        }
-
+        ScannerHelper.parseOptions(params.get("option_info"), kv -> {
+            optionInfo.put(kv[0], kv[1]);
+            return null;
+        }, t -> {
+            LOG.warn("Invalid paimon scanner option argument: " + t);
+            return null;
+        });
+        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), kv -> {
+            // see org.apache.paimon.utils.HadoopUtils.CONFIG_PREFIXES ["hadoop."]
+            optionInfo.put("hadoop." + kv[0], kv[1]);
+            return null;
+        }, t -> {
+            LOG.warn("Invalid paimon scanner fs options props argument: " + t);
+            return null;
+        });
         this.classLoader = this.getClass().getClassLoader();
     }
 
