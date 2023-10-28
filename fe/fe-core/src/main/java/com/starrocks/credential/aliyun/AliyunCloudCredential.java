@@ -57,6 +57,9 @@ public class AliyunCloudCredential implements CloudCredential {
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY, accessKey);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY, secretKey);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT, endpoint);
     }
 
     @Override
