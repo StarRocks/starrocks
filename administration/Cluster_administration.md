@@ -119,8 +119,7 @@ http://<cn_host>:<cn_http_port>/api/health
 
 若返回 `{"status": "OK", "msg": "To Be Added"}`，则集群正常启动。
 
-确认正常启动后，如果执行查询时需要使用 CN 节点，扩展算力，则需要设置系统变量 [`prefer_compute_node`、`use_compute_nodes`](../reference/System_variable.md
-)。
+确认正常启动后，如果执行查询时需要使用 CN 节点，扩展算力，则需要设置系统变量 [`prefer_compute_node`、`use_compute_nodes`](../reference/System_variable.md)。
 
 ## 停止集群
 
