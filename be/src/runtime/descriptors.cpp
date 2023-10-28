@@ -670,7 +670,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         }
         case TTableType::ODPS_TABLE: {
-            desc = pool->add(new OdpsTableDescriptor(tdesc));
+            desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
             break;
         }
         default:

@@ -101,7 +101,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                                           _runtime_state->chunk_size()));
     _runtime_state->set_desc_tbl(desc_tbl);
 
-    LOG(INFO) << "Prepare(): set up desc tbl " << tesc_tbl.debug_string();
+    LOG(INFO) << "Prepare(): set up desc tbl " << desc_tbl.debug_string();
 
     // set up plan
     DCHECK(request.__isset.fragment);
