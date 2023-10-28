@@ -62,7 +62,7 @@ DUPLICATE KEY(event_time, event_type)
 DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键，否则建表失败。分桶键的更多说明，请参见[分桶](./Data_distribution.md#分桶)。
 
 ### 使用说明
 
@@ -152,7 +152,7 @@ PROPERTIES (
 );
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](./Data_distribution.md#分桶)。
 
 ### 使用说明
 
@@ -227,7 +227,7 @@ UNIQUE KEY(create_time, order_id)
 DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](./Data_distribution.md#分桶)。
 
 ### 使用说明
 
@@ -316,7 +316,7 @@ PROPERTIES (
 );
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](./Data_distribution.md#分桶)。
 
 - 例如，需要实时分析用户情况，则可以将用户 ID `user_id` 作为主键，其余为指标列。建表语句如下：
 
@@ -342,7 +342,7 @@ PROPERTIES (
 );
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](./Data_distribution.md#分桶)。
 
 ### 使用说明
 

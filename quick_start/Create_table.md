@@ -101,15 +101,15 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 分区分桶
 
-`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](/table_design/Data_distribution.md#管理动态分区)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
+`PARTITION` 关键字用于给表 [创建分区](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](../table_design/Data_distribution.md#管理动态分区)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
 
-`DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
+`DISTRIBUTED` 关键字用于给表 [创建分桶](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
-创建表时合理的分区和分桶设计可以优化表的查询性能。有关分区分桶列如何选择，详见 [数据分布](/table_design/Data_distribution.md)。
+创建表时合理的分区和分桶设计可以优化表的查询性能。有关分区分桶列如何选择，详见 [数据分布](../table_design/Data_distribution.md)。
 
 #### 数据模型
 
-`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](/table_design/Data_model.md#明细模型)，[聚合模型](/table_design/Data_model.md#聚合模型)，[更新模型](/table_design/Data_model.md#更新模型)，[主键模型](/table_design/Data_model.md#主键模型)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](../table_design/Data_model.md)，[聚合模型](../table_design/Data_model.md)，[更新模型](../table_design/Data_model.md)，[主键模型](../table_design/Data_model.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
 
 #### 索引
 

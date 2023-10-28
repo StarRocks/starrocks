@@ -14,7 +14,7 @@ USE [<catalog_name>.]<db_name>
 
 | **参数**     | **必选** | **说明**                                                     |
 | ------------ | -------- | ------------------------------------------------------------ |
-| catalog_name | 否       | Catalog 名称。<ul><li>如不指定该参数，则默认使用 `default_catalog` 下的数据库。</li><li>如要使用 external catalog 下的数据库，则必须指定该参数，具体见「示例二」。</li><li>如从一个 catalog 下的数据库切换到另一个 catalog 下的数据库，则必须指定该参数，具体见「示例三」。</li></ul>更多有关 catalog 的信息，请参见[概述](/data_source/catalog/catalog_overview.md)。 |
+| catalog_name | 否       | Catalog 名称。<ul><li>如不指定该参数，则默认使用 `default_catalog` 下的数据库。</li><li>如要使用 external catalog 下的数据库，则必须指定该参数，具体见「示例二」。</li><li>如从一个 catalog 下的数据库切换到另一个 catalog 下的数据库，则必须指定该参数，具体见「示例三」。</li></ul>更多有关 catalog 的信息，请参见概述。 |
 | db_name      | 是       | 数据库名称。该数据库必须存在。                               |
 
 ## 示例

@@ -101,7 +101,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | **配置项**                          | **必选** | **说明**                                                     |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
 | type                                | 是       | 资源类型，取值为 `iceberg`。                                 |
-| starrocks.catalog-type              | 是       | Iceberg 的 catalog 类型。StarRocks 2.3 以下版本仅支持 Hive catalog；StarRocks 2.3 及以上版本支持 Hive catalog 和 custom catalog。 如要使用 Hive catalog， 设置该参数为 `HIVE`。 如要使用 custom catalog，设置该参数为 `CUSTOM`。详细信息参见[创建 Iceberg 资源](/using_starrocks/External_table#步骤一创建--iceberg-资源)。 |
+| starrocks.catalog-type              | 是       | Iceberg 的 catalog 类型。StarRocks 2.3 以下版本仅支持 Hive catalog；StarRocks 2.3 及以上版本支持 Hive catalog 和 custom catalog。 如要使用 Hive catalog， 设置该参数为 `HIVE`。 如要使用 custom catalog，设置该参数为 `CUSTOM`。详细信息参见[创建 Iceberg 资源](../../../data_source/External_table.md#步骤一创建--iceberg-资源)。 |
 | iceberg.catalog.hive.metastore.uris | 是       | Hive metastore 的URI。                                       |
 
 #### Hudi 资源

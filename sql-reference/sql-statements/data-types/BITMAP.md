@@ -38,4 +38,4 @@ BITMAP 与 HLL (HyperLogLog) 类似，常用来加速 count distinct 的去重�
 
 BITMAP 类型的详细使用方法，如向表中插入 BITMAP 值，请参考 [bitmap](../../sql-functions/aggregate-functions/bitmap.md)。
 
-BITMAP 类型的字段支持多种 BITMAP 函数，如 bitmap_and，bitmap_andnot 等。具体的函数请参考 [bitmap-functions](../../sql-functions/bitmap-functions)。
+BITMAP 类型的字段支持多种 BITMAP 函数，如 bitmap_and，bitmap_andnot 等。具体的函数请参考 [bitmap-functions](../../sql-functions/bitmap-functions/bitmap_and.md)。

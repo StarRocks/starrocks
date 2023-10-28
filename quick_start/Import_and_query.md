@@ -81,7 +81,7 @@ select * from detailDemo;
 select * from detailDemo order by region_num desc;
 ```
 
-StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#%E8%BF%9E%E6%8E%A5join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](/sql-reference/sql-statements/data-manipulation/SELECT.md#with-子句) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 支持多种 select 用法，包括：[Join](../sql-reference/sql-statements/data-manipulation/SELECT.md)，[子查询](../sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子句](../sql-reference/sql-statements/data-manipulation/SELECT.md#with-子句) 等，详见 [查询章节](../sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
 ## 扩展支持
 

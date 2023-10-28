@@ -124,7 +124,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 ```
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](/using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
 
 ### **ENGINE 类型**
 
@@ -299,7 +299,7 @@ PARTITION BY RANGE (datekey) (
 1. 当前分区键仅支持 **日期类型** 和 **整数类型**，分区类型需要与 EVERY 里的表达式匹配。
 2. 当分区键为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
 
-更详细的语法规则，请参见[批量创建分区](/table_design/Data_distribution#批量创建分区)。
+更详细的语法规则，请参见[批量创建分区](../../../table_design/Data_distribution.md#批量创建分区)。
 
 ### **distribution_desc**
 
@@ -312,7 +312,7 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 ```
 
 说明：
-使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](/table_design/Data_distribution#确定分桶数量)。建议使用 Hash 分桶方式。
+使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。建议使用 Hash 分桶方式。
 
 ### **PROPERTIES**
 
@@ -378,7 +378,7 @@ PROPERTIES (
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
+详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](../../../using_starrocks/Colocate_join.md) 章节。
 
 #### 设置动态分区
 
