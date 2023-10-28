@@ -60,20 +60,13 @@ public class IcebergConnector implements Connector {
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
-    private final Cache<TableIdentifier, IcebergTable> icebergTableCache;
+    private Cache<TableIdentifier, IcebergTable> icebergTableCache;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        long icebergTableCacheTTL = Config.hive_meta_cache_ttl_s;
-        if (getNativeCatalogType() == IcebergCatalogType.REST_CATALOG) {
-            icebergTableCacheTTL = ICEBERG_REST_CATALOG_TABLE_CACHE_TTL_S;
-        }
-        this.icebergTableCache = CacheBuilder.newBuilder().
-                expireAfterWrite(icebergTableCacheTTL, SECONDS).
-                maximumSize(1000000).build();
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -85,6 +78,13 @@ public class IcebergConnector implements Connector {
             Properties props = System.getProperties();
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
+
+        long icebergTableCacheTTL = Config.hive_meta_cache_ttl_s;
+        if (nativeCatalogType == IcebergCatalogType.REST_CATALOG) {
+            icebergTableCacheTTL = ICEBERG_REST_CATALOG_TABLE_CACHE_TTL_S;
+        }
+        this.icebergTableCache = CacheBuilder.newBuilder().expireAfterWrite(icebergTableCacheTTL, SECONDS)
+                .maximumSize(1000000).build();
 
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
