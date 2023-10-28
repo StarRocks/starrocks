@@ -18,11 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
-<<<<<<< HEAD
-=======
 import com.starrocks.jni.connector.ScannerHelper;
-import com.starrocks.jni.connector.SelectedFields;
->>>>>>> 5848af94d0 ([Feature] pass `hadoop-ext` related fields to jni scanner (#33660))
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
