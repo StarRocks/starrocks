@@ -80,17 +80,17 @@ select * from detailDemo;
 select * from detailDemo order by mache_verson desc;
 ```
 
-StarRocks 支持多种 select 用法，包括：[Join](/sql-reference/sql-statements/data-manipulation/SELECT.md#%E8%BF%9E%E6%8E%A5join)，[子查询](/sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子表](/sql-reference/sql-statements/data-manipulation/SELECT.md#with%E5%AD%90%E5%8F%A5) 等，详见 [查询章节](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
+StarRocks 支持多种 select 用法，包括：[Join](../sql-reference/sql-statements/data-manipulation/SELECT.md)，[子查询](../sql-reference/sql-statements/data-manipulation/SELECT.md#子查询)，[With 子表](../sql-reference/sql-statements/data-manipulation/SELECT.md#with%E5%AD%90%E5%8F%A5) 等，详见 [查询章节](../sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
 ## 扩展内容
 
 ### 函数支持
 
-StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](/sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](/sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](/sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](/sql-reference/sql-functions/cast.md)，[hash 函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](/sql-reference/sql-functions/encryption-functions/md5.md)，[窗口函数](/sql-reference/sql-functions/Window_function.md) 等。
+StarRocks 中支持多种函数，包括：[日期函数](../sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](../sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](../sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](../sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](../sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](../sql-reference/sql-functions/cast.md)，[hash 函数](../sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](../sql-reference/sql-functions/encryption-functions/md5.md)，[窗口函数](../sql-reference/sql-functions/Window_function.md) 等。
 
 ### 视图，物化视图
 
-StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definition/CREATE_VIEW.md#description) 和 [物化视图](/using_starrocks/Materialized_view.md#物化视图)。具体应用及原理详见对应章节。
+StarRocks 支持创建 [逻辑视图](../sql-reference/sql-statements/data-definition/CREATE_VIEW.md#description) 和 [物化视图](/using_starrocks/Materialized_view.md#物化视图)。具体应用及原理详见对应章节。
 
 ### 外部表
 
@@ -100,7 +100,7 @@ StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.
 
 ### 通过调整并行度优化查询效率
 
-您可以通过设置 Pipeline 执行引擎变量（推荐），或者调整一个 Fragment 实例的并行数量`set  parallel_fragment_exec_instance_num = 8;`，来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，请参见 [查询并行度相关参数](/administration/Query_management.md/#查询相关的session变量)。
+您可以通过设置 Pipeline 执行引擎变量（推荐），或者调整一个 Fragment 实例的并行数量`set  parallel_fragment_exec_instance_num = 8;`，来设置查询并行度，从而提高 CPU 资源利用率和查询效率。详细的参数介绍及设置，请参见 [查询并行度相关参数](../administration/Query_management.md#查询相关的session变量)。
 
 ### 如何查看 Profile 并分析查询瓶颈
 

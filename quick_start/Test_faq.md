@@ -46,7 +46,7 @@
 
 ### 如何合理地设置并行度
 
-您可以通过设置 Pipeline 执行引擎变量（推荐），或者设置一个 Fragment 实例的并行数量，来设置查询并行度，从而提高CPU资源利用率和查询效率。设置方式，请参见[查询并行度相关参数](/administration/Query_management.md/#查询相关的session变量)。
+您可以通过设置 Pipeline 执行引擎变量（推荐），或者设置一个 Fragment 实例的并行数量，来设置查询并行度，从而提高CPU资源利用率和查询效率。设置方式，请参见[查询并行度相关参数](../administration/Query_management.md#查询相关的session变量)。
 
 ### 如何查看Profile分析查询瓶颈
 

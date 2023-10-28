@@ -1,6 +1,6 @@
 # 通过导入实现数据变更
 
-StarRocks 的[主键模型](/table_design/Data_model.md#主键模型)支持通过 [Stream Load](/loading/StreamLoad.md)、[Broker Load](/loading/BrokerLoad.md) 或 [Routine Load](/loading/RoutineLoad.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../loading/InsertInto.md) 语句对 StarRocks 表进行数据变更。
+StarRocks 的[主键模型](../table_design/Data_model.md#主键模型)支持通过 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../loading/BrokerLoad.md) 或 [Routine Load](../loading/RoutineLoad.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../loading/InsertInto.md) 语句对 StarRocks 表进行数据变更。
 
 StarRocks 还支持部分更新。该特性目前正在公测中。
 
@@ -44,13 +44,13 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ## 前提条件
 
-如果使用 Broker Load 导入数据，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文假设您已部署一个名为 `broker1` 的 Broker。
+如果使用 Broker Load 导入数据，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见部署 Broker 节点完成 Broker 部署。本文假设您已部署一个名为 `broker1` 的 Broker。
 
 如果使用 Routine Load 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署四个 Topic，分别为 `topic1`、`topic2`、`topic3` 和 `topic4`。
 
 ## 操作示例
 
-下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md)。
+下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE_LOAD.md)。
 
 ### UPSERT
 

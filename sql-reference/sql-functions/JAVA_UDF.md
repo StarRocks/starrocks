@@ -131,7 +131,7 @@ FE 配置项：在 FE 配置文件（$FE_HOME/conf/fe.conf）中设置配置项 
 
     用户自定义类必须实现如下方法：
 
-    > 方法中请求参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md/#类型映射关系)。
+    > 方法中请求参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md#类型映射关系)。
 
     | **方法**                 | **含义**                                               |
     | ------------------------ | ------------------------------------------------------ |
@@ -177,7 +177,7 @@ SELECT MY_UDF_JSON_GET('{"key":"{\\"in\\":2}"}', '$.key.in');
 
 #### 步骤一：创建 Maven 项目
 
-请参考[步骤一：创建 Maven 项目](./JAVA_UDF.md/#步骤一创建-maven-项目)。
+请参考[步骤一：创建 Maven 项目](./JAVA_UDF.md#步骤一创建-maven-项目)。
 
 #### 步骤二：开发 UDAF 函数
 
@@ -224,7 +224,7 @@ SELECT MY_UDF_JSON_GET('{"key":"{\\"in\\":2}"}', '$.key.in');
 
     用户自定义类必须实现如下方法：
 
-    > 方法中传入参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md/#类型映射关系)。
+    > 方法中传入参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md#类型映射关系)。
 
     | **需要实现的方法**                | **说明**                                                     |
     | --------------------------------- | ------------------------------------------------------------ |
@@ -271,7 +271,7 @@ PROPERTIES
 );
 ```
 
-> 参数说明与 Scalar UDF 函数类似，请参考[在 StarRocks 中创建 Scalar UDF 函数](./JAVA_UDF.md/#步骤三在-starrocks-中创建-scalar-udf-函数)。
+> 参数说明与 Scalar UDF 函数类似，请参考[在 StarRocks 中创建 Scalar UDF 函数](./JAVA_UDF.md#步骤三在-starrocks-中创建-scalar-udf-函数)。
 
 #### 步骤四：使用 UDAF 函数
 
@@ -285,7 +285,7 @@ SELECT MY_SUM_INT(col1);
 
 #### 步骤一：创建 Maven 项目
 
-请参考[步骤一：创建 Maven 项目](./JAVA_UDF.md/#步骤一创建-maven-项目)。
+请参考[步骤一：创建 Maven 项目](./JAVA_UDF.md#步骤一创建-maven-项目)。
 
 #### 步骤二：开发 UDWF 函数
 
@@ -350,7 +350,7 @@ SELECT MY_SUM_INT(col1);
 
     用户自定义类必须实现 UDAF 所需要的方法（窗口函数是特殊聚合函数)，以及方法 `windowUpdate()`。
 
-    > 方法中请求参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md/#类型映射关系)。
+    > 方法中请求参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md#类型映射关系)。
 
 ##### 需要额外实现的方法
 
@@ -391,7 +391,7 @@ properties
 ```
 
 > - 参数Analytic：固定取值为**true**，表示所创建的函数为窗口函数。
-> - 其他参数的说明与 Scalar UDF 函数类似，请参考[在 StarRocks 中创建 Scalar UDF 函数](./JAVA_UDF.md/#步骤三在-starrocks-中创建-scalar-udf-函数)。
+> - 其他参数的说明与 Scalar UDF 函数类似，请参考[在 StarRocks 中创建 Scalar UDF 函数](./JAVA_UDF.md#步骤三在-starrocks-中创建-scalar-udf-函数)。
 
 #### 步骤四：使用 UDWF 函数
 
@@ -411,7 +411,7 @@ FROM test_basic;
 
 #### 步骤一：创建 Maven 项目
 
-请参考[步骤一：创建 Maven 项目](./JAVA_UDF.md/#步骤一创建-maven-项目)。
+请参考[步骤一：创建 Maven 项目](./JAVA_UDF.md#步骤一创建-maven-项目)。
 
 #### 步骤二：开发 UDTF 函数
 
@@ -430,7 +430,7 @@ FROM test_basic;
 
     用户自定义类必须实现如下方法：
 
-    > 方法中请求参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md/#类型映射关系)。
+    > 方法中请求参数和返回参数的数据类型，需要和步骤三中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](./JAVA_UDF.md#类型映射关系)。
 
     | **需要实现的方法** | **方法的含义**                              |
     | ------------------ | ------------------------------------------- |
@@ -459,7 +459,7 @@ properties
 );
 ```
 
-> 参数说明与 Scalar UDF 函数类似，请参考[在 StarRocks 中创建 Scalar UDF 函数](./JAVA_UDF.md/#步骤三在-starrocks-中创建-scalar-udf-函数)。
+> 参数说明与 Scalar UDF 函数类似，请参考[在 StarRocks 中创建 Scalar UDF 函数](./JAVA_UDF.md#步骤三在-starrocks-中创建-scalar-udf-函数)。
 
 #### 步骤四：使用 UDTF 函数
 

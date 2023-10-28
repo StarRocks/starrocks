@@ -35,7 +35,7 @@ Information_schema 的表结构类似 MySQL，但是部分统计信息还不完�
 
 ## 建表
 
-StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，分别适用于不同的应用场景，以 [明细表](../table_design/Data_model.md#明细模型) 为例书写建表语句：
+StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，分别适用于不同的应用场景，以 明细表 为例书写建表语句：
 
 ```sql
 use example_db;
@@ -73,9 +73,9 @@ PROPERTIES(
 
 可以通过 `show tables;` 命令查看当前库的所有表，通过 `desc table_name;` 命令可以查看表结构。通过 `show create table table_name;` 可查看建表语句。请注意：在 StarRocks 中字段名不区分大小写，表名区分大小写。
 
-表创建成功后，可以参考 [导入查询](/quick_start/Import_and_query.md) 章节 [Stream load Demo](/quick_start/Import_and_query.md#stream-load%E5%AF%BC%E5%85%A5demo) 进行数据导入及查询操作。
+表创建成功后，可以参考 [导入查询](../quick_start/Import_and_query.md) 章节 [Stream load Demo](/quick_start/Import_and_query.md#stream-load%E5%AF%BC%E5%85%A5demo) 进行数据导入及查询操作。
 
-更多建表语法详见 [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 章节。
+更多建表语法详见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 章节。
 
 ### 建表语句说明
 
@@ -85,43 +85,43 @@ StarRocks 表内部组织存储数据时会按照指定列排序，这些列为�
 
 #### 字段类型
 
-StarRocks 表中支持多种字段类型，除 demo 中已经列举的字段类型，还支持 [BITMAP 类型](/using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[Array 类型](../using_starrocks/Array.md)，字段类型介绍详见 [数据类型章节](/sql-reference/sql-statements/data-types/)。
+StarRocks 表中支持多种字段类型，除 demo 中已经列举的字段类型，还支持 [BITMAP 类型](../using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[Array 类型](../using_starrocks/Array.md)，字段类型介绍详见 数据类型章节。
 
 建表时尽量使用精确的类型。例如整形就不要用字符串类型，INT 类型满足则不要使用 BIGINT，精确的数据类型能够更好的发挥数据库的性能。
 
 #### 分区，分桶
 
-`PARTITION` 关键字用于给表 [创建分区](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#Syntax)，当前 demo 中使用 `make_time` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，`PROPERTIES` 中的 `dynamic_partition` 开头的相关属性配置都是为表设置动态分区。详见 [动态分区管理](/table_design/Data_distribution.md#动态分区管理)。
+`PARTITION` 关键字用于给表 [创建分区](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#Syntax)，当前 demo 中使用 `make_time` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，`PROPERTIES` 中的 `dynamic_partition` 开头的相关属性配置都是为表设置动态分区。详见 [动态分区管理](../table_design/Data_distribution.md#动态分区管理)。
 
-`DISTRIBUTED` 关键字用于给表 [创建分桶](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
+`DISTRIBUTED` 关键字用于给表 [创建分桶](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
-创建表时合理的分区和分桶设计可以优化表的查询性能，分区分桶列如何选择详见 [数据分布章节](/table_design/Data_distribution.md)。
+创建表时合理的分区和分桶设计可以优化表的查询性能，分区分桶列如何选择详见 [数据分布章节](../table_design/Data_distribution.md)。
 
 #### 数据模型
 
-`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](/table_design/Data_model.md#明细模型)，[聚合模型](/table_design/Data_model.md#聚合模型)，[更新模型](/table_design/Data_model.md#更新模型)，[主键模型](/table_design/Data_model.md#主键模型)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](../table_design/Data_model.md)，[聚合模型](../table_design/Data_model.md)，[更新模型](../table_design/Data_model.md)，[主键模型](../table_design/Data_model.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键和 shortke index](/table_design/Sort_key.md#排序列的原理) 章节。支持的索引类型有 [Bitmap 索引](/table_design/Bitmap_index.md#原理)，[Bloomfilter 索引](/table_design/Bloomfilter_index.md#原理) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键和 shortke index](../table_design/Sort_key.md#排序列的原理) 章节。支持的索引类型有 [Bitmap 索引](../table_design/Bitmap_index.md#原理)，[Bloomfilter 索引](../table_design/Bloomfilter_index.md#原理) 等。
 
 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
 
 #### ENGINE 类型
 
-默认为 olap。可选 mysql，elasticsearch，hive，ICEBERG 代表创建表为 [外部表](/data_source/External_table.md#外部表)。
+默认为 olap。可选 mysql，elasticsearch，hive，ICEBERG 代表创建表为 [外部表](../data_source/External_table.md#外部表)。
 
 <br/>
 
 ## 其他操作
 
-表创建成功后即可进行[数据导入查询](/quick_start/Import_and_query.md)。
+表创建成功后即可进行[数据导入查询](../quick_start/Import_and_query.md)。
 
-StarRocks支持[用户创建授权](/sql-reference/sql-statements/account-management)及多种[DDL操作](/sql-reference/sql-statements/data-definition)，此处仅简单介绍部分Schema Change 操作和如何创建用户并授权。
+StarRocks支持[用户创建授权](../sql-reference/sql-statements/account-management/GRANT.md)及多种[DDL操作](../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md)，此处仅简单介绍部分Schema Change 操作和如何创建用户并授权。
 
 ### Schema 修改
 
-使用 [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+使用 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
 
 以下举例说明。
 
@@ -194,4 +194,4 @@ mysql > exit
 mysql -h 127.0.0.1 -P9030 -utest -p123456
 ```
 
-更多用户权限介绍请参考 [用户权限章节](/administration/User_privilege.md)，创建用户更改用户密码相关命令详见 [用户账户管理章节](/sql-reference/sql-statements/account-management/)。
+更多用户权限介绍请参考 [用户权限章节](../administration/User_privilege.md)，创建用户更改用户密码相关命令详见 [用户账户管理章节](../sql-reference/sql-statements/account-management/CREATE_ROLE.md)。

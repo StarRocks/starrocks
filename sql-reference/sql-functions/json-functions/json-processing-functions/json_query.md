@@ -14,7 +14,7 @@ JSON_QUERY(json_object_expr, json_path)
 
 - `json_object_expr`：JSON 对象的表达式，可以是 JSON 类型的列，或者 PARSE_JSON 等 JSON 函数构造的 JSON 对象。
 
-- `json_path`: 查询 JSON 对象时的路径。支持的数据类型为字符串。StarRocks 支持的 JSON Path 的语法，请参见 [JSON Path 语法](../json-functions-and-operators.md/#JSON%Path)。
+- `json_path`: 查询 JSON 对象时的路径。支持的数据类型为字符串。StarRocks 支持的 JSON Path 的语法，请参见 [JSON Path 语法](../json-functions-and-operators.md#JSON%Path)。
 
 ## **返回值说明**
 

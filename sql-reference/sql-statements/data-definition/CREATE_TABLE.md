@@ -271,7 +271,7 @@ PARTITION BY RANGE (datekey) (
 1. 当前分区键仅支持 **日期类型** 和 **整数类型**，分区类型需要与 EVERY 里的表达式匹配。
 2. 当分区键为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
 
-更详细的语法规则，请参见[批量创建分区](/table_design/Data_distribution#批量创建分区)。
+更详细的语法规则，请参见[批量创建分区](../../../table_design/Data_distribution.md)。
 
 ### **distribution_desc**
 
@@ -284,7 +284,7 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 ```
 
 说明：
-使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](/table_design/Data_distribution#确定分桶数量)。建议使用 Hash 分桶方式。
+使用指定的 key 列进行哈希分桶。默认分桶数为 10。`DISTRIBUTED BY` 为必填字段。有关如何确定分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md)。建议使用 Hash 分桶方式。
 
 ### **PROPERTIES**
 
@@ -334,18 +334,6 @@ PROPERTIES (
     "bloom_filter_columns" = "k1, k2, k3"
 )
 ```
-
-#### 添加属性支持 Colocate Join
-
-如果希望使用 Colocate Join 特性，需要在 properties 中指定:
-
-``` sql
-PROPERTIES (
-    "colocate_with" = "table1"
-)
-```
-
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
 
 #### 设置动态分区
 
