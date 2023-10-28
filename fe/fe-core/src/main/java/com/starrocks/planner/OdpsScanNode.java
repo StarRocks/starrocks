@@ -96,7 +96,7 @@ public class OdpsScanNode extends ScanNode {
             hdfsScanRange.setOffset(split.getRowRange().getStartIndex());
             hdfsScanRange.setLength(split.getRowRange().getNumRecord());
             hdfsScanRange.setUse_odps_jni_reader(true);
-
+            hdfsScanRange.setFile_length(split.getRowRange().getNumRecord());
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocations.setScan_range(scanRange);

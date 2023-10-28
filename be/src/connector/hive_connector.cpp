@@ -551,7 +551,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
 HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
     LOG(INFO) << "create odps jni scanner";
     const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
-
+    LOG(INFO) << "convert to odps table";
     std::string required_fields;
     for (auto slot : _tuple_desc->slots()) {
         required_fields.append(slot->col_name());
@@ -577,6 +577,8 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
     jni_scanner_params["num_record"] = _scan_range.length;
     jni_scanner_params["nested_fields"] = nested_fields;
 
+    LOG(INFO) << "get jni scanner params";
+
     string option_info = "";
     if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::ALIYUN) {
         const AliyunCloudConfiguration aliyun_cloud_configuration =
@@ -591,6 +593,9 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
         if (!aliyun_cloud_credential.secret_key.empty()) {
             jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
         }
+    }
+    for (const auto& pair : jni_scanner_params) {
+        LOG(INFO) << pair.first << ": " << pair.second;
     }
     std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
