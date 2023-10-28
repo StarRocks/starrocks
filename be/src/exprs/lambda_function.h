@@ -59,6 +59,10 @@ public:
 
     Expr* get_lambda_expr() const { return _children[0]; }
 
+    void close() override;
+
+    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+
 private:
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;
