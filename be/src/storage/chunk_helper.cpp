@@ -274,7 +274,6 @@ Chunk* ChunkHelper::new_chunk_pooled(const Schema& schema, size_t chunk_size, bo
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const FieldPtr& f = schema.field(i);
         auto column = force ? column_from_pool<true>(*f, chunk_size) : column_from_pool<false>(*f, chunk_size);
-        column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }
     return new Chunk(std::move(columns), std::make_shared<Schema>(schema));
