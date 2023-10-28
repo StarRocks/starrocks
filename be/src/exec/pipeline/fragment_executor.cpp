@@ -294,6 +294,7 @@ int FragmentExecutor::_calc_query_expired_seconds(const UnifiedExecPlanFragmentP
 }
 
 Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+    LOG(INFO) << "prepare exec plan by request";
     auto* runtime_state = _fragment_ctx->runtime_state();
     auto* obj_pool = runtime_state->obj_pool();
     const DescriptorTbl& desc_tbl = runtime_state->desc_tbl();
@@ -605,6 +606,7 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
 
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request,
                                  const TExecPlanFragmentParams& unique_request) {
+    LOG(INFO) << "Fragment Executor:: prepare";
     DCHECK(common_request.__isset.desc_tbl);
     DCHECK(common_request.__isset.fragment);
 
@@ -686,6 +688,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 }
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
+    LOG(INFO) << "execute fragmet executor";
     bool prepare_success = false;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
@@ -700,6 +703,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     {
         SCOPED_TIMER(prepare_instance_timer);
         SCOPED_TIMER(prepare_driver_timer);
+        LOG(INFO) << "iterate drivers to prepare";
         RETURN_IF_ERROR(_fragment_ctx->iterate_drivers(
                 [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
     }
@@ -707,6 +711,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
 
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
+    LOG(INFO) << "iterate drivers to executor->submit(driver)";
     (void)_fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
         executor->submit(driver.get());
         return Status::OK();
