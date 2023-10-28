@@ -669,6 +669,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             desc = pool->add(new JDBCTableDescriptor(tdesc));
             break;
         }
+        case TTableType::ODPS_TABLE: {
+            desc = pool->add(new OdpsTableDescriptor(tdesc));
+            break;
+        }
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;
         }

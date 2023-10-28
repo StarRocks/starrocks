@@ -42,6 +42,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class OdpsMetadata implements ConnectorMetadata {
@@ -144,6 +145,8 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public CloudConfiguration getCloudConfiguration() {
-        return new AliyunCloudConfiguration(aliyunCloudCredential);
+        AliyunCloudConfiguration configuration = new AliyunCloudConfiguration(aliyunCloudCredential);
+        configuration.loadCommonFields(new HashMap<>(0));
+        return configuration;
     }
 }
