@@ -55,7 +55,7 @@ public class IcebergConnector implements Connector {
      * service.
      * 30 minutes is enough to make sure aws credential not to expired
      */
-    private static final Integer ICEBERG_TABLE_CACHE_TTL_S = 30 * 60;
+    private static final long ICEBERG_REST_CATALOG_TABLE_CACHE_TTL_S = 30 * 60L;
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
@@ -67,8 +67,12 @@ public class IcebergConnector implements Connector {
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
+        long icebergTableCacheTTL = Config.hive_meta_cache_ttl_s;
+        if (getNativeCatalogType() == IcebergCatalogType.REST_CATALOG) {
+            icebergTableCacheTTL = ICEBERG_REST_CATALOG_TABLE_CACHE_TTL_S;
+        }
         this.icebergTableCache = CacheBuilder.newBuilder().
-                expireAfterWrite(ICEBERG_TABLE_CACHE_TTL_S, SECONDS).
+                expireAfterWrite(icebergTableCacheTTL, SECONDS).
                 maximumSize(1000000).build();
     }
 
