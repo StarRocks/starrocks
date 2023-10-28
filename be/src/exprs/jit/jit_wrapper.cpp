@@ -30,6 +30,7 @@
 #include "llvm/ExecutionEngine/Orc/SimpleRemoteEPC.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/MC/SubtargetFeature.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Error.h"
@@ -97,8 +98,16 @@ StatusOr<JITScalarFunction> JITWapper::compile_scalar_function(ExprContext* cont
     instance->setup_module(module.get());
     // Generate scalar function IR.
     RETURN_IF_ERROR(JITFunction::generate_scalar_function_ir(context, *module, expr));
+    if (!llvm::verifyModule(*module)) {
+        return Status::JitCompileError("Failed to generate scalar function IR");
+    }
+
     // Optimize module.
     instance->optimize_module(module.get());
+    if (!llvm::verifyModule(*module)) {
+        return Status::JitCompileError("Failed to optimize scalar function IR");
+    }
+
     // Compile module, return function pointer (maybe nullptr).
     JITScalarFunction compiled_function = reinterpret_cast<JITScalarFunction>(
             instance->compile_module(std::move(module), std::move(llvm_context), expr_name));
