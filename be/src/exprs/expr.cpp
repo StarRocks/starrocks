@@ -210,6 +210,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
         LOG(ERROR) << "Could not construct expr tree.\n"
                    << status.get_error_msg() << "\n"
                    << apache::thrift::ThriftDebugString(texpr);
+        return status;
     }
 
     // Enable JIT based on the "enable_jit" parameters.
@@ -224,7 +225,13 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
 
     const auto* prev_e = e;
-    e->replace_compilable_exprs(&e, pool);
+    status = e->replace_compilable_exprs(&e, pool);
+    if (!status.ok()) {
+        LOG(ERROR) << "Could replace compilable exprs.\n"
+                   << status.get_error_msg() << "\n"
+                   << apache::thrift::ThriftDebugString(texpr);
+    }
+
     if (e != prev_e) {
         // The root node was replaced, so we need to update the context.
         *ctx = pool->add(new ExprContext(e));

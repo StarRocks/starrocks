@@ -419,7 +419,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 auto* jit_wrapper = JITWapper::get_instance();
                 if (jit_wrapper->support_jit()) {
                     const auto* prev_e = expr;
-                    expr->replace_compilable_exprs(&expr, _pool);
+                    auto status = expr->replace_compilable_exprs(&expr, _pool);
+                    if (!status.ok()) {
+                        LOG(ERROR) << "Could replace compilable exprs.\n" << status.get_error_msg() << "\n";
+                        continue;
+                    }
+
                     if (expr != prev_e) {
                         // The root node was replaced, so we need to update the context.
                         ctx = _pool->add(new ExprContext(expr));
