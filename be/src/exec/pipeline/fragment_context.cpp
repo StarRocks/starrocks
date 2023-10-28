@@ -50,6 +50,7 @@ void FragmentContext::close_all_pipelines() {
 }
 
 Status FragmentContext::iterate_drivers(const std::function<Status(const DriverPtr&)>& call) {
+    LOG(INFO) << "iterate drivers to call";
     for (const auto& pipeline : _pipelines) {
         for (const auto& driver : pipeline->drivers()) {
             RETURN_IF_ERROR(call(driver));

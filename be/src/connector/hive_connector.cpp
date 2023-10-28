@@ -69,6 +69,7 @@ std::string HiveDataSource::name() const {
 }
 
 Status HiveDataSource::open(RuntimeState* state) {
+    LOG(INFO) << "open hive datasource";
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
     // otherwise be will crash because of failure to create JVM.
@@ -548,6 +549,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
 }
 
 HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
+    LOG(INFO) << "create odps jni scanner";
     const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
 
     std::string required_fields;
@@ -596,6 +598,7 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
 }
 
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
+    LOG(INFO) << "init scanner";
     SCOPED_TIMER(_profile.open_file_timer);
 
     const auto& scan_range = _scan_range;

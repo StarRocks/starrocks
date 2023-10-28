@@ -347,6 +347,7 @@ void ExecNode::close(RuntimeState* state) {
 
 Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
                              ExecNode** root) {
+    LOG(INFO) << "craete tree from TPlan";
     if (plan.nodes.size() == 0) {
         *root = nullptr;
         return Status::OK();
@@ -364,6 +365,7 @@ Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan&
 
 Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root) {
+    LOG(INFO) << "construct plan tree from TPlanNode";
     // propagate error case
     if (*node_idx >= tnodes.size()) {
         return Status::InternalError("Failed to reconstruct plan tree from thrift.");
@@ -414,6 +416,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
 Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrocks::ObjectPool* pool,
                                         const starrocks::TPlanNode& tnode, const starrocks::DescriptorTbl& descs,
                                         starrocks::ExecNode** node) {
+    LOG(INFO) << "create scan node (switch by node type)";
     switch (tnode.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE:
         *node = pool->add(new OlapScanNode(pool, tnode, descs));
@@ -495,6 +498,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new TableFunctionNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::HDFS_SCAN_NODE: {
+        LOG(INFO) << "create hdfs scan node";
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::HIVE;
