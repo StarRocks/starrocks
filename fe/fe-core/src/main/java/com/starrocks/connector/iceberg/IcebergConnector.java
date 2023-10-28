@@ -49,20 +49,24 @@ public class IcebergConnector implements Connector {
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
+    /**
+     * TODO(POC code)
+     * We can't cache iceberg's table for too long, otherwise RestCatalog will using stale credentials to access aws
+     * service.
+     * 30 minutes is enough to make sure aws credential not to expired
+     */
+    private static final long ICEBERG_REST_CATALOG_TABLE_CACHE_TTL_S = 30 * 60L;
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
-    private final Cache<TableIdentifier, IcebergTable> icebergTableCache;
+    private Cache<TableIdentifier, IcebergTable> icebergTableCache;
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        this.icebergTableCache = CacheBuilder.newBuilder().
-                expireAfterWrite(Config.hive_meta_cache_ttl_s, SECONDS).
-                maximumSize(1000000).build();
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
@@ -74,6 +78,13 @@ public class IcebergConnector implements Connector {
             Properties props = System.getProperties();
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
+
+        long icebergTableCacheTTL = Config.hive_meta_cache_ttl_s;
+        if (nativeCatalogType == IcebergCatalogType.REST_CATALOG) {
+            icebergTableCacheTTL = ICEBERG_REST_CATALOG_TABLE_CACHE_TTL_S;
+        }
+        this.icebergTableCache = CacheBuilder.newBuilder().expireAfterWrite(icebergTableCacheTTL, SECONDS)
+                .maximumSize(1000000).build();
 
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
