@@ -40,6 +40,7 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
@@ -49,6 +50,22 @@
 #include "util/once.h"
 
 namespace starrocks {
+
+#define FILL_INDEX_PARAM(index_properties_name)              \
+    if (index.__isset.index_properties_name) {               \
+        for (const auto& kv : index.index_properties_name) { \
+            _##index_properties_name[kv.first] = kv.second;  \
+        }                                                    \
+    }
+
+#define FILL_INDEX_INTERNAL(properties_name)                                   \
+    if (auto it = properties.find(#properties_name); it != properties.end()) { \
+        std::swap(_##properties_name, it->second);                             \
+        properties.erase(it);                                                  \
+    }
+
+#define FILL_INDEX_TO_MAP(properties_name, map_name) \
+    map_name.insert(std::make_pair(#properties_name, _##properties_name));
 
 class TabletSchemaMap;
 class MemTracker;
@@ -229,6 +246,81 @@ private:
 bool operator==(const TabletColumn& a, const TabletColumn& b);
 bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
+class TabletSchema;
+
+class TabletIndex {
+public:
+    TabletIndex() = default;
+    TabletIndex(const TabletIndex& other) noexcept {
+        TabletIndexPB index_pb;
+        other.to_schema_pb(&index_pb);
+        init_from_pb(index_pb);
+    }
+
+    void init_from_thrift(const starrocks::TOlapTableIndex& index, const TabletSchema& tablet_schema);
+    void init_from_pb(const TabletIndexPB& index);
+    void to_schema_pb(TabletIndexPB* index) const;
+    const std::string properties_to_json() const;
+
+    const int64_t index_id() const { return _index_id; }
+    const std::string& index_name() const { return _index_name; }
+    const IndexType index_type() const { return _index_type; }
+    const std::vector<int32_t>& col_unique_ids() const { return _col_unique_ids; }
+    const bool contains_column(int32_t column_uid) const {
+        return !_col_unique_ids.empty() && _col_unique_ids[0] == column_uid;
+    }
+
+    const std::map<std::string, std::string>& common_properties() const { return _common_properties; }
+    const std::map<std::string, std::string>& index_properties() const { return _index_properties; }
+    const std::map<std::string, std::string>& search_properties() const { return _search_properties; }
+    const std::map<std::string, std::string>& extra_properties() const { return _extra_properties; }
+
+    // ================ for ut ================
+    void add_common_properties(const std::string& key, const std::string& value) {
+        _common_properties.insert(std::make_pair(key, value));
+    }
+    void add_index_properties(const std::string& key, const std::string& value) {
+        _index_properties.insert(std::make_pair(key, value));
+    }
+    void add_search_properties(const std::string& key, const std::string& value) {
+        _search_properties.insert(std::make_pair(key, value));
+    }
+    void add_extra_properties(const std::string& key, const std::string& value) {
+        _extra_properties.insert(std::make_pair(key, value));
+    }
+
+    int64_t mem_usage() const {
+        int64_t mem_usage = sizeof(TabletIndex);
+        for (const auto& p : _common_properties) {
+            mem_usage += sizeof(char) * (p.first.size() + p.second.size());
+        }
+        for (const auto& p : _index_properties) {
+            mem_usage += sizeof(char) * (p.first.size() + p.second.size());
+        }
+        for (const auto& p : _search_properties) {
+            mem_usage += sizeof(char) * (p.first.size() + p.second.size());
+        }
+        for (const auto& p : _extra_properties) {
+            mem_usage += sizeof(char) * (p.first.size() + p.second.size());
+        }
+        mem_usage += sizeof(int32_t) * _col_unique_ids.size();
+        mem_usage += sizeof(char) * _index_name.size();
+
+        return mem_usage;
+    }
+
+private:
+    int64_t _index_id;
+    std::string _index_name;
+    IndexType _index_type;
+    std::vector<int32_t> _col_unique_ids;
+    // TODO: replace to TenANN::IndexMeta
+    std::map<std::string, std::string> _common_properties;
+    std::map<std::string, std::string> _index_properties;
+    std::map<std::string, std::string> _search_properties;
+    std::map<std::string, std::string> _extra_properties;
+};
+
 class TabletSchema {
 public:
     using SchemaId = int64_t;
@@ -309,6 +401,9 @@ public:
         for (const auto& col : _cols) {
             mem_usage += col.mem_usage();
         }
+        for (const auto& index : _indexes) {
+            mem_usage += index.mem_usage();
+        }
         return mem_usage;
     }
 
@@ -318,6 +413,12 @@ public:
 
     Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
                                        const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
+
+    const std::vector<TabletIndex>& indexes() const { return _indexes; }
+    void get_indexes_for_column(int32_t col_unique_id, std::unordered_map<IndexType, TabletIndex>* res) const;
+    void get_indexes_for_column(int32_t col_unique_id, IndexType index_type, std::shared_ptr<TabletIndex>& res) const;
+    bool has_index(int32_t col_unique_id, IndexType index_type) const;
+    void update_indexes_from_thrift(const std::vector<starrocks::TOlapTableIndex>& indexes);
 
 private:
     friend class SegmentReaderWriterTest;
@@ -330,11 +431,15 @@ private:
     void _init_from_pb(const TabletSchemaPB& schema);
 
     void _init_schema() const;
+    void _fill_index_map(const TabletIndex& index);
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
 
     double _bf_fpp = 0;
+
+    std::vector<TabletIndex> _indexes;
+    std::unordered_map<IndexType, std::shared_ptr<std::unordered_set<int32_t>>> _index_map_col_unique_id;
 
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;

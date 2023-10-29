@@ -76,6 +76,12 @@ public:
         return Status::OK();
     }
 
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        RETURN_IF_ERROR(iterator->read_null(column_name, row_bitmap));
+        return Status::OK();
+    }
+
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override { return bf->test_bytes(nullptr, 0); }
@@ -141,6 +147,14 @@ public:
 
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
+    }
+
+    Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                               roaring::Roaring* row_bitmap) const override {
+        roaring::Roaring roaring;
+        RETURN_IF_ERROR(iterator->read_null(column_name, &roaring));
+        *row_bitmap -= roaring;
+        return Status::OK();
     }
 
     PredicateType type() const override { return PredicateType::kNotNull; }

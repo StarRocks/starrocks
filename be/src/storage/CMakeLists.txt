@@ -205,4 +205,10 @@ add_library(Storage STATIC
     lake/update_compaction_state.cpp
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
-    persistent_index_compaction_manager.cpp)
+    persistent_index_compaction_manager.cpp
+    inverted/inverted_index_iterator.cpp
+    inverted/inverted_index_option.cpp
+    inverted/clucene/clucene_inverted_compaction.cpp
+    inverted/clucene/clucene_inverted_reader.cpp
+    inverted/clucene/clucene_plugin.cpp
+    inverted/clucene/clucene_inverted_writer.cpp)

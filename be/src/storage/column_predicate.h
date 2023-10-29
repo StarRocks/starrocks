@@ -26,6 +26,8 @@
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/decimalv3.h"
+#include "storage/inverted/inverted_index_iterator.h"
+#include "storage/inverted/inverted_reader.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/type_traits.h"
@@ -162,6 +164,11 @@ public:
         return Status::Cancelled("not implemented");
     }
 
+    virtual Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
+                                       roaring::Roaring* row_bitmap) const {
+        return Status::Cancelled("not implemented");
+    }
+
     // Indicate whether or not the evaluate can be vectorized.
     // If this function return true, evaluate function will be vectorized and can achieve
     // good performance.
@@ -234,5 +241,4 @@ ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bo
 
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping);
-
 } //namespace starrocks

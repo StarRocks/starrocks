@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include <filesystem>
 #include <iomanip>
 #include <set>
 #include <sstream>
@@ -66,6 +67,16 @@ StatusOr<std::string> md5sum(const std::string& path) {
         ss << std::setfill('0') << std::setw(2) << std::hex << (int)i;
     }
     return ss.str();
+}
+
+inline Status copy_files(const std::string& src_path, const std::string& dst_path) {
+    std::error_code ec;
+    std::filesystem::copy(src_path, dst_path, std::filesystem::copy_options::recursive, ec);
+    if (ec) {
+        return Status::IOError(
+                fmt::format("failed to copy from {} to {}: ({}), {}", src_path, dst_path, ec.value(), ec.message()));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::fs

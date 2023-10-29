@@ -83,6 +83,9 @@ enum TExprNodeType {
   BINARY_LITERAL,
   MAP_EXPR,
   DICT_QUERY_EXPR,
+
+  // for inverted search
+  MATCH_PRED,
 }
 
 struct TAggregateExpr {

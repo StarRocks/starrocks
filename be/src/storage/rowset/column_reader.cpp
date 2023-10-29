@@ -44,13 +44,16 @@
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "common/logging.h"
+#include "segment_options.h"
 #include "storage/column_predicate.h"
+#include "storage/inverted/inverted_plugin_factory.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/index_descriptor.h"
 #include "storage/rowset/map_column_iterator.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
@@ -370,6 +373,48 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
         _ordinal_index_meta.reset();
         _segment->update_cache_size();
     }
+    return Status::OK();
+}
+
+Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,
+                                                 InvertedIndexIterator** iterator, const SegmentReadOptions& opts) {
+    RETURN_IF_ERROR(_load_inverted_index(index_meta, opts));
+    RETURN_IF_ERROR(_inverted_index->new_iterator(index_meta, iterator));
+    return Status::OK();
+}
+
+Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta,
+                                          const SegmentReadOptions& opts) {
+    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+
+    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id()) {
+        return Status::OK();
+    }
+
+    // inverted_index call
+    std::lock_guard<std::mutex> wlock(_load_index_lock);
+
+    // Double check lock
+    if (_inverted_index && index_meta && _inverted_index->get_index_id() == index_meta->index_id()) {
+        return Status::OK();
+    }
+    //
+    //    InvertedIndexParserType parser_type = get_inverted_index_parser_type_from_string(
+    //            get_parser_string_from_properties(index_meta->common_properties()));
+
+    LogicalType type;
+    if (_column_type == LogicalType::TYPE_ARRAY) {
+        type = _column_child_type;
+    } else {
+        type = _column_type;
+    }
+
+    ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(*index_meta))
+    std::string index_path = IndexDescriptor::inverted_index_file_path(opts.rowset_path, opts.rowsetid.to_string(),
+                                                                       _segment->id(), index_meta->index_id());
+
+    RETURN_IF_ERROR(get_plugin(imp_type)->create_inverted_index_reader(index_path, index_meta, type, &_inverted_index));
+
     return Status::OK();
 }
 

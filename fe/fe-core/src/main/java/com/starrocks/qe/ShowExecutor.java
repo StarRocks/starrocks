@@ -1315,9 +1315,10 @@ public class ShowExecutor {
             } else if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
-                    rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "", index.getIndexName(),
-                            "", String.join(",", index.getColumns()), "", "", "", "",
-                            "", index.getIndexType().name(), index.getComment()));
+                    rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "",
+                            index.getIndexName(), "", String.join(",", index.getColumns()), "", "", "", "",
+                            "", String.valueOf(index.getIndexId()), index.getIndexType().name(), index.getComment(),
+                            index.getPropertiesString()));
                 }
             } else {
                 // other type view, mysql, hive, es

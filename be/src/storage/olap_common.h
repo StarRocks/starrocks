@@ -261,6 +261,8 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+    int64_t inverted_index_filter_timer = 0;
+    int64_t rows_inverted_index_filtered = 0;
 
     int64_t rows_del_vec_filtered = 0;
 

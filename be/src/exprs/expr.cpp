@@ -400,6 +400,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::TUPLE_IS_NULL_PRED:
     case TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR:
         break;
+    case TExprNodeType::MATCH_PRED:
+        // TODO: implement MatchPredExpr
+        break;
     }
     if (*expr == nullptr) {
         std::string err_msg =

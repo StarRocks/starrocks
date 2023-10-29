@@ -10,4 +10,5 @@ add_library(Rowset STATIC
     rowset_factory.cpp
     rowset_meta_manager.cpp
     rowset_writer.cpp
+    index_descriptor.cpp
     )

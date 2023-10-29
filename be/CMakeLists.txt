@@ -174,6 +174,17 @@ if (${JEMALLOC_DEBUG})
 endif()
 
 # Set all libraries
+add_library(ic STATIC IMPORTED)
+set_target_properties(ic PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libic.a)
+
+add_library(clucene-core STATIC IMPORTED)
+set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-core-static.a)
+
+add_library(clucene-shared STATIC IMPORTED)
+set_target_properties(clucene-shared PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-shared-static.a)
+
+add_library(clucene-contribs-lib STATIC IMPORTED)
+set_target_properties(clucene-contribs-lib PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-contribs-lib.a)
 
 add_library(gflags STATIC IMPORTED GLOBAL)
 set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
@@ -835,6 +846,10 @@ set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
     ${WL_START_GROUP}
     build_version
+    ic
+    clucene-core
+    clucene-shared
+    clucene-contribs-lib
     rocksdb
     libs2
     snappy

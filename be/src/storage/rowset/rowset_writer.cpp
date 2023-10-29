@@ -117,6 +117,10 @@ Status RowsetWriter::init() {
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
+    _writer_options.segment_file_mark.rowset_path_prefix = _context.rowset_path_prefix;
+    _writer_options.segment_file_mark.rowset_id = _context.rowset_id.to_string();
+    _writer_options.segment_file_mark.segment_id = _num_segment;
+
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
         (_context.is_partial_update || !_context.merge_condition.empty() || _context.miss_auto_increment_column)) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();

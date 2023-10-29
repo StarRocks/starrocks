@@ -50,6 +50,7 @@
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/index_descriptor.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
@@ -291,6 +292,17 @@ Status Rowset::remove() {
         auto st = fs->delete_file(path);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
+
+        // delete index
+        for (const auto& index : _schema->indexes()) {
+            if (index.index_type() == IndexType::INVERTED) {
+                std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
+                        _rowset_path, rowset_id().to_string(), i, index.index_id());
+                auto ist = fs->delete_dir(inverted_index_path);
+                LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
+                merge_status(ist);
+            }
+        }
     }
     for (int i = 0, sz = num_delete_files(); i < sz; ++i) {
         std::string path = segment_del_file_path(_rowset_path, rowset_id(), i);
@@ -377,6 +389,35 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
         if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
             PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
             return Status::RuntimeError("Fail to link segment delete file");
+        }
+
+        // vector index
+        if (!_schema->indexes().empty()) {
+            int segment_n = i;
+            for (int index_id = 0; index_id < _schema->indexes().size(); index_id++) {
+                const auto& index = _schema->indexes()[index_id];
+                // TODO: We support directory link for now, can do hard-link with single file
+                // when support compound index file
+                if (index.index_type() == INVERTED) {
+                    std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
+                            dir, new_rowset_id.to_string(), segment_n, index_id);
+                    std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
+                            _rowset_path, rowset_id().to_string(), segment_n, index_id);
+
+                    RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
+                    std::set<std::string> files;
+                    RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
+                    for (const auto& file : files) {
+                        auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
+                        auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
+
+                        if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
+                            PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
+                            return Status::RuntimeError("Fail to link index data file");
+                        }
+                    }
+                }
+            }
         }
     }
     for (int i = 0; i < num_update_files(); ++i) {
@@ -596,6 +637,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.version = options.version;
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
     }
+    seg_options.rowset_path = _rowset_path;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
@@ -688,6 +730,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_schema = tablet_schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
+    seg_options.rowset_path = _rowset_path;
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;
@@ -718,6 +761,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.rowset_path = _rowset_path;
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_update_files());
     TabletSegmentId tsid;

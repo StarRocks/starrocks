@@ -45,6 +45,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/macros.h"
 #include "storage/delta_column_group.h"
+#include "storage/inverted/inverted_reader.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_pointer.h"
 #include "storage/short_key_index.h"
@@ -162,6 +163,7 @@ public:
     // May be called multiple times, subsequent calls will no op.
     [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
     bool has_loaded_index() const;
+    Status new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter, const SegmentReadOptions& opts);
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 

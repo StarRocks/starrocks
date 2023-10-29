@@ -1128,6 +1128,8 @@ struct TIndexInfo {
     2: optional list<string> columns
     3: optional string index_type
     4: optional string comment
+    5: optional i64 index_id
+    6: optional map<string, string> properties
 }
 
 struct TColumnMeta {

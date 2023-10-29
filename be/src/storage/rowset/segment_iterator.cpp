@@ -49,6 +49,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 #include "storage/rowset/fill_subfield_iterator.h"
+#include "storage/rowset/index_descriptor.h"
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment.h"
@@ -246,6 +247,10 @@ private:
 
     Status _apply_del_vector();
 
+    Status _init_inverted_index_iterators();
+
+    Status _apply_inverted_index();
+
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
     bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
@@ -325,6 +330,9 @@ private:
 
     bool _inited = false;
     bool _has_bitmap_index = false;
+    bool _has_inverted_index = false;
+
+    std::vector<InvertedIndexIterator*> _inverted_index_iterators;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -410,11 +418,13 @@ Status SegmentIterator::_init() {
     _init_column_access_paths();
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
+    RETURN_IF_ERROR(_init_inverted_index_iterators());
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_del_vector());
+    RETURN_IF_ERROR(_apply_inverted_index());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
@@ -1831,6 +1841,57 @@ Status SegmentIterator::_apply_del_vector() {
         size_t filtered_rows = row_bitmap.cardinality();
         _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
     }
+    return Status::OK();
+}
+
+Status SegmentIterator::_init_inverted_index_iterators() {
+    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    _inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    for (const auto& pair : _opts.predicates) {
+        ColumnId cid = pair.first;
+        if (_inverted_index_iterators[cid] == nullptr) {
+            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(cid, &_inverted_index_iterators[cid], _opts));
+            _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
+        }
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_inverted_index() {
+    DCHECK_EQ(_predicate_columns, _opts.predicates.size());
+    RETURN_IF(!_has_inverted_index, Status::OK());
+    SCOPED_RAW_TIMER(&_opts.stats->inverted_index_filter_timer);
+
+    roaring::Roaring row_bitmap = range2roaring(_scan_range);
+    size_t input_rows = row_bitmap.cardinality();
+    std::vector<const ColumnPredicate*> erased_preds;
+
+    for (auto& [cid, pred_list] : _opts.predicates) {
+        roaring::Roaring output_result = row_bitmap;
+        InvertedIndexIterator* inverted_iter = _inverted_index_iterators[cid];
+        if (inverted_iter == nullptr) {
+            continue;
+        }
+        const FieldPtr& fieldPtr = _schema.field(cid);
+        std::string_view sv_c = fieldPtr->name();
+        std::string column_name = {sv_c.begin(), sv_c.end()};
+        for (const ColumnPredicate* pred : pred_list) {
+            Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &output_result);
+            if (res.ok()) {
+                erased_preds.emplace_back(pred);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Erase predicates that hit bitmap index.
+    // ---------------------------------------------------------
+    for (const ColumnPredicate* pred : erased_preds) {
+        PredicateList& pred_list = _opts.predicates[pred->column_id()];
+        pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
+    }
+
+    _opts.stats->rows_inverted_index_filtered += (input_rows - row_bitmap.cardinality());
     return Status::OK();
 }
 

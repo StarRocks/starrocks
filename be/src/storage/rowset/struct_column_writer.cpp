@@ -47,6 +47,8 @@ public:
 
     Status write_bloom_filter_index() override { return Status::OK(); }
 
+    Status write_inverted_index() override { return Status::OK(); }
+
     ordinal_t get_next_rowid() const override { return _field_writers[0]->get_next_rowid(); }
 
     uint64_t total_mem_footprint() const override;

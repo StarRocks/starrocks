@@ -61,6 +61,13 @@ class Schema;
 extern const char* const k_segment_magic;
 extern const uint32_t k_segment_magic_length;
 
+class SegmentFileMark {
+public:
+    std::string rowset_path_prefix;
+    std::string rowset_id;
+    int segment_id;
+};
+
 struct SegmentWriterOptions {
 #ifdef BE_TEST
     uint32_t num_rows_per_block = 100;
@@ -69,6 +76,7 @@ struct SegmentWriterOptions {
 #endif
     GlobalDictByNameMaps* global_dicts = nullptr;
     std::vector<int32_t> referenced_column_ids;
+    SegmentFileMark segment_file_mark;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.

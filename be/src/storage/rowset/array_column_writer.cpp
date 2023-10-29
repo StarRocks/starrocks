@@ -37,6 +37,7 @@ public:
     Status finish() override;
     Status write_data() override;
     Status write_ordinal_index() override;
+    Status write_inverted_index() override { return Status::OK(); }
 
     Status finish_current_page() override;
 

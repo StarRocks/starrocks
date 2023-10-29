@@ -39,10 +39,12 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
 #include <memory>
+#include <utility>
 
 #include "column/column_access_path.h"
 #include "column/schema.h"
 #include "common/logging.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
 #include "segment_chunk_iterator_adapter.h"
 #include "segment_iterator.h"
@@ -285,6 +287,18 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     } else {
         return _new_iterator(schema, read_options);
     }
+}
+
+Status Segment::new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator** iter,
+                                            const SegmentReadOptions& opts) {
+    if (_column_readers[cid] != nullptr) {
+        std::shared_ptr<TabletIndex> index_meta;
+        _tablet_schema->get_indexes_for_column(cid, INVERTED, index_meta);
+        if (index_meta.get() != nullptr) {
+            return _column_readers[cid]->new_inverted_index_iterator(index_meta, iter, std::move(opts));
+        }
+    }
+    return Status::OK();
 }
 
 Status Segment::load_index(bool skip_fill_local_cache) {

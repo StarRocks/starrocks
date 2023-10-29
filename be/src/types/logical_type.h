@@ -112,22 +112,26 @@ inline LogicalType delegate_type(LogicalType type) {
     }
 }
 
-inline bool is_integer_type(LogicalType type) {
+constexpr inline bool is_integer_type(LogicalType type) {
     return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
            type == TYPE_LARGEINT;
 }
 
-inline bool is_float_type(LogicalType type) {
+constexpr inline bool is_float_type(LogicalType type) {
     return type == TYPE_FLOAT || type == TYPE_DOUBLE;
 }
 
-inline bool is_string_type(LogicalType type) {
+constexpr inline bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
 
 constexpr bool is_object_type(LogicalType type) {
     return type == LogicalType::TYPE_HLL || type == LogicalType::TYPE_OBJECT || type == LogicalType::TYPE_JSON ||
            type == LogicalType::TYPE_PERCENTILE;
+}
+
+constexpr inline bool is_numeric_type(LogicalType type) {
+    return is_integer_type(type) || is_float_type(type);
 }
 
 inline bool is_decimalv3_field_type(LogicalType type) {

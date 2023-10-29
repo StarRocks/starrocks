@@ -46,6 +46,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/type_utils.h"
 #include "tablet_meta.h"
+#include "util/json_util.h"
 
 namespace starrocks {
 
@@ -317,6 +318,91 @@ void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
 }
 
 /******************************************************************
+ * TabletIndex
+ ******************************************************************/
+
+void TabletIndex::init_from_thrift(const TOlapTableIndex& index, const TabletSchema& tablet_schema) {
+    _index_name = index.index_name;
+    // init col_unique_id in index at be side, since col_unique_id may be -1 at fe side
+    // get column unique id by name
+    std::vector<int32_t> col_unique_ids(index.columns.size());
+    for (size_t i = 0; i < index.columns.size(); i++) {
+        auto column_idx = tablet_schema.field_index(index.columns[i]);
+        if (column_idx >= 0) {
+            col_unique_ids[i] = tablet_schema.column(column_idx).unique_id();
+        } else {
+            col_unique_ids[i] = -1;
+        }
+    }
+    _col_unique_ids = std::move(col_unique_ids);
+
+    switch (index.index_type) {
+    case TIndexType::BITMAP:
+        _index_type = IndexType::BITMAP;
+        break;
+    case TIndexType::INVERTED:
+        _index_type = IndexType::INVERTED;
+        break;
+    }
+    FILL_INDEX_PARAM(common_properties)
+    FILL_INDEX_PARAM(index_properties)
+    FILL_INDEX_PARAM(search_properties)
+    FILL_INDEX_PARAM(extra_properties)
+}
+
+void TabletIndex::init_from_pb(const TabletIndexPB& index) {
+    _index_id = index.index_id();
+    _index_name = index.index_name();
+    _index_type = index.index_type();
+    _col_unique_ids.clear();
+    for (auto col_unique_id : index.col_unique_id()) {
+        _col_unique_ids.push_back(col_unique_id);
+    }
+    if (index.has_index_properties()) {
+        const auto& serialized_prop_stream = index.index_properties();
+        std::map<std::string, std::map<std::string, std::string>> properties;
+        auto status = from_json(serialized_prop_stream, &properties);
+        if (status.ok()) {
+            FILL_INDEX_INTERNAL(common_properties)
+            FILL_INDEX_INTERNAL(index_properties)
+            FILL_INDEX_INTERNAL(search_properties)
+            FILL_INDEX_INTERNAL(extra_properties)
+        } else {
+            LOG(WARNING) << "parse json from serialized_prop_stream error, content is '" << serialized_prop_stream
+                         << "'";
+        }
+    }
+}
+
+void TabletIndex::to_schema_pb(TabletIndexPB* index) const {
+    index->set_index_id(_index_id);
+    index->set_index_name(_index_name);
+    index->clear_col_unique_id();
+    for (auto col_unique_id : _col_unique_ids) {
+        index->add_col_unique_id(col_unique_id);
+    }
+    index->set_index_type(_index_type);
+    std::map<std::string, std::map<std::string, std::string>> map;
+    FILL_INDEX_TO_MAP(common_properties, map)
+    FILL_INDEX_TO_MAP(index_properties, map)
+    FILL_INDEX_TO_MAP(search_properties, map)
+    FILL_INDEX_TO_MAP(extra_properties, map)
+
+    std::string meta_string = to_json(map);
+    index->set_index_properties(meta_string);
+}
+
+const std::string TabletIndex::properties_to_json() const {
+    std::map<std::string, std::map<std::string, std::string>> map;
+    FILL_INDEX_TO_MAP(common_properties, map)
+    FILL_INDEX_TO_MAP(index_properties, map)
+    FILL_INDEX_TO_MAP(search_properties, map)
+    FILL_INDEX_TO_MAP(extra_properties, map)
+
+    return to_json(map);
+}
+
+/******************************************************************
  * TabletSchema
  ******************************************************************/
 
@@ -375,6 +461,16 @@ std::unique_ptr<TabletSchema> TabletSchema::copy(const std::shared_ptr<const Tab
     return t_ptr;
 }
 
+void TabletSchema::_fill_index_map(const TabletIndex& index) {
+    const auto idx_type = index.index_type();
+    if (_index_map_col_unique_id.count(idx_type) <= 0) {
+        auto col_unique_id_set = std::make_shared<std::unordered_set<int32_t>>();
+        _index_map_col_unique_id.insert(std::make_pair(idx_type, col_unique_id_set));
+    }
+    std::for_each(index.col_unique_ids().begin(), index.col_unique_ids().end(),
+                  [&](int32_t uid) { _index_map_col_unique_id[idx_type]->insert(uid); });
+}
+
 void TabletSchema::_init_schema() const {
     starrocks::Fields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {
@@ -411,6 +507,8 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _keys_type = static_cast<uint8_t>(schema.keys_type());
     _num_key_columns = 0;
     _num_columns = 0;
+    _indexes.clear();
+    _index_map_col_unique_id.clear();
     _cols.clear();
     _compression_type = schema.compression_type();
     for (auto& column_pb : schema.column()) {
@@ -422,6 +520,13 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         }
         _unique_id_to_index[column.unique_id()] = _num_columns;
         _num_columns++;
+    }
+
+    for (auto& index_pb : schema.table_indices()) {
+        TabletIndex index;
+        index.init_from_pb(index_pb);
+        _indexes.emplace_back(std::move(index));
+        _fill_index_map(index);
     }
 
     // There are three conditions:
@@ -546,6 +651,57 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     tablet_schema_pb->mutable_sort_key_idxes()->Add(_sort_key_idxes.begin(), _sort_key_idxes.end());
     tablet_schema_pb->mutable_sort_key_unique_ids()->Add(_sort_key_uids.begin(), _sort_key_uids.end());
     tablet_schema_pb->set_schema_version(_schema_version);
+    for (auto& index : _indexes) {
+        auto* tablet_index_pb = tablet_schema_pb->add_table_indices();
+        index.to_schema_pb(tablet_index_pb);
+    }
+}
+
+void TabletSchema::get_indexes_for_column(int32_t col_unique_id,
+                                          std::unordered_map<IndexType, TabletIndex>* res) const {
+    CHECK(res != nullptr);
+    for (const auto& _index : _indexes) {
+        if (_index.col_unique_ids().size() == 1) {
+            for (int32_t id : _index.col_unique_ids()) {
+                if (id == col_unique_id) {
+                    (*res).insert(std::make_pair(_index.index_type(), _index));
+                }
+            }
+        } else if (_index.col_unique_ids().size() > 1) {
+            // TODO: implement multi-column index
+        }
+    }
+}
+
+void TabletSchema::get_indexes_for_column(int32_t col_unique_id, IndexType index_type,
+                                          std::shared_ptr<TabletIndex>& res) const {
+    std::unordered_map<IndexType, TabletIndex> map_res;
+    get_indexes_for_column(col_unique_id, &map_res);
+    if (!map_res.empty()) {
+        const auto& it = map_res.find(index_type);
+        if (it != map_res.end()) {
+            res = std::make_shared<TabletIndex>(it->second);
+        }
+    }
+}
+
+bool TabletSchema::has_index(int32_t col_unique_id, IndexType index_type) const {
+    if (auto it = _index_map_col_unique_id.find(index_type); it != _index_map_col_unique_id.end()) {
+        return it->second->count(col_unique_id) > 0;
+    }
+    return false;
+}
+
+void TabletSchema::update_indexes_from_thrift(const std::vector<starrocks::TOlapTableIndex>& tindexes) {
+    std::vector<TabletIndex> indexes;
+    _index_map_col_unique_id.clear();
+    for (auto& tindex : tindexes) {
+        TabletIndex index;
+        index.init_from_thrift(tindex, *this);
+        indexes.emplace_back(std::move(index));
+        _fill_index_map(index);
+    }
+    _indexes = std::move(indexes);
 }
 
 size_t TabletSchema::estimate_row_size(size_t variable_len) const {

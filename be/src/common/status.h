@@ -307,6 +307,21 @@ public:
         return code() == TStatusCode::SR_EAGAIN;
     }
 
+    static Status InvertedIndexNotSupport(const Slice& msg) { return {TStatusCode::INVERTED_INDEX_NOT_SUPPORTED, msg}; }
+    static Status InvertedIndexFileNotFound(const Slice& msg) {
+        return {TStatusCode::INVERTED_INDEX_FILE_NOT_FOUND, msg};
+    }
+    static Status InvertedIndexNoTerms(const Slice& msg) { return {TStatusCode::INVERTED_INDEX_NO_TERMS, msg}; }
+    static Status InvertedIndexInvalidParams(const Slice& msg) {
+        return {TStatusCode::INVERTED_INDEX_INVALID_PARAMETERS, msg};
+    }
+    static Status InvertedIndexFileHitLimit(const Slice& msg) {
+        return {TStatusCode::INVERTED_INDEX_FILE_HIT_LIMIT, msg};
+    }
+    static Status InvertedIndexCluceneError(const Slice& msg) {
+        return {TStatusCode::INVERTED_INDEX_CLUCENE_ERROR, msg};
+    }
+
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
     template <typename T>
