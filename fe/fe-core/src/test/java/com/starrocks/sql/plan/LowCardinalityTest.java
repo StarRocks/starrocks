@@ -246,6 +246,44 @@ public class LowCardinalityTest extends PlanTestBase {
     }
 
     @Test
+    public void testPushdownRuntimeFilterAcrossDecodeNode() throws Exception {
+        String sql = "with cte1 as (\n" +
+                "select L_SHIPMODE,L_COMMENT\n" +
+                "from(\n" +
+                "select L_SHIPMODE, MAX(L_COMMENT) as L_COMMENT from lineitem group by L_SHIPMODE\n" +
+                "union all\n" +
+                "select L_SHIPMODE, \"ABCD\" from lineitem where L_SHIPMODE like \"A%\" group by L_SHIPMODE\n" +
+                ") t\n" +
+                "),\n" +
+                "cte2 as (\n" +
+                "select P_COMMENT from part where P_TYPE = \"AAAA\"\n" +
+                ")\n" +
+                "select cte1.L_SHIPMODE, cte1.L_COMMENT from cte1 join[broadcast] cte2 on cte1.L_SHIPMODE = cte2.P_COMMENT";
+
+        String plan = getVerboseExplain(sql);
+        Assert.assertTrue(plan, plan.contains("  3:Decode\n" +
+                "  |  <dict id 98> : <string id 66>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: max[([97: L_COMMENT, INT, false]);" +
+                " args: INT; result: INT; args nullable: false; result nullable: true]\n" +
+                "  |  group by: [63: L_SHIPMODE, CHAR, false]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:OlapScanNode\n" +
+                "     table: lineitem, rollup: lineitem\n" +
+                "     preAggregation: on\n" +
+                "     dict_col=L_COMMENT\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=54.0\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (63: L_SHIPMODE)\n"));
+    }
+
+    @Test
     public void testDecodeNodeRewrite4() throws Exception {
         String sql = "select dept_name from dept group by dept_name,state";
         String plan = getFragmentPlan(sql);
