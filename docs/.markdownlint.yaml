@@ -4,5 +4,6 @@
   "MD033": false,
   "MD024": {"allow_different_nesting": true},
   "MD036": false,
-  "MD051": false
+  "MD051": false,
+  "MD004": false
 }
