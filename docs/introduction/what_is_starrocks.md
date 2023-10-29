@@ -1,6 +1,6 @@
 # What is StarRocks?
 
-StarRocks ${foo} is a next-generation, blazing-fast massively parallel processing (MPP) database designed to make real-time analytics easy for enterprises. It is built to power sub-second queries at scale.
+StarRocks is a next-generation, blazing-fast massively parallel processing (MPP) database designed to make real-time analytics easy for enterprises. It is built to power sub-second queries at scale.
 
 StarRocks has an elegant design. It encompasses a rich set of features including fully vectorized engine, newly designed cost-based optimizer (CBO), and intelligent materialized view. As such, StarRocks can deliver a query speed far exceeding database products of its kind, especially for multi-table joins.
 
