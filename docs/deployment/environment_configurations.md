@@ -268,7 +268,7 @@ Problems can occur with StarRocks if the values of **max file descriptors** and 
 You can set the maximum number of file descriptors by running the following command:
 
 ```Bash
-ulimit -n 65535
+ulimit -n 655350
 ```
 
 ### Max user processes
