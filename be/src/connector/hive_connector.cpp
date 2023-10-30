@@ -397,7 +397,37 @@ static void build_nested_fields(const TypeDescriptor& type, const std::string& p
     }
 }
 
-HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
+static std::string build_fs_options_properties(const FSOptions& options) {
+    const TCloudConfiguration* cloud_configuration = options.cloud_configuration;
+    static constexpr char KV_SEPARATOR = 0x1;
+    static constexpr char PROP_SEPARATOR = 0x2;
+    std::string data;
+
+    if (cloud_configuration != nullptr) {
+        if (cloud_configuration->__isset.cloud_properties) {
+            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
+                data += cloud_property.key;
+                data += KV_SEPARATOR;
+                data += cloud_property.value;
+                data += PROP_SEPARATOR;
+            }
+        } else {
+            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
+                data += key;
+                data += KV_SEPARATOR;
+                data += value;
+                data += PROP_SEPARATOR;
+            }
+        }
+    }
+
+    if (data.size() > 0 && data.back() == PROP_SEPARATOR) {
+        data.pop_back();
+    }
+    return data;
+}
+
+HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) {
     const auto& scan_range = _scan_range;
     const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
     auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
@@ -449,13 +479,14 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner() {
     jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
     jni_scanner_params["serde"] = hudi_table->get_serde_lib();
     jni_scanner_params["input_format"] = hudi_table->get_input_format();
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
 }
 
-HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
+HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options) {
     const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
 
     std::string required_fields;
@@ -505,6 +536,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(FSOptions& options) {
         option_info += "s3.path.style.access=" + enable_path_style_access;
     }
     jni_scanner_params["option_info"] = option_info;
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
@@ -590,7 +622,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_paimon_jni_reader) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
-        scanner = _create_hudi_jni_scanner();
+        scanner = _create_hudi_jni_scanner(fsOptions);
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {

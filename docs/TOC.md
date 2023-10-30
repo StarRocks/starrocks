@@ -56,6 +56,7 @@
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from S3](./loading/s3.md)
+  + [Load data from GCS](./loading/gcs.md)
   + [Load data from HDFS](./loading/hdfs_load.md)
   + [Load data from cloud storage](./loading/cloud_storage_load.md)
   + Load data from Apache Kafka®
@@ -72,6 +73,7 @@
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
   + [Export data using EXPORT](./unloading/Export.md)
+  + [Unload data using INSERT INTO FILES](./unloading/unload_using_insert_into_files.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
 + Query Data Lakes
@@ -131,7 +133,7 @@
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
-    + [Dataphin.md](./integrations/IDE_integrations/Dataphin.md)
+    + [Dataphin](./integrations/IDE_integrations/Dataphin.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
@@ -166,9 +168,9 @@
     + [Query planning](./administration/Query_planning.md)
     + [Analyze query profile](./administration/query_profile.md)
     + [Profiling](./administration/Profiling.md)
-+ Reference
-  + SQL Reference
-    + [All commands](./sql-reference/sql-statements/all-commands.md)
++ SQL Reference
+  + SQL Statements
+    + [All statements](./sql-reference/sql-statements/all-commands.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER_USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE_ROLE.md)
@@ -368,7 +370,7 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
-  + Function Reference
+  + SQL Functions
     + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -746,6 +748,7 @@
   + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
+  + [Prepared statements](./sql-reference/sql-statements/prepared_statement.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
   + [AWS IAM policies](./reference/aws_iam_policies.md)

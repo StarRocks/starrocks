@@ -19,36 +19,61 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.CatalogContext;
+import org.apache.paimon.catalog.CatalogFactory;
+import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.data.BinaryString;
+import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.options.CatalogOptions;
+import org.apache.paimon.options.Options;
+import org.apache.paimon.schema.Schema;
+import org.apache.paimon.shade.guava30.com.google.common.collect.Lists;
+import org.apache.paimon.table.sink.BatchTableCommit;
+import org.apache.paimon.table.sink.BatchTableWrite;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataTypes;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.rules.TemporaryFolder;
 
+import java.time.LocalDate;
+import java.util.Collections;
 import java.util.Map;
 
 public class ConnectorPlanTestBase extends PlanTestBase {
+
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
     @BeforeClass
     public static void beforeClass() throws Exception {
-        PlanTestBase.beforeClass();
-        FeConstants.runningUnitTest = true;
-        GlobalStateMgr gsmMgr = connectContext.getGlobalStateMgr();
-        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
-        gsmMgr.setMetadataMgr(metadataMgr);
-
-        mockHiveCatalogImpl(metadataMgr);
-        mockJDBCCatalogImpl(metadataMgr);
+        String warehouse = temp.newFolder().toURI().toString();
+        doInit(warehouse);
     }
 
-    public static void mockCatalog(ConnectContext ctx) throws DdlException {
+    public static void doInit(String warehouse) throws Exception {
+        PlanTestBase.beforeClass();
+        FeConstants.runningUnitTest = true;
+        mockCatalog(connectContext, warehouse);
+    }
+
+    public static void mockCatalog(ConnectContext ctx, String warehouse) throws Exception {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
         MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
         mockIcebergCatalogImpl(metadataMgr);
+        mockPaimonCatalogImpl(metadataMgr, warehouse);
     }
 
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
@@ -67,6 +92,99 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
         MockedHiveMetadata mockedHiveMetadata = new MockedHiveMetadata();
         metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, mockedHiveMetadata);
+    }
+
+    public static void createPaimonTable(Catalog catalog, String db) throws Exception {
+        catalog.createDatabase(db, false);
+
+        // create paritioned table
+        createParitionedTable(catalog, db);
+
+        // create unparitioned table
+        createUnParitionedTable(catalog, db);
+    }
+
+    private static void createUnParitionedTable(Catalog catalog, String db) throws Exception {
+        Identifier identifier = Identifier.create(db, "unpartitioned_table");
+        Schema schema = new Schema(
+                Lists.newArrayList(
+                        new DataField(0, "pk", DataTypes.STRING(), "field1"),
+                        new DataField(1, "d", DataTypes.STRING(), "field2")),
+                Collections.emptyList(),
+                Lists.newArrayList("pk"),
+                org.apache.paimon.shade.guava30.com.google.common.collect.Maps.newHashMap(),
+                "");
+        catalog.createTable(
+                identifier,
+                schema,
+                false);
+        // create table
+        org.apache.paimon.table.Table table = catalog.getTable(identifier);
+        BatchTableWrite batchTableWrite = table.newBatchWriteBuilder().newWrite();
+        BatchTableCommit batchTableCommit = table.newBatchWriteBuilder().newCommit();
+        for (int i = 0; i < 10; i++) {
+            GenericRow genericRow = new GenericRow(3);
+            genericRow.setField(0, BinaryString.fromString(String.valueOf(i)));
+            genericRow.setField(1, BinaryString.fromString("2"));
+            batchTableWrite.write(genericRow);
+        }
+        batchTableCommit.commit(batchTableWrite.prepareCommit());
+    }
+
+    private static void createParitionedTable(Catalog catalog, String db) throws Exception {
+        Identifier identifier = Identifier.create(db, "partitioned_table");
+        Schema schema = new Schema(
+                Lists.newArrayList(
+                        new DataField(0, "pk", DataTypes.STRING(), "field1"),
+                        new DataField(1, "d", DataTypes.STRING(), "field2"),
+                        new DataField(2, "pt", DataTypes.DATE(), "field3")),
+                Lists.newArrayList("pt"),
+                Lists.newArrayList("pk", "pt"),
+                org.apache.paimon.shade.guava30.com.google.common.collect.Maps.newHashMap(),
+                "");
+        catalog.createTable(
+                identifier,
+                schema,
+                false);
+        // create table
+        org.apache.paimon.table.Table table = catalog.getTable(identifier);
+        BatchTableWrite batchTableWrite = table.newBatchWriteBuilder().newWrite();
+        BatchTableCommit batchTableCommit = table.newBatchWriteBuilder().newCommit();
+        for (int i = 0; i < 10; i++) {
+            GenericRow genericRow = new GenericRow(3);
+            genericRow.setField(0, BinaryString.fromString("1"));
+            genericRow.setField(1, BinaryString.fromString("2"));
+            genericRow.setField(2, (int) LocalDate.now().toEpochDay() + i);
+            batchTableWrite.write(genericRow);
+        }
+        batchTableCommit.commit(batchTableWrite.prepareCommit());
+    }
+
+    private static Catalog createPaimonCatalog(String warehouse) {
+        Options catalogOptions = new Options();
+        catalogOptions.set(CatalogOptions.WAREHOUSE, warehouse);
+        CatalogContext catalogContext = CatalogContext.create(catalogOptions);
+        Catalog catalog = CatalogFactory.createCatalog(catalogContext);
+        return catalog;
+    }
+
+    private static void mockPaimonCatalogImpl(MockedMetadataMgr metadataMgr, String warehouse) throws Exception {
+        //create paimon native table and write data
+        Catalog paimonNativeCatalog = createPaimonCatalog(warehouse);
+        createPaimonTable(paimonNativeCatalog, "pmn_db1");
+
+        // create extern paimon catalog
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("type", "paimon");
+        properties.put("paimon.catalog.type", "filesystem");
+        properties.put("paimon.catalog.warehouse", warehouse);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", "paimon0", "", properties);
+
+        //register paimon catalog
+        PaimonMetadata paimonMetadata =
+                new PaimonMetadata("paimon0", new HdfsEnvironment(), paimonNativeCatalog,
+                        "filesystem", null, warehouse);
+        metadataMgr.registerMockedMetadata("paimon0", paimonMetadata);
     }
 
     private static void mockJDBCCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {

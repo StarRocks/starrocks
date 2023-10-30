@@ -43,6 +43,8 @@ import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonPartitionKey;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -86,6 +88,7 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+    public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
@@ -112,6 +115,9 @@ public class PartitionUtil {
                 break;
             case JDBC:
                 partitionKey = new JDBCPartitionKey();
+                break;
+            case PAIMON:
+                partitionKey = new PaimonPartitionKey();
                 break;
             default:
                 Preconditions.checkState(false, "Do not support create partition key for " +
@@ -252,6 +258,14 @@ public class PartitionUtil {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
+        } else if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            if (paimonTable.isUnPartitioned()) {
+                // return table name if table is unpartitioned
+                return Lists.newArrayList(paimonTable.getTableName());
+            }
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
         } else {
             Preconditions.checkState(false, "Not support getPartitionNames for table type %s",
                     table.getType());
@@ -293,6 +307,9 @@ public class PartitionUtil {
         } else if (table.isJDBCTable()) {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionColumns = jdbcTable.getPartitionColumns();
+        } else if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            partitionColumns = paimonTable.getPartitionColumns();
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
                     "table type %s", table.getType());
@@ -323,7 +340,8 @@ public class PartitionUtil {
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()
+                || table.isPaimonTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(
                     table, partitionColumn, getPartitionNames(table), partitionExpr);
         } else {
@@ -335,7 +353,7 @@ public class PartitionUtil {
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getListPartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
             return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames(table));
         } else {
             throw new DmlException("Can not get partition list from table with type : %s", table.getType());
@@ -602,11 +620,18 @@ public class PartitionUtil {
         return partitionKeyList;
     }
 
+    // return partition name in forms of `col1=value1/col2=value2`
+    // if the partition field is explicitly named, use this name without change
+    // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
+    // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
-        int filePartitionFields = partition.size();
         StringBuilder sb = new StringBuilder();
-        for (int index = 0; index < filePartitionFields; ++index) {
+        for (int index = 0; index < partition.size(); ++index) {
             PartitionField partitionField = partitionSpec.fields().get(index);
+            // skip inactive partition field
+            if (partitionField.transform().isVoid()) {
+                continue;
+            }
             sb.append(partitionField.name());
             sb.append("=");
             String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
@@ -614,7 +639,11 @@ public class PartitionUtil {
             sb.append(value);
             sb.append("/");
         }
-        return sb.substring(0, sb.length() - 1);
+
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return ICEBERG_DEFAULT_PARTITION;
     }
 
     public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {

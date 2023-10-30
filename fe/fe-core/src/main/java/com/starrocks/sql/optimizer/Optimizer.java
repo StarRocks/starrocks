@@ -653,6 +653,7 @@ public class Optimizer {
         expression.setRequiredProperties(inputProperties);
         expression.setStatistics(groupExpression.getGroup().getStatistics());
         expression.setCost(groupExpression.getCost(requiredProperty));
+        expression.setOutputProperty(requiredProperty);
 
         // When build plan fragment, we need the output column of logical property
         expression.setLogicalProperty(rootGroup.getLogicalProperty());

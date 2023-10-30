@@ -278,14 +278,6 @@ Status StorageEngine::_init_store_map() {
     for (auto& store : tmp_stores) {
         _store_map.emplace(store.second->path(), store.second);
         store.first = false;
-        if (!_lake_persistent_index_dir_inited) {
-            auto status = store.second->init_persistent_index_dir();
-            if (!status.ok()) {
-                return Status::InternalError(strings::Substitute("init persistIndex dir failed, error=$0", error_msg));
-            }
-            _lake_persistent_index_dir_inited = true;
-            _persistent_index_data_dir = store.second;
-        }
     }
 
     release_guard.cancel();
@@ -533,13 +525,14 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
     return nullptr;
 }
 
-bool StorageEngine::is_lake_persistent_index_dir_inited() {
-    return _lake_persistent_index_dir_inited;
-}
-
-// maybe nullptr if storage_root_path is not set
-DataDir* StorageEngine::get_persistent_index_store() {
-    return _persistent_index_data_dir;
+// maybe nullptr if as cn
+DataDir* StorageEngine::get_persistent_index_store(int64_t tablet_id) {
+    auto stores = get_stores<false>();
+    if (stores.empty()) {
+        return nullptr;
+    } else {
+        return stores[tablet_id % stores.size()];
+    }
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
@@ -621,6 +614,10 @@ void StorageEngine::stop() {
     JOIN_THREADS(_tablet_checkpoint_threads)
 
     JOIN_THREAD(_pk_index_major_compaction_thread)
+
+#ifndef USE_STAROS
+    JOIN_THREAD(_local_pk_index_shard_data_gc_thread)
+#endif
 
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)
@@ -1500,6 +1497,28 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
         }
     }
     return Status::OK();
+}
+
+Status StorageEngine::_clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
+    // remove meta in RocksDB
+    WriteBatch wb;
+    auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);
+    if (status.ok()) {
+        status = data_dir->get_meta()->write_batch(&wb);
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to remove persistent index meta, tablet_id=[" + std::to_string(tablet_id)
+                         << "] error[" << status.to_string() << "]";
+        } else {
+            // remove tablet persistent_index dir
+            status = fs::remove_all(dir);
+            if (!status.ok()) {
+                LOG(WARNING) << "fail to remove local persistent index dir=[" + dir << "] error[" << status.to_string()
+                             << "]";
+            }
+        }
+    }
+
+    return status;
 }
 
 void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys) {

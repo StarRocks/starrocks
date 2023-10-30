@@ -284,7 +284,13 @@ TEST(FutureTest, test_wait_for01) {
 
     std::chrono::milliseconds delay(100);
 
+    auto t0 = std::chrono::steady_clock::now();
     EXPECT_TRUE(f1.wait_for(delay) == future_status::timeout);
+    auto t1 = std::chrono::steady_clock::now();
+    auto d = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+    EXPECT_GE(d, delay.count());
+    // Assuming that the delay due to scheduling does not exceed 50ms
+    EXPECT_LT(d, delay.count() + 50);
 
     p1.set_value(1);
 

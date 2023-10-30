@@ -137,7 +137,7 @@ public:
     // |delvecs| : new generate delvecs
     // |index| : tablet's primary key index
     Status finalize(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, PersistentIndexMetaPB& index_meta,
-                    vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
+                    MemTracker* tracker, vector<std::pair<uint32_t, DelVectorPtr>>& delvecs, PrimaryIndex& index);
 
     std::size_t memory_usage() const { return _memory_usage; }
 
@@ -151,19 +151,19 @@ public:
     const std::vector<BatchPKsPtr>& upserts() const { return _upserts; }
 
 private:
-    Status _load_upserts(Rowset* rowset, uint32_t start_idx, uint32_t* end_idx);
+    Status _load_upserts(Rowset* rowset, MemTracker* update_mem_tracker, uint32_t start_idx, uint32_t* end_idx);
 
     void _release_upserts(uint32_t start_idx, uint32_t end_idx);
 
-    Status _do_load(Tablet* tablet, Rowset* rowset);
+    Status _do_load(Tablet* tablet, Rowset* rowset, MemTracker* update_mem_tracker);
 
     // finalize decide the `ColumnPartialUpdateState` after conflict resolve
     // |tablet| : current tablet
     // |rowset| : the rowset that we want to handle it to generate delta column group
     // |latest_applied_version| : latest apply version of this tablet
     // |index| : tablet's primary key index
-    Status _finalize_partial_update_state(Tablet* tablet, Rowset* rowset, EditVersion latest_applied_version,
-                                          const PrimaryIndex& index);
+    Status _finalize_partial_update_state(Tablet* tablet, Rowset* rowset, MemTracker* update_mem_tracker,
+                                          EditVersion latest_applied_version, const PrimaryIndex& index);
 
     Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx, uint32_t end_idx,
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
@@ -188,8 +188,8 @@ private:
     Status _init_rowset_seg_id(Tablet* tablet);
 
     Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid, const Schema& partial_schema,
-                                   Rowset* rowset, OlapReaderStatistics* stats, std::vector<uint32_t>& rowids,
-                                   Chunk* result_chunk);
+                                   MemTracker* tracker, Rowset* rowset, OlapReaderStatistics* stats,
+                                   std::vector<uint32_t>& rowids, Chunk* result_chunk);
 
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_segment_writer(Rowset* rowset,
                                                                      const TabletSchemaCSPtr& tablet_schema,
@@ -214,7 +214,7 @@ private:
     Status _status;
     // it contains primary key seriable column for each update segment file
     std::vector<BatchPKsPtr> _upserts;
-    std::vector<ChunkPtr> _update_chunk_cache;
+    std::vector<ChunkUniquePtr> _update_chunk_cache;
     // total memory usage in current state.
     // it will not record the temp memory usage.
     size_t _memory_usage = 0;

@@ -132,21 +132,42 @@ public class IcebergApiConverterTest {
     public void testIdentityPartitionNames() {
         List<Types.NestedField> fields = Lists.newArrayList();
         fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
-        fields.add(Types.NestedField.optional(2, "ts", new Types.DateType()));
+        fields.add(Types.NestedField.optional(2, "dt", new Types.DateType()));
         fields.add(Types.NestedField.optional(3, "data", new Types.StringType()));
 
         Schema schema = new Schema(fields);
         PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
-        PartitionSpec partitionSpec = builder.identity("ts").build();
+        PartitionSpec partitionSpec = builder.identity("dt").build();
         String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "ts=2022-08-01"));
-        Assert.assertEquals("ts=2022-08-01", partitionName);
+                "dt=2022-08-01"));
+        Assert.assertEquals("dt=2022-08-01", partitionName);
 
         builder = PartitionSpec.builderFor(schema);
-        partitionSpec = builder.identity("id").identity("ts").build();
+        partitionSpec = builder.identity("id").identity("dt").build();
         partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
-                "id=1/ts=2022-08-01"));
-        Assert.assertEquals("id=1/ts=2022-08-01", partitionName);
+                "id=1/dt=2022-08-01"));
+        Assert.assertEquals("id=1/dt=2022-08-01", partitionName);
+    }
+
+    @Test
+    public void testNonIdentityPartitionNames() {
+        List<Types.NestedField> fields = Lists.newArrayList();
+        fields.add(Types.NestedField.optional(1, "id", new Types.IntegerType()));
+        fields.add(Types.NestedField.optional(2, "ts", Types.TimestampType.withoutZone()));
+        fields.add(Types.NestedField.optional(3, "data", new Types.StringType()));
+
+        Schema schema = new Schema(fields);
+        PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
+        PartitionSpec partitionSpec = builder.hour("ts").build();
+        String partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
+                "ts_hour=62255"));
+        Assert.assertEquals("ts_hour=62255", partitionName);
+
+        builder = PartitionSpec.builderFor(schema);
+        partitionSpec = builder.hour("ts").truncate("data", 2).build();
+        partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
+                "ts_hour=365/data_trunc=xy"));
+        Assert.assertEquals("ts_hour=365/data_trunc=xy", partitionName);
     }
 
     @Test

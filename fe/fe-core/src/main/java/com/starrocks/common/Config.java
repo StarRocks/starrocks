@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle profile processing
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store profile process task
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField
@@ -2556,4 +2568,17 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
+
+    /**
+     * Checking the connectivity of port opened by FE,
+     * mainly used for checking edit log port currently.
+     */
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_interval_sec = 60;
+
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int port_connectivity_check_timeout_ms = 10000;
 }

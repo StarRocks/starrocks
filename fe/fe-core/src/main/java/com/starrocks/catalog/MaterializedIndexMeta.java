@@ -177,6 +177,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
+    public void setDefineStmt(OriginStatement stmt) {
+        this.defineStmt = stmt;
+    }
+
+    public OriginStatement getDefineStmt() {
+        return this.defineStmt;
+    }
+
     public long getDbId() {
         return dbId;
     }
