@@ -737,7 +737,7 @@
   + [生成列](/sql-reference/sql-statements/generated_columns.md)
   + [系统变量](/reference/System_variable.md)
   + [用户自定义变量](/reference/user_defined_variables.md)
-  + [预准备语句](/sql-reference/sql-statements/prepare_statement.md)
+  + [预准备语句](/sql-reference/sql-statements/prepared_statement.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
   + [AWS IAM 策略](/reference/aws_iam_policies.md)
