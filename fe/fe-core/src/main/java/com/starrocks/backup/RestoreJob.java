@@ -1349,10 +1349,10 @@ public class RestoreJob extends AbstractJob {
     protected void updateTablets(MaterializedIndex idx, Partition part) {
         for (Tablet tablet : idx.getTablets()) {
             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                if (!replica.checkVersionCatchUp(part.getVisibleVersion(), false)) {
-                    replica.updateRowCount(part.getVisibleVersion(),
-                            replica.getDataSize(), replica.getRowCount());
-                }
+                // force update all info for all replica
+                replica.updateForRestore(part.getVisibleVersion(),
+                        replica.getDataSize(), replica.getRowCount());
+                replica.setLastReportVersion(part.getVisibleVersion());
             }
         }
     }
