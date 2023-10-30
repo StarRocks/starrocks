@@ -381,6 +381,15 @@ public class Replica implements Writable {
                 this.lastSuccessVersion, this.minReadableVersion, dataSize, rowCount);
     }
 
+    public synchronized void updateForRestore(long newVersion, long newDataSize,
+                                              long newRowCount) {
+        this.version = newVersion;
+        this.lastFailedVersion = -1;
+        this.lastSuccessVersion = newVersion;
+        this.dataSize = newDataSize;
+        this.rowCount = newRowCount;
+    }
+
     /* last failed version:  LFV
      * last success version: LSV
      * version:              V
