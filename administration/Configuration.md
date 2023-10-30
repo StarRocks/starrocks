@@ -1460,7 +1460,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### txn_commit_rpc_timeout_ms
 
-- 含义：Txn 超时的时长。自 3.1 版本弃用，通过 `time_out` 设置事务超时时间。
+- 含义：导入事务的超时时长。自 3.1 版本起，改为控制 RPC 请求的超时时长。
 - 单位：毫秒
 - 默认值：20000
 
