@@ -14,9 +14,9 @@
 
 package com.starrocks.connector;
 
-import com.aliyun.odps.table.read.split.InputSplit;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
+import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import org.apache.iceberg.FileScanTask;
 
@@ -37,12 +37,12 @@ public class RemoteFileDesc {
     // to reduce the memory usage of RemoteFileInfo
     private List<FileScanTask> icebergScanTasks = new ArrayList<>();
     private PaimonSplitsInfo paimonSplitsInfo;
-    private List<InputSplit> odpsSplitsInfo = new ArrayList<>();
+    private OdpsSplitsInfo odpsSplitsInfo;
 
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                            ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
                            List<FileScanTask> icebergScanTasks, PaimonSplitsInfo paimonSplitsInfo,
-                           List<InputSplit> odpsSplitsInfo) {
+                           OdpsSplitsInfo odpsSplitsInfo) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
@@ -71,7 +71,7 @@ public class RemoteFileDesc {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo, null);
     }
 
-    public static RemoteFileDesc createOdpsRemoteFileDesc(List<InputSplit> odpsSplitsInfo) {
+    public static RemoteFileDesc createOdpsRemoteFileDesc(OdpsSplitsInfo odpsSplitsInfo) {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, odpsSplitsInfo);
     }
 
@@ -124,7 +124,7 @@ public class RemoteFileDesc {
     public PaimonSplitsInfo getPaimonSplitsInfo() {
         return paimonSplitsInfo;
     }
-    public List<InputSplit> getOdpsSplitsInfo() {
+    public OdpsSplitsInfo getOdpsSplitsInfo() {
         return odpsSplitsInfo;
     }
 

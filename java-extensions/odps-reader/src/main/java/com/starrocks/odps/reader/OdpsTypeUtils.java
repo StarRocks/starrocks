@@ -14,6 +14,7 @@
 
 package com.starrocks.odps.reader;
 
+import com.aliyun.odps.Column;
 import com.aliyun.odps.data.Binary;
 import com.aliyun.odps.data.Char;
 import com.aliyun.odps.data.Varchar;
@@ -32,6 +33,7 @@ import com.aliyun.odps.table.arrow.accessor.ArrowVarCharAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
 import com.aliyun.odps.table.utils.ConfigConstants;
 import com.aliyun.odps.type.TypeInfo;
+import com.starrocks.jni.connector.ColumnType;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
 import org.apache.arrow.vector.DateDayVector;
@@ -59,6 +61,40 @@ import java.time.format.DateTimeFormatter;
  * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
  */
 public class OdpsTypeUtils {
+    public static ColumnType convertToColumnType(Column column) {
+        switch (column.getTypeInfo().getOdpsType()) {
+            case BOOLEAN:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.BOOLEAN);
+            case TINYINT:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.TINYINT);
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.INT);
+            case FLOAT:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.FLOAT);
+            case DOUBLE:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DOUBLE);
+            case DECIMAL:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DECIMAL64);
+            case STRING:
+            case VARCHAR:
+            case CHAR:
+            case JSON:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.STRING);
+            case BINARY:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.BINARY);
+            case DATE:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DATE);
+            case DATETIME:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DATETIME);
+            case TIMESTAMP:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DATETIME_MILLIS);
+            default:
+                throw new UnsupportedOperationException("Datatype not supported");
+        }
+    }
+
     public static ArrowVectorAccessor createColumnVectorAccessor(ValueVector vector, TypeInfo typeInfo) {
         switch (typeInfo.getOdpsType()) {
             case BOOLEAN:
