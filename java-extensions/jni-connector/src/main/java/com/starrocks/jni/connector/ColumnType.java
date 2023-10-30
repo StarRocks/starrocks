@@ -55,10 +55,11 @@ public class ColumnType {
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
-
+    String rawTypeValue;
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
-
+    private static final Map<TypeValue, String> PRIMITIVE_TYPE_VALUE_STRING_MAPPING = new HashMap<>();
+    
     static {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
@@ -75,6 +76,13 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
+
+        for (String k : PRIMITIVE_TYPE_VALUE_MAPPING.keySet()) {
+            PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(PRIMITIVE_TYPE_VALUE_MAPPING.get(k), k);
+        }
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.STRUCT, "struct");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
@@ -193,6 +201,7 @@ public class ColumnType {
             default: {
                 // convert decimal(x,y) to decimal
                 if (t.startsWith("decimal")) {
+                    rawTypeValue = t;
                     t = "decimal";
                 }
                 typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
@@ -249,6 +258,10 @@ public class ColumnType {
         return childNames.indexOf(FIELD_1_NAME) != -1;
     }
 
+    public boolean isDecimal() {
+        return typeValue == TypeValue.DECIMAL;
+    }
+
     public int computeColumnSize() {
         switch (typeValue) {
             case UNKNOWN:
@@ -290,6 +303,10 @@ public class ColumnType {
 
     public int getPrimitiveTypeValueSize() {
         return PRIMITIVE_TYPE_VALUE_SIZE.getOrDefault(typeValue, -1);
+    }
+
+    public String getTypeValueString() {
+        return PRIMITIVE_TYPE_VALUE_STRING_MAPPING.get(typeValue);
     }
 
     public List<String> getChildNames() {
@@ -369,5 +386,9 @@ public class ColumnType {
             sb.append(top);
             sb.append(',');
         }
+    }
+
+    public String getRawTypeValue() {
+        return rawTypeValue;
     }
 }
