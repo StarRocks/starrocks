@@ -177,7 +177,6 @@ Status HiveDataSource::_init_partition_values() {
         partition_chunk->append_column(partition_value_col, slot_id);
     }
 
-
     // eval conjuncts and skip if no rows.
     if (_has_scan_range_indicate_const_column) {
         std::vector<ExprContext*> ctxs;
@@ -426,11 +425,12 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 }
 
 void HiveDataSource::_init_rf_counters() {
-    auto* root = _profile.runtime_profile;
+    auto* root = _runtime_profile;
     if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         static const char* prefix = "DynamicPruningScanRange";
         ADD_COUNTER(root, prefix, TUnit::NONE);
-        runtime_bloom_filter_eval_context.join_runtime_filter_timer = ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
         runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
         runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =

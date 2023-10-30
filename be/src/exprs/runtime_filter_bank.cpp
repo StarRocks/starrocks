@@ -418,7 +418,8 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
     }
 }
 
-void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
+                                                            RuntimeBloomFilterEvalContext& eval_context) {
     auto& selection = eval_context.running_context.selection;
     eval_context.running_context.use_merged_selection = false;
     eval_context.running_context.compatibility =
@@ -459,7 +460,6 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
 
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
         // for colocate grf
-        eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
         compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
         filter->evaluate(column.get(), &eval_context.running_context);
 
@@ -510,7 +510,8 @@ void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeBloomFilterEvalC
     }
 }
 
-void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context) {
+void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
+                                                         RuntimeBloomFilterEvalContext& eval_context) {
     if (_descriptors.empty()) return;
     size_t before = partial_chunk->num_rows();
     if (before == 0) return;
