@@ -14,7 +14,9 @@
 
 package com.starrocks.planner;
 
+import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
+import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
@@ -84,21 +86,21 @@ public class OdpsScanNode extends ScanNode {
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 table.getCatalogName(), table, null, -1, predicate, fieldNames, -1);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
-        List<InputSplitWithRowRange> splits = remoteFileDesc.getOdpsSplitsInfo();
+        List<InputSplit> splits = remoteFileDesc.getOdpsSplitsInfo();
         if (splits.isEmpty()) {
             LOG.warn("There is no odps splits on {}.{} and predicate: [{}]",
                     table.getDbName(), table.getTableName(), predicate);
             return;
         }
-        for (InputSplitWithRowRange split : splits) {
+        for (InputSplit inputSplit : splits) {
+            IndexedInputSplit split = (IndexedInputSplit) inputSplit;
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(split.getSessionId());
-            hdfsScanRange.setOffset(split.getRowRange().getStartIndex());
-            hdfsScanRange.setLength(split.getRowRange().getNumRecord());
+            hdfsScanRange.setOffset(split.getSplitIndex());
             hdfsScanRange.setUse_odps_jni_reader(true);
-            hdfsScanRange.setFile_length(split.getRowRange().getNumRecord());
+            hdfsScanRange.setFile_length(1);
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocations.setScan_range(scanRange);
@@ -114,6 +116,7 @@ public class OdpsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        //TODO (zhangdingxin.zdx) support max scan range length ?
         return scanRangeLocationsList;
     }
 

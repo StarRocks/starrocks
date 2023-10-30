@@ -14,7 +14,9 @@
 
 package com.starrocks.connector;
 
+import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
+import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -37,12 +39,12 @@ public class RemoteFileDesc {
     // to reduce the memory usage of RemoteFileInfo
     private List<FileScanTask> icebergScanTasks = new ArrayList<>();
     private PaimonSplitsInfo paimonSplitsInfo;
-    private List<InputSplitWithRowRange> odpsSplitsInfo = new ArrayList<>();
+    private List<InputSplit> odpsSplitsInfo = new ArrayList<>();
 
     private RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                            ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs,
                            List<FileScanTask> icebergScanTasks, PaimonSplitsInfo paimonSplitsInfo,
-                           List<InputSplitWithRowRange> odpsSplitsInfo) {
+                           List<InputSplit> odpsSplitsInfo) {
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
@@ -71,7 +73,7 @@ public class RemoteFileDesc {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, paimonSplitsInfo, null);
     }
 
-    public static RemoteFileDesc createOdpsRemoteFileDesc(List<InputSplitWithRowRange> odpsSplitsInfo) {
+    public static RemoteFileDesc createOdpsRemoteFileDesc(List<InputSplit> odpsSplitsInfo) {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, odpsSplitsInfo);
     }
 
@@ -124,7 +126,7 @@ public class RemoteFileDesc {
     public PaimonSplitsInfo getPaimonSplitsInfo() {
         return paimonSplitsInfo;
     }
-    public List<InputSplitWithRowRange> getOdpsSplitsInfo() {
+    public List<InputSplit> getOdpsSplitsInfo() {
         return odpsSplitsInfo;
     }
 
