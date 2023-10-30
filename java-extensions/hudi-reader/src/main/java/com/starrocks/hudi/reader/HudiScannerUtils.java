@@ -22,6 +22,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -89,36 +90,44 @@ public class HudiScannerUtils {
                 || type == ColumnType.TypeValue.DATETIME);
     }
 
-    public static String mapToHiveType(String value) {
-        if (value.startsWith("struct<")) {
-            StringBuilder sb = new StringBuilder();
+    public static String mapColumnTypeToHiveType(ColumnType type) {
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        StringBuilder sb = new StringBuilder();
+        if (type.isStruct()) {
+            List<String> childNames = type.getChildNames();
+            List<ColumnType> childTypes = type.getChildTypes();
             sb.append("struct<");
-            String[] fields = value.substring(7, value.length() - 1).split(",");
-            for (String field : fields) {
-                String[] kv = field.split(":");
-                if (kv.length != 2) {
-                    throw new IllegalArgumentException("Invalid type: " + value);
-                }
-                sb.append(kv[0]);
+            for (int i = 0; i < childNames.size(); i++) {
+                sb.append(childNames.get(i));
                 sb.append(":");
-                sb.append(mapToHiveType(kv[1]));
+                sb.append(mapColumnTypeToHiveType(childTypes.get(i)));
                 sb.append(",");
             }
-            if (fields.length > 0) {
+            if (childNames.size() > 0) {
                 sb.deleteCharAt(sb.length() - 1);
             }
             sb.append(">");
             return sb.toString();
-        } else if (value.startsWith("array<")) {
-            return "array<" + mapToHiveType(value.substring(6, value.length() - 1)) + ">";
-        } else if (value.startsWith("map<")) {
-            String[] kv = value.substring(4, value.length() - 1).split(",");
-            if (kv.length != 2) {
-                throw new IllegalArgumentException("Invalid type: " + value);
+        } else if (type.isMap() || type.isArray()) {
+            List<ColumnType> childTypes = type.getChildTypes();
+            sb.append(type.getTypeValueString());
+            sb.append("<");
+            for (int i = 0; i < childTypes.size(); i++) {
+                sb.append(mapColumnTypeToHiveType(childTypes.get(i)));
+                sb.append(",");
             }
-            return "map<" + mapToHiveType(kv[0]) + "," + mapToHiveType(kv[1]) + ">";
+            if (childTypes.size() > 0) {
+                sb.deleteCharAt(sb.length() - 1);
+            }
+            sb.append(">");
+            return sb.toString();
+        } else if (type.isDecimal()) {
+            return type.getRawTypeValue();
         } else {
-            // primitive type.
+            String value = type.getTypeValueString();
+            if (value == null) {
+                throw new IllegalArgumentException("Invalid type: " + type.toString());
+            }
             return HIVE_TYPE_MAPPING.getOrDefault(value, value);
         }
     }

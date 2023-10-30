@@ -79,9 +79,6 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
 
-    public static final int MAX_DECIMAL32_PRECISION = 9;
-    public static final int MAX_DECIMAL64_PRECISION = 18;
-
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
@@ -130,12 +127,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         for (int i = 0; i < requiredFields.length; i++) {
             requiredColumnIds[i] = hiveColumnNameToIndex.get(requiredFields[i]);
             String type = hiveColumnNameToType.get(requiredFields[i]);
-
-            if (type.startsWith("decimal")) {
-                parseDecimal(type, i);
-            } else {
-                requiredTypes[i] = new ColumnType(requiredFields[i], type);
-            }
+            requiredTypes[i] = new ColumnType(requiredFields[i], type);
         }
 
         // prune fields
@@ -148,28 +140,6 @@ public class HudiSliceScanner extends ConnectorScanner {
             String name = requiredFields[i];
             type.pruneOnField(ssf, name);
         }
-    }
-
-    // convert decimal(x,y) to decimal
-    private void parseDecimal(String type, int i) {
-        int precision = -1;
-        int scale = -1;
-        int s = type.indexOf('(');
-        int e = type.indexOf(')');
-        if (s != -1 && e != -1) {
-            String[] ps = type.substring(s + 1, e).split(",");
-            precision = Integer.parseInt(ps[0].trim());
-            scale = Integer.parseInt(ps[1].trim());
-            if (precision <= MAX_DECIMAL32_PRECISION) {
-                type = "decimal32";
-            } else if (precision <= MAX_DECIMAL64_PRECISION) {
-                type = "decimal64";
-            } else {
-                type = "decimal128";
-            }
-        }
-        requiredTypes[i] = new ColumnType(requiredFields[i], type);
-        requiredTypes[i].setScale(scale);
     }
 
     private Properties makeProperties() {
@@ -193,9 +163,10 @@ public class HudiSliceScanner extends ConnectorScanner {
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
 
         List<String> types = new ArrayList<>();
+        String[] hiveColumnNames = this.hiveColumnNames.split(",");
         for (int i = 0; i < this.hiveColumnTypes.length; i++) {
-            String type = this.hiveColumnTypes[i];
-            type = HudiScannerUtils.mapToHiveType(type);
+            ColumnType columnType = new ColumnType(hiveColumnNames[i], hiveColumnTypes[i]);
+            String type = HudiScannerUtils.mapColumnTypeToHiveType(columnType);
             types.add(type);
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
