@@ -573,8 +573,7 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
     jni_scanner_params["table_name"] = odps_table->get_table_name();
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["session_id"] = _scan_range.relative_path;
-    jni_scanner_params["start_index"] = std::to_string(_scan_range.offset);
-    jni_scanner_params["num_record"] = std::to_string(_scan_range.length);
+    jni_scanner_params["split_index"] = std::to_string(_scan_range.offset);
     jni_scanner_params["nested_fields"] = nested_fields;
 
     LOG(INFO) << "get jni scanner params";
