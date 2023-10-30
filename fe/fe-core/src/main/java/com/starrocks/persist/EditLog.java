@@ -406,6 +406,11 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
+                case OperationType.OP_RENAME_COLUMN_V2: {
+                    ColumnRenameInfo info = (ColumnRenameInfo) journal.getData();
+                    globalStateMgr.replayRenameColumn(info);
+                    break;
+                }
                 case OperationType.OP_BACKUP_JOB:
                 case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
@@ -2356,7 +2361,6 @@ public class EditLog {
     }
 
     // warehouse
-
     public void logCreateWarehouse(Warehouse warehouse) {
         logEdit(OperationTypeEPack.OP_CREATE_WAREHOUSE, warehouse);
     }
@@ -2383,5 +2387,9 @@ public class EditLog {
     public void logUpdateFailoverGroup(FailoverGroup failoverGroup) {
         UpdateFailoverGroupLog updateFailoverGroupLog = new UpdateFailoverGroupLog(failoverGroup);
         logEdit(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, updateFailoverGroupLog);
+    }
+
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
     }
 }
