@@ -972,6 +972,74 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void collectProfile() {
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimeMs;
+
+        // For the usage scenarios of flink cdc or routine load,
+        // the frequency of stream load maybe very high, resulting in many profiles,
+        // but we may only care about the long-duration stream load profile.
+        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
+            LOG.info(String.format("Load %s, totalTimeMs %d < Config.stream_load_profile_collect_second %d)",
+                    label, totalTimeMs, Config.stream_load_profile_collect_second));
+            return;
+        }
+
+        RuntimeProfile profile = new RuntimeProfile("Load");
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeString(createTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+        summaryProfile.addInfoString("StarRocks Version",
+                String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+        summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
+
+        Map<String, String> loadCounters = coord.getLoadCounters();
+        if (loadCounters != null && loadCounters.size() != 0) {
+            summaryProfile.addInfoString("NumRowsNormal", loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
+            summaryProfile.addInfoString("NumLoadBytesTotal", loadCounters.get(LoadJob.LOADED_BYTES));
+            summaryProfile.addInfoString("NumRowsAbnormal", loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
+            summaryProfile.addInfoString("numRowsUnselected", loadCounters.get(LoadJob.UNSELECTED_ROWS));
+        }
+        ConnectContext session = ConnectContext.get();
+        if (session != null) {
+            SessionVariable variables = session.getSessionVariable();
+            if (variables != null) {
+                summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+            }
+        }
+
+        profile.addChild(summaryProfile);
+        if (coord.getQueryProfile() != null) {
+            if (!isSyncStreamLoad()) {
+                coord.collectProfileSync();
+                profile.addChild(coord.buildQueryProfile(session == null || session.needMergeProfile()));
+            } else {
+                profile.addChild(coord.getQueryProfile());
+            }
+        }
+
+        ProfileManager.getInstance().pushLoadProfile(profile);
+    }
+
+    public void setLoadState(long loadBytes, long loadRows, long filteredRows, long unselectedRows,
+                             String errorLogUrl, String errorMsg) {
+        this.numRowsNormal = loadRows;
+        this.numRowsAbnormal = filteredRows;
+        this.numRowsUnselected = unselectedRows;
+        this.numLoadBytesTotal = loadBytes;
+        this.trackingUrl = errorLogUrl;
+        this.errorMsg = errorMsg;
+    }
+
+>>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
     @Override
     public void replayOnCommitted(TransactionState txnState) {
         writeLock();
