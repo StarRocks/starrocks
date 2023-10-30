@@ -15,7 +15,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -27,6 +30,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -36,6 +40,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -55,6 +60,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -3816,6 +3822,55 @@ public class CreateMaterializedViewTest {
             }
         }
         return Lists.newArrayList();
+    }
+
+    @Test
+    public void testHivePartitionTable_DiscretePartition() throws Exception {
+        PlanTestBase.mockDml();
+        MockedHiveMetadata.mockTablesWithSinglePartitionColumn();
+        String mvName = "mv_discrete_part";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName +
+                " partition by (part_date) " +
+                "refresh manual as " +
+                "select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` ");
+
+        String refreshSql = String.format("refresh materialized view %s", mvName);
+        starRocksAssert.refreshMvPartition(refreshSql);
+
+        // verify partitions
+        MaterializedView mv = getMv("test", mvName);
+        Assert.assertEquals(ImmutableSet.of("p20210102", "p20220303", "p20200101", "p20230103"),
+                mv.getPartitionNames());
+        Map<String, Range<PartitionKey>> partitionMap = mv.getRangePartitionMap();
+        Assert.assertEquals(ImmutableMap.of(
+                "p20210102", PartitionKey.ofDateRange("2021-01-02", "2021-01-03"),
+                "p20220303", PartitionKey.ofDateRange("2022-03-03", "2022-03-04"),
+                "p20200101", PartitionKey.ofDateRange("2020-01-01", "2020-01-02"),
+                "p20230103", PartitionKey.ofDateRange("2023-01-03", "2023-01-04")
+        ), partitionMap);
+
+        // verify rewrite
+        starRocksAssert.query("select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` " +
+                "where part_date = '2021-01-02' ").explainContains(mvName);
+        starRocksAssert.query("select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` " +
+                "where part_date = '2022-03-03' ").explainContains(mvName);
+        starRocksAssert.query("select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` " +
+                "where part_date = '2022-03-04' ").explainContains(mvName);
+        starRocksAssert.query("select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` " +
+                "where part_date = '2023-01-04' ").explainContains(mvName);
+
+        // use ttl to truncate partitions
+        starRocksAssert.getCtx().executeSql(String.format("alter materialized view %s " +
+                "set('partition_ttl_number'='1')", mvName));
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(
+                ImmutableMap.of("p20230103", PartitionKey.ofDateRange("2023-01-03", "2023-01-04")),
+                mv.getRangePartitionMap());
+        starRocksAssert.refreshMvPartition(refreshSql);
+        starRocksAssert.query("select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` " +
+                "where part_date = '2023-01-04' ").explainContains(mvName);
+        starRocksAssert.query("select part_date, c1 from `hive0`.`partitioned_db`.`part_tbl3_discrete` " +
+                "where part_date = '2022-03-03' ").explainWithout(mvName);
     }
 
     @Test
