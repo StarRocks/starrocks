@@ -186,7 +186,6 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return tablet;
 }
 
-<<<<<<< HEAD
 Status TabletManager::delete_tablet(int64_t tablet_id) {
     std::vector<std::string> objects;
     // TODO: construct prefix in LocationProvider or a common place
@@ -209,12 +208,12 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     st.permit_unchecked_error();
 
     for (const auto& obj : objects) {
-        erase_metacache(obj);
+        _metacache->erase(obj);
         st = fs->delete_file(obj);
         st.permit_unchecked_error();
     }
     //drop tablet schema from metacache;
-    erase_metacache(tablet_schema_cache_key(tablet_id));
+    _metacache->erase(tablet_schema_cache_key(tablet_id));
 
     std::unique_lock wrlock(_meta_lock);
     _tablet_in_writing_txn_size.erase(tablet_id);
@@ -222,10 +221,7 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     return Status::OK();
 }
 
-Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
-=======
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
->>>>>>> ec7b0c6cf3 ([Enhancement] Enforce const and immutability in cache management (#33159))
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
     auto t0 = butil::gettimeofday_us();
@@ -370,7 +366,7 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto t0 = butil::gettimeofday_us();
     auto location = txn_log_location(tablet_id, txn_id);
-    erase_metacache(location);
+    _metacache->erase(location);
     auto st = fs::delete_file(location);
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
@@ -381,7 +377,7 @@ Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
 Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
     auto t0 = butil::gettimeofday_us();
     auto location = txn_vlog_location(tablet_id, version);
-    erase_metacache(location);
+    _metacache->erase(location);
     auto st = fs::delete_file(location);
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
