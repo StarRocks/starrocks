@@ -38,7 +38,7 @@ class CompactionManager {
 public:
     CompactionManager();
 
-    ~CompactionManager();
+    ~CompactionManager() = default;
 
     void stop();
 
