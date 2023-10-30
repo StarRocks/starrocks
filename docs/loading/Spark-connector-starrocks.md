@@ -81,7 +81,11 @@ Directly download the corresponding version of the Spark connector JAR from the 
 | starrocks.user                                 | YES      | None          | The username of your StarRocks cluster account.              |
 | starrocks.password                             | YES      | None          | The password of your StarRocks cluster account.              |
 | starrocks.write.label.prefix                   | NO       | spark-        | The label prefix used by Stream Load.                        |
+<<<<<<< HEAD
 | starrocks.write.enable.transaction-stream-load | NO       | TRUE          | Whether to use [the transactional interface of Stream Load](./Stream_Load_transaction_interface.md) to load data. This feature is supported in StarRocks v2.4 and later. |
+=======
+| starrocks.write.enable.transaction-stream-load | NO | TRUE | Whether to use [Stream Load transaction interface](../loading/Stream_Load_transaction_interface.md) to load data. It requires StarRocks v2.5 or later. This feature can load more data in a transaction with less memory usage, and improve performance. <br/> **NOTICE:** Since 1.1.1, this parameter takes effect only when the value of `starrocks.write.max.retries` is non-positive because Stream Load transaction interface does not support retry. |
+>>>>>>> de1f108ae3 ([Doc] Update Spark-connector-starrocks.md (#33969))
 | starrocks.write.buffer.size                    | NO       | 104857600     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. Setting this parameter to a larger value can improve loading performance but may increase loading latency. |
 | starrocks.write.flush.interval.ms              | NO       | 300000        | The interval at which data is sent to StarRocks. This parameter is used to control the loading latency. |
 | starrocks.columns                              | NO       | None          | The StarRocks table column into which you want to load data. You can specify multiple columns, which must be separated by commas (,), for example, `"c0,c1,c2"`. |
