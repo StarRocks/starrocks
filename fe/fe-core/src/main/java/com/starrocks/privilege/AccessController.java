@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
 
 import java.util.List;
 import java.util.Map;
@@ -145,6 +146,17 @@ public interface AccessController {
     }
 
     default void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name,
+                                 PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName name)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }

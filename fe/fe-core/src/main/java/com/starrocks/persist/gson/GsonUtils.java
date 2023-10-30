@@ -153,6 +153,7 @@ import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.GlobalFunctionPEntryObject;
 import com.starrocks.privilege.MaterializedViewPEntryObject;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.ResourceGroupPEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.StorageVolumePEntryObject;
@@ -320,8 +321,9 @@ public class GsonUtils {
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                     .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
+                    .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
                     .registerSubtype(PolicyPEntryObject.class, "PolicyPEntryObject")
-                    .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject");
+                    .registerSubtype(PipePEntryObject.class, "PipePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<RoleMapping> ROLE_MAPPING_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoleMapping.class, "clazz")
@@ -394,7 +396,6 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(AnalyzeJob.class, "clazz")
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
-
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));

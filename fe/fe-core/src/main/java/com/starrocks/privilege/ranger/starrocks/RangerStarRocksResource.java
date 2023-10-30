@@ -55,6 +55,8 @@ public class RangerStarRocksResource extends RangerAccessResourceImpl {
             setValue(convertToRangerType(ObjectType.RESOURCE_GROUP), objectTokens.get(0));
         } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
             setValue(convertToRangerType(ObjectType.STORAGE_VOLUME), objectTokens.get(0));
+        } else if (objectType.equals(ObjectType.PIPE)) {
+            setValue(convertToRangerType(ObjectType.PIPE), objectTokens.get(0));
         }
     }
 
@@ -90,6 +92,8 @@ public class RangerStarRocksResource extends RangerAccessResourceImpl {
             return "resource_group";
         } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
             return "storage_volume";
+        } else if (objectType.equals(ObjectType.PIPE)) {
+            return "pipe";
         } else {
             return "unknown";
         }

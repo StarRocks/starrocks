@@ -233,6 +233,23 @@ public class PipeManagerTest {
         };
     }
 
+    public static void mockRepoExecutorDML() {
+        new MockUp<RepoExecutor>() {
+            @Mock
+            public void executeDML(String sql) {
+            }
+
+            @Mock
+            public List<TResultBatch> executeDQL(String sql) {
+                return Lists.newArrayList();
+            }
+
+            @Mock
+            public void executeDDL(String sql) {
+            }
+        };
+    }
+
     private void mockRepoExecutor() {
         new MockUp<RepoExecutor>() {
             @Mock

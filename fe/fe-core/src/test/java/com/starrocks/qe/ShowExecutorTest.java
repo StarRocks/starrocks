@@ -1198,7 +1198,8 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         resultSet.getResultRows().forEach(System.out::println);
         String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW, CREATE MASKING POLICY, CREATE ROW ACCESS POLICY ON ALL DATABASES TO ROLE 'root'";
+                "CREATE MATERIALIZED VIEW, CREATE MASKING POLICY, CREATE ROW ACCESS POLICY, CREATE PIPE " +
+                "ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +

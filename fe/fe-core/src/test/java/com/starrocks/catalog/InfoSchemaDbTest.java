@@ -397,7 +397,7 @@ public class InfoSchemaDbTest {
         item3.setObject_database("db");
         item3.setObject_type("DATABASE");
         item3.setPrivilege_type("CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, CREATE MATERIALIZED VIEW, " +
-                "CREATE MASKING POLICY, CREATE ROW ACCESS POLICY");
+                "CREATE MASKING POLICY, CREATE ROW ACCESS POLICY, CREATE PIPE");
         item3.setIs_grantable(false);
         Assert.assertTrue(GrantsTo.getGrantsTo(request).grants_to.contains(item3));
 
