@@ -216,6 +216,8 @@ public:
                              RuntimeBloomFilterEvalContext& eval_context);
     void evaluate(Chunk* chunk);
     void evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
+    // evaluate partial chunk that may not contain slots referenced by runtime filter
+    void evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
@@ -247,6 +249,7 @@ private:
     // TODO: return a funcion call status
     void do_evaluate(Chunk* chunk);
     void do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context);
+    void do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;

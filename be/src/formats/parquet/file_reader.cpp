@@ -209,21 +209,6 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             if (discard) {
                 return true;
             }
-
-            // skip topn runtime filter, because it has taken effect on min/max filtering
-            // if row-group contains exactly one value(i.e. min_value = max_value), use bloom filter to test
-            if (!filter->always_true() && min_chunk->columns()[0]->equals(0, *max_chunk->columns()[0], 0)) {
-                ColumnPtr& chunk_part_column = min_chunk->columns()[0];
-                JoinRuntimeFilter::RunningContext ctx;
-                ctx.use_merged_selection = false;
-                auto& selection = ctx.selection;
-                selection.assign(chunk_part_column->size(), 1);
-                filter->compute_hash({chunk_part_column.get()}, &ctx);
-                filter->evaluate(chunk_part_column.get(), &ctx);
-                if (selection[0] == 0) {
-                    return true;
-                }
-            }
         }
     }
 

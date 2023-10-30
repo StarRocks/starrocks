@@ -28,7 +28,7 @@ public:
     JniScanner(std::string factory_class, std::map<std::string, std::string> params)
             : _jni_scanner_params(std::move(params)), _jni_scanner_factory_class(std::move(factory_class)) {}
 
-    ~JniScanner() override { finalize(); }
+    ~JniScanner() override { close(); }
 
     [[nodiscard]] Status do_open(RuntimeState* runtime_state) override;
     void do_update_counter(HdfsScanProfile* profile) override;

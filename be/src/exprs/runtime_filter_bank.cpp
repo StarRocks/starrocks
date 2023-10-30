@@ -419,6 +419,64 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
         }
     }
 }
+
+void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context) {
+    auto& selection = eval_context.running_context.selection;
+    eval_context.running_context.use_merged_selection = false;
+    eval_context.running_context.compatibility =
+            _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
+
+    // since partial chunk is currently very lightweight (a bunch of const columns), use very runtime filter if possible
+    // without computing each rf's selectivity
+    for (auto kv : _descriptors) {
+        RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+        if (filter == nullptr || filter->always_true()) {
+            continue;
+        }
+
+        auto* probe_expr = rf_desc->probe_expr_ctx();
+        auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
+
+        // skip if (can be relaxed later)
+        //  1. multi-column runtime filter
+        //  2. runtime filter that is not slot ref, or a slot ref of a non-existent column
+        auto can_use_rf_on_partial_chunk = [&]() {
+            if (!partition_by_exprs->empty()) {
+                return false;
+            }
+            SlotId slot_id;
+            if (!rf_desc->is_probe_slot_ref(&slot_id)) {
+                return false;
+            }
+            if (!partial_chunk->is_slot_exist(slot_id)) {
+                return false;
+            }
+            return true;
+        };
+
+        if (!can_use_rf_on_partial_chunk()) {
+            continue;
+        }
+
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
+        // for colocate grf
+        eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+        compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
+        filter->evaluate(column.get(), &eval_context.running_context);
+
+        auto true_count = SIMD::count_nonzero(selection);
+        eval_context.run_filter_nums += 1;
+
+        if (true_count == 0) {
+            partial_chunk->set_num_rows(0);
+            return;
+        } else {
+            partial_chunk->filter(selection);
+        }
+    }
+}
+
 void RuntimeFilterProbeCollector::init_counter() {
     _eval_context.join_runtime_filter_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterTime");
     _eval_context.join_runtime_filter_hash_timer = ADD_TIMER(_runtime_profile, "JoinRuntimeFilterHashTime");
@@ -449,6 +507,22 @@ void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeBloomFilterEvalC
         eval_context.run_filter_nums = 0;
         do_evaluate(chunk, eval_context);
         size_t after = chunk->num_rows();
+        eval_context.join_runtime_filter_output_counter->update(after);
+        eval_context.join_runtime_filter_eval_counter->update(eval_context.run_filter_nums);
+    }
+}
+
+void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk, RuntimeBloomFilterEvalContext& eval_context) {
+    if (_descriptors.empty()) return;
+    size_t before = partial_chunk->num_rows();
+    if (before == 0) return;
+
+    {
+        SCOPED_TIMER(eval_context.join_runtime_filter_timer);
+        eval_context.join_runtime_filter_input_counter->update(before);
+        eval_context.run_filter_nums = 0;
+        do_evaluate_partial_chunk(partial_chunk, eval_context);
+        size_t after = partial_chunk->num_rows();
         eval_context.join_runtime_filter_output_counter->update(after);
         eval_context.join_runtime_filter_eval_counter->update(eval_context.run_filter_nums);
     }
