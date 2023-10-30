@@ -33,6 +33,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -909,7 +910,6 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
@@ -1523,6 +1523,23 @@ public class StmtExecutor {
                 }
             }
 
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
+                // when the target table is not ExternalOlapTable or OlapTable
+                // if there is no data to load, the result of the insert statement is success
+                // otherwise, the result of the insert statement is failed
+                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
+                if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
+                    if (!(targetTable instanceof IcebergTable)) {
+                        // schema table and iceberg table does not need txn
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                database.getId(), transactionId, errorMsg);
+                    }
+                    context.getState().setOk();
+                    insertError = true;
+                    return;
+                }
+            }
 
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;

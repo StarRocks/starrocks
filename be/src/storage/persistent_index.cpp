@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "fs/fs.h"
+#include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -3347,8 +3348,8 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (found_values[i].get_value() != NullIndexValue &&
-            ((uint32_t)(found_values[i].get_value() >> 32)) <= max_src_rssid) {
+        auto found_value = found_values[i].get_value();
+        if (found_value != NullIndexValue && ((uint32_t)(found_value >> 32)) <= max_src_rssid) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
@@ -4107,14 +4108,15 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->finish());
     std::vector<std::unique_ptr<ImmutableIndex>> new_l1_vec;
     std::vector<int> new_l1_merged_num;
-    size_t merge_num = _l1_merged_num[merge_l1_start_idx];
-    for (int i = 0; i < merge_l1_start_idx; i++) {
-        new_l1_vec.emplace_back(std::move(_l1_vec[i]));
-        new_l1_merged_num.emplace_back(_l1_merged_num[i]);
-    }
-
+    size_t merge_num = 0;
     {
         std::unique_lock wrlock(_lock);
+        merge_num = _l1_merged_num[merge_l1_start_idx];
+        for (int i = 0; i < merge_l1_start_idx; i++) {
+            new_l1_vec.emplace_back(std::move(_l1_vec[i]));
+            new_l1_merged_num.emplace_back(_l1_merged_num[i]);
+        }
+
         for (int i = merge_l1_start_idx; i < _l1_vec.size(); i++) {
             _l1_vec[i]->destroy();
         }

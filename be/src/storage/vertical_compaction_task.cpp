@@ -30,7 +30,7 @@ Status VerticalCompactionTask::run_impl() {
     RETURN_IF_ERROR(_validate_compaction(statistics));
     TRACE("[Compaction] vertical compaction validated");
 
-    _commit_compaction();
+    RETURN_IF_ERROR(_commit_compaction());
     TRACE("[Compaction] vertical compaction committed");
 
     return Status::OK();

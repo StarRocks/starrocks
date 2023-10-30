@@ -90,12 +90,13 @@ public:
     virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
+        DCHECK_GT(count, 0);
         if (_data->is_nullable()) {
             bool ok = true;
             if (_size == 0) {
                 ok = _data->append_nulls(1);
             }
-            _size += ok;
+            _size += count;
             return ok;
         } else {
             return false;

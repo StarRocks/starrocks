@@ -290,7 +290,7 @@ Users can use the following command to check the status of a specific Tablet. Fo
   +------------------------+-----------+---------------+-----------+----------+----------+-------------+----------+--------+---------------------------------------------------------------------------+
   ```
 
-Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details 
+Above shows the database, table, partition, index and other information corresponding to the tablet. Users can copy the command in `DetailCmd` to check out the details
     `SHOW PROC '/dbs/29502391/29502428/partitions/29502427/29502428/29502553';`
 
   ```plaintext
@@ -317,7 +317,7 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
   ```
 
-  A breakdown of all the properties is as follows.
+* A breakdown of all the properties is as follows.
 
   * TabletId: The ID of the Tablet that is waiting for scheduling. A task for each Tablet
   * Type: The type of task, either REPAIR or BALANCE

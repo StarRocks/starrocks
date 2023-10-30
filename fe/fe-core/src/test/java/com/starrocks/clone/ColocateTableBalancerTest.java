@@ -323,9 +323,21 @@ public class ColocateTableBalancerTest {
 
     @Test
     public void testPerGroupBalance(@Mocked SystemInfoService infoService,
-                                    @Mocked ClusterLoadStatistic statistic) {
+                                    @Mocked ClusterLoadStatistic statistic) throws InterruptedException {
         new Expectations() {
             {
+                // try to fix the unstable test
+                // java.util.ConcurrentModificationException
+                //    at mockit.internal.expectations.state.ExecutingTest.isInjectableMock(ExecutingTest.java:142)
+                //    at mockit.internal.expectations.state.ExecutingTest.addInjectableMock(ExecutingTest.java:137)
+                //    at com.starrocks.clone.ColocateTableBalancerTest$2.<init>(ColocateTableBalancerTest.java:342)
+                //    at com.starrocks.clone.ColocateTableBalancerTest.testPerGroupBalance(ColocateTableBalancerTest.java:340)
+                //
+                // this exception happens at the internal of the mockit, probably a bug of mockit
+                // need to use concurrent safe list for mockit.internal.expectations.state.ExecutingTest#injectableMocks
+                // because mockit itself will start some background thread to clean `injectableMocks` which will have
+                // conflict with our test thread, here is just a workaround, wait for a while to avoid that.
+                Thread.sleep(2000);
                 infoService.getBackend(1L);
                 result = backend1;
                 minTimes = 0;

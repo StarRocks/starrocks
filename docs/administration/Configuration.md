@@ -598,7 +598,6 @@ BE static parameters are as follows.
 
 #### row_nums_check
 
-
 - **Default**: True
 - **Unit**: N/A
 - **Description**: A boolean value to control whether to check row counts before and after compaction. The value true indicates to enable the row count check. The value false indicates disable the row count check.

@@ -18,6 +18,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -434,5 +435,27 @@ struct ChunkSlice {
     vectorized::ChunkPtr cutoff(size_t required_rows);
     void reset(vectorized::ChunkUniquePtr input);
 };
+
+template <PrimitiveType ltype>
+struct GetContainer {
+    using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
+    const auto& get_data(Column* column) { return ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); }
+    const auto& get_data(const ColumnPtr& column) {
+        return ColumnHelper::as_raw_column<ColumnType>(column.get())->get_data();
+    }
+};
+
+#define GET_CONTAINER(ltype)                                                                  \
+    template <>                                                                               \
+    struct GetContainer<ltype> {                                                              \
+        const auto& get_data(Column* column) {                                                \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column)->get_proxy_data();       \
+        }                                                                                     \
+        const auto& get_data(const ColumnPtr& column) {                                       \
+            return ColumnHelper::as_raw_column<BinaryColumn>(column.get())->get_proxy_data(); \
+        }                                                                                     \
+    };
+APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
+#undef GET_CONTAINER
 
 } // namespace starrocks::vectorized

@@ -210,11 +210,11 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * enable_populate_block_cache (2.5 and later)
   
-  Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+  Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: `true`. This variable is supported from 2.5.
 
 * enable_tablet_internal_parallel (2.3 and later)
 
-  Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency. Default value: true.
+  Whether to enable adaptive parallel scanning of tablets. After this feature is enabled, multiple threads can be used to scan one tablet by segment, increasing the scan concurrency. Default value: `true`.
 
 * enable_query_cache (2.5 and later)
 
@@ -231,6 +231,16 @@ The variables are described **in alphabetical order**. Variables with the `globa
 * enable_sort_aggregate (2.5 and later)
 
   Specifies whether to enable sorted streaming. `true` indicates sorted streaming is enabled to sort data in data streams.
+
+* enable_query_tablet_affinity（2.5 and later）
+
+  Boolean value to control whether to direct multiple queries against the same tablet to a fixed replica.
+
+  In scenarios where the table to query has a large number of tablets, this feature significantly improves query performance because the meta information and data of the tablet can be cached in memory more quickly.
+
+  However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
+
+  Default value: `false`, which means the system selects a replica for each query. This feature is supported since 2.5.6, 3.0.8, and 3.1.4.
 
 * enable_global_runtime_filter
 
