@@ -208,8 +208,6 @@ struct SpilledPartition : public SpillPartitionInfo {
 
 class PartitionedSpillerWriter final : public SpillerWriter {
 public:
-    static const constexpr auto max_partition_size = 1024;
-    static const constexpr auto max_partition_level = 6;
     PartitionedSpillerWriter(Spiller* spiller, RuntimeState* state);
 
     Status prepare(RuntimeState* state) override;
