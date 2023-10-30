@@ -475,7 +475,7 @@ CREATE EXTERNAL CATALOG iceberg_catalog_hms
 PROPERTIES
 (
     "type" = "iceberg",
-    "hive.metastore.type" = "hive",
+    "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
 );
 ```
