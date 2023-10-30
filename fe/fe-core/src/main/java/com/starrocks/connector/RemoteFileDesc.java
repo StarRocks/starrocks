@@ -15,8 +15,6 @@
 package com.starrocks.connector;
 
 import com.aliyun.odps.table.read.split.InputSplit;
-import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
-import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
