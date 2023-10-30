@@ -62,6 +62,7 @@ Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& sc
             if (columns[j]->get(i).is_null()) {
                 if (schema.field(idx)->is_nullable()) {
                     null_bitmap.add(j);
+                    offsets.emplace_back(0);
                 } else {
                     return Status::InternalError("null value in non-null filed, check value correct.");
                 }
@@ -108,9 +109,8 @@ Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& 
         Slice s = full_row_column.get_slice(i);
         int32_t version = RowStoreEncoderType::SIMPLE;
 
-        size_t num_cols = schema.num_fields();
         size_t num_key_cols = schema.num_key_fields();
-        int32_t num_value_cols = num_cols - num_key_cols;
+        int32_t num_value_cols = 0;
 
         // header 8 bytes
         decode_header(&s, &version, num_value_cols);
