@@ -35,6 +35,10 @@ Fixed the following issues:
 
 Release date: September 12, 2023
 
+### Behavior Change
+
+- When using the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function, you must use the SEPARATOR keyword to declare the separator.
+
 ### New Features
 
 - The aggregate function [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) supports the DISTINCT keyword and the ORDER BY clause. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
