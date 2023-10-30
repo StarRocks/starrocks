@@ -196,6 +196,19 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
+    lake/sstable/block_builder.cpp
+    lake/sstable/block.cpp
+    lake/sstable/coding.cpp
+    lake/sstable/comparator.cpp
+    lake/sstable/filter_block.cpp
+    lake/sstable/format.cpp
+    lake/sstable/lake_persistent_index_sst.cpp
+    lake/sstable/table_builder.cpp
+    lake/sstable/table.cpp
+    lake/sstable/two_level_iterator.cpp
+    lake/sstable/filter_policy.cpp
+    lake/sstable/iterator.cpp
+    lake/sstable/options.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
