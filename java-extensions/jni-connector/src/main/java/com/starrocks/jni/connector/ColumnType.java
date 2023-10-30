@@ -55,9 +55,20 @@ public class ColumnType {
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
+<<<<<<< HEAD
 
+=======
+    String rawTypeValue;
+
+    int scale = -1;
+>>>>>>> 887a2e5811 ([BugFix] fix hudi scanner type mapping for complex type (#33900))
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
+
+    private static final Map<TypeValue, String> PRIMITIVE_TYPE_VALUE_STRING_MAPPING = new HashMap<>();
+
+    private static final int MAX_DECIMAL32_PRECISION = 9;
+    private static final int MAX_DECIMAL64_PRECISION = 18;
 
     static {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
@@ -75,6 +86,13 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
+
+        for (String k : PRIMITIVE_TYPE_VALUE_MAPPING.keySet()) {
+            PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(PRIMITIVE_TYPE_VALUE_MAPPING.get(k), k);
+        }
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.STRUCT, "struct");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
@@ -191,11 +209,19 @@ public class ColumnType {
             }
             break;
             default: {
+<<<<<<< HEAD
                 // convert decimal(x,y) to decimal
                 if (t.startsWith("decimal")) {
                     t = "decimal";
                 }
                 typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+=======
+                if (t.startsWith("decimal")) {
+                    typeValue = parseDecimal(t);
+                } else {
+                    typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+                }
+>>>>>>> 887a2e5811 ([BugFix] fix hudi scanner type mapping for complex type (#33900))
             }
         }
 
@@ -249,6 +275,11 @@ public class ColumnType {
         return childNames.indexOf(FIELD_1_NAME) != -1;
     }
 
+    public boolean isDecimal() {
+        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 || typeValue == TypeValue.DECIMAL64 ||
+                typeValue == TypeValue.DECIMAL128;
+    }
+
     public int computeColumnSize() {
         switch (typeValue) {
             case UNKNOWN:
@@ -290,6 +321,10 @@ public class ColumnType {
 
     public int getPrimitiveTypeValueSize() {
         return PRIMITIVE_TYPE_VALUE_SIZE.getOrDefault(typeValue, -1);
+    }
+
+    public String getTypeValueString() {
+        return PRIMITIVE_TYPE_VALUE_STRING_MAPPING.get(typeValue);
     }
 
     public List<String> getChildNames() {
@@ -370,4 +405,44 @@ public class ColumnType {
             sb.append(',');
         }
     }
+<<<<<<< HEAD
+=======
+
+    public void setScale(int scale) {
+        this.scale = scale;
+    }
+
+    public int getScale() {
+        return scale;
+    }
+
+    public String getRawTypeValue() {
+        return rawTypeValue;
+    }
+
+    // convert decimal(x,y) to decimal
+    private TypeValue parseDecimal(String rawType) {
+        String type = rawType;
+        int precision = -1;
+        int scale = -1;
+        int s = type.indexOf('(');
+        int e = type.indexOf(')');
+        if (s != -1 && e != -1) {
+            String[] ps = type.substring(s + 1, e).split(",");
+            precision = Integer.parseInt(ps[0].trim());
+            scale = Integer.parseInt(ps[1].trim());
+            if (precision <= MAX_DECIMAL32_PRECISION) {
+                type = "decimal32";
+            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+                type = "decimal64";
+            } else {
+                type = "decimal128";
+            }
+        }
+        TypeValue value = PRIMITIVE_TYPE_VALUE_MAPPING.get(type);
+        rawTypeValue = rawType;
+        setScale(scale);
+        return value;
+    }
+>>>>>>> 887a2e5811 ([BugFix] fix hudi scanner type mapping for complex type (#33900))
 }
