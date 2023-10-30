@@ -14,8 +14,10 @@
 
 package com.starrocks.connector.odps;
 
+import com.aliyun.odps.type.DecimalTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 
@@ -36,7 +38,9 @@ public class EntityConvertUtils {
             case FLOAT:
                 return Type.FLOAT;
             case DECIMAL:
-                return Type.DECIMAL64;
+                DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
+                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, Math.min(38,
+                        decimalTypeInfo.getPrecision()), decimalTypeInfo.getScale());
             case DOUBLE:
                 return Type.DOUBLE;
             case CHAR:

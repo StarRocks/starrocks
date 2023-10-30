@@ -16,8 +16,6 @@ package com.starrocks.odps.reader;
 
 import com.aliyun.odps.Column;
 import com.aliyun.odps.data.Binary;
-import com.aliyun.odps.data.Char;
-import com.aliyun.odps.data.Varchar;
 import com.aliyun.odps.table.arrow.accessor.ArrowBigIntAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowBitAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowDateDayAccessor;
@@ -78,7 +76,7 @@ public class OdpsTypeUtils {
             case DOUBLE:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.DOUBLE);
             case DECIMAL:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.DECIMAL64);
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DECIMAL128);
             case STRING:
             case VARCHAR:
             case CHAR:
