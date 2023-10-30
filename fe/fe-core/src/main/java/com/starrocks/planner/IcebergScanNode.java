@@ -31,6 +31,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
@@ -65,9 +66,12 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -189,6 +193,12 @@ public class IcebergScanNode extends ScanNode {
             String partitionValue;
             partitionValue = field.transform().toHumanString(type,
                     PartitionUtil.getPartitionValue(partition, index, javaClass));
+
+            // currently starrocks date literal only support local datetime
+            if (type.equals(Types.TimestampType.withZone())) {
+                partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        PartitionUtil.getPartitionValue(partition, index, javaClass)).toLocalDateTime().toString();
+            }
             partitionValues.add(partitionValue);
 
             cols.add(srIcebergTable.getColumn(field.name()));
