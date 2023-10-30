@@ -307,7 +307,7 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
 
 ### Scheduling tasks for replicas
 
-1. View the tasks that are waiting to be scheduled by `SHOW PROC '/cluster_balance/pending_tablets';`
+#### View the tasks that are waiting to be scheduled by `SHOW PROC '/cluster_balance/pending_tablets';`
 
   ```plaintext
   +----------+--------+-----------------+---------+----------+----------+-------+---------+--------+----------+---------+---------------------+---------------------+---------------------+----------+------+-------------+---------------+---------------------+------------+---------------------+--------+---------------------+-------------------------------+
@@ -341,9 +341,12 @@ Above shows all replicas of the corresponding Tablet. The content shown here is 
   * CmtVer/CmtVerHash/VisibleVer/VisibleVerHash: Version information used to execute the clone task
   * ErrMsg: The error message when the task is scheduled and run
 
-2. View the running tasks  
-    `SHOW PROC '/cluster_balance/running_tablets';`  
-    Same properties are used here. See `pending tablets` for details.
-3. View the finished tasks  
-    `SHOW PROC '/cluster_balance/history_tablets';`  
-    By default, we only keep the last 1000 completed tasks. Same properties are used here. See `pending tablets` for details. If the `State` is `FINISHED`, that means the task is completed properly. Otherwise, check `ErrMsg` for the reason of a failed task.
+#### View the running tasks  
+
+`SHOW PROC '/cluster_balance/running_tablets';`  
+Same properties are used here. See `pending tablets` for details.
+
+#### View the finished tasks  
+
+`SHOW PROC '/cluster_balance/history_tablets';`  
+By default, we only keep the last 1000 completed tasks. Same properties are used here. See `pending tablets` for details. If the `State` is `FINISHED`, that means the task is completed properly. Otherwise, check `ErrMsg` for the reason of a failed task.
