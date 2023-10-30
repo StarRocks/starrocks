@@ -1653,6 +1653,12 @@ public class Config extends ConfigBase {
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
+
+    /**
      * Check expire partition statistics data when StarRocks start up
      */
     @ConfField(mutable = true)
