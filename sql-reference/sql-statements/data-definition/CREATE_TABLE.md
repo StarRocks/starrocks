@@ -612,6 +612,16 @@ PROPERTIES (
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
+#### 设置随机分桶的表中分桶大小
+
+自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小。默认为 `1024 * 1024 * 1024 B`（1 GB），最大支持为 4 GB。通常情况下建议保留默认值。
+
+``` sql
+PROPERTIES (
+    "bucket_size" = "3221225472"
+)
+```
+
 #### 设置数据压缩算法
 
 您可以在建表时通过增加属性 `compression` 为该表指定数据压缩算法。
