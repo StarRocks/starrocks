@@ -195,17 +195,10 @@ private:
     static inline ParallelSet<int64_t> _s_schema_change_set;
 
     Tablet _tablet;
-<<<<<<< HEAD
-    std::shared_ptr<TabletMetadataPB> _metadata;
-    int64_t _base_version;
-    int64_t _new_version;
-    int64_t _max_txn_id; // Used as the file name prefix of the delvec file
-=======
     MutableTabletMetadataPtr _metadata;
     int64_t _base_version{0};
     int64_t _new_version{0};
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
->>>>>>> ec7b0c6cf3 ([Enhancement] Enforce const and immutability in cache management (#33159))
     MetaFileBuilder _builder;
     bool _inited;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};

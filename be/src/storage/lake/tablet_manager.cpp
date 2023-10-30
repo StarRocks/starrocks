@@ -186,7 +186,6 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return tablet;
 }
 
-<<<<<<< HEAD
 Status TabletManager::delete_tablet(int64_t tablet_id) {
     std::vector<std::string> objects;
     // TODO: construct prefix in LocationProvider or a common place
@@ -209,18 +208,15 @@ Status TabletManager::delete_tablet(int64_t tablet_id) {
     (void)fs->iterate_dir(root_path, scan_cb);
 
     for (const auto& obj : objects) {
-        erase_metacache(obj);
+        _metacache->erase(obj);
         (void)fs->delete_file(obj);
     }
     //drop tablet schema from metacache;
-    erase_metacache(tablet_schema_cache_key(tablet_id));
+    _metacache->erase(tablet_schema_cache_key(tablet_id));
     return Status::OK();
 }
 
-Status TabletManager::put_tablet_metadata(TabletMetadataPtr metadata) {
-=======
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
->>>>>>> ec7b0c6cf3 ([Enhancement] Enforce const and immutability in cache management (#33159))
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
     auto t0 = butil::gettimeofday_us();
@@ -365,7 +361,7 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto t0 = butil::gettimeofday_us();
     auto location = txn_log_location(tablet_id, txn_id);
-    erase_metacache(location);
+    _metacache->erase(location);
     auto st = fs::delete_file(location);
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
@@ -376,7 +372,7 @@ Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
 Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
     auto t0 = butil::gettimeofday_us();
     auto location = txn_vlog_location(tablet_id, version);
-    erase_metacache(location);
+    _metacache->erase(location);
     auto st = fs::delete_file(location);
     auto t1 = butil::gettimeofday_us();
     g_del_txn_log_latency << (t1 - t0);
@@ -438,7 +434,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
             if (index_id_iter != properties.end()) {
                 auto schema_id = std::atol(index_id_iter->second.data());
                 auto global_cache_key = global_schema_cache_key(schema_id);
-                auto schema = lookup_tablet_schema(global_cache_key);
+                auto schema = _metacache->lookup_tablet_schema(global_cache_key);
                 if (schema != nullptr) {
                     return schema;
                 }
@@ -449,8 +445,7 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
                     VLOG(3) << "Got tablet schema of id " << schema_id << " for tablet " << tablet_id;
                     schema = std::move(schema_or).value();
                     // Save the schema into the in-memory cache, use the schema id as the cache key
-                    auto cache_value = std::make_unique<CacheValue>(schema);
-                    fill_metacache(global_cache_key, cache_value.release(), 0);
+                    _metacache->cache_tablet_schema(global_cache_key, schema, 0 /*TODO*/);
                     return std::move(schema);
                 } else if (schema_or.status().is_not_found()) {
                     // version 3.0 will not generate the tablet schema file, ignore the not found error and
@@ -497,7 +492,6 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, in
     return schema;
 }
 
-<<<<<<< HEAD
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
     auto tablet_ptr = std::make_shared<Tablet>(tablet);
@@ -508,25 +502,6 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     if (algorithm == VERTICAL_COMPACTION) {
         return std::make_shared<VerticalCompactionTask>(txn_id, version, std::move(tablet_ptr),
                                                         std::move(input_rowsets));
-=======
-StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t tablet_id, int64_t index_id) {
-    auto global_cache_key = global_schema_cache_key(index_id);
-    auto schema = _metacache->lookup_tablet_schema(global_cache_key);
-    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.1", &schema);
-    if (schema != nullptr) {
-        return schema;
-    }
-    // else: Cache miss, read the schema file
-    auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(index_id));
-    auto schema_or = load_and_parse_schema_file(schema_file_path);
-    TEST_SYNC_POINT_CALLBACK("get_tablet_schema_by_index_id.2", &schema_or);
-    if (schema_or.ok()) {
-        VLOG(3) << "Got tablet schema of id " << index_id << " for tablet " << tablet_id;
-        schema = std::move(schema_or).value();
-        // Save the schema into the in-memory cache, use the schema id as the cache key
-        _metacache->cache_tablet_schema(global_cache_key, schema, 0 /*TODO*/);
-        return std::move(schema);
->>>>>>> ec7b0c6cf3 ([Enhancement] Enforce const and immutability in cache management (#33159))
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
         return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr),

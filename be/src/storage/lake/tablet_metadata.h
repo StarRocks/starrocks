@@ -21,11 +21,7 @@
 namespace starrocks::lake {
 
 using TabletMetadata = TabletMetadataPB;
-<<<<<<< HEAD
-using TabletMetadataPtr = std::shared_ptr<TabletMetadata>;
-=======
 using TabletMetadataPtr = std::shared_ptr<const TabletMetadata>;
->>>>>>> ec7b0c6cf3 ([Enhancement] Enforce const and immutability in cache management (#33159))
 using MutableTabletMetadataPtr = std::shared_ptr<TabletMetadata>;
 
 } // namespace starrocks::lake

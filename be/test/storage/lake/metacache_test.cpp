@@ -122,7 +122,7 @@ TEST_F(LakeMetacacheTest, test_txn_log_cache) {
 TEST_F(LakeMetacacheTest, test_tablet_schema_cache) {
     auto* metacache = _tablet_mgr->metacache();
 
-    auto schema1 = std::make_shared<TabletSchema>();
+    auto schema1 = std::make_shared<TabletSchema>(TabletSchemaPB());
     metacache->cache_tablet_schema("schema1", schema1, 0);
 
     auto schema2 = metacache->lookup_tablet_schema("schema1");
