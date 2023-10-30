@@ -232,9 +232,14 @@ public class LoadLoadingTask extends LoadTask {
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+<<<<<<< HEAD
                 curCoordinator.endProfile();
                 curCoordinator.mergeIsomorphicProfiles(null);
                 profile.addChild(curCoordinator.getQueryProfile());
+=======
+                curCoordinator.collectProfileSync();
+                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
+>>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
