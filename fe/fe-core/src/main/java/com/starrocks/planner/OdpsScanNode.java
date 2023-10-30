@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.aliyun.odps.table.read.split.InputSplit;
-import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
 import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -26,6 +25,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -86,18 +86,20 @@ public class OdpsScanNode extends ScanNode {
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 table.getCatalogName(), table, null, -1, predicate, fieldNames, -1);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
-        List<InputSplit> splits = remoteFileDesc.getOdpsSplitsInfo();
-        if (splits.isEmpty()) {
+        OdpsSplitsInfo splitsInfo = remoteFileDesc.getOdpsSplitsInfo();
+        if (splitsInfo.isEmpty()) {
             LOG.warn("There is no odps splits on {}.{} and predicate: [{}]",
                     table.getDbName(), table.getTableName(), predicate);
             return;
         }
-        for (InputSplit inputSplit : splits) {
+        String serializeSession = splitsInfo.getSerializeSession();
+        for (InputSplit inputSplit : splitsInfo.getSplits()) {
             IndexedInputSplit split = (IndexedInputSplit) inputSplit;
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(split.getSessionId());
+            hdfsScanRange.setFull_path(serializeSession);
             hdfsScanRange.setOffset(split.getSplitIndex());
             hdfsScanRange.setUse_odps_jni_reader(true);
             hdfsScanRange.setFile_length(1);
@@ -109,7 +111,6 @@ public class OdpsScanNode extends ScanNode {
                     scanRangeLocation =
                     new com.starrocks.thrift.TScanRangeLocation(new com.starrocks.thrift.TNetworkAddress("-1", -1));
             scanRangeLocations.addToLocations(scanRangeLocation);
-
             scanRangeLocationsList.add(scanRangeLocations);
         }
     }

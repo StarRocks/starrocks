@@ -21,7 +21,6 @@ import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
-import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.InputSplitAssigner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -106,7 +105,6 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> columnNames, long limit) {
-        List<InputSplit> splits;
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
@@ -119,8 +117,8 @@ public class OdpsMetadata implements ConnectorMetadata {
                             .withSplitOptions(SplitOptions.createDefault())
                             .buildBatchReadSession();
             InputSplitAssigner assigner = scan.getInputSplitAssigner();
-            splits = Arrays.asList(assigner.getAllSplits());
-            RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(splits);
+            OdpsSplitsInfo odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), scan);
+            RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(odpsRemoteFileDesc);
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
