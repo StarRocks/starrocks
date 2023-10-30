@@ -157,6 +157,15 @@ public class ArrayType extends Type {
     public boolean isNullTypeItem() {
         return itemType.isNull();
     }
+
+    public String toMysqlDataTypeString() {
+        return "array";
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        return toSql();
+    }
 }
 
 

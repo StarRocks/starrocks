@@ -80,7 +80,7 @@ void ResultSinkOperator::close(RuntimeState* state) {
             if (!st.ok() && final_status.ok()) {
                 final_status = st;
             }
-            _sender->close(final_status);
+            WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         }
 
         st = state->exec_env()->result_mgr()->cancel_at_time(

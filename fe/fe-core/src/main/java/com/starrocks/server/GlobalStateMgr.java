@@ -190,6 +190,7 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
@@ -3534,6 +3535,10 @@ public class GlobalStateMgr {
         localMetastore.replayRenamePartition(tableInfo);
     }
 
+    public void replayRenameColumn(ColumnRenameInfo columnRenameInfo) throws DdlException {
+        localMetastore.replayRenameColumn(columnRenameInfo);
+    }
+
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {
         localMetastore.renameColumn(db, table, renameClause);
     }
@@ -3704,7 +3709,7 @@ public class GlobalStateMgr {
     }
 
     public boolean isNotAlwaysNullResultWithNullParamFunction(String funcName) {
-        return FunctionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
+        return functionSet.isNotAlwaysNullResultWithNullParamFunctions(funcName);
     }
 
     public void replayCreateCluster(Cluster cluster) {

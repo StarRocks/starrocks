@@ -204,6 +204,42 @@ public class TypeTest {
     }
 
     @Test
+    public void testMysqlDataType() {
+        Object[][] testCases = new Object[][] {
+                {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint"},
+                {ScalarType.createType(PrimitiveType.LARGEINT), "bigint unsigned"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal"},
+                {new ArrayType(Type.INT), "array"},
+                {new MapType(Type.INT, Type.INT), "map"},
+                {new StructType(Lists.newArrayList(Type.INT)), "struct"},
+        };
+
+        for (Object[] tc : testCases) {
+            Type type = (Type) tc[0];
+            String name = (String) tc[1];
+            Assert.assertEquals(name, type.toMysqlDataTypeString());
+        }
+    }
+
+    @Test
+    public void testMysqlColumnType() {
+        Object[][] testCases = new Object[][] {
+                {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
+                {ScalarType.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal64(18, 4)"},
+                {new ArrayType(Type.INT), "array<int(11)>"},
+                {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
+                {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},
+        };
+
+        for (Object[] tc : testCases) {
+            Type type = (Type) tc[0];
+            String name = (String) tc[1];
+            Assert.assertEquals(name, type.toMysqlColumnTypeString());
+        }
+    }
+
+    @Test
     public void testMapSerialAndDeser() {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
@@ -215,7 +251,7 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isMapType());
-        Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1048576)>>", deType.toString());
+        Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
         // Make sure select fields are false when initialized
         Assert.assertFalse(deType.selectedFields[0]);
         Assert.assertFalse(deType.selectedFields[1]);
@@ -235,7 +271,7 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(root);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isStructType());
-        Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1048576)>>",
+        Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1073741824)>>",
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));

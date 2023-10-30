@@ -310,8 +310,9 @@ public class ScalarType extends Type implements Cloneable {
 
     // Use for Hive string now.
     public static ScalarType createDefaultExternalTableString() {
-        ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
-        return stringType;
+        // 1GB for each line, it's enough
+        final int MAX_LENGTH = 1024 * 1024 * 1024;
+        return ScalarType.createVarcharType(MAX_LENGTH);
     }
 
     public static ScalarType createMaxVarcharType() {
@@ -602,6 +603,7 @@ public class ScalarType extends Type implements Cloneable {
             case DATETIME:
             case HLL:
             case BITMAP:
+            case BINARY:
             case PERCENTILE:
             case JSON:
             case FUNCTION:
@@ -843,6 +845,35 @@ public class ScalarType extends Type implements Cloneable {
             return String.format("DECIMAL(%d,%d)", precision, scale);
         } else {
             return toString();
+        }
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp to_mysql_data_type_string
+    public String toMysqlDataTypeString() {
+        switch (type) {
+            case BOOLEAN:
+                return "tinyint";
+            case LARGEINT:
+                return "bigint unsigned";
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMALV2:
+                return "decimal";
+            default:
+                return type.toString().toLowerCase();
+        }
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        switch (type) {
+            case BOOLEAN:
+                return "tinyint(1)";
+            case LARGEINT:
+                return "bigint(20) unsigned";
+            default:
+                return toSql();
         }
     }
 }

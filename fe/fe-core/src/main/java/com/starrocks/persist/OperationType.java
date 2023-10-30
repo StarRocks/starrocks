@@ -460,6 +460,7 @@ public class OperationType {
     public static final short OP_RECOVER_PARTITION_V2 = 13003;
     public static final short OP_RENAME_TABLE_V2 = 13004;
     public static final short OP_RENAME_PARTITION_V2 = 13005;
+    public static final short OP_RENAME_COLUMN_V2 = 13006;
 
     public static final short OP_DROP_ROLLUP_V2 = 13010;
     public static final short OP_FINISH_CONSISTENCY_CHECK_V2 = 13011;

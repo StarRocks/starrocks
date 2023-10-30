@@ -317,5 +317,14 @@ public class StructType extends Type {
             return new StructType(structFields, isNamed);
         }
     }
+
+    public String toMysqlDataTypeString() {
+        return "struct";
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        return toSql();
+    }
 }
 

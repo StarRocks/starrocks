@@ -959,7 +959,7 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs;
     span->AddEvent("gen_delta_column_group");
     // 3. finalize and generate delta column group
-    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, new_del_vecs, index);
+    st = state.finalize(&_tablet, rowset.get(), rowset_id, index_meta, manager->mem_tracker(), new_del_vecs, index);
     if (!st.ok()) {
         failure_handler("finalize failed", st);
         return;
@@ -1459,7 +1459,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
             rowset->rowset_meta()->set_data_disk_size(full_rowset_size);
             rowset->set_schema(apply_tschema);
             rowset->rowset_meta()->set_tablet_schema(apply_tschema);
-            rowset->reload();
+            (void)rowset->reload();
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                         new_del_vecs, index_meta, enable_persistent_index,
                                                         &(rowset->rowset_meta()->get_meta_pb()));
@@ -4446,8 +4446,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), full_row_column.get()));
             auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
-            row_encoder->decode_columns_from_full_row_column(*(_tablet.tablet_schema()->schema()), *full_row_column,
-                                                             column_ids, columns);
+            RETURN_IF_ERROR(row_encoder->decode_columns_from_full_row_column(*(_tablet.tablet_schema()->schema()),
+                                                                             *full_row_column, column_ids, columns));
         } else {
             for (auto i = 0; i < column_ids.size(); ++i) {
                 // try to build iterator from delta column file first

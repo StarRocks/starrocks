@@ -766,9 +766,9 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
 
 Status OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
                                                  bool enable_column_expr_predicate) {
-    normalize_conjuncts();
+    RETURN_IF_ERROR(normalize_conjuncts());
     RETURN_IF_ERROR(build_olap_filters());
-    build_scan_keys(scan_keys_unlimited, max_scan_key_num);
+    RETURN_IF_ERROR(build_scan_keys(scan_keys_unlimited, max_scan_key_num));
     if (enable_column_expr_predicate) {
         VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
         build_column_expr_predicates();

@@ -39,6 +39,7 @@ import org.junit.Test;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -58,7 +59,7 @@ public class IcebergExprVisitorTest {
                     Types.NestedField.optional(10, "k10", Types.StructType.of(
                             Types.NestedField.optional(11, "k11", Types.IntegerType.get()),
                             Types.NestedField.optional(12, "k12", Types.DateType.get()),
-                            Types.NestedField.optional(13, "k13", Types.TimestampType.withoutZone()),
+                            Types.NestedField.optional(13, "k13", Types.TimestampType.withZone()),
                             Types.NestedField.optional(14, "k14", Types.BooleanType.get()),
                             Types.NestedField.optional(15, "k15", Types.StringType.get()),
                             Types.NestedField.optional(16, "k16", Types.FloatType.get())
@@ -112,7 +113,7 @@ public class IcebergExprVisitorTest {
 
         // equal datetime
         value = ConstantOperator.createDatetime(LocalDateTime.of(2022, 11, 11, 11, 11, 11));
-        long epochSec = value.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
+        long epochSec = value.getDatetime().toEpochSecond(ZoneOffset.UTC);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, K4, value)), context);
         expectedExpr = Expressions.equal("k4", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.SECONDS));
@@ -121,10 +122,12 @@ public class IcebergExprVisitorTest {
 
         // equal timestamp
         value = ConstantOperator.createDatetime(LocalDateTime.of(2023, 8, 18, 15, 13, 12, 634297000));
-        epochSec = 1692342792634297L;
+        long secs = value.getDatetime().atZone(ZoneOffset.UTC).toEpochSecond() * 1000
+                * 1000 * 1000 + value.getDatetime().getNano();
+        epochSec = TimeUnit.MICROSECONDS.convert(secs, TimeUnit.NANOSECONDS);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryType.EQ, K4, value)), context);
-        expectedExpr = Expressions.equal("k4", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.MICROSECONDS));
+        expectedExpr = Expressions.equal("k4", epochSec);
         Assert.assertEquals("Generated equal expression should be correct",
                 expectedExpr.toString(), convertedExpr.toString());
 

@@ -85,7 +85,11 @@ jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAd
     auto jarr = env->NewLongArray(array_size);
     jlong array[array_size];
     GetColumnAddrVistor vistor(array);
-    column->accept(&vistor);
+    if (!column->accept(&vistor).ok()) {
+        env->ThrowNew(env->FindClass("java/lang/IllegalArgumentException"),
+                      fmt::format("GetColumnAddr in java native function error").c_str());
+        return jarr;
+    }
     env->SetLongArrayRegion(jarr, 0, array_size, array);
     return jarr;
 }

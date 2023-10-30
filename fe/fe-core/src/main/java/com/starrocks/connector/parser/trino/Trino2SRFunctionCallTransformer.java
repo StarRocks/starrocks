@@ -194,6 +194,23 @@ public class Trino2SRFunctionCallTransformer {
 
         // length -> char_length
         registerFunctionTransformer("length", 1, "char_length", ImmutableList.of(Expr.class));
+
+        // str_to_map(str, del1, del2) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 3, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
+                )), new PlaceholderExpr(3, Expr.class))));
+
+        // str_to_map(str) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 2, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
+                )), new StringLiteral(":"))));
+
+        // str_to_map(str) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 1, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new StringLiteral(","))), new StringLiteral(":"))));
     }
 
     private static void registerRegexpFunctionTransformer() {

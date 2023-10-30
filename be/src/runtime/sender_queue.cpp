@@ -40,11 +40,6 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         _chunk_meta.slot_id_to_index[pb_chunk.slot_id_map()[i]] = pb_chunk.slot_id_map()[i + 1];
     }
 
-    _chunk_meta.tuple_id_to_index.reserve(pb_chunk.tuple_id_map().size());
-    for (int i = 0; i < pb_chunk.tuple_id_map().size(); i += 2) {
-        _chunk_meta.tuple_id_to_index[pb_chunk.tuple_id_map()[i]] = pb_chunk.tuple_id_map()[i + 1];
-    }
-
     _chunk_meta.is_nulls.resize(pb_chunk.is_nulls().size());
     for (int i = 0; i < pb_chunk.is_nulls().size(); ++i) {
         _chunk_meta.is_nulls[i] = pb_chunk.is_nulls()[i];
@@ -57,6 +52,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
+    std::set<SlotId> hit_flags;
     for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         phmap::flat_hash_map<SlotId, TypeDescriptor> slot_id_to_type;
@@ -68,16 +64,28 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
             if (iter != slot_id_to_type.end()) {
                 _chunk_meta.types[kv.second] = iter->second;
                 ++column_index;
+                hit_flags.insert(kv.first);
             }
         }
     }
-    for (const auto& kv : _chunk_meta.tuple_id_to_index) {
-        _chunk_meta.types[kv.second] = TypeDescriptor(LogicalType::TYPE_BOOLEAN);
-        ++column_index;
-    }
 
     if (UNLIKELY(column_index != _chunk_meta.is_nulls.size())) {
-        return Status::InternalError("build chunk meta error");
+        std::vector<std::pair<SlotId, size_t>> missing_pairs;
+        for (const auto& kv : _chunk_meta.slot_id_to_index) {
+            if (hit_flags.find(kv.first) == hit_flags.end()) {
+                missing_pairs.emplace_back(kv.first, kv.second);
+            }
+        }
+        std::stringstream ss;
+        ss << "build chunk meta error";
+        ss << ", fragment_instance_id=" << _recvr->fragment_instance_id();
+        ss << ", node_id=" << _recvr->_dest_node_id;
+        ss << ", missing pairs: ";
+        for (const auto& kv : missing_pairs) {
+            ss << "(slot:" << kv.first << ", index:" << kv.second << ") ";
+        }
+        std::string msg = ss.str();
+        return Status::InternalError(msg);
     }
 
     // decode extra chunk meta
@@ -539,14 +547,12 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
-    bool expected = false;
-    if (_is_cancelled.compare_exchange_strong(expected, true)) {
-        clean_buffer_queues();
-    }
+    _is_cancelled = true;
+    clean_buffer_queues();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::close() {
-    cancel();
+    clean_buffer_queues();
 }
 
 void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
@@ -578,6 +584,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
                     item.closure->Run();
                 }
             }
+            chunk_queue.clear();
         }
     }
 }
@@ -743,10 +750,9 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        if (_is_cancelled) {
-            LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
-            return Status::OK();
-        }
+        // NOTICE: The enqueue process use a lock-free approach to avoid lock contention,
+        // and double check is introduced to handle the exception cases like short circuit and cancel.
+        // And it may lead to closure leak if it is not well handled.
 
         // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
@@ -777,6 +783,12 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             // Double check here for short circuit compatibility without introducing a critical section
             if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
                 short_circuit(index);
+                // We cannot early-return for short circuit, it may occur for parts of parallelism,
+                // and the other parallelism may need to proceed.
+            }
+            if (_is_cancelled) {
+                clean_buffer_queues();
+                return Status::OK();
             }
             _recvr->_num_buffered_bytes += chunk_bytes;
             COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);

@@ -67,18 +67,16 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             // create SHADOW index for each partition
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
-                long shardGroupId = partition.getShardGroupId();
+                long shadowShardGroupId = createShardGroup(dbId, tableId, partitionId);
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
-                // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
-                //  revise the code again.
                 List<Long> originTabletIds = originTablets.stream().map(Tablet::getId).collect(Collectors.toList());
                 Map<String, String> properties = new HashMap<>();
-                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
+                properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(tableId));
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(partitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
-                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                                     table.getPartitionFileCacheInfo(partitionId), shadowShardGroupId,
                                      originTabletIds, properties);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
@@ -94,7 +92,7 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                     schemaChangeJob
                             .addTabletIdMap(partitionId, shadowIndexId, shadowTablet.getId(), originTablet.getId());
                 }
-                schemaChangeJob.addPartitionShadowIndex(partitionId, shadowIndexId, shadowIndex);
+                schemaChangeJob.addPartitionShadowInfo(partitionId, shadowIndexId, shadowIndex, shadowShardGroupId);
             } // end for partition
             schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
@@ -108,6 +106,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         throws DdlException {
         return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
                 properties);
+    }
+
+    @VisibleForTesting
+    public static long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+        return GlobalStateMgr.getCurrentStarOSAgent().createShardGroup(dbId, tableId, partitionId);
     }
 
 }

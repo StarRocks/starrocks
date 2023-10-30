@@ -53,17 +53,14 @@ public:
     using ChunkPtr = std::shared_ptr<Chunk>;
     using SlotHashMap = phmap::flat_hash_map<SlotId, size_t, StdHash<SlotId>>;
     using ColumnIdHashMap = phmap::flat_hash_map<ColumnId, size_t, StdHash<SlotId>>;
-    using TupleHashMap = phmap::flat_hash_map<TupleId, size_t, StdHash<TupleId>>;
 
     Chunk();
     Chunk(Columns columns, SchemaPtr schema);
     Chunk(Columns columns, SlotHashMap slot_map);
-    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     // Chunk with extra data implements.
     Chunk(Columns columns, SchemaPtr schema, ChunkExtraDataPtr extra_data);
     Chunk(Columns columns, SlotHashMap slot_map, ChunkExtraDataPtr extra_data);
-    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map, ChunkExtraDataPtr extra_data);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -86,10 +83,8 @@ public:
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
     bool has_columns() const { return !_columns.empty(); }
-    bool has_tuple_columns() const { return !_tuple_id_to_index.empty(); }
     size_t num_columns() const { return _columns.size(); }
     size_t num_rows() const { return _columns.empty() ? 0 : _columns[0]->size(); }
-    size_t num_tuple_columns() const { return _tuple_id_to_index.size(); }
 
     // Resize the chunk to contain |count| rows elements.
     //  - If the current size is less than count, additional default values are appended.
@@ -118,8 +113,6 @@ public:
 
     void update_rows(const Chunk& src, const uint32_t* indexes);
 
-    void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
-
     void append_default();
 
     void remove_column_by_index(size_t idx);
@@ -140,16 +133,12 @@ public:
     const ColumnPtr& get_column_by_id(ColumnId cid) const;
     ColumnPtr& get_column_by_id(ColumnId cid);
 
-    const ColumnPtr& get_tuple_column_by_id(TupleId tuple_id) const;
-    ColumnPtr& get_tuple_column_by_id(TupleId tuple_id);
-
     // Must ensure the slot_id exist
     const ColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
     ColumnPtr& get_column_by_slot_id(SlotId slot_id);
 
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
-    bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.contains(id); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
     size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
@@ -160,19 +149,13 @@ public:
     const std::string& source_filename() const { return _source_filename; }
 
     // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
-    // not clone tuple column
     ChunkUniquePtr clone_empty() const;
     ChunkUniquePtr clone_empty_with_slot() const;
     ChunkUniquePtr clone_empty_with_schema() const;
     // Create an empty chunk with the same meta and reserve it of specified size.
-    // not clone tuple column
     ChunkUniquePtr clone_empty(size_t size) const;
     ChunkUniquePtr clone_empty_with_slot(size_t size) const;
     ChunkUniquePtr clone_empty_with_schema(size_t size) const;
-    // Create an empty chunk with the same meta and reserve it of size chunk _num_rows
-    ChunkUniquePtr clone_empty_with_tuple() const;
-    // Create an empty chunk with the same meta and reserve it of specified size.
-    ChunkUniquePtr clone_empty_with_tuple(size_t size) const;
     ChunkUniquePtr clone_unique() const;
 
     void append(const Chunk& src) { append(src, 0, src.num_rows()); }
@@ -225,7 +208,6 @@ public:
 
     DelCondSatisfied delete_state() const { return _delete_state; }
 
-    const TupleHashMap& get_tuple_id_to_index_map() const { return _tuple_id_to_index; }
     const SlotHashMap& get_slot_id_to_index_map() const { return _slot_id_to_index; }
 
     // Call `Column::reserve` on each column of |chunk|, with |cap| passed as argument.
@@ -306,7 +288,6 @@ private:
     ColumnIdHashMap _cid_to_index;
     // For compatibility
     SlotHashMap _slot_id_to_index;
-    TupleHashMap _tuple_id_to_index;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
     query_cache::owner_info _owner_info;
     ChunkExtraDataPtr _extra_data;
@@ -349,14 +330,6 @@ inline ColumnPtr& Chunk::get_column_by_id(ColumnId cid) {
     DCHECK(!_cid_to_index.empty());
     DCHECK(_cid_to_index.contains(cid));
     return _columns[_cid_to_index[cid]];
-}
-
-inline const ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) const {
-    return const_cast<Chunk*>(this)->get_tuple_column_by_id(tuple_id);
-}
-
-inline ColumnPtr& Chunk::get_tuple_column_by_id(TupleId tuple_id) {
-    return _columns[_tuple_id_to_index[tuple_id]];
 }
 
 } // namespace starrocks

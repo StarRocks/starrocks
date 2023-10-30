@@ -252,7 +252,9 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
             // skip segment zonemap filter when this segment has column files link to it.
             if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                if (read_options.is_first_split_of_segment) {
+                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                }
                 return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
             } else {
                 break;
@@ -333,10 +335,6 @@ void Segment::_reset() {
 
 bool Segment::has_loaded_index() const {
     return invoked(_load_index_once);
-}
-
-bool Segment::is_valid_column(uint32_t column_unique_id) const {
-    return _column_readers.count(column_unique_id) > 0;
 }
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
@@ -435,7 +433,7 @@ Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
     return Status::OK();
 }
 
-size_t Segment::_column_index_mem_usage() {
+size_t Segment::_column_index_mem_usage() const {
     size_t size = 0;
     for (auto& r : _column_readers) {
         auto& reader = r.second;

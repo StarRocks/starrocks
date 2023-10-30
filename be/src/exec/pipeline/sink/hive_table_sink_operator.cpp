@@ -32,7 +32,7 @@ Status HiveTableSinkOperator::prepare(RuntimeState* state) {
 void HiveTableSinkOperator::close(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
     }
     Operator::close(state);
@@ -64,7 +64,7 @@ bool HiveTableSinkOperator::is_finished() const {
 Status HiveTableSinkOperator::set_finishing(RuntimeState* state) {
     for (const auto& writer : _partition_writers) {
         if (!writer.second->closed()) {
-            writer.second->close(state);
+            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
     }
 
@@ -101,9 +101,9 @@ Status HiveTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
             _partition_writers.insert({HIVE_UNPARTITIONED_TABLE_LOCATION, std::move(writer)});
         }
 
-        _partition_writers[HIVE_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state);
+        RETURN_IF_ERROR(_partition_writers[HIVE_UNPARTITIONED_TABLE_LOCATION]->append_chunk(chunk.get(), state));
     } else if (_is_static_partition_insert && !_partition_writers.empty()) {
-        _partition_writers.begin()->second->append_chunk(chunk.get(), state);
+        RETURN_IF_ERROR(_partition_writers.begin()->second->append_chunk(chunk.get(), state));
     } else {
         std::vector<std::string> partition_column_values(_partition_expr.size());
         for (int i = 0; i < _partition_expr.size(); ++i) {
@@ -128,9 +128,9 @@ Status HiveTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
                                                                       add_hive_commit_info, state, _driver_sequence);
             RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({partition_location, std::move(writer)});
-            _partition_writers[partition_location]->append_chunk(chunk.get(), state);
+            RETURN_IF_ERROR(_partition_writers[partition_location]->append_chunk(chunk.get(), state));
         } else {
-            partition_writer->second->append_chunk(chunk.get(), state);
+            RETURN_IF_ERROR(partition_writer->second->append_chunk(chunk.get(), state));
         }
     }
     return Status::OK();

@@ -76,7 +76,7 @@ If the BE storage space runs out as your raw data grows, you can supplement it b
 
   You can also add extra storage volumes to existing BE nodes. For detailed instructions, see [Scale your StarRocks cluster - Scale BE up](../administration/Scale_up_down.md).
 
-  After extra storage volumes are added, StarRocks automatically re-balances the data in all tables except Primary Key tables. In this situation, the distribution of data from Primary Key tables may be imbalanced across nodes, and consequently, queries against these tables are run slowly. Therefore, adding extra storage volumes to BE nodes is not recommended if your StarRocks cluster contains Primary Key tables.
+  After extra storage volumes are added, StarRocks automatically re-balances the data in all tables.
 
 - Add cloud storage
 

@@ -34,7 +34,8 @@ namespace starrocks::lake {
 UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()),
           _update_state_cache(std::numeric_limits<size_t>::max()),
-          _location_provider(location_provider) {
+          _location_provider(location_provider),
+          _pk_index_shards(config::pk_index_map_shard_size) {
     _update_mem_tracker = mem_tracker;
     _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
@@ -262,8 +263,8 @@ Status UpdateManager::_do_update_with_condition(Tablet* tablet, const TabletMeta
             } else {
                 int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                 if (r > 0) {
-                    index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                 idx_begin + upsert_idx_step, new_deletes);
+                    RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                                 idx_begin + upsert_idx_step, new_deletes));
 
                     idx_begin = j + 1;
                     upsert_idx_step = 0;
@@ -441,10 +442,9 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec) {
-    std::string filepath = _location_provider->tablet_metadata_location(tsid.tablet_id, meta_ver);
-    MetaFileReader reader(filepath, false);
-    RETURN_IF_ERROR(reader.load_by_cache(filepath, _tablet_mgr));
-    RETURN_IF_ERROR(reader.get_del_vec(_tablet_mgr, tsid.segment_id, delvec));
+    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, false));
+    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, delvec));
     return Status::OK();
 }
 
@@ -563,6 +563,10 @@ void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
         succ = true;
     }
     LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
+}
+
+bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
+    return _index_cache.try_remove_by_key(tablet_id);
 }
 
 Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version) {

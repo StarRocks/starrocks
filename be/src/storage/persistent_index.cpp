@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "fs/fs.h"
+#include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -2901,7 +2902,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
         // if has l1, idx range is [0, 1)
-        _reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false);
+        RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false));
     }
 
     return Status::OK();
@@ -3281,7 +3282,7 @@ bool PersistentIndex::_enable_minor_compaction() {
         } else {
             LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
-            _reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+            (void)_reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
         }
     }
     return false;
@@ -3773,8 +3774,8 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (found_values[i].get_value() != NullIndexValue &&
-            ((uint32_t)(found_values[i].get_value() >> 32)) <= max_src_rssid) {
+        auto found_value = found_values[i].get_value();
+        if (found_value != NullIndexValue && ((uint32_t)(found_value >> 32)) <= max_src_rssid) {
             replace_idxes.emplace_back(i);
         } else {
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
@@ -4713,7 +4714,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     RETURN_IF_ERROR(_delete_expired_index_file(
             _version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
-    _delete_major_compaction_tmp_index_file();
+    (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 
@@ -4765,7 +4766,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
                 _version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
-    _delete_major_compaction_tmp_index_file();
+    (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 

@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle profile processing
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store profile process task
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField
@@ -1639,6 +1651,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
+
+    /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
 
     /**
      * Check expire partition statistics data when StarRocks start up

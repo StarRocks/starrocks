@@ -80,7 +80,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
@@ -127,8 +126,6 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.sparkproject.guava.collect.Maps;
 
-import java.io.IOException;
-import java.net.URL;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -956,70 +953,6 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testHelp() throws AnalysisException, IOException, UserException {
-        HelpModule module = new HelpModule();
-        URL help = getClass().getClassLoader().getResource("test-help-resource-show-help.zip");
-        module.setUpByZip(help.getPath());
-        new Expectations(module) {
-            {
-                HelpModule.getInstance();
-                minTimes = 0;
-                result = module;
-            }
-        };
-
-        // topic
-        HelpStmt stmt = new HelpStmt("ADD");
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("ADD", resultSet.getString(0));
-        Assert.assertEquals("add function\n", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
-
-        // topic
-        stmt = new HelpStmt("logical");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("OR", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        // keywords
-        stmt = new HelpStmt("MATH");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("ADD", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("MINUS", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        // category
-        stmt = new HelpStmt("functions");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("HELP", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("binary function", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("bit function", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-
-        // empty
-        stmt = new HelpStmt("empty");
-        executor = new ShowExecutor(ctx, stmt);
-        resultSet = executor.execute();
-
-        Assert.assertFalse(resultSet.next());
-    }
-
-    @Test
     public void testShowMaterializedView() throws AnalysisException, DdlException {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -1246,7 +1179,7 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         resultSet.getResultRows().forEach(System.out::println);
         String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
-                "CREATE MATERIALIZED VIEW ON ALL DATABASES TO ROLE 'root'";
+                "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString1)));
         String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +

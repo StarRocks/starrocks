@@ -78,6 +78,9 @@ struct TColumnDesc {
   23: optional string dbName
   24: optional string tableName
   25: optional string columnDefault
+  // Let FE control the type, which makes it easier to modify and display complex types
+  26: optional string columnTypeStr
+  27: optional string dataType
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -409,6 +412,7 @@ struct TListPipesInfo {
 
     // schema info
     10: optional string database_name
+    11: optional string table_name
 
     // pipe status and statistics
     20: optional string state
@@ -417,6 +421,9 @@ struct TListPipesInfo {
     30: optional i64 loaded_files
     31: optional i64 loaded_rows
     32: optional i64 loaded_bytes
+    33: optional string load_status
+    34: optional string last_error
+    35: optional i64 created_time
 }
 
 struct TListPipesResult {

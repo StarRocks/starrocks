@@ -218,6 +218,7 @@ import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.ShowWarehousesStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
@@ -1331,59 +1332,7 @@ public class ShowExecutor {
     // Handle help statement.
     private void handleHelp() {
         HelpStmt helpStmt = (HelpStmt) stmt;
-        String mark = helpStmt.getMask();
-        HelpModule module = HelpModule.getInstance();
-
-        // Get topic
-        HelpTopic topic = module.getTopic(mark);
-        // Get by Keyword
-        if (topic == null) {
-            List<String> topics = module.listTopicByKeyword(mark);
-            if (topics.size() == 0) {
-                // assign to avoid code style problem
-                topic = null;
-            } else if (topics.size() == 1) {
-                topic = module.getTopic(topics.get(0));
-            } else {
-                // Send topic list and category list
-                List<List<String>> rows = Lists.newArrayList();
-                for (String str : topics) {
-                    rows.add(Lists.newArrayList(str, "N"));
-                }
-                List<String> categories = module.listCategoryByName(mark);
-                for (String str : categories) {
-                    rows.add(Lists.newArrayList(str, "Y"));
-                }
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), rows);
-                return;
-            }
-        }
-        if (topic != null) {
-            resultSet = new ShowResultSet(helpStmt.getMetaData(), Lists.<List<String>>newArrayList(
-                    Lists.newArrayList(topic.getName(), topic.getDescription(), topic.getExample())));
-        } else {
-            List<String> categories = module.listCategoryByName(mark);
-            if (categories.isEmpty()) {
-                // If no category match for this name, return
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), EMPTY_SET);
-            } else if (categories.size() > 1) {
-                // Send category list
-                resultSet = new ShowResultSet(helpStmt.getCategoryMetaData(),
-                        Lists.<List<String>>newArrayList(categories));
-            } else {
-                // Send topic list and sub-category list
-                List<List<String>> rows = Lists.newArrayList();
-                List<String> topics = module.listTopicByCategory(categories.get(0));
-                for (String str : topics) {
-                    rows.add(Lists.newArrayList(str, "N"));
-                }
-                List<String> subCategories = module.listCategoryByCategory(categories.get(0));
-                for (String str : subCategories) {
-                    rows.add(Lists.newArrayList(str, "Y"));
-                }
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), rows);
-            }
-        }
+        resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), EMPTY_SET);
     }
 
     // Show load statement.
@@ -2769,6 +2718,16 @@ public class ShowExecutor {
             if (pipe.getPipeId().getDbId() != dbId) {
                 continue;
             }
+
+            // check privilege
+            try {
+                Authorizer.checkAnyActionOnPipe(connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), new PipeName(dbName, pipe.getName()));
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+
+            // execute
             List<Comparable> row = Lists.newArrayList();
             ShowPipeStmt.handleShow(row, pipe);
             rows.add(row);
