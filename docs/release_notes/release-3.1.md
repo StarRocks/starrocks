@@ -6,6 +6,7 @@ Release date: September 25, 2023
 
 ## New Features
 
+- Primary Key tables created in StarRocks shared-data clusters support index persistence onto local disks in the same way as they do in StarRocks classic clusters.
 - The aggregate function [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) supports the DISTINCT keyword and the ORDER BY clause. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
 - [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Kafka Connector](../loading/Kafka-connector-starrocks.md), [Flink Connector](../loading/Flink-connector-starrocks.md), and [Spark Connector](../loading/Spark-connector-starrocks.md) support partial updates in column mode on a Primary Key table. [#28288](https://github.com/StarRocks/starrocks/pull/28288)
 - Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](../table_design/list_partitioning.md).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
