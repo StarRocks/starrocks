@@ -39,6 +39,8 @@ public:
     CompactionManager();
 
     ~CompactionManager();
+    
+    void stop();
 
     void init_max_task_num(int32_t num);
 
