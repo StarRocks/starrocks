@@ -507,6 +507,16 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
+#### Specify the bucket size for tables configured with random bucketing
+
+Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation. The default size is `1024 * 1024 * 1024 B` (1 GB), and the maximum size is 4 GB.
+
+```sql
+PROPERTIES (
+    "bucket_size" = "3221225472"
+)
+```
+
 #### Set data compression algorithm
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
