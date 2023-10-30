@@ -427,7 +427,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 void HiveDataSource::_init_rf_counters() {
     auto* root = _runtime_profile;
     if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
-        static const char* prefix = "DynamicPruningScanRange";
+        static const char* prefix = "DynamicPruneScanRange";
         ADD_COUNTER(root, prefix, TUnit::NONE);
         runtime_bloom_filter_eval_context.join_runtime_filter_timer =
                 ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
