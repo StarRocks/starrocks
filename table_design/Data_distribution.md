@@ -558,7 +558,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
       ;--无需手动设置分区中分桶数量，并且随机分桶，无需设置分桶键
       ```
 
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
+    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
 
     如果是随机分桶表，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示分区**当前**的分桶数量。
     > **注意**
@@ -599,7 +599,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
        >
        > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在新增分区时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
 
-    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md) 来查看 StarRocks 为新分区设置的分桶数量。如果是哈希分桶表，新分区的分桶数量**固定**。
+    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为新分区设置的分桶数量。如果是哈希分桶表，新分区的分桶数量**固定**。
 
     如果是随机分桶表，在导入数据至新分区的过程中，新分区的分桶数量会**动态增加**，返回结果显示新分区**当前**的分桶数量。
     > **注意**
