@@ -88,4 +88,38 @@ public class HudiScannerUtils {
                 || type == ColumnType.TypeValue.DATETIME_MILLIS
                 || type == ColumnType.TypeValue.DATETIME);
     }
+
+    public static String mapToHiveType(String value) {
+        if (value.startsWith("struct<")) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("struct<");
+            String[] fields = value.substring(7, value.length() - 1).split(",");
+            for (String field : fields) {
+                String[] kv = field.split(":");
+                if (kv.length != 2) {
+                    throw new IllegalArgumentException("Invalid type: " + value);
+                }
+                sb.append(kv[0]);
+                sb.append(":");
+                sb.append(mapToHiveType(kv[1]));
+                sb.append(",");
+            }
+            if (fields.length > 0) {
+                sb.deleteCharAt(sb.length() - 1);
+            }
+            sb.append(">");
+            return sb.toString();
+        } else if (value.startsWith("array<")) {
+            return "array<" + mapToHiveType(value.substring(6, value.length() - 1)) + ">";
+        } else if (value.startsWith("map<")) {
+            String[] kv = value.substring(4, value.length() - 1).split(",");
+            if (kv.length != 2) {
+                throw new IllegalArgumentException("Invalid type: " + value);
+            }
+            return "map<" + mapToHiveType(kv[0]) + "," + mapToHiveType(kv[1]) + ">";
+        } else {
+            // primitive type.
+            return HIVE_TYPE_MAPPING.getOrDefault(value, value);
+        }
+    }
 }

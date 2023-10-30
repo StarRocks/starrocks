@@ -51,7 +51,6 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.starrocks.hudi.reader.HudiScannerUtils.HIVE_TYPE_MAPPING;
 import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
@@ -192,12 +191,11 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
         properties.setProperty("columns", this.hiveColumnNames);
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
+
         List<String> types = new ArrayList<>();
         for (int i = 0; i < this.hiveColumnTypes.length; i++) {
             String type = this.hiveColumnTypes[i];
-            if (HIVE_TYPE_MAPPING.containsKey(type)) {
-                type = HIVE_TYPE_MAPPING.get(type);
-            }
+            type = HudiScannerUtils.mapToHiveType(type);
             types.add(type);
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
