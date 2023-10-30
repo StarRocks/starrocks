@@ -89,7 +89,18 @@ public:
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
     void set_enable_profile() { _enable_profile = true; }
-    bool enable_profile() { return _enable_profile; }
+    bool enable_profile() {
+        if (_enable_profile) {
+            return true;
+        }
+        if (_big_query_profile_threshold_ns <= 0) {
+            return false;
+        }
+        return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
+    }
+    void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s) {
+        _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
+    }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
     }
@@ -202,6 +213,7 @@ private:
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
     bool _enable_profile = false;
+    int64_t _big_query_profile_threshold_ns = 0;
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
