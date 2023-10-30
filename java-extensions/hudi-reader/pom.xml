@@ -16,9 +16,12 @@
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <slf4j.version>1.7.36</slf4j.version>
-        <hive-apache.version>3.1.2-13</hive-apache.version>
+        <hive-apache.version>3.1.2-22</hive-apache.version>
+        <parquet-hadoop.version>1.12.3</parquet-hadoop.version>
         <hadoop.version>3.3.6</hadoop.version>
         <hudi.version>0.12.2</hudi.version>
+        <airlift.version>0.25</airlift.version>
+        <avro.version>1.11.2</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
 
@@ -57,6 +60,35 @@
             <groupId>io.trino.hive</groupId>
             <artifactId>hive-apache</artifactId>
             <version>${hive-apache.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-hadoop -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop-bundle</artifactId>
+            <version>${parquet-hadoop.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.parquet/parquet-avro -->
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-avro</artifactId>
+            <version>${parquet-hadoop.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.avro/avro -->
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>${avro.version}</version>
+        </dependency>
+
+
+        <!-- https://mvnrepository.com/artifact/io.airlift/aircompressor -->
+        <dependency>
+            <groupId>io.airlift</groupId>
+            <artifactId>aircompressor</artifactId>
+            <version>${airlift.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
