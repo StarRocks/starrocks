@@ -43,6 +43,8 @@ public class EntityConvertUtils {
             case VARCHAR:
             case STRING:
                 return ScalarType.createVarcharType(65533);
+            case BINARY:
+                return Type.VARBINARY;
             case BOOLEAN:
                 return Type.BOOLEAN;
             case DATE:
