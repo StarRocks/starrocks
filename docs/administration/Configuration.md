@@ -1526,7 +1526,7 @@ BE dynamic parameters are as follows.
 #### txn_commit_rpc_timeout_ms
 
 - **Default:** 60,000 ms
-- **Description:** The timeout for a transaction commit RPC.
+- **Description:** The timeout of a load transaction. From v3.1 onwards, this parameter controls the timeout of a transaction commit RPC.
 
 #### max_consumer_num_per_group
 
