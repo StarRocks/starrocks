@@ -22,6 +22,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -87,5 +88,47 @@ public class HudiScannerUtils {
         return (type == ColumnType.TypeValue.DATETIME_MICROS
                 || type == ColumnType.TypeValue.DATETIME_MILLIS
                 || type == ColumnType.TypeValue.DATETIME);
+    }
+
+    public static String mapColumnTypeToHiveType(ColumnType type) {
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        StringBuilder sb = new StringBuilder();
+        if (type.isStruct()) {
+            List<String> childNames = type.getChildNames();
+            List<ColumnType> childTypes = type.getChildTypes();
+            sb.append("struct<");
+            for (int i = 0; i < childNames.size(); i++) {
+                sb.append(childNames.get(i));
+                sb.append(":");
+                sb.append(mapColumnTypeToHiveType(childTypes.get(i)));
+                sb.append(",");
+            }
+            if (childNames.size() > 0) {
+                sb.deleteCharAt(sb.length() - 1);
+            }
+            sb.append(">");
+            return sb.toString();
+        } else if (type.isMap() || type.isArray()) {
+            List<ColumnType> childTypes = type.getChildTypes();
+            sb.append(type.getTypeValueString());
+            sb.append("<");
+            for (int i = 0; i < childTypes.size(); i++) {
+                sb.append(mapColumnTypeToHiveType(childTypes.get(i)));
+                sb.append(",");
+            }
+            if (childTypes.size() > 0) {
+                sb.deleteCharAt(sb.length() - 1);
+            }
+            sb.append(">");
+            return sb.toString();
+        } else if (type.isDecimal()) {
+            return type.getRawTypeValue();
+        } else {
+            String value = type.getTypeValueString();
+            if (value == null) {
+                throw new IllegalArgumentException("Invalid type: " + type.toString());
+            }
+            return HIVE_TYPE_MAPPING.getOrDefault(value, value);
+        }
     }
 }
