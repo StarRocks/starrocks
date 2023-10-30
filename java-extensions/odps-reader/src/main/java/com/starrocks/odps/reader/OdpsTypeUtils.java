@@ -68,9 +68,11 @@ public class OdpsTypeUtils {
             case TINYINT:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.TINYINT);
             case SMALLINT:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.SHORT);
             case INT:
-            case BIGINT:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.INT);
+            case BIGINT:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.LONG);
             case FLOAT:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.FLOAT);
             case DOUBLE:
