@@ -19,9 +19,8 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
-#include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/location_provider.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
@@ -152,17 +151,16 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     ASSIGN_OR_ABORT(auto segments1, rowset->segments(false));
     ASSERT_EQ(2, segments1.size());
     for (const auto& seg : segments1) {
-        auto handle = cache->lookup(CacheKey(seg->file_name()));
-        ASSERT_TRUE(handle == nullptr);
+        auto segment = cache->lookup_segment(seg->file_name());
+        ASSERT_TRUE(segment == nullptr);
     }
 
     // fill data cache: false, fill metadata cache: true
     ASSIGN_OR_ABORT(auto segments2, rowset->segments(false, true));
     ASSERT_EQ(2, segments2.size());
     for (const auto& seg : segments2) {
-        auto handle = cache->lookup(CacheKey(seg->file_name()));
-        ASSERT_TRUE(handle != nullptr);
-        cache->release(handle);
+        auto segment = cache->lookup_segment(seg->file_name());
+        ASSERT_TRUE(segment != nullptr);
     }
 }
 
