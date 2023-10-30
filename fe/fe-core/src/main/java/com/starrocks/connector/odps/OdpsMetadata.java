@@ -23,8 +23,6 @@ import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.InputSplitAssigner;
-import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
-import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
