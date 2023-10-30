@@ -139,7 +139,6 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 
 ### ETL task
 
-- [DROP TASK](./data-manipulation/DROP_TASK.md)
 - [SUBMIT TASK](./data-manipulation/SUBMIT_TASK.md)
 
 ## Catalog, database, resource
