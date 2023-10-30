@@ -93,7 +93,6 @@ import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
@@ -1561,10 +1560,9 @@ public class Coordinator {
             cancelInternal(cancelReason);
         } finally {
             try {
-                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // Disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
-                if (connectContext.getSessionVariable().isEnableProfile() && profileDoneSignal != null
-                        && cancelledMessage.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                if (profileDoneSignal != null && cancelledMessage.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     profileDoneSignal.countDownToZero(new Status());
                     LOG.info("count down profileDoneSignal since backend has crashed, query id: {}", DebugUtil.printId(queryId));
                 }
@@ -1589,7 +1587,7 @@ public class Coordinator {
         cancelRemoteFragmentsAsync(cancelReason);
         if (profileDoneSignal != null && cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
             // count down to zero to notify all objects waiting for this
-            if (!connectContext.getSessionVariable().isEnableProfile()) {
+            if (!connectContext.isProfileEnabled()) {
                 profileDoneSignal.countDownToZero(new Status());
                 LOG.info("unfinished instance: {}",
                         profileDoneSignal.getLeftMarks().stream().map(e -> DebugUtil.printId(e.getKey())).toArray());
@@ -1626,7 +1624,7 @@ public class Coordinator {
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
         if (topProfileSupplier != null && execPlan != null && connectContext != null &&
-                connectContext.getSessionVariable().isEnableProfile() &&
+                connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.done || profileDoneSignal.getLeftMarks().size() > 1) &&
                 // Interval * 0.95 * 1000 to allow a certain range of deviation
@@ -1634,7 +1632,7 @@ public class Coordinator {
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
             ExecPlan plan = execPlan;
-            profile.addChild(buildMergedQueryProfile());
+            profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         }
@@ -1844,20 +1842,8 @@ public class Coordinator {
         return false;
     }
 
-    public RuntimeProfile buildMergedQueryProfile() {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-        if (!sessionVariable.isEnableProfile()) {
-            return queryProfile;
-        }
-
-        if (!coordinatorPreprocessor.isUsePipeline()) {
-            return queryProfile;
-        }
-
-        int profileLevel = sessionVariable.getPipelineProfileLevel();
-        if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
-            // We don't guarantee the detail level profile can work well with visualization feature.
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (!needMerge || !coordinatorPreprocessor.isUsePipeline()) {
             return queryProfile;
         }
 

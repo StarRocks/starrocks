@@ -575,9 +575,8 @@ public class StmtExecutor {
                         }
                     } finally {
                         boolean isAsync = false;
-<<<<<<< HEAD
                         if (!needRetry) {
-                            if (context.getSessionVariable().isEnableProfile()) {
+                            if (context.isProfileEnabled()) {
                                 isAsync = tryProcessProfileAsync(execPlan);
                                 if (parsedStmt.isExplain() &&
                                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
@@ -588,14 +587,6 @@ public class StmtExecutor {
 
                             if (!isStatisticsJob) {
                                 WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), -1L);
-=======
-                        if (!needRetry && context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
->>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
                             }
                         }
                         if (isAsync) {
