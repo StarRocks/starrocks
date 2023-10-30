@@ -17,10 +17,11 @@
 #include <memory>
 
 #include "fs/fs_util.h"
-#include "gutil/strings/escaping.h"
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/update_manager.h"
+#include "storage/protobuf_file.h"
 #include "util/coding.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
@@ -224,7 +225,7 @@ void MetaFileBuilder::_fill_delvec_cache() {
         // find delvec ptr by segment id
         auto delvec_iter = _segmentid_to_delvec.find(cache_item.second);
         if (delvec_iter != _segmentid_to_delvec.end() && delvec_iter->second != nullptr) {
-            _tablet.tablet_mgr()->cache_delvec(cache_item.first, delvec_iter->second);
+            _tablet.tablet_mgr()->metacache()->cache_delvec(cache_item.first, delvec_iter->second);
         }
     }
 }
@@ -237,98 +238,45 @@ void MetaFileBuilder::handle_failure() {
     }
 }
 
-MetaFileReader::MetaFileReader(const std::string& filepath, bool fill_cache) {
-    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
-    auto rf = fs::new_random_access_file(opts, filepath);
-    if (rf.ok()) {
-        _access_file = std::move(*rf);
-    } else {
-        _err_status = rf.status();
-    }
-    _tablet_meta = std::make_unique<TabletMetadata>();
-    _load = false;
-}
-
-Status MetaFileReader::load() {
-    if (_access_file == nullptr) return _err_status;
-
-    ASSIGN_OR_RETURN(auto file_size, _access_file->get_size());
-    if (file_size <= 4) {
-        return Status::Corruption(
-                fmt::format("meta file {} is corrupt, invalid file size {}", _access_file->filename(), file_size));
-    }
-    std::string metadata_str;
-    raw::stl_string_resize_uninitialized(&metadata_str, file_size);
-    RETURN_IF_ERROR(_access_file->read_at_fully(0, metadata_str.data(), file_size));
-    bool parsed = _tablet_meta->ParseFromArray(metadata_str.data(), static_cast<int>(file_size));
-    if (!parsed) {
-        return Status::Corruption(fmt::format("failed to parse tablet meta {}", _access_file->filename()));
-    }
-    _load = true;
-    TRACE("end load tablet metadata");
-    return Status::OK();
-}
-
-Status MetaFileReader::load_by_cache(const std::string& filepath, TabletManager* tablet_mgr) {
-    // 1. lookup meta cache first
-    if (auto ptr = tablet_mgr->lookup_tablet_metadata(filepath); ptr != nullptr) {
-        _tablet_meta = ptr;
-        _load = true;
-        return Status::OK();
-    } else {
-        // 2. load directly
-        return load();
-    }
-}
-
-Status MetaFileReader::get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec) {
-    if (_access_file == nullptr) return _err_status;
-    if (!_load) return Status::InternalError("meta file reader not loaded");
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec) {
     // find delvec by segment id
-    auto iter = _tablet_meta->delvec_meta().delvecs().find(segment_id);
-    if (iter != _tablet_meta->delvec_meta().delvecs().end()) {
-        VLOG(2) << fmt::format("MetaFileReader get_del_vec {} segid {}", _tablet_meta->delvec_meta().ShortDebugString(),
-                               segment_id);
+    auto iter = metadata.delvec_meta().delvecs().find(segment_id);
+    if (iter != metadata.delvec_meta().delvecs().end()) {
+        VLOG(2) << fmt::format("get_del_vec {} segid {}", metadata.delvec_meta().ShortDebugString(), segment_id);
         std::string buf;
         raw::stl_string_resize_uninitialized(&buf, iter->second.size());
         // find in cache
-        std::string cache_key = delvec_cache_key(_tablet_meta->id(), iter->second);
-        DelVectorPtr delvec_cache_ptr = tablet_mgr->lookup_delvec(cache_key);
-        if (delvec_cache_ptr != nullptr) {
-            delvec->copy_from(*delvec_cache_ptr);
+        std::string cache_key = delvec_cache_key(metadata.id(), iter->second);
+        auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
+        if (cached_delvec != nullptr) {
+            delvec->copy_from(*cached_delvec);
             return Status::OK();
         }
 
         // lookup delvec file name and then read it
-        auto iter2 = _tablet_meta->delvec_meta().version_to_file().find(iter->second.version());
-        if (iter2 == _tablet_meta->delvec_meta().version_to_file().end()) {
-            LOG(ERROR) << "Can't find delvec file name for tablet: " << _tablet_meta->id()
+        auto iter2 = metadata.delvec_meta().version_to_file().find(iter->second.version());
+        if (iter2 == metadata.delvec_meta().version_to_file().end()) {
+            LOG(ERROR) << "Can't find delvec file name for tablet: " << metadata.id()
                        << ", version: " << iter->second.version();
             return Status::InternalError("Can't find delvec file name");
         }
         const auto& delvec_name = iter2->second.name();
         RandomAccessFileOptions opts{.skip_fill_local_cache = true};
-        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(
-                                          opts, tablet_mgr->delvec_location(_tablet_meta->id(), delvec_name)));
+        ASSIGN_OR_RETURN(auto rf,
+                         fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
         RETURN_IF_ERROR(rf->read_at_fully(iter->second.offset(), buf.data(), iter->second.size()));
         // parse delvec
         RETURN_IF_ERROR(delvec->load(iter->second.version(), buf.data(), iter->second.size()));
         // put in cache
-        delvec_cache_ptr = std::make_shared<DelVector>();
+        auto delvec_cache_ptr = std::make_shared<DelVector>();
         delvec_cache_ptr->copy_from(*delvec);
-        tablet_mgr->cache_delvec(cache_key, delvec_cache_ptr);
+        tablet_mgr->metacache()->cache_delvec(cache_key, delvec_cache_ptr);
         TRACE("end load delvec");
         return Status::OK();
     }
-    VLOG(2) << fmt::format("MetaFileReader get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
-                           _tablet_meta->delvec_meta().ShortDebugString());
+    VLOG(2) << fmt::format("get_del_vec not found, segmentid {} tablet_meta {}", segment_id,
+                           metadata.delvec_meta().ShortDebugString());
     return Status::OK();
-}
-
-StatusOr<TabletMetadataPtr> MetaFileReader::get_meta() {
-    if (_access_file == nullptr) return _err_status;
-    if (!_load) return Status::InternalError("meta file reader not loaded");
-    return std::move(_tablet_meta);
 }
 
 bool is_primary_key(TabletMetadata* metadata) {
