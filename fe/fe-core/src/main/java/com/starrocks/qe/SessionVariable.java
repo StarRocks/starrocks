@@ -368,6 +368,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
+    public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+    public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
+
+    public static final String SQL_DIALECT = "sql_dialect";
+
+    public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
+
+    public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
+    public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+    public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
+
+>>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -667,6 +684,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableAsyncProfile = true;
+
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
+    private int bigQueryProfileSecondThreshold = 0;
+
+>>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
     private int resourceGroupId = 0;
@@ -1165,6 +1191,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableProfile = enableProfile;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnableLoadProfile() {
+        return enableLoadProfile;
+    }
+
+    public void setEnableLoadProfile(boolean enableLoadProfile) {
+        this.enableLoadProfile = enableLoadProfile;
+    }
+
+    public boolean isEnableBigQueryProfile() {
+        return bigQueryProfileSecondThreshold > 0;
+    }
+
+    public int getBigQueryProfileSecondThreshold() {
+        return bigQueryProfileSecondThreshold;
+    }
+
+>>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
     public int getWaitTimeoutS() {
         return waitTimeout;
     }
@@ -1918,7 +1963,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
+<<<<<<< HEAD
         tResult.setCodegen_level(0);
+=======
+        tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
+        tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
+>>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
         tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
