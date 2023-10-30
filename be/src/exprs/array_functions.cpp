@@ -780,8 +780,11 @@ private:
             }
             if (found) {
                 i++;
+                j++;
+            } else {
+                i = 0;
+                j++;
             }
-            j++;
         }
         return i == target_end;
     }
