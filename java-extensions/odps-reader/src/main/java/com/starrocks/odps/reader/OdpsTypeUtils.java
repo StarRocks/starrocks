@@ -157,13 +157,11 @@ public class OdpsTypeUtils {
             case DECIMAL:
                 return ((ArrowDecimalAccessor) dataAccessor).getDecimal(rowId);
             case STRING:
-                return ((ArrowVarCharAccessor) dataAccessor).getBytes(rowId);
+                return new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId));
             case VARCHAR:
-                return new Varchar(new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId),
-                        ConfigConstants.DEFAULT_CHARSET));
             case CHAR:
-                return new Char(new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId),
-                        ConfigConstants.DEFAULT_CHARSET));
+                return new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId),
+                        ConfigConstants.DEFAULT_CHARSET);
             case BINARY:
                 return new Binary(((ArrowVarBinaryAccessor) dataAccessor).getBinary(rowId));
             case DATE:

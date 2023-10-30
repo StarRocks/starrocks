@@ -15,6 +15,7 @@
 package com.starrocks.connector.odps;
 
 import com.aliyun.odps.Odps;
+import com.aliyun.odps.Partition;
 import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
@@ -43,6 +44,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 
 public class OdpsMetadata implements ConnectorMetadata {
@@ -70,11 +72,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public Database getDb(String name) {
         try {
-            if (listDbNames().contains(name)) {
-                return new Database(0, name);
-            } else {
-                return null;
-            }
+            return new Database(0, name);
         } catch (StarRocksConnectorException e) {
             return null;
         }
@@ -82,7 +80,12 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(String dbName) {
-        return ImmutableList.of("test_table");
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        Iterator<com.aliyun.odps.Table> iterator = odps.tables().iterator(dbName);
+        while (iterator.hasNext()) {
+            builder.add(iterator.next().getName());
+        }
+        return builder.build();
     }
 
     @Override
@@ -93,12 +96,22 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
-        return ImmutableList.of();
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        for (Partition partition : odps.tables().get(databaseName, tableName).getPartitions()) {
+            builder.add(partition.getPartitionSpec().toString());
+        }
+        return builder.build();
     }
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        return ImmutableList.of();
+        ImmutableList.Builder<PartitionInfo> builder = ImmutableList.builder();
+        for (String partitionName : partitionNames) {
+            com.starrocks.connector.hive.Partition partition =
+                    com.starrocks.connector.hive.Partition.builder().setFullPath(partitionName).build();
+            builder.add(partition);
+        }
+        return builder.build();
     }
 
     @Override
