@@ -387,7 +387,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
 
-            if (fn.name.function_name == "array_flatten") {
+            if (fn.name.function_name == "array_flatten" || fn.name.function_name == "array_flatten_distinct") {
                 // for array_flatten use inner type as sign
                 arg_type = arg_type.children[0];
             }

@@ -295,6 +295,7 @@ public class FunctionSet {
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_FLATTEN = "array_flatten";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
+    public static final String ARRAY_FLATTEN_DISTINCT = "array_flatten_distinct";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -967,6 +968,8 @@ public class FunctionSet {
         // array_agg(distinct)
         registerBuiltinArrayAggDistinctFunction();
 
+        registerBuiltinArrayFlattenDistinctFunction();
+
         // Avg
         registerBuiltinAvgAggFunction();
 
@@ -1186,6 +1189,32 @@ public class FunctionSet {
                     Lists.newArrayList(arrayType), arrayType, arrayType,
                     false, false, false));
         }
+    }
+
+    private void registerBuiltinArrayFlattenDistinctFunction() {
+        // array_flatten_distinct -> mapping array_agg_distinct
+        for (ScalarType type : Type.getNumericTypes()) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_FLATTEN_DISTINCT,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+        for (ScalarType type : Type.STRING_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_FLATTEN_DISTINCT,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.DATE_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_FLATTEN_DISTINCT,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_FLATTEN_DISTINCT,
+                Lists.newArrayList(Type.ARRAY_DATETIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
+                false, false, false));
     }
 
     private void registerBuiltinAvgAggFunction() {

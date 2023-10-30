@@ -77,7 +77,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
     private static final List<String> WHITE_FNS = ImmutableList.of(FunctionSet.MAX, FunctionSet.MIN,
             FunctionSet.SUM, FunctionSet.HLL_UNION, FunctionSet.BITMAP_UNION, FunctionSet.PERCENTILE_UNION,
-            FunctionSet.ARRAY_AGG);
+            FunctionSet.ARRAY_AGG, FunctionSet.ARRAY_AGG_DISTINCT);
 
     private final TaskContext taskContext;
     private final OptimizerContext optimizerContext;
@@ -405,7 +405,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return null;
         }
 
-        if (context.aggregations.isEmpty() && context.groupBys.isEmpty()) {
+        if (context.aggregations.isEmpty() || context.groupBys.isEmpty()) {
             return null;
         }
 
