@@ -51,6 +51,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -64,11 +65,17 @@ import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.time.format.DateTimeFormatter;
+=======
+import java.time.temporal.ChronoUnit;
+>>>>>>> de13b3b7a0 ([BugFix] fix iceberg timestamptz type to partitionkey (#33911))
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -626,6 +633,35 @@ public class PartitionUtil {
         return ICEBERG_DEFAULT_PARTITION;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+        PartitionData partitionData = (PartitionData) partition;
+        List<String> partitionValues = new ArrayList<>();
+        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (int i = 0; i < spec.fields().size(); i++) {
+            PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+                continue;
+            }
+
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+
+            // currently starrocks date literal only support local datetime
+            org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
+            if (icebergType.equals(Types.TimestampType.withZone())) {
+                value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
+            }
+
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
+    }
+
+>>>>>>> de13b3b7a0 ([BugFix] fix iceberg timestamptz type to partitionkey (#33911))
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {
         return partition.get(position, (Class<T>) javaClass);
     }
