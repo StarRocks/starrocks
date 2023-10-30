@@ -668,7 +668,7 @@ private:
     }
 };
 
-template <bool Any>
+template <bool Any, bool ContainsSeq>
 class ArrayHasImpl {
 public:
     static StatusOr<ColumnPtr> evaluate(const Column& array, const Column& element) {
@@ -752,6 +752,39 @@ private:
             return true;
         }
     }
+
+    template <bool NullableElement, bool NullableTarget, typename ElementColumn>
+    static uint8 __process_seq(const ElementColumn& elements, uint32 element_start, uint32 element_end,
+        const ElementColumn& targets, uint32 target_start, uint32 target_end,
+        const NullColumn::Container* null_map_elements,
+        const NullColumn::Container* null_map_targets) {
+        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
+                          std::is_same_v<MapColumn, ElementColumn> ||
+                          std::is_same_v<StructColumn, ElementColumn>,
+                          uint8_t, typename ElementColumn::ValueType>;
+
+        [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
+            return (*null_map)[idx] != 0;
+        };
+        bool found = false;
+        size_t i = target_start;
+        size_t j = element_start;
+        while (i < target_end && j < element_end) {
+            if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                          std::is_same_v<StructColumn, ElementColumn> || std::is_same_v<JsonColumn, ElementColumn>) {
+                found = (elements.equals(j, targets, i) == 1);
+            } else {
+                auto elements_ptr = (const ValueType*)(elements.raw_data());
+                auto targets_ptr = (const ValueType*)(targets.raw_data());
+                found = (elements_ptr[j] == targets_ptr[i]);
+            }
+            if (found) {
+                i++;
+            }
+            j++;
+        }
+        return i == target_end;
+    }
     template <bool NullableElement, bool NullableTarget, bool ConstTarget, typename ElementColumn>
     static StatusOr<ColumnPtr> _process(const ElementColumn& elements, const UInt32Column& element_offsets,
                                         const ElementColumn& targets, const UInt32Column& target_offsets,
@@ -769,16 +802,23 @@ private:
 
         for (size_t i = 0; i < num_array; i++) {
             uint8_t found = 0;
-            if constexpr (ConstTarget) {
-                DCHECK_EQ(num_target, 1);
-                found = __process<NullableElement, NullableTarget, ElementColumn>(
-                        elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets, target_offsets_ptr[0],
-                        target_offsets_ptr[1], null_map_elements, null_map_targets);
-            } else {
+            if(ContainsSeq) {
                 DCHECK_EQ(num_array, num_target);
-                found = __process<NullableElement, NullableTarget, ElementColumn>(
+                found = __process_seq<NullableElement, NullableTarget, ElementColumn>(
                         elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets, target_offsets_ptr[i],
                         target_offsets_ptr[i + 1], null_map_elements, null_map_targets);
+            } else {
+                if constexpr (ConstTarget) {
+                                DCHECK_EQ(num_target, 1);
+                                found = __process<NullableElement, NullableTarget, ElementColumn>(
+                                        elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets, target_offsets_ptr[0],
+                                        target_offsets_ptr[1], null_map_elements, null_map_targets);
+                } else {
+                                DCHECK_EQ(num_array, num_target);
+                                found = __process<NullableElement, NullableTarget, ElementColumn>(
+                                        elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets, target_offsets_ptr[i],
+                                        target_offsets_ptr[i + 1], null_map_elements, null_map_targets);
+                }
             }
             result_ptr[i] = found;
         }
@@ -962,7 +1002,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_contains_any([[maybe_unused]] Function
     const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
     const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
-    return ArrayHasImpl<true>::evaluate(*arg0, *arg1);
+    return ArrayHasImpl<true, false>::evaluate(*arg0, *arg1);
 }
 
 StatusOr<ColumnPtr> ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context,
@@ -971,7 +1011,16 @@ StatusOr<ColumnPtr> ArrayFunctions::array_contains_all([[maybe_unused]] Function
     const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
     const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
 
-    return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
+    return ArrayHasImpl<false, false>::evaluate(*arg0, *arg1);
+}
+
+StatusOr<ColumnPtr> ArrayFunctions::array_contains_seq([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    const ColumnPtr& arg0 = ColumnHelper::unpack_and_duplicate_const_column(columns[0]->size(), columns[0]); // array
+    const ColumnPtr& arg1 = ColumnHelper::unpack_and_duplicate_const_column(columns[1]->size(), columns[1]); // element
+
+    return ArrayHasImpl<false, true>::evaluate(*arg0, *arg1);
 }
 
 // cannot be called anymore
