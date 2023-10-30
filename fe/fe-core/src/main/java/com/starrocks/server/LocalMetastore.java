@@ -112,6 +112,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -1638,6 +1639,148 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private PhysicalPartition createPhysicalPartition(Database db, OlapTable olapTable, Partition partition) throws DdlException {
+        long partitionId = partition.getId();
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo().copy();
+        olapTable.inferDistribution(distributionInfo);
+        // create sub partition
+        Map<Long, MaterializedIndex> indexMap = new HashMap<>();
+        for (long indexId : olapTable.getIndexIdToMeta().keySet()) {
+            MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+            indexMap.put(indexId, rollup);
+        }
+
+        Long id = GlobalStateMgr.getCurrentState().getNextId();
+        long shardGroupId = 0;
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
+            shardGroupId = GlobalStateMgr.getCurrentStarOSAgent().
+                    createShardGroup(db.getId(), olapTable.getId(), id);
+        }
+
+        PhysicalPartitionImpl physicalParition = new PhysicalPartitionImpl(
+                id, partition.getId(), shardGroupId, indexMap.get(olapTable.getBaseIndexId()));
+
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        short replicationNum = partitionInfo.getReplicationNum(partitionId);
+        TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
+        for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
+            long indexId = entry.getKey();
+            MaterializedIndex index = entry.getValue();
+            MaterializedIndexMeta indexMeta = olapTable.getIndexIdToMeta().get(indexId);
+            Set<Long> tabletIdSet = new HashSet<>();
+
+            // create tablets
+            TabletMeta tabletMeta =
+                    new TabletMeta(db.getId(), olapTable.getId(), id, indexId, indexMeta.getSchemaHash(),
+                            storageMedium, olapTable.isCloudNativeTableOrMaterializedView());
+
+            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                createLakeTablets(olapTable, id, shardGroupId, index, distributionInfo,
+                        tabletMeta, tabletIdSet);
+            } else {
+                createOlapTablets(olapTable, index, Replica.ReplicaState.NORMAL, distributionInfo,
+                        physicalParition.getVisibleVersion(), replicationNum, tabletMeta, tabletIdSet);
+            }
+            if (index.getId() != olapTable.getBaseIndexId()) {
+                // add rollup index to partition
+                physicalParition.createRollupIndex(index);
+            }
+        }
+
+        return physicalParition;
+    }
+
+    public void addSubPartitions(Database db, String tableName,
+                                 Partition partition, int numSubPartition) throws DdlException {
+        OlapTable olapTable;
+        OlapTable copiedTable;
+
+        db.readLock();
+        Set<String> checkExistPartitionName = Sets.newConcurrentHashSet();
+        try {
+            olapTable = checkTable(db, tableName);
+
+            if (partition.getDistributionInfo().getType() != DistributionInfo.DistributionInfoType.RANDOM) {
+                throw new DdlException("Only support adding physical partition to random distributed table");
+            }
+
+            copiedTable = olapTable.selectiveCopy(null, false, MaterializedIndex.IndexExtState.VISIBLE);
+        } finally {
+            db.readUnlock();
+        }
+
+        Preconditions.checkNotNull(olapTable);
+        Preconditions.checkNotNull(copiedTable);
+
+        List<PhysicalPartition> subPartitions = new ArrayList<>();
+        // create physical partition
+        for (int i = 0; i < numSubPartition; i++) {
+            PhysicalPartition subPartition = createPhysicalPartition(db, copiedTable, partition);
+            subPartitions.add(subPartition);
+        }
+
+        // build partitions
+        buildPartitions(db, copiedTable, subPartitions);
+
+        // check again
+        if (!db.writeLockAndCheckExist()) {
+            throw new DdlException("db " + db.getFullName()
+                    + "(" + db.getId() + ") has been dropped");
+        }
+        try {
+            // check if meta changed
+            checkIfMetaChange(olapTable, copiedTable, tableName);
+
+            for (PhysicalPartition subPartition : subPartitions) {
+                // add sub partition
+                partition.addSubPartition(subPartition);
+            }
+
+            // add partition log
+            addSubPartitionLog(db, olapTable, partition, subPartitions);
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
+        Database db = this.getDb(info.getDbId());
+        db.writeLock();
+        try {
+            OlapTable olapTable = (OlapTable) db.getTable(info.getTableId());
+            Partition partition = olapTable.getPartition(info.getPartitionId());
+            PhysicalPartition physicalPartition = info.getPhysicalPartition();
+            partition.addSubPartition(physicalPartition);
+
+            if (!isCheckpointThread()) {
+                // add to inverted index
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    long indexId = index.getId();
+                    int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                    TabletMeta tabletMeta = new TabletMeta(info.getDbId(), info.getTableId(), physicalPartition.getId(),
+                            index.getId(), schemaHash, olapTable.getPartitionInfo().getDataProperty(
+                            info.getPartitionId()).getStorageMedium());
+                    for (Tablet tablet : index.getTablets()) {
+                        long tabletId = tablet.getId();
+                        invertedIndex.addTablet(tabletId, tabletMeta);
+                        // modify some logic
+                        if (tablet instanceof LocalTablet) {
+                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                invertedIndex.addReplica(tabletId, replica);
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+>>>>>>> 72b8c58295 ([Enhancement] Avoid creating thread when concurrently creating partit… (#33588))
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
                               Long version, Set<Long> tabletIdSet) throws DdlException {
         PartitionInfo partitionInfo = table.getPartitionInfo();
@@ -1755,12 +1898,18 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
+=======
+    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                             int numReplicas,
+>>>>>>> 72b8c58295 ([Enhancement] Avoid creating thread when concurrently creating partit… (#33588))
                                              int numBackends) throws DdlException {
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
+<<<<<<< HEAD
         Thread t = new Thread(() -> {
             Map<Long, List<Long>> taskSignatures = new HashMap<>();
             try {
@@ -1769,48 +1918,56 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Partition partition : partitions) {
                     if (!countDownLatch.getStatus().ok()) {
                         break;
+=======
+        Map<Long, List<Long>> taskSignatures = new HashMap<>();
+        try {
+            int numFinishedTasks;
+            int numSendedTasks = 0;
+            long startTime = System.currentTimeMillis();
+            long maxWaitTimeMs = Math.min(timeout, maxTimeout) * 1000L;
+            for (PhysicalPartition partition : partitions) {
+                if (!countDownLatch.getStatus().ok()) {
+                    break;
+                }
+                List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
+                for (CreateReplicaTask task : tasks) {
+                    List<Long> signatures =
+                            taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                    signatures.add(task.getSignature());
+                }
+                sendCreateReplicaTasks(tasks, countDownLatch);
+                numSendedTasks += tasks.size();
+                numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
+                // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
+                // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
+                // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
+                // than 200.
+                // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
+                while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
+                    long currentTime = System.currentTimeMillis();
+                    // Add timeout check
+                    if (currentTime > startTime + maxWaitTimeMs) {
+                        throw new TimeoutException("Wait in buildPartitionsConcurrently exceeded timeout");
+>>>>>>> 72b8c58295 ([Enhancement] Avoid creating thread when concurrently creating partit… (#33588))
                     }
-                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
-                    for (CreateReplicaTask task : tasks) {
-                        List<Long> signatures =
-                                taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
-                        signatures.add(task.getSignature());
-                    }
-                    sendCreateReplicaTasks(tasks, countDownLatch);
-                    numSendedTasks += tasks.size();
+                    ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
                     numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
-                    // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
-                    // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
-                    // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
-                    // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
-                    // than 200.
-                    // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
-                    while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
-                        ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
-                        numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
-                    }
                 }
-                countDownLatch.await();
-                if (countDownLatch.getStatus().ok()) {
-                    taskSignatures.clear();
-                }
-            } catch (Exception e) {
-                LOG.warn(e);
-                countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.toString()));
-            } finally {
+            }
+            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+        } catch (Exception e) {
+            LOG.warn(e);
+            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
+            throw new DdlException(e.getMessage());
+        }  finally {
+            if (!countDownLatch.getStatus().ok()) {
                 for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
                     for (Long signature : entry.getValue()) {
                         AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
                     }
                 }
             }
-        }, "partition-build");
-        t.start();
-        try {
-            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
-        } catch (Exception e) {
-            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
-            throw e;
         }
     }
 
@@ -4996,4 +5153,3 @@ public class LocalMetastore implements ConnectorMetadata {
         defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
     }
 }
-
