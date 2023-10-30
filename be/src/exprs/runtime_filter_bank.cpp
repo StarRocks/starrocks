@@ -425,7 +425,7 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
     eval_context.running_context.compatibility =
             _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
 
-    // since partial chunk is currently very lightweight (a bunch of const columns), use very runtime filter if possible
+    // since partial chunk is currently very lightweight (a bunch of const columns), use every runtime filter if possible
     // without computing each rf's selectivity
     for (auto kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
@@ -437,7 +437,7 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        // skip if (can be relaxed later)
+        // skip if (conditions can be relaxed later)
         //  1. multi-column runtime filter
         //  2. runtime filter that is not slot ref, or a slot ref of a non-existent column
         auto can_use_rf_on_partial_chunk = [&]() {
