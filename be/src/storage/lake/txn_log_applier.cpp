@@ -36,7 +36,7 @@ class PrimaryKeyTxnLogApplier : public TxnLogApplier {
                                           phmap::priv::Allocator<T>, 4, std::mutex, true>;
 
 public:
-    PrimaryKeyTxnLogApplier(Tablet tablet, std::shared_ptr<TabletMetadataPB> metadata, int64_t new_version)
+    PrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
@@ -194,7 +194,7 @@ private:
     static inline ParallelSet<int64_t> _s_schema_change_set;
 
     Tablet _tablet;
-    std::shared_ptr<TabletMetadataPB> _metadata;
+    MutableTabletMetadataPtr _metadata;
     int64_t _base_version{0};
     int64_t _new_version{0};
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
@@ -205,7 +205,7 @@ private:
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
-    NonPrimaryKeyTxnLogApplier(Tablet tablet, std::shared_ptr<TabletMetadataPB> metadata, int64_t new_version)
+    NonPrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet), _metadata(std::move(metadata)), _new_version(new_version) {}
 
     Status apply(const TxnLogPB& log) override {
@@ -344,11 +344,12 @@ private:
     }
 
     Tablet _tablet;
-    std::shared_ptr<TabletMetadataPB> _metadata;
+    MutableTabletMetadataPtr _metadata;
     int64_t _new_version;
 };
 
-std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, TabletMetadataPtr metadata, int64_t new_version) {
+std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, MutableTabletMetadataPtr metadata,
+                                                   int64_t new_version) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version);
     }

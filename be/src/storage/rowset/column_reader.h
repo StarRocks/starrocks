@@ -154,7 +154,7 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    size_t mem_usage();
+    size_t mem_usage() const;
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }

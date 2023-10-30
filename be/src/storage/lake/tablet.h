@@ -64,7 +64,7 @@ public:
 
     [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_metadata(TabletMetadataPtr metadata);
+    [[nodiscard]] Status put_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
@@ -76,7 +76,7 @@ public:
 
     [[nodiscard]] Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(TxnLogPtr log);
+    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 

@@ -88,12 +88,7 @@ TEST_F(MetaFileTest, test_meta_rw) {
     EXPECT_TRUE(st.ok());
 
     // 3. read meta from meta file
-    MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, 10), false);
-    EXPECT_TRUE(reader.load().ok());
-    auto meta_st = reader.get_meta();
-    EXPECT_TRUE(meta_st.ok());
-    EXPECT_EQ((*meta_st)->id(), tablet_id);
-    EXPECT_EQ((*meta_st)->version(), 10);
+    ASSIGN_OR_ABORT(auto metadata2, s_tablet_manager->get_tablet_metadata(tablet_id, 10));
 }
 
 TEST_F(MetaFileTest, test_delvec_rw) {
@@ -125,19 +120,14 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(st.ok());
 
     // 3. read delvec
-    MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, version), false);
-    EXPECT_TRUE(reader.load().ok());
     DelVector after_delvec;
-    EXPECT_TRUE(reader.get_del_vec(s_tablet_manager.get(), segment_id, &after_delvec).ok());
+    ASSIGN_OR_ABORT(auto metadata2, s_tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *metadata2, segment_id, &after_delvec).ok());
     EXPECT_EQ(before_delvec, after_delvec.save());
 
     // 4. read meta
-    MetaFileReader reader2(s_tablet_manager->tablet_metadata_location(tablet_id, version), false);
-    EXPECT_TRUE(reader2.load().ok());
-    auto meta_st = reader2.get_meta();
-    EXPECT_TRUE(meta_st.ok());
-    auto iter = (*meta_st)->delvec_meta().delvecs().find(segment_id);
-    EXPECT_TRUE(iter != (*meta_st)->delvec_meta().delvecs().end());
+    auto iter = metadata2->delvec_meta().delvecs().find(segment_id);
+    EXPECT_TRUE(iter != metadata2->delvec_meta().delvecs().end());
     auto delvec_pagepb = iter->second;
     EXPECT_EQ(delvec_pagepb.version(), version);
 
@@ -155,34 +145,29 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(st.ok());
 
     // 6. read again
-    MetaFileReader reader3(s_tablet_manager->tablet_metadata_location(tablet_id, version2), false);
-    EXPECT_TRUE(reader3.load().ok());
-    meta_st = reader3.get_meta();
-    EXPECT_TRUE(meta_st.ok());
+    ASSIGN_OR_ABORT(auto metadata3, s_tablet_manager->get_tablet_metadata(tablet_id, version2));
 
-    iter = (*meta_st)->delvec_meta().delvecs().find(segment_id);
-    EXPECT_TRUE(iter != (*meta_st)->delvec_meta().delvecs().end());
+    iter = metadata3->delvec_meta().delvecs().find(segment_id);
+    EXPECT_TRUE(iter != metadata3->delvec_meta().delvecs().end());
     auto delvecpb = iter->second;
     EXPECT_EQ(delvecpb.version(), version2);
 
     // 7. test reclaim delvec version to file name record
-    MetaFileReader reader4(s_tablet_manager->tablet_metadata_location(tablet_id, version2), false);
-    EXPECT_TRUE(reader4.load().ok());
-    meta_st = reader4.get_meta();
-    EXPECT_TRUE(meta_st.ok());
+    ASSIGN_OR_ABORT(auto metadata4, s_tablet_manager->get_tablet_metadata(tablet_id, version2));
 
     // clear all delvec meta element so that all element in
     // version_to_file map will also be removed
     // in this case, delvecs meta map has only one element [key=(segment=1234, value=(version=12, offset=0, size=35)]
     // delvec_to_file has also one element [key=(version=12), value=(delvec_file=xxx)]
     // after clearing,  delvecs meta map will have nothing, and element in delvec_to_file will also be useless
-    (*meta_st)->mutable_delvec_meta()->mutable_delvecs()->clear();
+    auto new_meta = std::make_shared<TabletMetadataPB>(*metadata4);
+    new_meta->mutable_delvec_meta()->mutable_delvecs()->clear();
 
     // insert a new delvec record into delvecs meta map with new version 13
     // we expect the old element in delvec_to_file map (version 12) will be removed
     auto new_version = version2 + 1;
-    MetaFileBuilder builder3(*tablet, *meta_st);
-    (*meta_st)->set_version(new_version);
+    MetaFileBuilder builder3(*tablet, new_meta);
+    new_meta->set_version(new_version);
     DelVector dv3;
     dv3.set_empty();
     EXPECT_TRUE(dv3.empty());
@@ -194,9 +179,8 @@ TEST_F(MetaFileTest, test_delvec_rw) {
     EXPECT_TRUE(st.ok());
 
     // validate delvec file record with version 12 been removed
-    MetaFileReader reader5(s_tablet_manager->tablet_metadata_location(tablet_id, new_version), false);
-    EXPECT_TRUE(reader5.load().ok());
-    auto version_to_file_map = (*meta_st)->delvec_meta().version_to_file();
+    ASSIGN_OR_ABORT(auto metadata5, s_tablet_manager->get_tablet_metadata(tablet_id, new_version));
+    auto version_to_file_map = metadata5->delvec_meta().version_to_file();
     EXPECT_EQ(version_to_file_map.size(), 1);
 
     auto iter2 = version_to_file_map.find(version2);
@@ -204,48 +188,6 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     iter2 = version_to_file_map.find(new_version);
     EXPECT_TRUE(iter2 != version_to_file_map.end());
-}
-
-TEST_F(MetaFileTest, test_delvec_read_meta_cache) {
-    // 1. generate metadata
-    const int64_t tablet_id = 10003;
-    const uint32_t segment_id = 1234;
-    const int64_t version = 11;
-    auto tablet = std::make_shared<Tablet>(s_tablet_manager.get(), tablet_id);
-    auto metadata = std::make_shared<TabletMetadata>();
-    metadata->set_id(tablet_id);
-    metadata->set_version(version);
-    metadata->set_next_rowset_id(110);
-    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
-
-    // 2. write pk meta & delvec
-    MetaFileBuilder builder(*tablet, metadata);
-    DelVector dv;
-    dv.set_empty();
-    EXPECT_TRUE(dv.empty());
-
-    std::shared_ptr<DelVector> ndv;
-    std::vector<uint32_t> dels = {1, 3, 5, 7, 90000};
-    dv.add_dels_as_new_version(dels, version, &ndv);
-    EXPECT_FALSE(ndv->empty());
-    std::string before_delvec = ndv->save();
-    builder.append_delvec(ndv, segment_id);
-    Status st = builder.finalize(next_id());
-    EXPECT_TRUE(st.ok());
-
-    // 3. read delvec
-    MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, version), false);
-    auto tablet_meta_ptr =
-            s_tablet_manager->lookup_tablet_metadata(s_tablet_manager->tablet_metadata_location(tablet_id, version));
-    EXPECT_TRUE(tablet_meta_ptr != nullptr);
-    EXPECT_EQ(tablet_meta_ptr->id(), tablet_id);
-    // call load_by cache for test
-    EXPECT_TRUE(
-            reader.load_by_cache(s_tablet_manager->tablet_metadata_location(tablet_id, version), s_tablet_manager.get())
-                    .ok());
-    DelVector after_delvec;
-    EXPECT_TRUE(reader.get_del_vec(s_tablet_manager.get(), segment_id, &after_delvec).ok());
-    EXPECT_EQ(before_delvec, after_delvec.save());
 }
 
 TEST_F(MetaFileTest, test_delvec_read_loop) {
@@ -279,10 +221,9 @@ TEST_F(MetaFileTest, test_delvec_read_loop) {
         EXPECT_TRUE(st.ok());
 
         // 3. read delvec
-        MetaFileReader reader(s_tablet_manager->tablet_metadata_location(tablet_id, version), false);
-        EXPECT_TRUE(reader.load().ok());
         DelVector after_delvec;
-        EXPECT_TRUE(reader.get_del_vec(s_tablet_manager.get(), segment_id, &after_delvec).ok());
+        ASSIGN_OR_ABORT(auto meta, s_tablet_manager->get_tablet_metadata(tablet_id, version));
+        EXPECT_TRUE(get_del_vec(s_tablet_manager.get(), *meta, segment_id, &after_delvec).ok());
         EXPECT_EQ(before_delvec, after_delvec.save());
     };
     for (uint32_t segment_id = 1000; segment_id < 1200; segment_id++) {

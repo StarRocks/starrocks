@@ -79,24 +79,7 @@ private:
     std::shared_ptr<std::vector<std::string>> _trash_files;
 };
 
-class MetaFileReader {
-public:
-    explicit MetaFileReader(const std::string& filepath, bool fill_cache);
-    ~MetaFileReader() {}
-    // load tablet meta from file
-    Status load();
-    // try to load tablet meta from cache first, if not exist then load from file
-    Status load_by_cache(const std::string& filepath, TabletManager* tablet_mgr);
-    Status get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec);
-    StatusOr<TabletMetadataPtr> get_meta();
-
-private:
-    std::unique_ptr<RandomAccessFile> _access_file;
-    std::shared_ptr<TabletMetadata> _tablet_meta;
-    Status _err_status;
-    bool _load;
-};
-
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 
