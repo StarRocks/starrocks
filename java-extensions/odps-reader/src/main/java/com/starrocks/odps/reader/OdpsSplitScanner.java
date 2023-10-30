@@ -163,9 +163,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
     }
 
     private void read(OdpsBatchColumnValue odpsBatchColumnValue, int rowCount) {
-        for (int i = 0; i < rowCount; i++) {
-            List<OdpsColumnValue> columnValue = odpsBatchColumnValue.getColumnValue(i, rowCount);
-            for (int j = 0; j < requiredFields.length; j++) {
+        for (int j = 0; j < requiredFields.length; j++) {
+            List<OdpsColumnValue> columnValue = odpsBatchColumnValue.getColumnValue(j, rowCount);
+            for (int i = 0; i < rowCount; i++) {
                 appendData(j, columnValue.get(i));
             }
         }
