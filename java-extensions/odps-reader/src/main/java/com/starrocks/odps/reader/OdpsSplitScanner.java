@@ -34,6 +34,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -117,29 +118,56 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
     }
 
+    private int size = 0;
+    private ArrayDeque<OdpsBatchColumnValue> queue = new ArrayDeque<>();
+
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             int numRows = 0;
-            while (reader.hasNext() && numRows < fetchSize) {
+            // read record util size >= fetchSize
+            while (reader.hasNext()) {
+                if (size >= fetchSize) {
+                    break;
+                }
                 VectorSchemaRoot vectorSchemaRoot = reader.get();
-                int shouldRead = Math.min(vectorSchemaRoot.getRowCount(), fetchSize - numRows);
                 OdpsBatchColumnValue odpsBatchColumnValue =
                         new OdpsBatchColumnValue(vectorSchemaRoot, requireColumns);
-                for (int i = 0; i < requiredFields.length; i++) {
-                    List<OdpsColumnValue> columnValues = odpsBatchColumnValue.getColumnValue(i, shouldRead);
-                    for (OdpsColumnValue value : columnValues) {
-                        appendData(i, value);
-                    }
-                }
-                numRows += shouldRead;
+                queue.addLast(odpsBatchColumnValue);
+                int fetchRowCount = odpsBatchColumnValue.getRowCount();
+                size += fetchRowCount;
+                LOG.info("fetch {} rows, and cached {} rows left", fetchRowCount, size);
             }
+            int shouldRead = Math.min(size, fetchSize);
+            while (numRows < shouldRead) {
+                OdpsBatchColumnValue odpsBatchColumnValue = queue.getFirst();
+                int rowCount = odpsBatchColumnValue.getRowCount();
+                if (rowCount > shouldRead) {
+                    read(odpsBatchColumnValue, shouldRead);
+                    numRows += shouldRead;
+                } else {
+                    read(odpsBatchColumnValue, rowCount);
+                    numRows += rowCount;
+                    queue.removeFirst();
+                }
+            }
+            size -= numRows;
+            LOG.info("read {} rows, and cached {} rows left", numRows, size);
             return numRows;
         } catch (Exception e) {
             close();
-            String msg = "Failed to get the next off-heap table chunk of paimon.";
+            String msg = "Failed to get the next off-heap table chunk of odps.";
             LOG.error(msg, e);
             throw new IOException(msg, e);
+        }
+    }
+
+    private void read(OdpsBatchColumnValue odpsBatchColumnValue, int rowCount) {
+        for (int i = 0; i < rowCount; i++) {
+            List<OdpsColumnValue> columnValue = odpsBatchColumnValue.getColumnValue(i, rowCount);
+            for (int j = 0; j < requiredFields.length; j++) {
+                appendData(j, columnValue.get(i));
+            }
         }
     }
 

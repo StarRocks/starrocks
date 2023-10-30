@@ -26,7 +26,8 @@ import java.util.List;
  * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
  */
 public class OdpsBatchColumnValue {
-
+    private int rowCount;
+    private int offset;
     private Column[] columns;
     private ArrowVectorAccessor[] columnAccessors;
 
@@ -34,20 +35,34 @@ public class OdpsBatchColumnValue {
         this.columns = columns;
         columnAccessors = new ArrowVectorAccessor[columns.length];
         List<FieldVector> fieldVectors = root.getFieldVectors();
+        this.rowCount = root.getRowCount();
         for (int i = 0; i < fieldVectors.size(); i++) {
             columnAccessors[i] =
                     OdpsTypeUtils.createColumnVectorAccessor(fieldVectors.get(i), columns[i].getTypeInfo());
         }
     }
 
+    public int getRowCount() {
+        return rowCount - offset;
+    }
+
+    public int getOffset() {
+        return offset;
+    }
+
     public List<OdpsColumnValue> getColumnValue(int i, int limit) {
         try {
-            List<OdpsColumnValue> values = new ArrayList<>(limit);
-            for (int j = 0; j < limit; j++) {
+            List<OdpsColumnValue> values = new ArrayList<>(4096);
+            for (int j = offset; j < limit; j++) {
                 Object data = OdpsTypeUtils.getData(columnAccessors[i], columns[i].getTypeInfo(), j);
                 OdpsColumnValue odpsColumnValue = new OdpsColumnValue(data, columns[i].getTypeInfo());
-                values.add(odpsColumnValue);
+                if (odpsColumnValue.isNull()) {
+                    values.add(null);
+                } else {
+                    values.add(odpsColumnValue);
+                }
             }
+            offset += limit;
             return values;
         } catch (Exception e) {
             throw new RuntimeException(e);
