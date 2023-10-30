@@ -530,6 +530,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Description**: Whether to automatically set the number of buckets.
   - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
+- **Introduced in**: v3.2.0
 
 ##### storage_usage_soft_limit_percent
 
