@@ -400,6 +400,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
 
         AggregatePushDownContext childContext = new AggregatePushDownContext();
         childContext.aggregations.putAll(context.aggregations);
+        context.aggregations.clear();
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
