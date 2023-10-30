@@ -35,7 +35,6 @@ import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -267,7 +266,7 @@ public class QueryRuntimeProfile {
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
         if (topProfileSupplier != null && execPlan != null && connectContext != null &&
-                connectContext.getSessionVariable().isEnableProfile() &&
+                connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
                 // Interval * 0.95 * 1000 to allow a certain range of deviation
@@ -275,7 +274,7 @@ public class QueryRuntimeProfile {
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
             ExecPlan plan = execPlan;
-            profile.addChild(buildMergedQueryProfile());
+            profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             ProfileManager.getInstance().pushProfile(profilingPlan, profile);
         }
@@ -312,20 +311,8 @@ public class QueryRuntimeProfile {
         }
     }
 
-    public RuntimeProfile buildMergedQueryProfile() {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-        if (!sessionVariable.isEnableProfile()) {
-            return queryProfile;
-        }
-
-        if (!jobSpec.isEnablePipeline()) {
-            return queryProfile;
-        }
-
-        int profileLevel = sessionVariable.getPipelineProfileLevel();
-        if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
-            // We don't guarantee the detail level profile can work well with visualization feature.
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (!needMerge || !jobSpec.isEnablePipeline()) {
             return queryProfile;
         }
 

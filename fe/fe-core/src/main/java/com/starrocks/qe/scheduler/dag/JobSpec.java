@@ -102,7 +102,8 @@ public class JobSpec {
                     .descTable(descTable)
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
-                    .needReport(context.getSessionVariable().isEnableProfile())
+                    .needReport(context.getSessionVariable().isEnableProfile() ||
+                            context.getSessionVariable().isEnableBigQueryProfile())
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
