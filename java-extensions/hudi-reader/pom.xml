@@ -21,7 +21,7 @@
         <hadoop.version>3.3.6</hadoop.version>
         <hudi.version>0.12.2</hudi.version>
         <airlift.version>0.25</airlift.version>
-        <avro.version>1.11.2</avro.version>
+        <avro.version>1.11.3</avro.version>
         <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
 
