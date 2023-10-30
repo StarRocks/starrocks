@@ -83,9 +83,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
+            // TODO: check if with sessionId is need
             TableBatchReadSession scan = scanBuilder.identifier(TableIdentifier.of(projectName, tableName))
                     .withSettings(settings)
-                    .withSessionId(sessionId)
                     .requiredDataColumns(Arrays.asList(requiredFields))
                     .buildBatchReadSession();
             reader = scan.createArrowReader(
