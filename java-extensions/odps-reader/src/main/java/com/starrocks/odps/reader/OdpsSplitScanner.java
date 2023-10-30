@@ -18,6 +18,7 @@ import com.aliyun.odps.Column;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
+import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
 import com.aliyun.odps.table.configuration.ReaderOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
@@ -27,6 +28,7 @@ import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
+import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -34,7 +36,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -95,7 +96,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             reader = scan.createArrowReader(
                     new IndexedInputSplit(sessionId, splitIndex),
-                    ReaderOptions.newBuilder().withSettings(settings).build());
+                    ReaderOptions.newBuilder().withMaxBatchRowCount(fetchSize).withSettings(settings).build());
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
         } catch (Exception e) {
             close();
@@ -118,56 +119,39 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
     }
 
-    private int size = 0;
-    private ArrayDeque<OdpsBatchColumnValue> queue = new ArrayDeque<>();
-
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            int numRows = 0;
-            // read record util size >= fetchSize
-            while (reader.hasNext()) {
-                if (size >= fetchSize) {
-                    break;
-                }
+            if (reader.hasNext()) {
                 VectorSchemaRoot vectorSchemaRoot = reader.get();
-                OdpsBatchColumnValue odpsBatchColumnValue =
-                        new OdpsBatchColumnValue(vectorSchemaRoot, requireColumns);
-                queue.addLast(odpsBatchColumnValue);
-                int fetchRowCount = odpsBatchColumnValue.getRowCount();
-                size += fetchRowCount;
-                LOG.info("fetch {} rows, and cached {} rows left", fetchRowCount, size);
-            }
-            int shouldRead = Math.min(size, fetchSize);
-            while (numRows < shouldRead) {
-                OdpsBatchColumnValue odpsBatchColumnValue = queue.getFirst();
-                int rowCount = odpsBatchColumnValue.getRowCount();
-                if (rowCount > shouldRead) {
-                    read(odpsBatchColumnValue, shouldRead);
-                    numRows += shouldRead;
-                } else {
-                    read(odpsBatchColumnValue, rowCount);
-                    numRows += rowCount;
-                    queue.removeFirst();
+                List<FieldVector> fieldVectors = vectorSchemaRoot.getFieldVectors();
+                ArrowVectorAccessor[] columnAccessors = new ArrowVectorAccessor[requireColumns.length];
+                for (int i = 0; i < fieldVectors.size(); i++) {
+                    columnAccessors[i] =
+                            OdpsTypeUtils.createColumnVectorAccessor(fieldVectors.get(i),
+                                    requireColumns[i].getTypeInfo());
                 }
+                for (int rowId = 0; rowId < requireColumns.length; rowId++) {
+                    for (int index = 0; index < vectorSchemaRoot.getRowCount(); index++) {
+                        Object data = OdpsTypeUtils.getData(columnAccessors[rowId], requireColumns[rowId].getTypeInfo(),
+                                index);
+                        OdpsColumnValue odpsColumnValue =
+                                new OdpsColumnValue(data, requireColumns[rowId].getTypeInfo());
+                        if (odpsColumnValue.isNull()) {
+                            appendData(rowId, null);
+                        } else {
+                            appendData(rowId, odpsColumnValue);
+                        }
+                    }
+                }
+                return vectorSchemaRoot.getRowCount();
             }
-            size -= numRows;
-            LOG.info("read {} rows, and cached {} rows left", numRows, size);
-            return numRows;
+            return 0;
         } catch (Exception e) {
             close();
             String msg = "Failed to get the next off-heap table chunk of odps.";
             LOG.error(msg, e);
             throw new IOException(msg, e);
-        }
-    }
-
-    private void read(OdpsBatchColumnValue odpsBatchColumnValue, int rowCount) {
-        for (int j = 0; j < requiredFields.length; j++) {
-            List<OdpsColumnValue> columnValue = odpsBatchColumnValue.getColumnValue(j, rowCount);
-            for (int i = 0; i < rowCount; i++) {
-                appendData(j, columnValue.get(i));
-            }
         }
     }
 
