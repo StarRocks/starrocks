@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   backport:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     if: >
       github.event.pull_request.merged == true &&
       github.base_ref == 'main' && 
@@ -147,7 +147,7 @@ jobs:
           rm -rf ${{ github.workspace }}/*
 
   clean_ci_workflow:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     if: >
       github.event.pull_request.merged != true && github.base_ref == 'main'
     env:

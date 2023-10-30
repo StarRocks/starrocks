@@ -29,7 +29,7 @@ permissions:
 jobs:
 
   sync-checker:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     if: >
       !contains(github.event.pull_request.title, '(sync #') &&
       !contains(github.event.pull_request.labels.*.name, 'sync') &&
@@ -50,7 +50,7 @@ jobs:
 
   backport-check:
     needs: title-check
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
        startsWith(github.event.pull_request.title, '[Enhancement]')) &&
@@ -117,7 +117,7 @@ jobs:
           exit 1
 
   behavior-check:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     if: >
       !startsWith(github.event.pull_request.title, '[Doc]') && github.base_ref == 'main'
     steps:
@@ -168,7 +168,7 @@ jobs:
           labels: 'behavior_changed'
 
   automerge-check:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, quick ]
     needs: backport-check
     env:
       PR_NUMBER: ${{ github.event.number }}

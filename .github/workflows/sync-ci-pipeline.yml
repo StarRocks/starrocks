@@ -52,7 +52,7 @@ jobs:
           echo "LABELS=$labels" >> $GITHUB_OUTPUT
 
   sync-checker:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, sync-normal ]
     needs: pr-label
     if: >
       contains(github.event.pull_request.title, '(sync #') &&
@@ -67,7 +67,7 @@ jobs:
           echo "${{ github.head_ref }}"
 
   code-checker:
-    runs-on: ubuntu-latest
+    runs-on: [ self-hosted, sync-normal ]
     needs: sync-checker
     name: CODE FILTER
     outputs:

@@ -327,7 +327,7 @@ jobs:
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v0.7.5
+        uses: dbelyaev/action-checkstyle@v1.1.1
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
