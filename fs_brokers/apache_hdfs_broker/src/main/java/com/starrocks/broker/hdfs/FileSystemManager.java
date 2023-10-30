@@ -781,6 +781,8 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_COS_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_COS_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_COS_ENDPOINT, "");
+        String region = properties.getOrDefault("fs.cosn.trsf.fs.ofs.bucket.region", "");
+        String appid = properties.getOrDefault("fs.cosn.trsf.fs.ofs.user.appid", "");
         String disableCache = properties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
@@ -801,14 +803,26 @@ public class FileSystemManager {
                 // it is a corner case
                 return null;
             }
+
+
             if (fileSystem.getDFSFileSystem() == null) {
                 logger.info("could not find file system for path " + path + " create a new one");
+                logger.info("appid: " + appid + " region: " + region);
                 // create a new filesystem
                 Configuration conf = new Configuration();
+
+                for (String property : properties.keySet()) {
+                    conf.set(property, properties.get(property));
+                }
+
                 conf.set(FS_COS_ACCESS_KEY, accessKey);
                 conf.set(FS_COS_SECRET_KEY, secretKey);
                 conf.set(FS_COS_ENDPOINT, endpoint);
                 conf.set(FS_COS_IMPL, "org.apache.hadoop.fs.CosFileSystem");
+                conf.set("fs.cosn.trsf.fs.ofs.bucket.region", region);
+                conf.set("fs.cosn.trsf.fs.ofs.user.appid", appid);
+                conf.set("fs.cosn.trsf.fs.ofs.tmp.cache.dir", "/tmp");
+                conf.set("fs.cosn.credentials.provider", "org.apache.hadoop.fs.auth.RangerCredentialsProvider");
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
