@@ -788,10 +788,9 @@ public class DefaultCoordinator extends Coordinator {
             cancelInternal(reason);
         } finally {
             try {
-                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // Disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
-                if (connectContext.getSessionVariable().isEnableProfile() &&
-                        message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     queryProfile.finishAllInstances(Status.OK);
                     LOG.info("count down profileDoneSignal since backend has crashed, query id: {}",
                             DebugUtil.printId(jobSpec.getQueryId()));
@@ -813,7 +812,7 @@ public class DefaultCoordinator extends Coordinator {
         cancelRemoteFragmentsAsync(cancelReason);
         if (cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
             // count down to zero to notify all objects waiting for this
-            if (!connectContext.getSessionVariable().isEnableProfile()) {
+            if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
             }
         }
@@ -1021,8 +1020,8 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public RuntimeProfile buildMergedQueryProfile() {
-        return queryProfile.buildMergedQueryProfile();
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        return queryProfile.buildQueryProfile(needMerge);
     }
 
     /**
