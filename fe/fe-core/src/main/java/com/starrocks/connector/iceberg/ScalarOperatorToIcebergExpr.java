@@ -41,7 +41,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -384,7 +384,7 @@ public class ScalarOperatorToIcebergExpr {
                 case DATE:
                     return operator.getDate().toLocalDate().toEpochDay();
                 case DATETIME:
-                    long value = operator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset()) * 1000
+                    long value = operator.getDatetime().toEpochSecond(ZoneOffset.UTC) * 1000
                             * 1000 * 1000 + operator.getDatetime().getNano();
                     return TimeUnit.MICROSECONDS.convert(value, TimeUnit.NANOSECONDS);
                 default:
