@@ -77,7 +77,6 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiTypeToHiveTypeString;
-import static com.starrocks.connector.hive.HiveClassNames.COLUMNAR_SERDE_CLASS;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
 import static com.starrocks.connector.hive.RemoteFileInputFormat.fromHdfsInputFormatClass;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
@@ -326,12 +325,10 @@ public class HiveMetastoreApiConverter {
 
         String serdeLib = storageFormat.getSerde();
         if (!Strings.isNullOrEmpty(serdeLib)) {
-            // RCTEXT and RCBINARY has same input/output format class, but serde lib is not same
-            // In RemoteFileInputFormat, we use RCBINARY to represent RCFileInputFormat
-            // and set RCTEXT's serde lib explictly here
+            // metaStore has more accurate information about serde
             if (metastoreTable.getSd() != null && metastoreTable.getSd().getSerdeInfo() != null &&
-                    metastoreTable.getSd().getSerdeInfo().getSerializationLib().equals(COLUMNAR_SERDE_CLASS)) {
-                serdeLib = COLUMNAR_SERDE_CLASS;
+                    metastoreTable.getSd().getSerdeInfo().getSerializationLib() != null) {
+                serdeLib = metastoreTable.getSd().getSerdeInfo().getSerializationLib();
             }
             hiveProperties.put(HIVE_TABLE_SERDE_LIB, serdeLib);
         }

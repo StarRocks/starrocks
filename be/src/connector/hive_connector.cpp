@@ -616,7 +616,8 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["nested_fields"] = nested_fields;
     jni_scanner_params["data_file_path"] = data_file_path;
-    jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
+    jni_scanner_params["block_offset"] = std::to_string(scan_range.offset);
+    jni_scanner_params["block_length"] = std::to_string(scan_range.length);
     jni_scanner_params["serde"] = hdfs_table->get_serde_lib();
     jni_scanner_params["input_format"] = hdfs_table->get_input_format();
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
@@ -763,7 +764,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr) {
-        scanner = _create_hive_file_jni_scanner();
+        scanner = _create_file_table_jni_scanner();
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;

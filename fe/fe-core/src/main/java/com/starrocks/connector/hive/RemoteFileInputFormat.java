@@ -71,6 +71,8 @@ public enum RemoteFileInputFormat {
                 return THdfsFileFormat.AVRO;
             case RCBINARY:
                 return THdfsFileFormat.RC_BINARY;
+            case RCTEXT:
+                return THdfsFileFormat.RC_TEXT;
             case SEQUENCE:
                 return THdfsFileFormat.SEQUENCE_FILE;
             default:

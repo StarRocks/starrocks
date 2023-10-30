@@ -61,7 +61,9 @@ public class HiveScanner extends ConnectorScanner {
 
     private final String dataFilePath;
 
-    private final long dataFileLength;
+    private final long blockOffset;
+
+    private final long blockLength;
 
     private final String serde;
     private final String inputFormat;
@@ -81,7 +83,8 @@ public class HiveScanner extends ConnectorScanner {
         this.requiredFields = params.get("required_fields").split(",");
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.dataFilePath = params.get("data_file_path");
-        this.dataFileLength = Long.parseLong(params.get("data_file_length"));
+        this.blockOffset = Long.parseLong(params.get("block_offset"));
+        this.blockLength = Long.parseLong(params.get("block_length"));
         this.serde = params.get("serde");
         this.inputFormat = params.get("input_format");
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
@@ -163,7 +166,7 @@ public class HiveScanner extends ConnectorScanner {
 
     private void initReader(JobConf jobConf, Properties properties) throws Exception {
         Path path = new Path(dataFilePath);
-        FileSplit fileSplit = new FileSplit(path, 0, dataFileLength, (String[]) null);
+        FileSplit fileSplit = new FileSplit(path, blockOffset, blockLength, (String[]) null);
 
         InputFormat<?, ?> inputFormatClass = createInputFormat(jobConf, inputFormat);
         reader = (RecordReader<Writable, Writable>) inputFormatClass.getRecordReader(fileSplit, jobConf, Reporter.NULL);
@@ -228,8 +231,8 @@ public class HiveScanner extends ConnectorScanner {
             return numRows;
         } catch (Exception e) {
             close();
-            LOG.error("Failed to get the next off-heap table chunk of hudi.", e);
-            throw new IOException("Failed to get the next off-heap table chunk of hudi.", e);
+            LOG.error("Failed to get the next off-heap table chunk of hive.", e);
+            throw new IOException("Failed to get the next off-heap table chunk of hive.", e);
         }
     }
 
@@ -273,8 +276,10 @@ public class HiveScanner extends ConnectorScanner {
         sb.append("dataFilePath: ");
         sb.append(dataFilePath);
         sb.append("\n");
-        sb.append("dataFileLenth: ");
-        sb.append(dataFileLength);
+        sb.append("block_offset: ");
+        sb.append(blockOffset);
+        sb.append("block_length: ");
+        sb.append(blockLength);
         sb.append("\n");
         sb.append("serde: ");
         sb.append(serde);

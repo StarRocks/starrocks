@@ -1,22 +1,15 @@
 package com.starrocks.hive.reader;
 
 import com.starrocks.jni.connector.OffHeapTable;
-import org.apache.avro.Schema;
-import org.apache.avro.file.DataFileWriter;
-import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericRecord;
-import org.apache.avro.io.DatumWriter;
-import org.apache.avro.specific.SpecificDatumWriter;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
 
 public class TestHiveScanner {
 
@@ -34,43 +27,19 @@ public class TestHiveScanner {
         Map<String, String> params = new HashMap<>();
         URL resource = TestHiveScanner.class.getResource("/test_primitive_type");
         String basePath = resource.getPath().toString();
-        String filePath = basePath + "/basic.avro";
+        String filePath = basePath + "/row_1.avro";
         File file = new File(filePath);
-        params.put("data_file_path",filePath);
-        params.put("data_file_length", String.valueOf(file.length()));
+        params.put("data_file_path", filePath);
+        params.put("block_offset", "0");
+        params.put("block_length", String.valueOf(file.length()));
         params.put("hive_column_names",
-                "booleantype,longtype,doubletype,stringtype");
+                "col_tinyint,col_smallint,col_int,col_bigint,col_float,col_double,col_decimal,col_string,col_char,col_varchar,col_boolean,col_timestamp,col_date,col_array,col_map,col_struct");
         params.put("hive_column_types",
-                "boolean#bigint#double#string");
+                "int#int#int#bigint#float#double#decimal(10,2)#string#char(10)#varchar(20)#boolean#timestamp#date#array<string>#map<string,int>#struct<name:string,age:int>");
         params.put("input_format", "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat");
         params.put("serde", "org.apache.hadoop.hive.serde2.avro.AvroSerDe");
-        params.put("required_fields", "booleantype,longtype,doubletype,stringtype");
+        params.put("required_fields", "col_tinyint,col_smallint,col_int,col_bigint,col_float,col_double,col_decimal");
         return params;
-    }
-
-    public static void main(String[] args) throws IOException {
-        // 1. 定义Avro Schema
-        URL resource= TestHiveScanner.class.getResource("/test_primitive_type");
-        String basePath = resource.getPath().toString();
-
-        Schema schema = new Schema.Parser().parse(new File(basePath + "/avro_basic_schema.json"));
-
-
-        // 2. 创建Avro数据对象
-        GenericRecord person = new GenericData.Record(schema);
-        person.put("booleantype", true);
-        person.put("longtype", 4294967296L);
-        person.put("doubletype", 1.234567);
-        person.put("stringtype", "abcdefg");
-//        GenericData.EnumSymbol symbol = new GenericData.EnumSymbol(schema, "DIAMONDS");
-//        person.put("enumtype", symbol);
-
-        // 3. 将Avro数据对象序列化为二进制格式
-        DatumWriter<GenericRecord> datumWriter = new SpecificDatumWriter<>(schema);
-        DataFileWriter<GenericRecord> dataFileWriter = new DataFileWriter<>(datumWriter);
-        dataFileWriter.create(schema, new File(basePath + "/basic.avro"));
-        dataFileWriter.append(person);
-        dataFileWriter.close();
     }
 
     String runScanOnParams(Map<String, String> params) throws IOException {

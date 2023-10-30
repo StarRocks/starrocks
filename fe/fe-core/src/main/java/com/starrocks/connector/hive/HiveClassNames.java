@@ -50,6 +50,4 @@ public class HiveClassNames {
     public static final String SEQUENCE_OUTPUT_FORMAT_CLASS =
             "org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat";
 
-    public static final String SEQUENCE_SERDE_CLASS = "org.apache.hadoop.hive.serde2.avro.AvroSerDe";
-
 }
