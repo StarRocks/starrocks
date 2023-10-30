@@ -67,7 +67,7 @@ SET @var_name = expr [, ...];
 SET @id1 = 1, @country1 = 'USA', @city1 = 'New York', @revenue1 = 1000000;
 ```
 
-For more information, see [user-defined variables](./user_defined_variables.md).
+For more information, see [user-defined variables](../../reference/user_defined_variables.md).
 
 ### EXECUTE
 
