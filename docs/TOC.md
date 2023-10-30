@@ -750,7 +750,7 @@
   + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
-  + [Prepared statements](./sql-reference/sql-statements/prepare_statement.md)
+  + [Prepared statements](./sql-reference/sql-statements/prepared_statement.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
   + [AWS IAM policies](./reference/aws_iam_policies.md)
