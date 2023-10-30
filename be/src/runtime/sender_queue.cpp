@@ -584,6 +584,7 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
                     item.closure->Run();
                 }
             }
+            chunk_queue.clear();
         }
     }
 }
