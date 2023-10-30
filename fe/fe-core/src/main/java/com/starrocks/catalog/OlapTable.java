@@ -645,6 +645,9 @@ public class OlapTable extends Table {
             origIdxIdToName.put(entry.getValue(), entry.getKey());
         }
 
+        // reset table id
+        setId(globalStateMgr.getNextId());
+
         // reset all 'indexIdToXXX' map
         for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
             long newIdxId = globalStateMgr.getNextId();
