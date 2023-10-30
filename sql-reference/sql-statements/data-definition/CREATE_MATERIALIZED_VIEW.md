@@ -129,7 +129,7 @@ DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC [START (<start_time>)] [EVERY INTERVAL (<refresh_interval>)] | MANUAL]
+    [ASYNC [START (<start_time>)] [EVERY (INTERVAL <refresh_interval>)] | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
