@@ -6,8 +6,9 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 
 > **NOTICE**
 >
-> - Spark Load can not be used to load data into a Primary Key table.
-> -  In versions earlier than v2.5.9, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
+> Spark Load can not be used to load data into a Primary Key table.
+>
+> In versions earlier than v2.5.9, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
 
 ## Terminology explanation
 
