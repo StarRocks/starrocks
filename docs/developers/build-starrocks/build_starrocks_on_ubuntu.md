@@ -7,7 +7,7 @@ sudo apt-get update
 ```
 
 ```
-sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 -y
+sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 libbrotli1 -y
 ```
 
 ### Compiler
