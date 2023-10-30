@@ -228,15 +228,8 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
-<<<<<<< HEAD
-=======
-
-  106: optional bool enable_agg_spill_preaggregation;
-  107: optional i64 global_runtime_filter_build_max_size;
-  108: optional i64 runtime_filter_rpc_http_min_size;
 
   109: optional i64 big_query_profile_second_threshold;
->>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
 }
 
 
