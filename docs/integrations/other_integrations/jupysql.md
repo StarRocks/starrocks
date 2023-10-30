@@ -39,7 +39,7 @@ from sklearn_evaluation import plot
 
 **You'd need to make sure your StarRocks instance is up and reachable for the next stages.**
 
-**Note:** You will need to adjust the connection string according to the instance type you're trying to connect to (url, user, password). In the example below we've used a local instance. To learn more about it, check out [Introduction to StarRocks](../../introduction/StarRocks_intro.md).
+**Note:** You will need to adjust the connection string according to the instance type you're trying to connect to (url, user, password). In the example below we've used a local instance.
 
 ## Connecting to StarRocks via Jupysql
 
