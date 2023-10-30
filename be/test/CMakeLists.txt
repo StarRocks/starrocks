@@ -149,6 +149,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
+        ./formats/orc/orc_chunk_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
