@@ -15,10 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.*;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
@@ -40,6 +37,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -142,6 +140,17 @@ public class AstToSQLBuilder {
                 sqlBuilder.append("DISTINCT ");
             }
 
+            Map<FunctionCallExpr, String> selectFuncCallExprAliasMap = new HashMap<>();
+            for (SelectListItem selectListItem : selectList.getItems()) {
+                if (selectListItem.getExpr() != null
+                        && !(selectListItem.getExpr() instanceof FieldReference)
+                        && !(selectListItem.getExpr() instanceof SlotRef)
+                ) {
+                    selectFuncCallExprAliasMap.put((FunctionCallExpr)selectListItem.getExpr(),
+                            selectListItem.getAlias());
+                }
+            }
+
             List<String> selectListString = new ArrayList<>();
             if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
                 for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
@@ -161,7 +170,7 @@ public class AstToSQLBuilder {
                                     columnName));
                         }
                     } else {
-                        String aliasColumn = stmt.getSelectList().getItems().get(i).getAlias();
+                        String aliasColumn = selectFuncCallExprAliasMap.get(expr);
                         selectListString.add(
                                 aliasColumn == null ?
                                         visit(expr) : visit(expr) + " AS `" + aliasColumn + "`");
