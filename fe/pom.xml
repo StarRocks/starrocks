@@ -55,6 +55,7 @@ under the License.
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <odps.version>0.45.5-public</odps.version>
     </properties>
 
     <profiles>
@@ -154,13 +155,13 @@ under the License.
             <dependency>
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-core</artifactId>
-                <version>0.45.2-public</version>
+                <version>${odps.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>com.aliyun.odps</groupId>
                 <artifactId>odps-sdk-table-api</artifactId>
-                <version>0.45.2-public</version>
+                <version>${odps.version}</version>
             </dependency>
 
             <dependency>

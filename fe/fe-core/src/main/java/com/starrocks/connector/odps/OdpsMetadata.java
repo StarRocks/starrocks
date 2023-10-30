@@ -21,8 +21,10 @@ import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
+import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.InputSplitAssigner;
 import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
+import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
@@ -41,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -105,8 +108,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> columnNames, long limit) {
-        int rowsPerSplit = 5000;
-        List<InputSplitWithRowRange> splits = Lists.newArrayList();
+        List<InputSplit> splits;
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
@@ -116,23 +118,10 @@ public class OdpsMetadata implements ConnectorMetadata {
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(columnNames)
-                            .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
+                            .withSplitOptions(SplitOptions.createDefault())
                             .buildBatchReadSession();
             InputSplitAssigner assigner = scan.getInputSplitAssigner();
-            long totalRowCount = assigner.getTotalRowCount();
-            if (limit != -1) {
-                totalRowCount = Math.min(assigner.getTotalRowCount(), limit);
-            }
-            int numRecord = 0;
-            for (int i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
-                InputSplitWithRowRange splitByRowOffset =
-                        (InputSplitWithRowRange) assigner.getSplitByRowOffset(numRecord, i);
-                splits.add(splitByRowOffset);
-                numRecord = i;
-            }
-            InputSplitWithRowRange splitByRowOffset =
-                    (InputSplitWithRowRange) assigner.getSplitByRowOffset(numRecord, totalRowCount);
-            splits.add(splitByRowOffset);
+            splits = Arrays.asList(assigner.getAllSplits());
             RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(splits);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(odpsRemoteFileDesc);
             remoteFileInfo.setFiles(remoteFileDescs);

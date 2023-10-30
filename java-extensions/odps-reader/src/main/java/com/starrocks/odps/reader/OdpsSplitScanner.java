@@ -20,13 +20,12 @@ import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
 import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.ReaderOptions;
-import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.SplitReader;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
-import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
+import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.arrow.vector.VectorSchemaRoot;
@@ -46,8 +45,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
     private final String projectName;
     private final String tableName;
     private final String sessionId;
-    private final String startIndex;
-    private final String numRecords;
+    private final int splitIndex;
     private final String[] requiredFields;
     private final Column[] requireColumns;
     private final int fetchSize;
@@ -62,8 +60,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
         this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
         this.sessionId = params.get("session_id");
-        this.startIndex = params.get("start_index");
-        this.numRecords = params.get("num_record");
+        this.splitIndex = Integer.parseInt(params.get("split_index"));
 
         Account account = new AliyunAccount(params.get("access_id"), params.get("access_key"));
         Odps odps = new Odps(account);
@@ -89,11 +86,11 @@ public class OdpsSplitScanner extends ConnectorScanner {
             TableBatchReadSession scan = scanBuilder.identifier(TableIdentifier.of(projectName, tableName))
                     .withSettings(settings)
                     .withSessionId(sessionId)
-                    .withSplitOptions(SplitOptions.createDefault())
+                    .requiredDataColumns(Arrays.asList(requiredFields))
                     .buildBatchReadSession();
             reader = scan.createArrowReader(
-                    new RowRangeInputSplit(sessionId, Long.parseLong(startIndex), Long.parseLong(numRecords)),
-                    ReaderOptions.newBuilder().build());
+                    new IndexedInputSplit(sessionId, splitIndex),
+                    ReaderOptions.newBuilder().withSettings(settings).build());
         } catch (Exception e) {
             close();
             String msg = "Failed to open the odps reader.";
@@ -147,11 +144,8 @@ public class OdpsSplitScanner extends ConnectorScanner {
         sb.append("projectName: ");
         sb.append(projectName);
         sb.append("\n");
-        sb.append("numRecords: ");
-        sb.append(numRecords);
-        sb.append("\n");
-        sb.append("startIndex: ");
-        sb.append(startIndex);
+        sb.append("splitIndex: ");
+        sb.append(splitIndex);
         sb.append("\n");
         sb.append("tableName: ");
         sb.append(tableName);
