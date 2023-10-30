@@ -27,8 +27,7 @@ public class HudiSliceScannerFactory implements ScannerFactory {
     static {
         String basePath = System.getenv("STARROCKS_HOME");
         List<File> preloadFiles = new ArrayList();
-        // It does not work, because hudi scanner use hadoop 2.x
-        //        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
+        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
         File dir = new File(basePath + "/lib/hudi-reader-lib");
         for (File f : dir.listFiles()) {
             preloadFiles.add(f);
