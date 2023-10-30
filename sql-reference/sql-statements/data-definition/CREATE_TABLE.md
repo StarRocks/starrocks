@@ -651,7 +651,7 @@ PROPERTIES (
 
 ```sql
 ALTER TABLE example_db.my_table
-SET ("replicated_storage" = "false");
+SET ("replicated_storage" = "true");
 ```
 
 #### 建表时批量创建多个 Rollup
