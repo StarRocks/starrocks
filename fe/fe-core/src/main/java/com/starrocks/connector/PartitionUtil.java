@@ -53,6 +53,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -67,10 +68,13 @@ import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -658,6 +662,14 @@ public class PartitionUtil {
 
             Class<?> clazz = spec.javaClasses()[i];
             String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+
+            // currently starrocks date literal only support local datetime
+            org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
+            if (icebergType.equals(Types.TimestampType.withZone())) {
+                value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
+            }
+
             partitionValues.add(value);
         }
 

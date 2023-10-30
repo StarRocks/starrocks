@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.RemoteFileDesc;
@@ -57,9 +58,12 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -180,7 +184,53 @@ public class IcebergScanNode extends ScanNode {
         return result;
     }
 
+<<<<<<< HEAD
     public void setupScanRangeLocations() throws UserException {
+=======
+    public static BiMap<Integer, PartitionField> getIdentityPartitions(PartitionSpec partitionSpec) {
+        // TODO: expose transform information in Iceberg library
+        BiMap<Integer, PartitionField> columns = HashBiMap.create();
+        if (!ConnectContext.get().getSessionVariable().getEnableIcebergIdentityColumnOptimize()) {
+            return columns;
+        }
+        for (int i = 0; i < partitionSpec.fields().size(); i++) {
+            PartitionField field = partitionSpec.fields().get(i);
+            if (field.transform().isIdentity()) {
+                columns.put(i, field);
+            }
+        }
+        return columns;
+    }
+
+    private PartitionKey getPartitionKey(StructLike partition, PartitionSpec spec, List<Integer> indexes,
+                                         BiMap<Integer, PartitionField> indexToField) throws AnalysisException {
+        List<String> partitionValues = new ArrayList<>();
+        List<Column> cols = new ArrayList<>();
+        indexes.forEach((index) -> {
+            PartitionField field = indexToField.get(index);
+            int id = field.sourceId();
+            org.apache.iceberg.types.Type type = spec.schema().findType(id);
+            Class<?> javaClass = type.typeId().javaClass();
+
+            String partitionValue;
+            partitionValue = field.transform().toHumanString(type,
+                    PartitionUtil.getPartitionValue(partition, index, javaClass));
+
+            // currently starrocks date literal only support local datetime
+            if (type.equals(Types.TimestampType.withZone())) {
+                partitionValue = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        PartitionUtil.getPartitionValue(partition, index, javaClass)).toLocalDateTime().toString();
+            }
+            partitionValues.add(partitionValue);
+
+            cols.add(srIcebergTable.getColumn(field.name()));
+        });
+
+        return PartitionUtil.createPartitionKey(partitionValues, cols, Table.TableType.ICEBERG);
+    }
+
+    public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
+>>>>>>> de13b3b7a0 ([BugFix] fix iceberg timestamptz type to partitionkey (#33911))
         Optional<Snapshot> snapshot = Optional.ofNullable(srIcebergTable.getNativeTable().currentSnapshot());
         if (!snapshot.isPresent()) {
             LOG.warn(String.format("Table %s has no snapshot!", srIcebergTable.getRemoteTableName()));
