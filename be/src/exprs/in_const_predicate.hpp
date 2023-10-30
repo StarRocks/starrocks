@@ -363,6 +363,17 @@ public:
 
     bool is_use_array() const { return _array_size != 0; }
 
+    size_t num_values() const {
+        size_t cnt = _null_in_set;
+        if (is_use_array()) {
+            cnt += SIMD::count_nonzero(_array_buffer);
+        } else {
+            cnt += _hash_set.size();
+        }
+
+        return cnt;
+    }
+
 private:
     // Note(yan): It's very tempting to use real bitmap, but the real scenario is, the array size is usually small like dict codes.
     // To usse real bitmap involves bit shift, and/or ops, which eats much cpu cycles.
@@ -525,6 +536,8 @@ public:
     void set_null_in_set(bool v) { _null_in_set = v; }
     void set_is_not_in(bool v) { _is_not_in = v; }
     ExprContext* get_in_const_predicate() const { return _in_pred_ctx; }
+
+    size_t num_values() const;
 
 private:
     ExprContext* _create();

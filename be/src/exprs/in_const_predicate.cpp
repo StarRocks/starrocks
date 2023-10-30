@@ -139,4 +139,18 @@ void VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, size
     }
 }
 
+struct NumValuesRetriever {
+    template <LogicalType ltype>
+    size_t operator()(const Expr* expr) {
+        const auto* in_pred = down_cast<const VectorizedInConstPredicate<ltype>*>(expr);
+        return in_pred->num_values();
+    }
+};
+
+size_t VectorizedInConstPredicateBuilder::num_values() const {
+    LogicalType ltype = _expr->type().type;
+    const Expr* expr = _in_pred_ctx->root();
+    return type_dispatch_basic(ltype, NumValuesRetriever(), expr);
+}
+
 } // namespace starrocks

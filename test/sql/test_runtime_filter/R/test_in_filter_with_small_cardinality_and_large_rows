@@ -1,0 +1,124 @@
+-- name: test_in_filter_with_small_cardinality_and_large_rows
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+create table t1 (
+    k1 int,
+    k2 int,
+    c1 string
+)
+duplicate key(k1, k2)
+distributed by hash(k1) buckets 48
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table t2_base (
+    k1 int,
+    k2 int,
+    c1 string
+)
+duplicate key(k1, k2)
+distributed by hash(k1) buckets 48
+properties("replication_num" = "1");
+-- result:
+-- !result
+create table t2 (
+    k1 int,
+    k2 int,
+    c1 string
+)
+duplicate key(k1, k2)
+distributed by hash(k1) buckets 48
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1
+    select generate_series, generate_series + 10000, concat('a', generate_series) from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into t2_base select * from t1 where k1 in (0, 9999); -- 2 rows
+insert into t2_base select * from t2_base; -- 4 rows
+insert into t2_base select * from t2_base; -- 8 rows
+insert into t2_base select * from t2_base; -- 16 rows
+insert into t2_base select * from t2_base; -- 32 rows
+insert into t2_base select * from t2_base; -- 64 rows
+insert into t2_base select * from t2_base; -- 128 rows
+insert into t2_base select * from t2_base; -- 256 rows
+insert into t2_base select * from t2_base; -- 512 rows
+insert into t2_base select * from t2_base; -- 1024 rows
+insert into t2_base select * from t2_base; -- 2048 rows
+insert into t2_base select * from t2_base; -- 4096 rows
+insert into t2 select * from t2_base;
+-- result:
+-- !result
+select /*+SET_VAR(pipeline_profile_level=1)*/
+    sum(murmur_hash3_32(t1.k1)), sum(murmur_hash3_32(t1.k2)), sum(murmur_hash3_32(t1.c1)), 
+    sum(murmur_hash3_32(t2.k1)), sum(murmur_hash3_32(t2.k2)), sum(murmur_hash3_32(t2.c1))
+from t1 join [broadcast] t2 using(k1);
+-- result:
+-2626106402816	-3665105876992	-182825129984	-2626106402816	-3665105876992	-182825129984
+-- !result
+with 
+    profile as (
+        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+    ), result as (
+        -- format: "RawRowsRead: 9.009K (9009)" or "RawRowsRead: 100"
+        select "RawRowsRead" as `key`, regexp_extract(line, ".*- RawRowsRead: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RawRowsRead%"
+        UNION ALL
+        select "RowsRead" as `key`, regexp_extract(line, ".*- RowsRead: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RowsRead%"
+        UNION ALL
+        select "SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- SegmentZoneMapFilterRows%"
+        UNION ALL
+        select "ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- ShortKeyFilterRows%"
+        UNION ALL
+        select "UsedBuildBuckets" as `key`, regexp_extract(line, ".*- UsedBuildBuckets: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- UsedBuildBuckets%"
+    )
+select * from result order by `key`, value;
+-- result:
+RawRowsRead	2
+RawRowsRead	4096
+RowsRead	2
+RowsRead	4096
+SegmentZoneMapFilterRows	0
+SegmentZoneMapFilterRows	9573
+ShortKeyFilterRows	0
+ShortKeyFilterRows	425
+UsedBuildBuckets	6
+-- !result
+select /*+SET_VAR(pipeline_profile_level=1,runtime_in_filter_build_max_size=1024)*/
+    sum(murmur_hash3_32(t1.k1)), sum(murmur_hash3_32(t1.k2)), sum(murmur_hash3_32(t1.c1)), 
+    sum(murmur_hash3_32(t2.k1)), sum(murmur_hash3_32(t2.k2)), sum(murmur_hash3_32(t2.c1))
+from t1 join [broadcast] t2 using(k1);
+-- result:
+-2626106402816	-3665105876992	-182825129984	-2626106402816	-3665105876992	-182825129984
+-- !result
+with 
+    profile as (
+        select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n") )
+    ), result as (
+        -- format: "RawRowsRead: 9.009K (9009)" or "RawRowsRead: 100"
+        select "RawRowsRead" as `key`, regexp_extract(line, ".*- RawRowsRead: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RawRowsRead%"
+        UNION ALL
+        select "RowsRead" as `key`, regexp_extract(line, ".*- RowsRead: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- RowsRead%"
+        UNION ALL
+        select "SegmentZoneMapFilterRows" as `key`, regexp_extract(line, ".*- SegmentZoneMapFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- SegmentZoneMapFilterRows%"
+        UNION ALL
+        select "ShortKeyFilterRows" as `key`, regexp_extract(line, ".*- ShortKeyFilterRows: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- ShortKeyFilterRows%"
+        UNION ALL
+        select "UsedBuildBuckets" as `key`, regexp_extract(line, ".*- UsedBuildBuckets: (?:.*\\()?(\\d+)\\)?", 1) as value from profile where line like "%- UsedBuildBuckets%"
+    )
+select * from result order by `key`, value;
+-- result:
+RawRowsRead	10000
+RawRowsRead	4096
+RowsRead	10000
+RowsRead	4096
+SegmentZoneMapFilterRows	0
+SegmentZoneMapFilterRows	0
+ShortKeyFilterRows	0
+ShortKeyFilterRows	0
+UsedBuildBuckets	6
+-- !result

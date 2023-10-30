@@ -761,6 +761,7 @@ public:
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     float get_keys_per_bucket() const;
+    size_t get_num_used_buckets() const;
     void remove_duplicate_index(Filter* filter);
 
     int64_t mem_usage() const;
