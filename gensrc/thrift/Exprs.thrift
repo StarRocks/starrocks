@@ -83,6 +83,7 @@ enum TExprNodeType {
   BINARY_LITERAL,
   MAP_EXPR,
   DICT_QUERY_EXPR,
+  JIT_EXPR,
 }
 
 struct TAggregateExpr {
