@@ -150,17 +150,9 @@ private:
     // record the "__op" column's index
     int _op_col_index;
 
-    std::unique_ptr<char> _payload_buffer;
+    std::unique_ptr<char[]> _payload_buffer;
     size_t _payload_buffer_size;
     size_t _payload_buffer_capacity;
-
-    // only used in unit test.
-    // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
-    //       Import a json library supporting streaming parse.
-#if BE_TEST
-    size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
-    raw::RawVector<char> _buf;
-#endif
 };
 
 } // namespace starrocks

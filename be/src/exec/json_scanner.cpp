@@ -343,10 +343,6 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
           _payload_buffer(nullptr),
           _payload_buffer_size(0),
           _payload_buffer_capacity(0) {
-#if BE_TEST
-    raw::RawVector<char> buf(_buf_size);
-    std::swap(buf, _buf);
-#endif
     int index = 0;
     for (const auto& desc : _slot_descs) {
         if (desc == nullptr) {
@@ -772,16 +768,15 @@ Status JsonReader::_check_ndjson() {
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_and_parse_json() {
 #ifdef BE_TEST
+    _payload_buffer_capacity = 1024 * 1024;
+    _payload_buffer.reset(new char[_payload_buffer_capacity]);
 
-    [[maybe_unused]] size_t message_size = 0;
-    ASSIGN_OR_RETURN(auto nread, _file->read(_buf.data(), _buf_size));
+    ASSIGN_OR_RETURN(auto nread, _file->read(_payload_buffer.get(), _payload_buffer_capacity));
     if (nread == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
 
-    _payload_buffer.reset(_buf.data());
     _payload_buffer_size = nread;
-    _payload_buffer_capacity = nread;
 #else
     const auto& file_type = _scanner->_scan_range.ranges[0].file_type;
     if (file_type == TFileType::FILE_STREAM) {
