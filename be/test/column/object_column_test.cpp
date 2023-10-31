@@ -23,7 +23,6 @@
 #include "runtime/types.h"
 #include "types/hll.h"
 #include "util/percentile_value.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -164,8 +163,8 @@ TEST(ObjectColumnTest, test_append_value_multiple_times) {
     }
     src_col->append(&bitmap);
 
-    deep_copy_col->append_value_multiple_times(*src_col, 0, 4, true);
-    shallow_copy_col->append_value_multiple_times(*src_col, 0, 4, false);
+    deep_copy_col->append_value_multiple_times(*src_col, 0, 4);
+    shallow_copy_col->append_value_multiple_times(*src_col, 0, 4);
     src_col->get_object(0)->add(64);
 
     for (size_t i = 0; i < 4; i++) {
