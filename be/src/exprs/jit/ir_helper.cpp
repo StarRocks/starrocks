@@ -60,7 +60,7 @@ StatusOr<llvm::Type*> IRHelper::logical_to_ir_type(llvm::IRBuilder<>& b, const L
     case TYPE_VARBINARY:
     default:
         // Not supported.
-        return Status::JitCompileError("Type not supported.");
+        return Status::NotSupported("JIT type not supported.");
     }
 }
 
@@ -98,7 +98,7 @@ StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const Lo
     case TYPE_VARBINARY:
     default:
         // Not supported.
-        return Status::JitCompileError("Type not supported.");
+        return Status::NotSupported("JIT type not supported.");
     }
 }
 
@@ -134,7 +134,7 @@ StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const Lo
     case TYPE_VARBINARY:
     default:
         // Not supported.
-        return Status::JitCompileError("Type not supported.");
+        return Status::NotSupported("JIT type not supported.");
     }
 }
 
@@ -167,7 +167,7 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
     }
 
     // Not supported.
-    return Status::JitCompileError("Cast Not supported.");
+    return Status::NotSupported("JIT cast type not supported.");
 }
 
 } // namespace starrocks

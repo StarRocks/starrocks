@@ -690,7 +690,7 @@ ColumnRef* Expr::get_column_ref() {
 StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                       const std::vector<LLVMDatum>& datums) const {
     if (!is_compilable()) {
-        return Status::JitCompileError("Expr not supported");
+        return Status::NotSupported("JIT expr not supported");
     }
 
     ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
