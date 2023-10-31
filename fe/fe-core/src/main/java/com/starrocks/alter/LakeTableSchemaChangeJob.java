@@ -636,12 +636,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 // modify column
                 for (Column col : shadowSchema) {
                     if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
-<<<<<<< HEAD
                         modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
-=======
-                        modifiedColumns.add(
-                                col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, col.getName()));
->>>>>>> 4fea6af47a ([BugFix] Potential schema change concurrency issue in shared data mode (#33809))
                     }
                 }
             } else if (shadowSchema.size() < originSchema.size()) {
