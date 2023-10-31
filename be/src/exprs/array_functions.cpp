@@ -763,7 +763,7 @@ private:
                                                      std::is_same_v<StructColumn, ElementColumn>,
                                              uint8_t, typename ElementColumn::ValueType>;
         if (element_end < target_end) {
-           return false;
+            return false;
         }
         bool found = false;
         size_t i = target_start;
