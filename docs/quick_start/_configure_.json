@@ -1,0 +1,7 @@
+{
+  "position": 50,
+  "label": "Quick Start",
+  "collapsible": true,
+  "collapsed": true,
+  "link": { "type": "doc", "id": "quick_start/Concepts" }
+}
