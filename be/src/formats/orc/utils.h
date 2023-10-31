@@ -53,7 +53,7 @@ public:
 // orc timestamp is millseconds since unix epoch time.
 // timestamp conversion is quite tricky, because it involves timezone info,
 // and it affects how we interpret `value`. according to orc v1 spec
-// https://orc.apache.org/specification/ORCv1/ writer timezoe  is in stripe footer.
+// https://orc.apache.org/specification/ORCv1/ writer timezone is in stripe footer.
 
 // time conversion involves two aspects:
 // 1. timezone (UTC/GMT and local timezone)
@@ -96,6 +96,13 @@ public:
                 orc_ts_to_native_ts_before_unix_epoch(tv, cctz::utc_time_zone(), seconds, nanoseconds);
             }
         }
+    }
+
+    static void native_ts_to_orc_ts(const TimestampValue& tv, int64_t& seconds, int64_t& nanoseconds) {
+        Timestamp time = tv._timestamp & TIMESTAMP_BITS_TIME;
+        uint64_t microseconds = time % USECS_PER_SEC;
+        seconds = tv.to_unix_second();
+        nanoseconds = microseconds * 1000;
     }
 };
 
