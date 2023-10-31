@@ -135,12 +135,10 @@ public class OdpsSplitScanner extends ConnectorScanner {
                     for (int index = 0; index < vectorSchemaRoot.getRowCount(); index++) {
                         Object data = OdpsTypeUtils.getData(columnAccessors[rowId], requireColumns[rowId].getTypeInfo(),
                                 index);
-                        OdpsColumnValue odpsColumnValue =
-                                new OdpsColumnValue(data, requireColumns[rowId].getTypeInfo());
-                        if (odpsColumnValue.isNull()) {
+                        if (data == null) {
                             appendData(rowId, null);
                         } else {
-                            appendData(rowId, odpsColumnValue);
+                            appendData(rowId, new OdpsColumnValue(data, requireColumns[rowId].getTypeInfo()));
                         }
                     }
                 }

@@ -25,6 +25,10 @@ import com.starrocks.catalog.Type;
  * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
  */
 public class EntityConvertUtils {
+
+    public static final int MAX_DECIMAL32_PRECISION = 9;
+    public static final int MAX_DECIMAL64_PRECISION = 18;
+
     public static Type convertType(TypeInfo typeInfo) {
         switch (typeInfo.getOdpsType()) {
             case BIGINT:
@@ -39,8 +43,16 @@ public class EntityConvertUtils {
                 return Type.FLOAT;
             case DECIMAL:
                 DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
-                return ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, Math.min(38,
-                        decimalTypeInfo.getPrecision()), decimalTypeInfo.getScale());
+                int precision = decimalTypeInfo.getPrecision();
+                PrimitiveType type;
+                if (precision <= MAX_DECIMAL32_PRECISION) {
+                    type = PrimitiveType.DECIMAL32;
+                } else if (precision <= MAX_DECIMAL64_PRECISION) {
+                    type = PrimitiveType.DECIMAL64;
+                } else {
+                    type = PrimitiveType.DECIMAL128;
+                }
+                return ScalarType.createDecimalV3Type(type, decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
             case DOUBLE:
                 return Type.DOUBLE;
             case CHAR:
