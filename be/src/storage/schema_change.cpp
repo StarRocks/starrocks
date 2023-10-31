@@ -747,7 +747,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         // pk table can handle the case that convert version > request version, duplicate versions will be skipped
         int64_t request_version = request.alter_version;
-        int64_t base_max_version = base_tablet->max_version().first;
+        int64_t base_max_version = base_tablet->max_version().second;
         if (base_max_version > request_version) {
             LOG(INFO) << _alter_msg_header << " base_tablet's max_version:" << base_max_version
                       << " > request_version:" << request_version
