@@ -610,11 +610,10 @@ public class Config extends ConfigBase {
     public static int http_max_chunk_size = 8192;
 
     /**
-     * If this time is exceeded when requesting the http service, a log will be output to remind you to determine
-     * the problem. Normally, the execution time of the metrics interface should not exceed 5 seconds.
+     * If a request takes longer than the configured time, a log will be generated to trace it.
      */
     @ConfField(mutable = true)
-    public static int http_execution_time_ms_slowdown_threshold = 5000;
+    public static int http_slow_request_threshold_ms = 5000;
 
     /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through

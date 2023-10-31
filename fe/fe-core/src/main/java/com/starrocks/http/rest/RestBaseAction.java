@@ -94,9 +94,9 @@ public class RestBaseAction extends BaseAction {
         }
         long endTime = System.currentTimeMillis();
         long elapsedTime = endTime - startTime;
-        if (elapsedTime > Config.http_execution_time_ms_slowdown_threshold) {
+        if (elapsedTime > Config.http_slow_request_threshold_ms) {
             LOG.warn("Execution uri={} time exceeded {} ms and took {} ms.", request.getRequest().uri(),
-                    Config.http_execution_time_ms_slowdown_threshold, elapsedTime);
+                    Config.http_slow_request_threshold_ms, elapsedTime);
         }
     }
 
