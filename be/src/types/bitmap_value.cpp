@@ -470,10 +470,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
             _type = BITMAP;
             break;
         case BITMAP: {
-            BitmapValue rhs_bitmap(rhs);
-            *rhs_bitmap._bitmap -= *_bitmap;
-            *_bitmap -= *rhs._bitmap;
-            *_bitmap |= *rhs_bitmap._bitmap;
+            *_bitmap ^= *rhs._bitmap;
             break;
         }
         case SET: {
