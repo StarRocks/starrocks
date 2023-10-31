@@ -114,6 +114,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -368,8 +369,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         for (String partitionName : partitionsToRefresh) {
             mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
         }
+        Comparator<Range<PartitionKey>> cmp =
+                mvContext.isPartitionRefreshReverse() ?
+                        RangeUtils.RANGE_COMPARATOR.reversed() : RangeUtils.RANGE_COMPARATOR;
         LinkedHashMap<String, Range<PartitionKey>> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(RangeUtils.RANGE_COMPARATOR))
+                .sorted(Map.Entry.comparingByValue(cmp))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
         Iterator<String> partitionNameIter = sortedPartition.keySet().iterator();
@@ -379,11 +383,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
         }
         String nextPartitionStart = null;
+        String startPartitionName = null;
         String endPartitionName = null;
         if (partitionNameIter.hasNext()) {
-            String startPartitionName = partitionNameIter.next();
-            Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
-            nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
+            startPartitionName = partitionNameIter.next();
             endPartitionName = startPartitionName;
             partitionsToRefresh.remove(endPartitionName);
         }
@@ -392,6 +395,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             partitionsToRefresh.remove(endPartitionName);
         }
 
+        // swap the start and end
+        if (mvContext.isPartitionRefreshReverse()) {
+            String tmp = startPartitionName;
+            startPartitionName = endPartitionName;
+            endPartitionName = tmp;
+        }
+
+        Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
+        nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
         mvContext.setNextPartitionStart(nextPartitionStart);
 
         if (endPartitionName != null) {

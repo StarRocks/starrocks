@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
@@ -62,6 +63,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -73,6 +75,7 @@ import org.junit.rules.TemporaryFolder;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -2062,8 +2065,9 @@ public class PartitionBasedMvRefreshProcessorTest {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
         taskRun.executeTaskRun();
-        materializedView.getTableProperty().setPartitionRefreshNumber(3);
+        materializedView.getTableProperty().setPartitionRefreshNumber(1);
         PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
 
         MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
@@ -2081,6 +2085,84 @@ public class PartitionBasedMvRefreshProcessorTest {
         mvContext = processor.getMvContext();
         Assert.assertNull(mvContext.getNextPartitionStart());
         Assert.assertNull(mvContext.getNextPartitionEnd());
+    }
+
+    @Test
+    public void testReversedRefresh() throws Exception {
+        // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
+        // PARTITION p1 values [('2022-01-01'),('2022-02-01'))
+        // PARTITION p2 values [('2022-02-01'),('2022-03-01'))
+        // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
+        // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        String mvName = "mv_reverse_refresh";
+        starRocksAssert.withMaterializedView("create materialized view test.mv_reverse_refresh\n" +
+                "partition by k1\n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+
+        taskRun.executeTaskRun();
+        materializedView.getTableProperty().setPartitionRefreshNumber(1);
+        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
+
+        MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
+        processor.setMvContext(mvContext);
+
+        Set<String> allPartitions = new HashSet<>(materializedView.getPartitionNames());
+
+        // forward refresh
+        {
+            Set<String> refreshedPartitions = new HashSet<>();
+
+            // round 1
+            Set<String> toRefresh = new HashSet<>(allPartitions);
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p0"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 2
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p1"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 3
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p2"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+        }
+
+        // reversed refresh
+        {
+            mvContext.setPartitionRefreshReverse(true);
+            Set<String> refreshedPartitions = new HashSet<>();
+
+            // round 1
+            Set<String> toRefresh = new HashSet<>(allPartitions);
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p4"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 2
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p3"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 3
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p2"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+        }
     }
 
     @Test
