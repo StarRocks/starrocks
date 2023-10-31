@@ -482,25 +482,8 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-<<<<<<< HEAD
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
-                            writeProfile(beginTimeInNanoSecond);
-=======
-                        boolean isAsync = false;
                         if (!needRetry && context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan);
-                            if (parsedStmt.isExplain() &&
-                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                handleExplainStmt(ExplainAnalyzer.analyze(
-                                        ProfilingExecPlan.buildFrom(execPlan), profile, null));
-                            }
-                        }
-                        if (isAsync) {
-                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                                    context.getSessionVariable().getProfileTimeout() * 1000L);
-                        } else {
-                            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
->>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
+                            writeProfile(beginTimeInNanoSecond);
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                     }
@@ -607,7 +590,7 @@ public class StmtExecutor {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
             handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.isProfileEnabled()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             if (context.getState().getStateType() == MysqlStateType.ERR) {
@@ -655,43 +638,6 @@ public class StmtExecutor {
         if (context.getQueryDetail() != null) {
             context.getQueryDetail().setProfile(profileContent);
         }
-<<<<<<< HEAD
-=======
-        // This process will get information from the context, so it must be executed synchronously.
-        // Otherwise, the context may be changed, for example, containing the wrong query id.
-        profile = buildTopLevelProfile();
-
-        long profileCollectStartTime = System.currentTimeMillis();
-        long startTime = context.getStartTime();
-        TUniqueId executionId = context.getExecutionId();
-        QueryDetail queryDetail = context.getQueryDetail();
-        boolean needMerge = context.needMergeProfile();
-
-        // DO NOT use context int the async task, because the context is shared among consecutive queries.
-        // profile of query1 maybe executed when query2 is under execution.
-        Consumer<Boolean> task = (Boolean isAsync) -> {
-            RuntimeProfile summaryProfile = profile.getChild("Summary");
-            summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
-                    DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
-            summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
-            profile.addChild(coord.buildQueryProfile(needMerge));
-
-            // Update TotalTime to include the Profile Collect Time and the time to build the profile.
-            long now = System.currentTimeMillis();
-            long totalTimeMs = now - startTime;
-            summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
-            summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
-
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
-            if (queryDetail != null) {
-                queryDetail.setProfile(profileContent);
-            }
-            QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
-            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
-        };
-        return coord.tryProcessProfileAsync(task);
->>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
     }
 
     // Analyze one statement to structure in memory.
@@ -1335,24 +1281,8 @@ public class StmtExecutor {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
             throw t;
         } finally {
-<<<<<<< HEAD
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(beginTimeInNanoSecond);
-=======
-            boolean isAsync = false;
             if (context.isProfileEnabled()) {
-                isAsync = tryProcessProfileAsync(execPlan);
-                if (parsedStmt.isExplain() &&
-                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
-                }
-            }
-            if (isAsync) {
-                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                        context.getSessionVariable().getProfileTimeout() * 1000L);
-            } else {
-                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
->>>>>>> 0e2d0569a4 ([Enhancement] Support profile for only big query (#33825))
+                writeProfile(beginTimeInNanoSecond);
             }
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
