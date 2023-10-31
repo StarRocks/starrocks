@@ -236,15 +236,16 @@ public class RoutineLoadMgr implements Writable {
                         + dbName);
             }
             long allSlotNum = beNum * Config.max_routine_load_task_num_per_be;
+            // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                        RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED));
-            long curSlotNum = 0;
+                        RoutineLoadJob.JobState.RUNNING));
+            long curTaskNum = 0;
             for (RoutineLoadJob job : jobs) {
-                curSlotNum += job.calculateCurrentConcurrentTaskNum();
+                curTaskNum += job.calculateCurrentConcurrentTaskNum();
             }
             int needSlotNum = routineLoadJob.calculateCurrentConcurrentTaskNum();
-            if (curSlotNum + needSlotNum > allSlotNum) {
-                throw new DdlException("Current routine load job is " + curSlotNum + ". "
+            if (curTaskNum + needSlotNum > allSlotNum) {
+                throw new DdlException("Current routine load tasks is " + curTaskNum + ". "
                         + "The new job need " + needSlotNum + " tasks. "
                         + "But we only support " + beNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
                         + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
