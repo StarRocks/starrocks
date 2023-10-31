@@ -2832,7 +2832,7 @@ TEST_F(TabletUpdatesTest, test_partial_update_with_lsc) {
     _tablet = create_tablet(rand(), rand());
     std::vector<int64_t> keys;
     int N = 100;
-    for (int i = 0 ; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         keys.push_back(i);
     }
     {
