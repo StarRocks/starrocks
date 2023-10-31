@@ -29,6 +29,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -122,31 +123,6 @@ public class SplitAggregateRule extends TransformationRule {
         return false;
     }
 
-    // Note: This method logic must consistent with CostEstimator::needGenerateOneStageAggNode
-    private boolean needGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
-        // 1. Must do one stage aggregate If the child contains limit,
-        //    the aggregation must be a single node to ensure correctness.
-        //    eg. select count(*) from (select * table limit 2) t
-        if (input.inputAt(0).getOp().hasLimit()) {
-            return false;
-        }
-        // 2. check if must generate multi stage aggregate.
-        if (mustGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
-            return true;
-        }
-        // 3. Respect user hint
-        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-        if (aggStage == ONE_STAGE) {
-            return false;
-        }
-        // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
-        if (aggStage == AUTO_MODE && input.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-            return false;
-        }
-        // Default, we could generate two stage aggregate
-        return true;
-    }
-
     // check if multi distinct functions used the same columns.
     private void checkDistinctAgg(List<CallOperator> distinctAggCallOperator) {
         List<ScalarOperator> distinctChild0 = distinctAggCallOperator.get(0).getChildren();
@@ -217,7 +193,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         // no need to do multiple stage agg
-        if (!needGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
+        if (!Utils.needGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(), input.inputAt(0).getOp())) {
             return Lists.newArrayList();
         }
 

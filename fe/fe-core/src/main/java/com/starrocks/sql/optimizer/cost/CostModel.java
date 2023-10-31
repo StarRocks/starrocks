@@ -30,10 +30,10 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -222,65 +222,11 @@ public class CostModel {
                     inputStatistics.getComputeSize());
         }
 
-        boolean canGenerateOneStageAggNode(ExpressionContext context) {
-            // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
-            //   If the repeat node is used as the input node of the Exchange node.
-            //   Will cause the node to be unable to confirm whether it is const during serialization
-            //   (BE does this for efficiency reasons).
-            //   Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
-            //   on top of the repeat node.
-            if (context.getChildOperator(0).getOpType().equals(OperatorType.LOGICAL_REPEAT)) {
-                return false;
-            }
-
-            // 2. Must do multi stage aggregate when aggregate distinct function has array type
-            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
-                        callOperator.isDistinct())) {
-                    return false;
-                }
-            }
-
-            // 3. agg distinct function with multi columns can not generate one stage aggregate
-            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator -> callOperator.isDistinct() &&
-                        callOperator.getChildren().size() > 1)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        boolean mustGenerateOneStageAggNode(ExpressionContext context) {
-            // Must do one stage aggregate If the child contains limit,
-            // the aggregation must be a single node to ensure correctness.
-            // eg. select count(*) from (select * table limit 2) t
-            if (context.getChildOperator(0).hasLimit()) {
-                return true;
-            }
-            return false;
-        }
-
-        // Note: This method logic must consistent with SplitAggregateRule::needGenerateMultiStageAggregate
-        boolean needGenerateOneStageAggNode(ExpressionContext context) {
-            if (!canGenerateOneStageAggNode(context)) {
-                return false;
-            }
-            if (mustGenerateOneStageAggNode(context)) {
-                return true;
-            }
-            // respect user hint
-            int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-            return aggStage == 1 || aggStage == 0;
-        }
-
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!needGenerateOneStageAggNode(context) && node.getDistinctColumnDataSkew() == null && !node.isSplit() &&
-                    node.getType().isGlobal()) {
+            LogicalProperty inputLogicalProperty = context.getRootProperty();
+            if (Utils.needGenerateMultiStageAggregate(inputLogicalProperty, node, context.getChildOperator(0))
+                    && node.getDistinctColumnDataSkew() == null && !node.isSplit() && node.getType().isGlobal()) {
                 return CostEstimate.infinite();
             }
 
