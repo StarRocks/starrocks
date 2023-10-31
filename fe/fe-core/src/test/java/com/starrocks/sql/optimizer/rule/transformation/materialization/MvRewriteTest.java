@@ -2001,6 +2001,67 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.dropTable("t1_agg");
     }
 
+    /**
+     * MV rewrite should prefer the exact matched expression
+     */
+    @Test
+    public void testColumnPriority() throws Exception {
+        String createTable = "CREATE TABLE `t1_event_struct` (\n" +
+                "  `c1_event_date` date NOT NULL COMMENT \"\",\n" +
+                "  `c2_event` struct<name varchar(65533)> NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1_event_date`)\n" +
+                "PARTITION BY RANGE(`c1_event_date`)\n" +
+                "(PARTITION p1 VALUES [(\"2023-07-02\"), (\"2023-07-03\")),\n" +
+                "PARTITION p2 VALUES [(\"2023-07-03\"), (\"2023-07-04\")),\n" +
+                "PARTITION p3 VALUES [(\"2023-07-05\"), (\"2023-07-06\")))\n" +
+                "DISTRIBUTED BY HASH(`c1_event_date`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String createMv = "CREATE MATERIALIZED VIEW `mv_event_name_1` \n" +
+                "PARTITION BY (`c1_event_date`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `c1_event_date`, `c2_event`.`name` AS `name`, c2_event \n" +
+                "FROM `t1_event_struct`\n" +
+                "WHERE `t1_event_struct`.`c2_event`.`name` != 'haha';";
+
+        String tableName = "t1_event_struct";
+        String mvName = "mv_event_name_1";
+        starRocksAssert.withTable(createTable);
+        createAndRefreshMv("test", mvName, createMv);
+
+        // original expression
+        {
+            String query = "select c2_event.name from t1_event_struct " +
+                    "where c1_event_date = '2023-07-02' and c2_event.name = 'e1' ";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 4: c1_event_date = '2023-07-02', 5: name = 'e1'");
+        }
+
+        // function call
+        {
+            String query = "select upper(c2_event.name) from t1_event_struct " +
+                    "where c1_event_date = '2023-07-02' and c2_event.name = 'e1' ";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 4: c1_event_date = '2023-07-02', 5: name = 'e1'");
+        }
+
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    /**
+     * Put a not-equal predicate in the mv, and the query use an opposite predicate
+     *
+     * @throws Exception
+     */
     @Test
     public void testExclusivePredicate_StructType() throws Exception {
         String createTable = "CREATE TABLE `t1_event_struct` (\n" +
