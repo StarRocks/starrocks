@@ -98,8 +98,8 @@ public class OdpsScanNode extends ScanNode {
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
-            hdfsScanRange.setRelative_path(split.getSessionId());
-            hdfsScanRange.setFull_path(serializeSession);
+            hdfsScanRange.setOdps_split_info(split.getSessionId());
+            hdfsScanRange.setOdps_scan_reader_info(serializeSession);
             hdfsScanRange.setOffset(split.getSplitIndex());
             hdfsScanRange.setUse_odps_jni_reader(true);
             hdfsScanRange.setFile_length(1);

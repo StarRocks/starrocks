@@ -54,12 +54,12 @@ import java.util.stream.Collectors;
 
 public class OdpsMetadata implements ConnectorMetadata {
 
-    private static Logger LOG = LogManager.getLogger(OdpsMetadata.class);
+    private static final Logger LOG = LogManager.getLogger(OdpsMetadata.class);
 
-    private Odps odps;
-    private String catalogName;
-    private EnvironmentSettings settings;
-    private AliyunCloudCredential aliyunCloudCredential;
+    private final Odps odps;
+    private final String catalogName;
+    private final EnvironmentSettings settings;
+    private final AliyunCloudCredential aliyunCloudCredential;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential) {
         this.odps = odps;
