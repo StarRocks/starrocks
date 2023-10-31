@@ -117,8 +117,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -365,46 +363,39 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (partitionRefreshNumber >= rangePartitionMap.size()) {
             return;
         }
-        Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
+        Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = new HashMap<>();
         for (String partitionName : partitionsToRefresh) {
             mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
         }
-        Comparator<Range<PartitionKey>> cmp =
-                mvContext.isPartitionRefreshReverse() ?
+        Comparator<Range<PartitionKey>> cmp = mvContext.isPartitionRefreshReverse() ?
                         RangeUtils.RANGE_COMPARATOR.reversed() : RangeUtils.RANGE_COMPARATOR;
-        LinkedHashMap<String, Range<PartitionKey>> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
+        List<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(cmp))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
 
-        Iterator<String> partitionNameIter = sortedPartition.keySet().iterator();
-        for (int i = 0; i < partitionRefreshNumber; i++) {
-            if (partitionNameIter.hasNext()) {
-                partitionNameIter.next();
-            }
-        }
-        String nextPartitionStart = null;
-        String startPartitionName = null;
-        String endPartitionName = null;
-        if (partitionNameIter.hasNext()) {
-            startPartitionName = partitionNameIter.next();
-            endPartitionName = startPartitionName;
-            partitionsToRefresh.remove(endPartitionName);
-        }
-        while (partitionNameIter.hasNext())  {
-            endPartitionName = partitionNameIter.next();
-            partitionsToRefresh.remove(endPartitionName);
-        }
+        // Skip first N partitions, which will be refreshed in this round
+        List<String> residualPartitions = sortedPartition.subList(partitionRefreshNumber, sortedPartition.size());
 
-        // swap the start and end
+        if (residualPartitions.isEmpty()) {
+            mvContext.setNextPartitionStart(null);
+            mvContext.setNextPartitionEnd(null);
+            return;
+        }
+        String startPartitionName = residualPartitions.get(0);
+        String endPartitionName = residualPartitions.get(residualPartitions.size() - 1);
+
+        // Remove from candidate partitions
+        residualPartitions.forEach(partitionsToRefresh::remove);
+
+        // Swap the start and end if reversed
         if (mvContext.isPartitionRefreshReverse()) {
             String tmp = startPartitionName;
             startPartitionName = endPartitionName;
             endPartitionName = tmp;
         }
 
-        Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
-        nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
-        mvContext.setNextPartitionStart(nextPartitionStart);
+        mvContext.setNextPartitionStart(mapPartitionNameToLowerBound(mappedPartitionsToRefresh, startPartitionName));
 
         if (endPartitionName != null) {
             PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
@@ -414,6 +405,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             // will cause endPartitionName == null
             mvContext.setNextPartitionEnd(null);
         }
+    }
+
+    private static String mapPartitionNameToLowerBound(Map<String, Range<PartitionKey>> mappedPartitionsToRefresh,
+                                                       String partitionName) {
+        Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(partitionName);
+        return AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
     }
 
     private void generateNextTaskRun() {

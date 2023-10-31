@@ -2162,6 +2162,18 @@ public class PartitionBasedMvRefreshProcessorTest {
             processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
             Assert.assertEquals(ImmutableSet.of("p2"), toRefresh);
             refreshedPartitions.addAll(toRefresh);
+
+            // round 4
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p1"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
+
+            // round 5
+            toRefresh = new HashSet<>(SetUtils.disjunction(allPartitions, refreshedPartitions));
+            processor.filterPartitionByRefreshNumber(toRefresh, materializedView);
+            Assert.assertEquals(ImmutableSet.of("p0"), toRefresh);
+            refreshedPartitions.addAll(toRefresh);
         }
     }
 
