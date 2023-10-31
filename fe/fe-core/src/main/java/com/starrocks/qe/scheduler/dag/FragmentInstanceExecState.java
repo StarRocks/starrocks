@@ -161,8 +161,19 @@ public class FragmentInstanceExecState {
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
+<<<<<<< HEAD
             deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy,
                     jobSpec.getPlanProtocol());
+=======
+            // when `set enable_plan_serialize_concurrently = false` or encountered exception when serializing.
+            if (serializedRequest != null && serializedRequest.length != 0) {
+                deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, serializedRequest,
+                        jobSpec.getPlanProtocol());
+            } else {
+                deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, requestToDeploy,
+                        jobSpec.getPlanProtocol());
+            }
+>>>>>>> 23c4e43cf0 ([BugFix]fix serilized requet nullptr when concurrency serilize is disabled (#33968))
         } catch (RpcException | TException e) {
             // DO NOT throw exception here, return a complete future with error code,
             // so that the following logic will cancel the fragment.
