@@ -300,7 +300,7 @@ public class MvRewritePreprocessor {
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
-        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
 
         // Only record `refTableUpdatedPartitionNames` when `mvPartialPartitionPredicates` is not null and it needs
         // to be compensated by using it.

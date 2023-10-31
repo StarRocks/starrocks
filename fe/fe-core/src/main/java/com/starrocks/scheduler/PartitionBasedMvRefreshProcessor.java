@@ -560,23 +560,28 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
                                                Set<String> mvRefreshedPartitions,
                                                Map<Table, Set<String>> refTableAndPartitionNames) {
-        Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
-        if (!Objects.isNull(mvToBaseNameRef) && !Objects.isNull(refTableAndPartitionNames) &&
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
+        if (!Objects.isNull(mvToBaseNameRefs) && !Objects.isNull(refTableAndPartitionNames) &&
                 !refTableAndPartitionNames.isEmpty()) {
             try {
-                Preconditions.checkState(refTableAndPartitionNames.size() == 1);
-                Table refBaseTable = refTableAndPartitionNames.keySet().iterator().next();
                 Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
                         refreshContext.getMvPartitionNameRefBaseTablePartitionMap();
                 for (String mvRefreshedPartition : mvRefreshedPartitions) {
-                    Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
-                    for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(mvRefreshedPartition)) {
-                        realBaseTableAssociatedPartitions.addAll(
-                                convertMVPartitionNameToRealPartitionName(refBaseTable,
-                                        refBaseTableAssociatedPartition));
+                    Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvRefreshedPartition);
+                    for (Map.Entry<Table, Set<String>> entry : refTableAndPartitionNames.entrySet()) {
+                        Table refBaseTable = entry.getKey();
+                        if (!mvToBaseNameRef.containsKey(refBaseTable)) {
+                            continue;
+                        }
+                        Set<String> realBaseTableAssociatedPartitions = Sets.newHashSet();
+                        for (String refBaseTableAssociatedPartition : mvToBaseNameRef.get(refBaseTable)) {
+                            realBaseTableAssociatedPartitions.addAll(
+                                    convertMVPartitionNameToRealPartitionName(refBaseTable,
+                                            refBaseTableAssociatedPartition));
+                        }
+                        mvPartitionNameRefBaseTablePartitionMap
+                                .put(mvRefreshedPartition, realBaseTableAssociatedPartitions);
                     }
-                    mvPartitionNameRefBaseTablePartitionMap
-                            .put(mvRefreshedPartition, realBaseTableAssociatedPartitions);
                 }
 
             } catch (Exception e) {
@@ -744,36 +749,37 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private void syncPartitionsForExpr(TaskRunContext context) {
         Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
-        Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
-        Table refBaseTable = partitionTableAndColumn.first;
-        Preconditions.checkNotNull(refBaseTable);
-        Column refBaseTablePartitionColumn = partitionTableAndColumn.second;
-        Preconditions.checkNotNull(refBaseTablePartitionColumn);
-
+        Map<Table, Column> partitionTableAndColumn = materializedView.getRelatedPartitionTableAndColumn();
+        Preconditions.checkArgument(!partitionTableAndColumn.isEmpty());
         RangePartitionDiff rangePartitionDiff = null;
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
-        Map<String, Range<PartitionKey>> refBaseTablePartitionMap;
-        Map<String, Set<String>> refBaseTableMVPartitionMap = Maps.newHashMap();
+        Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
+        Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap = Maps.newHashMap();
         try {
-            // Collect the ref base table's partition range map.
-            refBaseTablePartitionMap = PartitionUtil.getPartitionKeyRange(
-                    refBaseTable, refBaseTablePartitionColumn, partitionExpr);
+            for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
+                Table refBaseTable = entry.getKey();
+                Column refBaseTablePartitionColumn = entry.getValue();
+                // Collect the ref base table's partition range map.
+                refBaseTablePartitionMap.put(refBaseTable, PartitionUtil.getPartitionKeyRange(
+                        refBaseTable, refBaseTablePartitionColumn, partitionExpr));
 
-            // To solve multi partition columns' problem of external table, record the mv partition name to all the same
-            // partition names map here.
-            if (!refBaseTable.isNativeTableOrMaterializedView()) {
-                refBaseTableMVPartitionMap = PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
-                        refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
+                // To solve multi partition columns' problem of external table, record the mv partition name to all the same
+                // partition names map here.
+                if (!refBaseTable.isNativeTableOrMaterializedView()) {
+                    refBaseTableMVPartitionMap.put(refBaseTable,
+                            PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
+                                    refBaseTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable)));
+                }
             }
-
+            Table partitionTable = materializedView.getDirectTableAndPartitionColumn().first;
             Column partitionColumn =
                     ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
             PartitionDiffer differ = PartitionDiffer.build(materializedView, context);
-            rangePartitionDiff = PartitionUtil.getPartitionDiff(
-                    partitionExpr, partitionColumn, refBaseTablePartitionMap, mvRangePartitionMap, differ);
+            rangePartitionDiff = PartitionUtil.getPartitionDiff(partitionExpr, partitionColumn,
+                    refBaseTablePartitionMap.get(partitionTable), mvRangePartitionMap, differ);
         } catch (UserException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
@@ -803,11 +809,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 materializedView.getName(), adds);
 
         // used to get partitions to refresh
-        Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
-                .getIntersectedPartitions(refBaseTablePartitionMap, mvRangePartitionMap);
-        Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
-                .getIntersectedPartitions(mvRangePartitionMap, refBaseTablePartitionMap);
-
+        Map<Table, Expr> tableToExprMap = materializedView.getTableToPartitionExprMap();
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef = SyncPartitionUtils
+                .generateBaseRefMap(refBaseTablePartitionMap, tableToExprMap, mvRangePartitionMap);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = SyncPartitionUtils
+                .generateMvRefMap(mvRangePartitionMap, tableToExprMap, refBaseTablePartitionMap);
         mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
         mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
         mvContext.setRefBaseTableRangePartitionMap(refBaseTablePartitionMap);
@@ -854,12 +860,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 materializedView.getName(), adds);
 
         // used to get partitions to refresh
-        Map<String, Set<String>> baseToMvNameRef = Maps.newHashMap();
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef = Maps.newHashMap();
         for (String partitionName : baseListPartitionMap.keySet()) {
-            baseToMvNameRef.put(partitionName, Sets.newHashSet(partitionName));
+            Map<String, Set<String>> basePartitionNameRef = Maps.newHashMap();
+            basePartitionNameRef.put(partitionName, Sets.newHashSet(partitionName));
+            baseToMvNameRef.put(partitionBaseTable, basePartitionNameRef);
+        }
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = Maps.newHashMap();
+        for (String partitionName : listPartitionMap.keySet()) {
+            Map<Table, Set<String>> mvPartitionNameRef = Maps.newHashMap();
+            mvPartitionNameRef.put(partitionBaseTable, Sets.newHashSet(partitionName));
+            mvToBaseNameRef.put(partitionName, mvPartitionNameRef);
         }
         mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
-        mvContext.setMvRefBaseTableIntersectedPartitions(baseToMvNameRef);
+        mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
         mvContext.setRefBaseTableListPartitionMap(baseListPartitionMap);
     }
 
@@ -899,12 +913,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * - its non-ref base table except un-supported base table has updated.
      */
     private boolean isPartitionedMVNeedToRefreshBaseOnNonRefTables(Table partitionTable) {
+        Map<Table, Column> tableColumnMap = materializedView.getRelatedPartitionTableAndColumn();
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
             if (snapshotTable.getId() == partitionTable.getId()) {
                 continue;
             }
             if (unSupportRefreshByPartition(snapshotTable)) {
+                continue;
+            }
+            if (tableColumnMap.containsKey(snapshotTable)) {
                 continue;
             }
             if (needToRefreshTable(snapshotTable)) {
@@ -989,15 +1007,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 }
             }
 
-            // check the ref base table
+            Map<Table, Column> partitionTablesAndColumn = materializedView.getRelatedPartitionTableAndColumn();
             if (partitionExpr instanceof SlotRef) {
-                return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable, mvRangePartitionNames,
-                        force);
+                // check related partition table
+                for (Table table : partitionTablesAndColumn.keySet()) {
+                    needRefreshMvPartitionNames.addAll(getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+                            table, mvRangePartitionNames, force));
+                }
             } else if (partitionExpr instanceof FunctionCallExpr) {
-                needRefreshMvPartitionNames = getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(refBaseTable,
-                        mvRangePartitionNames, force);
+                // check related partition table
+                for (Table table : partitionTablesAndColumn.keySet()) {
+                    needRefreshMvPartitionNames.addAll(getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+                            table, mvRangePartitionNames, force));
+                }
 
-                Set<String> baseChangedPartitionNames =
+                Map<Table, Set<String>> baseChangedPartitionNames =
                         getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
                 // because the relation of partitions between materialized view and base partition table is n : m,
                 // should calculate the candidate partitions recursively.
@@ -1053,7 +1077,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // step2: fetch the corresponding materialized view partition names as the need to refresh partitions
-        Set<String> result = getMVPartitionNamesByBasePartitionNames(updatePartitionNames);
+        Set<String> result = getMVPartitionNamesByBasePartitionNames(refBaseTable, updatePartitionNames);
         result.retainAll(mvRangePartitionNames);
         return result;
     }
@@ -1063,9 +1087,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param basePartitionNames : ref base table partition names to check.
      * @return                   : Return mv corresponding partition names to the ref base table partition names.
      */
-    private Set<String> getMVPartitionNamesByBasePartitionNames(Set<String> basePartitionNames) {
+    private Set<String> getMVPartitionNamesByBasePartitionNames(Table baseTable, Set<String> basePartitionNames) {
         Set<String> result = Sets.newHashSet();
-        Map<String, Set<String>> refBaseTableMVPartitionMap = mvContext.getRefBaseTableMVIntersectedPartitions();
+        Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
+        if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(baseTable)) {
+            return basePartitionNames;
+        }
+        Map<String, Set<String>> refBaseTableMVPartitionMap = refBaseTableMVPartitionMaps.get(baseTable);
         for (String basePartitionName : basePartitionNames) {
             if (refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
                 result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
@@ -1081,15 +1109,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param mvPartitionNames : the need to refresh materialized view partition names
      * @return                 : the corresponding ref base table partition names to the materialized view partition names
      */
-    private Set<String> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
-        Set<String> result = Sets.newHashSet();
-        Map<String, Set<String>> mvRefBaseTablePartitionMap = mvContext.getMvRefBaseTableIntersectedPartitions();
+    private Map<Table, Set<String>> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
+        Map<Table, Set<String>> result = new HashMap<>();
+        Map<String, Map<Table, Set<String>>> mvRefBaseTablePartitionMaps =
+                mvContext.getMvRefBaseTableIntersectedPartitions();
         for (String mvPartitionName : mvPartitionNames) {
-            if (mvRefBaseTablePartitionMap.containsKey(mvPartitionName)) {
-                result.addAll(mvRefBaseTablePartitionMap.get(mvPartitionName));
-            } else {
+            if (mvRefBaseTablePartitionMaps == null || !mvRefBaseTablePartitionMaps.containsKey(mvPartitionName)) {
                 LOG.warn("Cannot find need refreshed mv table partition from synced partition info: {}",
                         mvPartitionName);
+                continue;
+            }
+            Map<Table, Set<String>> mvRefBaseTablePartitionMap = mvRefBaseTablePartitionMaps.get(mvPartitionName);
+            for (Map.Entry<Table, Set<String>> entry : mvRefBaseTablePartitionMap.entrySet()) {
+                Table baseTable = entry.getKey();
+                Set<String> baseTablePartitions = entry.getValue();
+                if (result.containsKey(baseTable)) {
+                    // If the result already contains the base table name, add all new partitions to the existing set
+                    result.get(baseTable).addAll(baseTablePartitions);
+                } else {
+                    // If the result doesn't contain the base table name, put the new set into the map
+                    result.put(baseTable, Sets.newHashSet(baseTablePartitions));
+                }
             }
         }
         return result;
@@ -1159,8 +1199,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 //  non-ref-base-table  : t2.dt
                 // so add partition predicates for select relation when refresh partitions incrementally(eg: dt=20230810):
                 // (select * from t1 join t2 on t1.dt = t2.dt) where t1.dt=20230810
-                Expr partitionPredicates = generatePartitionPredicate(tablePartitionNames, queryStatement,
-                        materializedView.getPartitionInfo());
+                Expr partitionPredicates = generatePartitionPredicate(tableRelation.getTable(),
+                        tablePartitionNames, queryStatement, materializedView.getPartitionInfo());
                 if (partitionPredicates != null) {
                     List<SlotRef> slots = Lists.newArrayList();
                     partitionPredicates.collect(SlotRef.class, slots);
@@ -1207,8 +1247,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @return
      * @throws AnalysisException
      */
-    private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
-                                            PartitionInfo mvPartitionInfo)
+    private Expr generatePartitionPredicate(Table table, Set<String> tablePartitionNames,
+                                            QueryStatement queryStatement, PartitionInfo mvPartitionInfo)
             throws AnalysisException {
         SlotRef partitionSlot = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         List<String> columnOutputNames = queryStatement.getQueryRelation().getColumnOutputNames();
@@ -1246,16 +1286,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
-            Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap =
-                    mvContext.getRefBaseTableRangePartitionMap();
             for (String partitionName : tablePartitionNames) {
-                sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
+                sourceTablePartitionRange.add(mvContext.getRefBaseTableRangePartitionMap()
+                        .get(table).get(partitionName));
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
             // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
             // here we should convert date into '%Y%m%d' format
             Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
-            Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
+            Pair<Table, Column> partitionTableAndColumn = materializedView.getDirectTableAndPartitionColumn();
             boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
             if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                     && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
@@ -1611,9 +1650,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      */
     private Set<String> convertMVPartitionNameToRealPartitionName(Table table, String mvPartitionName) {
         if (!table.isNativeTableOrMaterializedView()) {
-            Map<String, Set<String>> refBaseTableRangePartitionMap = mvContext.getExternalRefBaseTableMVPartitionMap();
-            Preconditions.checkState(refBaseTableRangePartitionMap.containsKey(mvPartitionName));
-            return refBaseTableRangePartitionMap.get(mvPartitionName);
+            Map<Table, Map<String, Set<String>>> refBaseTableRangePartitionMap
+                    = mvContext.getExternalRefBaseTableMVPartitionMap();
+            Preconditions.checkState(refBaseTableRangePartitionMap.containsKey(table));
+            return refBaseTableRangePartitionMap.get(table).get(mvPartitionName);
         } else {
             return Sets.newHashSet(mvPartitionName);
         }
@@ -1623,19 +1663,33 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param mvToRefreshedPartitions :  to-refreshed materialized view partition names
      * @return : return to-refreshed base table's table name and partition names mapping
      */
-    private Map<Table, Set<String>> getRefTableRefreshPartitions(Set<String> mvToRefreshedPartitions) {
-        Table refBaseTable = mvContext.getRefBaseTable();
+    @VisibleForTesting
+    public Map<Table, Set<String>> getRefTableRefreshPartitions(Set<String> mvToRefreshedPartitions) {
         Map<Table, Set<String>> refTableAndPartitionNames = Maps.newHashMap();
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
+        if (mvToBaseNameRefs == null) {
+            return refTableAndPartitionNames;
+        }
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table table = tablePair.second;
-            if (refBaseTable != null && refBaseTable == table) {
-                Set<String> needRefreshTablePartitionNames = Sets.newHashSet();
-                Map<String, Set<String>> mvToBaseNameRef = mvContext.getMvRefBaseTableIntersectedPartitions();
-                for (String mvPartitionName : mvToRefreshedPartitions) {
-                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(mvPartitionName));
+            Set<String> needRefreshTablePartitionNames = null;
+            for (String mvPartitionName : mvToRefreshedPartitions) {
+                if (!mvToBaseNameRefs.containsKey(mvPartitionName)) {
+                    continue;
                 }
+                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvPartitionName);
+                if (mvToBaseNameRef.containsKey(table)) {
+                    if (needRefreshTablePartitionNames == null) {
+                        needRefreshTablePartitionNames = Sets.newHashSet();
+                    }
+                    // The table in this map has related partition with mv
+                    // It's ok to add empty set for a table, means no partition corresponding to this mv partition
+                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(table));
+                }
+            }
+            //TODO: (choury) why not add all partitions of table?
+            if (needRefreshTablePartitionNames != null) {
                 refTableAndPartitionNames.put(table, needRefreshTablePartitionNames);
-                return refTableAndPartitionNames;
             }
         }
         return refTableAndPartitionNames;
@@ -1645,11 +1699,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * Return all non-ref base table and refreshed partitions.
      */
     private Map<Table, Set<String>> getNonRefTableRefreshPartitions() {
-        Table partitionTable = mvContext.getRefBaseTable();
         Map<Table, Set<String>> tableNamePartitionNames = Maps.newHashMap();
+        Map<Table, Map<String, Set<String>>> baseTableToMvNameRefs = mvContext.getRefBaseTableMVIntersectedPartitions();
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table table = tablePair.second;
-            if (partitionTable != null && partitionTable.equals(table)) {
+            if (baseTableToMvNameRefs != null && baseTableToMvNameRefs.containsKey(table)) {
                 // do nothing
             } else {
                 if (table.isNativeTableOrMaterializedView()) {

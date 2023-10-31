@@ -39,17 +39,23 @@ public class SlotRefResolver {
         public Expr visitExpression(Expr expr, Relation node) {
             expr = expr.clone();
             for (int i = 0; i < expr.getChildren().size(); i++) {
-                Expr child = expr.getChild(i);
-                expr.setChild(i, child.accept(this, node));
+                Expr child = expr.getChild(i).accept(this, node);
+                if (child == null) {
+                    return null;
+                }
+                expr.setChild(i, child);
             }
             return expr;
         }
 
         @Override
         public Expr visitSlot(SlotRef slotRef, Relation node) {
+            if (slotRef.getTblNameWithoutAnalyzed() == null) {
+                return node.accept(SLOT_REF_RESOLVER, slotRef);
+            }
             String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
             if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
-                return slotRef;
+                return null;
             }
             return node.accept(SLOT_REF_RESOLVER, slotRef);
         }
@@ -58,7 +64,8 @@ public class SlotRefResolver {
         public Expr visitFieldReference(FieldReference fieldReference, Relation node) {
             Field field = node.getScope().getRelationFields()
                     .getFieldByIndex(fieldReference.getFieldIndex());
-            SlotRef slotRef = new SlotRef(field.getRelationAlias(), field.getName());
+            SlotRef slotRef = new SlotRef(field.getRelationAlias(), field.getName(), field.getName());
+            slotRef.setType(field.getType());
             return node.accept(SLOT_REF_RESOLVER, slotRef);
         }
     };
@@ -162,5 +169,9 @@ public class SlotRefResolver {
      */
     public static Expr resolveExpr(Expr expr, QueryStatement queryStatement) {
         return expr.accept(EXPR_SHUTTLE, queryStatement.getQueryRelation());
+    }
+
+    public static Expr resolveExpr(Expr expr, Relation relation) {
+        return expr.accept(EXPR_SHUTTLE, relation);
     }
 }

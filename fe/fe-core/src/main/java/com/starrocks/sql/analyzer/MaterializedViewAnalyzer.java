@@ -641,8 +641,6 @@ public class MaterializedViewAnalyzer {
                             functionCallExpr.getFnName().getFunction() +
                             " must related with column", functionCallExpr.getPos());
                 }
-                SlotRef slotRef = getSlotRef(functionCallExpr);
-                slotRef.setType(partitionColumn.getType());
                 // copy function and set it into partitionRefTableExpr
                 Expr partitionRefTableExpr = functionCallExpr.clone();
                 List<Expr> children = partitionRefTableExpr.getChildren();

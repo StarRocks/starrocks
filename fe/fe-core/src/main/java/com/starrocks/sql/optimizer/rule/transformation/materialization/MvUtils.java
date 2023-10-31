@@ -993,7 +993,7 @@ public class MvUtils {
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return false;
         }
@@ -1153,7 +1153,7 @@ public class MvUtils {
             MaterializedView mv,
             OptExpression mvPlan,
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
