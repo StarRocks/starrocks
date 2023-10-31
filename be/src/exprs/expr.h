@@ -236,7 +236,7 @@ public:
     [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module,
                                                                llvm::IRBuilder<>& b,
                                                                const std::vector<LLVMDatum>& datums) const {
-        return Status::JitCompileError("Expr not supported");
+        return Status::NotSupported("JIT expr not supported");
     }
 
     // Return true if this expression supports JIT compilation.
