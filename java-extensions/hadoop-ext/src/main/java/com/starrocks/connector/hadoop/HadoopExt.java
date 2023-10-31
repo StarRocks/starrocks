@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 public class HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HadoopExt.class);
-    private static HadoopExt instance;
+    private static final HadoopExt INSTANCE = new HadoopExt();
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
     public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
@@ -29,11 +29,8 @@ public class HadoopExt {
     public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
     public static final String LOGGER_MESSAGE_PREFIX = "[hadoop-ext]";
 
-    public static synchronized HadoopExt getInstance() {
-        if (instance == null) {
-            instance = new HadoopExt();
-        }
-        return instance;
+    public static HadoopExt getInstance() {
+        return INSTANCE;
     }
 
     public void rewriteConfiguration(Configuration conf) {
