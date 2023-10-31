@@ -304,7 +304,7 @@ Status MemTable::finalize() {
                                   primary_key_idxes.end())
                             .first != sort_key_idxes.end()) {
                     _chunk = _result_chunk;
-                    _sort(true, true);
+                    _sort(true);
                 }
             }
             _aggregator.reset();
@@ -387,10 +387,10 @@ void MemTable::_aggregate(bool is_final) {
     }
 }
 
-void MemTable::_sort(bool is_final, bool by_sort_key) {
+Status MemTable::_sort(bool is_final) {
     SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
-    _sort_column_inc(by_sort_key);
+    RETURN_IF_ERROR(_sort_column_inc());
     if (is_final) {
         // No need to reserve, it will be reserve in IColumn::append_selective(),
         // Otherwise it will use more peak memory
@@ -404,6 +404,7 @@ void MemTable::_sort(bool is_final, bool by_sort_key) {
     }
     _chunk_memory_usage = 0;
     _chunk_bytes_usage = 0;
+    return Status::OK();
 }
 
 void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final) {
@@ -464,9 +465,27 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     return Status::OK();
 }
 
-void MemTable::_sort_column_inc(bool by_sort_key) {
+void MemTable::_sort_column_inc() {
     Columns columns;
-    std::vector<ColumnId> sort_key_idxes;
+    std::vector<ColumnId> sort_key_idxes = _vectorized_schema->sort_key_idxes();
+    if (sort_key_idxes.empty()) {
+        for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
+            sort_key_idxes.push_back(i);
+        }
+    }
+    if (_keys_type == AGG_KEYS || _keys_type == UNIQUE_KEYS) {
+        // check sort_key_idxes is equal to keys
+        std::vector<ColumnId> tmp = sort_key_idxes;
+        std::sort(tmp.begin(), tmp.end());
+        std::vector<ColumnId> key_idxes;
+        key_idxes.resize(_vectorized_schema->num_key_fields());
+        std::iota(key_idxes.begin(), key_idxes.end(), 0);
+        if (!std::equal(tmp.begin(), tmp.end(), key_idxes.begin(), key_idxes.end())) {
+            std::string msg = strings::Substitute("tablet type: $0 sort key columns is different with key columns", _keys_type);
+            LOG(FATAL) << msg;
+        }
+    }
+    /*
     if (!by_sort_key) {
         for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
             sort_key_idxes.push_back(i);
@@ -474,6 +493,7 @@ void MemTable::_sort_column_inc(bool by_sort_key) {
     } else {
         sort_key_idxes = _vectorized_schema->sort_key_idxes();
     }
+    */
 
     for (auto sort_key_idx : sort_key_idxes) {
         columns.push_back(_chunk->get_column_by_index(sort_key_idx));
