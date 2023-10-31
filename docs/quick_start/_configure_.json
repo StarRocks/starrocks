@@ -3,5 +3,5 @@
   "label": "Quick Start",
   "collapsible": true,
   "collapsed": true,
-  "link": { "type": "doc", "id": "Concepts" }
+  "link": { "type": "doc", "id": "README" }
 }
