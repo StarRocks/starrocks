@@ -62,7 +62,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.ScalarType.OLAP_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.BOOLEAN;
 import static com.starrocks.catalog.Type.DATE;
@@ -136,7 +136,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case "VARCHAR":
                 return ScalarType.createVarcharType(getVarcharLength(hiveType));
             case "CHAR":
@@ -217,7 +217,7 @@ public class ColumnTypeConverter {
             throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported CHAR types: CHAR(<=%d).",
                     type, HiveChar.MAX_CHAR_LENGTH);
         } else if (type.isVarchar()) {
-            if (type.getColumnSize() == -1 || type.getColumnSize() == MAX_VARCHAR_LENGTH) {
+            if (type.getColumnSize() == -1 || type.getColumnSize() == OLAP_MAX_VARCHAR_LENGTH) {
                 return stringTypeInfo;
             }
             if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
@@ -285,7 +285,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case STRING:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case ARRAY:
                 Type type = new ArrayType(fromHudiType(avroSchema.getElementType()));
                 if (type.isArrayType()) {
@@ -333,7 +333,7 @@ public class ColumnTypeConverter {
 
                 if (!isConvertedFailed) {
                     // Hudi map's key must be string
-                    return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
+                    return new MapType(ScalarType.createDefaultCatalogString(), valueType);
                 }
                 break;
             case UNION:
@@ -468,7 +468,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
@@ -508,7 +508,7 @@ public class ColumnTypeConverter {
         }
 
         public Type visit(VarCharType varCharType) {
-            return ScalarType.createDefaultExternalTableString();
+            return ScalarType.createDefaultCatalogString();
         }
 
         public Type visit(BooleanType booleanType) {
@@ -607,7 +607,7 @@ public class ColumnTypeConverter {
                 break;
             case STRING:
             case UUID:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();

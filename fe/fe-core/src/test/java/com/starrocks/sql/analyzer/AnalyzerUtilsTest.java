@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -75,6 +76,13 @@ public class AnalyzerUtilsTest {
         Assert.assertTrue(success);
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
         Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
+    }
+
+    @Test
+    public void testConvertCatalogMaxStringToOlapMaxString() {
+        ScalarType catalogString = ScalarType.createDefaultCatalogString();
+        ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
+        Assert.assertEquals(ScalarType.OLAP_MAX_VARCHAR_LENGTH, convertedString.getLength());
     }
 
 }

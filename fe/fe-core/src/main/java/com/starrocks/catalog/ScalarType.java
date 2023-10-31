@@ -69,7 +69,9 @@ public class ScalarType extends Type implements Cloneable {
     public static final int DEFAULT_SCALE = 0; // SQL standard
     // Longest supported VARCHAR and CHAR, chosen to match Hive.
     public static final int DEFAULT_STRING_LENGTH = 65533;
-    public static final int MAX_VARCHAR_LENGTH = 1048576;
+    public static final int OLAP_MAX_VARCHAR_LENGTH = 1048576;
+    // 1GB for each line, it's enough
+    public static final int CATALOG_MAX_VARCHAR_LENGTH = 1024 * 1024 * 1024;
     public static final int MAX_CHAR_LENGTH = 255;
     // HLL DEFAULT LENGTH  2^14(registers) + 1(type)
     public static final int MAX_HLL_LENGTH = 16385;
@@ -309,14 +311,12 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     // Use for Hive string now.
-    public static ScalarType createDefaultExternalTableString() {
-        // 1GB for each line, it's enough
-        final int MAX_LENGTH = 1024 * 1024 * 1024;
-        return ScalarType.createVarcharType(MAX_LENGTH);
+    public static ScalarType createDefaultCatalogString() {
+        return ScalarType.createVarcharType(CATALOG_MAX_VARCHAR_LENGTH);
     }
 
-    public static ScalarType createMaxVarcharType() {
-        ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+    public static ScalarType createOlapMaxVarcharType() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
         return stringType;
     }
 
