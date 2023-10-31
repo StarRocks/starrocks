@@ -283,7 +283,8 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.needReport = context.getSessionVariable().isEnableProfile();
+        this.needReport = context.getSessionVariable().isEnableProfile() ||
+                context.getSessionVariable().isEnableBigQueryProfile();
 
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, descTable, queryGlobals,
