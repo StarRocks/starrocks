@@ -16,20 +16,17 @@ package com.starrocks.hive.reader;
 
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
-import org.apache.hadoop.io.LongWritable;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import static com.starrocks.hive.reader.HiveScannerUtils.TIMESTAMP_UNIT_MAPPING;
 
 public class HiveColumnValue implements ColumnValue {
     private final Object fieldData;
@@ -92,15 +89,7 @@ public class HiveColumnValue implements ColumnValue {
 
     @Override
     public String getTimestamp(ColumnType.TypeValue type) {
-        // INT64 timestamp type
-        if (HiveScannerUtils.isMaybeInt64Timestamp(type) && (fieldData instanceof LongWritable)) {
-            long datetime = ((LongWritable) fieldData).get();
-            TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
-            LocalDateTime localDateTime = HiveScannerUtils.getTimestamp(datetime, timeUnit, true);
-            return HiveScannerUtils.formatDateTime(localDateTime);
-        } else {
-            return inspectObject().toString();
-        }
+        return inspectObject().toString();
     }
 
     @Override
@@ -167,5 +156,10 @@ public class HiveColumnValue implements ColumnValue {
         } else {
             return (Byte) inspectObject();
         }
+    }
+
+    @Override
+    public BigDecimal getDecimal() {
+        return ((HiveDecimal) inspectObject()).bigDecimalValue();
     }
 }

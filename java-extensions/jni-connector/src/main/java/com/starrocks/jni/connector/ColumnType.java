@@ -187,7 +187,7 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p = scanner.indexOf('<', ',', '>');
+        int p = scanner.indexOf('<', ',', '>', '(', ')');
         int end = scanner.indexOf(')') + 1;
         String t = scanner.substr(p);
         if (t.startsWith("decimal")) {

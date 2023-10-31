@@ -760,11 +760,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr) {
-        scanner = _create_hive_jni_scanner();
+        scanner = _create_hive_jni_scanner(fsOptions);
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
                dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr) {
-        scanner = _create_file_table_jni_scanner();
+        scanner = _create_file_table_jni_scanner(fsOptions);
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
