@@ -48,7 +48,7 @@ You can set the capacity of a query queue and the maximum timeout of queries in 
 
 | **Variable**                       | **Default** | **Description**                                              |
 | ---------------------------------- | ----------- | ------------------------------------------------------------ |
-| query_queue_max_queued_queries     | 0           | The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. |
+| query_queue_max_queued_queries     | 1024        | The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. |
 | query_queue_pending_timeout_second | 300         | The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. |
 
 ## View query queue statistics

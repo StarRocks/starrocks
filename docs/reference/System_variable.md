@@ -479,7 +479,7 @@ The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effec
 
 ### query_queue_max_queued_queries (global)
 
-The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `0`.
+The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `1024`.
 
 ### query_queue_mem_used_pct_limit (global)
 
