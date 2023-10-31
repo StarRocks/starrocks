@@ -482,4 +482,37 @@ public class ExpressionRangePartitionInfoTest {
         Assert.assertNotNull(fn);
     }
 
+    @Test
+    public void testExpressionRangePartitionInfoSerializedWrongNotFailed() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE `game_log` (\n" +
+                "  `cloud_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `user_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `day` date NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`cloud_id`, `user_id`)\n" +
+                "PARTITION BY date_trunc('day', day)\n" +
+                "DISTRIBUTED BY HASH(`cloud_id`, `user_id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"ZSTD\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable olapTable = (OlapTable) db.getTable("game_log");
+        ExpressionRangePartitionInfo expressionRangePartitionInfo =
+                (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        partitionColumns.get(0).setType(Type.VARCHAR);
+        // serialize
+        String json = GsonUtils.GSON.toJson(olapTable);
+        // deserialize
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+    }
+
 }
