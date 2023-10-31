@@ -567,13 +567,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 #### fast_schema_evolution
 
 - **Default**: TRUE
-- **Description**: Whether to enable fast schema evolution for all tables within the cluster. Valid values are `TRUE` (default) or `FALSE`. Enabling this feature can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+- **Description**: Whether to enable the fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` (default) or `FALSE`. Enabling this feature can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
   > **NOTE**
   > - StarRocks shared-data clusters do not support this parameter.
-  > - If you need to configure this  parameter for a specific table, such as disabling fast schema evolution for that table, you can specify the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#setting-fast-schema-evolution) at table creation.
-
+  > - If you need to configure the fast schema evolution for a specific table, such as disabling the fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 - **Introduced in**: v3.2.0
-
 
 ##### recover_with_empty_tablet
 
