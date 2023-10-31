@@ -22,7 +22,11 @@
 package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+<<<<<<< HEAD
 import com.starrocks.analysis.UserIdentity;
+=======
+import com.starrocks.common.Config;
+>>>>>>> 6488726958 ([Enhancement] Add logs for slow interfaces (#33908))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -55,6 +59,7 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void handleRequest(BaseRequest request) throws Exception {
         LOG.info("receive http request. url={}", request.getRequest().uri());
+        long startTime = System.currentTimeMillis();
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);
@@ -67,6 +72,12 @@ public class RestBaseAction extends BaseAction {
             } else {
                 sendResult(request, response, new RestBaseResult(e.getMessage()));
             }
+        }
+        long endTime = System.currentTimeMillis();
+        long elapsedTime = endTime - startTime;
+        if (elapsedTime > Config.http_slow_request_threshold_ms) {
+            LOG.warn("Execution uri={} time exceeded {} ms and took {} ms.", request.getRequest().uri(),
+                    Config.http_slow_request_threshold_ms, elapsedTime);
         }
     }
 
