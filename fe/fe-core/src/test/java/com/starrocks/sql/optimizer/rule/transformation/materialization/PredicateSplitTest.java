@@ -60,9 +60,9 @@ public class PredicateSplitTest {
                 BinaryType.GE, callOperator, ConstantOperator.createInt(1));
         ScalarOperator andPredicate = Utils.compoundAnd(binaryPredicate, binaryPredicate2, binaryPredicate3);
         PredicateSplit result = PredicateSplit.splitPredicate(andPredicate);
-        Assert.assertEquals(binaryPredicate, result.getEqualPredicates());
-        Assert.assertEquals(binaryPredicate2, result.getRangePredicates());
-        Assert.assertEquals(binaryPredicate3, result.getResidualPredicates());
+        Assert.assertEquals("1: col1 = 2: col2", result.getEqualPredicates().toString());
+        Assert.assertEquals("1: col1 >= 1 AND sum(1: col1, 2: col2) >= 1", result.getRangePredicates().toString());
+        Assert.assertNull(result.getResidualPredicates());
     }
 
     @Test

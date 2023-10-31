@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.Collections;
 import java.util.List;
@@ -183,6 +184,10 @@ public abstract class ScalarOperator implements Cloneable {
 
     public String debugString() {
         return toString();
+    }
+
+    public boolean hasColumnRef() {
+        return CollectionUtils.isNotEmpty(getColumnRefs());
     }
 
     public boolean isColumnRef() {
