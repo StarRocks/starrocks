@@ -65,10 +65,7 @@ public:
     }
 
     hdfsFS getFS() { return _hdfs_client->hdfs_fs; }
-    hdfsFile getFile() {
-        ensureOpened();
-        return _file;
-    }
+    hdfsFile getFile() { return _file; }
     int64_t getOpenTimeNs() const { return _open_time_ns; }
     const std::string& getPath() const { return _path; }
     void setOffset(int64_t offset) { _offset = offset; }
