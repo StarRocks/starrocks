@@ -396,6 +396,8 @@ private:
 
     std::string _debug_version_info(bool lock) const;
 
+    std::string _debug_compaction_stats(const std::vector<uint32_t>& input_rowsets, const uint32_t output_rowset);
+
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
     void _set_error(const string& msg);
