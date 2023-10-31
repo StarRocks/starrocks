@@ -16,6 +16,7 @@ package com.starrocks.http;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -47,7 +48,11 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testGetShowData() throws IOException {
+<<<<<<< HEAD
         String baseUri = "http://localhost:" + String.valueOf(HTTP_PORT);
+=======
+        Config.http_slow_request_threshold_ms = 0;
+>>>>>>> 6488726958 ([Enhancement] Add logs for slow interfaces (#33908))
         Request request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
