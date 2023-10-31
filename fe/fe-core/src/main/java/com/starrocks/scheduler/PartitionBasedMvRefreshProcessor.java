@@ -108,6 +108,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -117,8 +118,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -365,55 +364,47 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (partitionRefreshNumber >= rangePartitionMap.size()) {
             return;
         }
-        Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = Maps.newHashMap();
-        for (String partitionName : partitionsToRefresh) {
-            mappedPartitionsToRefresh.put(partitionName, rangePartitionMap.get(partitionName));
-        }
-        Comparator<Range<PartitionKey>> cmp =
-                mvContext.isPartitionRefreshReverse() ?
+        Map<String, Range<PartitionKey>> mappedPartitionsToRefresh = partitionsToRefresh.stream()
+                .collect(Collectors.toMap(partitionName -> partitionName, rangePartitionMap::get, (a, b) -> b));
+        Comparator<Range<PartitionKey>> cmp = mvContext.isPartitionRefreshReverse() ?
                         RangeUtils.RANGE_COMPARATOR.reversed() : RangeUtils.RANGE_COMPARATOR;
-        LinkedHashMap<String, Range<PartitionKey>> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
+        List<String> sortedPartition = mappedPartitionsToRefresh.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(cmp))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
 
-        Iterator<String> partitionNameIter = sortedPartition.keySet().iterator();
-        for (int i = 0; i < partitionRefreshNumber; i++) {
-            if (partitionNameIter.hasNext()) {
-                partitionNameIter.next();
-            }
-        }
-        String nextPartitionStart = null;
-        String startPartitionName = null;
-        String endPartitionName = null;
-        if (partitionNameIter.hasNext()) {
-            startPartitionName = partitionNameIter.next();
-            endPartitionName = startPartitionName;
-            partitionsToRefresh.remove(endPartitionName);
-        }
-        while (partitionNameIter.hasNext())  {
-            endPartitionName = partitionNameIter.next();
-            partitionsToRefresh.remove(endPartitionName);
-        }
+        // Skip first N partitions, which will be refreshed in this round
+        List<String> residualPartitions = sortedPartition.subList(partitionRefreshNumber, sortedPartition.size());
+        mvContext.setCandidateRefreshPartitions(Sets.newHashSet(residualPartitions));
 
-        // swap the start and end
+        String startPartitionName = residualPartitions.get(0);
+        String endPartitionName = residualPartitions.get(residualPartitions.size() - 1);
+
+        // Remove from candidate partitions
+        residualPartitions.forEach(partitionsToRefresh::remove);
+
+        // Swap the start and end if reversed
         if (mvContext.isPartitionRefreshReverse()) {
             String tmp = startPartitionName;
             startPartitionName = endPartitionName;
             endPartitionName = tmp;
         }
 
-        Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
-        nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
+        // Set next_start & next_end for next round
+        String nextPartitionStart = mapPartitionNameToLowerBound(mappedPartitionsToRefresh, startPartitionName);
         mvContext.setNextPartitionStart(nextPartitionStart);
 
         if (endPartitionName != null) {
-            PartitionKey upperEndpoint = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint();
-            mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperEndpoint, 0));
+            mvContext.setNextPartitionEnd(mapPartitionNameToLowerBound(mappedPartitionsToRefresh, endPartitionName));
         } else {
-            // partitionNameIter has just been traversed, and endPartitionName is not updated
-            // will cause endPartitionName == null
             mvContext.setNextPartitionEnd(null);
         }
+    }
+
+    private static String mapPartitionNameToLowerBound(Map<String, Range<PartitionKey>> mappedPartitionsToRefresh,
+                                                       String partitionName) {
+        Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(partitionName);
+        return AnalyzerUtils.parseLiteralExprToDateString(partitionKeyRange.lowerEndpoint(), 0);
     }
 
     private void generateNextTaskRun() {
@@ -421,21 +412,34 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> properties = mvContext.getProperties();
         long mvId = Long.parseLong(properties.get(MV_ID));
         String taskName = TaskBuilder.getMvTaskName(mvId);
-        Map<String, String> newProperties = Maps.newHashMap();
-        for (Map.Entry<String, String> proEntry : properties.entrySet()) {
-            if (proEntry.getValue() != null) {
-                newProperties.put(proEntry.getKey(), proEntry.getValue());
+
+        int batchSize = materializedView.getTableProperty().getPartitionRefreshNumber();
+        List<String> candidatePartitions = mvContext.getCandidateRefreshPartitions().stream().sorted()
+                .collect(Collectors.toList());
+        List<List<String>> batches = ListUtils.partition(candidatePartitions, batchSize);
+        for (int i = 0; i < Config.default_mv_partition_refresh_concurrency; i++) {
+            Map<String, String> newProperties = Maps.newHashMap();
+            for (Map.Entry<String, String> proEntry : properties.entrySet()) {
+                if (proEntry.getValue() != null) {
+                    newProperties.put(proEntry.getKey(), proEntry.getValue());
+                }
             }
+            List<String> batch = batches.get(i);
+            String startPartitionBound = mapPartitionNameToLowerBound(materializedView.getRangePartitionMap(),
+                    batch.get(0));
+            String endPartitionBound = mapPartitionNameToLowerBound(materializedView.getRangePartitionMap(),
+                    batch.get(batch.size() - 1));
+
+            newProperties.put(TaskRun.PARTITION_START, startPartitionBound);
+            newProperties.put(TaskRun.PARTITION_END, endPartitionBound);
+            // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
+            // Otherwise this round of partition refreshing would be staved and never got finished
+            ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), false, newProperties);
+            taskManager.executeTask(taskName, option);
+            LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
+                    materializedView.getName(), materializedView.getId(),
+                    mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
         }
-        newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
-        newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
-        // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
-        // Otherwise this round of partition refreshing would be staved and never got finished
-        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
-        taskManager.executeTask(taskName, option);
-        LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
-                materializedView.getName(), materializedView.getId(),
-                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
     }
 
     private void refreshExternalTable(TaskRunContext context) {

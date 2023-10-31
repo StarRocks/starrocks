@@ -49,6 +49,7 @@ public class MvTaskRunContext extends TaskRunContext {
     // is called `refBaseTablePartitionColumn`.
     private Column refBaseTablePartitionColumn;
 
+    private Set<String> candidateRefreshPartitions = null;
     private String nextPartitionStart = null;
     private String nextPartitionEnd = null;
     private ExecPlan execPlan = null;
@@ -80,6 +81,14 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setMvRefBaseTableIntersectedPartitions(Map<String, Set<String>> mvRefBaseTableIntersectedPartitions) {
         this.mvRefBaseTableIntersectedPartitions = mvRefBaseTableIntersectedPartitions;
+    }
+
+    public Set<String> getCandidateRefreshPartitions() {
+        return candidateRefreshPartitions;
+    }
+
+    public void setCandidateRefreshPartitions(Set<String> candidateRefreshPartitions) {
+        this.candidateRefreshPartitions = candidateRefreshPartitions;
     }
 
     public boolean hasNextBatchPartition() {
