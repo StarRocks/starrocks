@@ -471,7 +471,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_queue_max_queued_queries (global)
 
-队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。默认值：`0`。
+队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。默认值：`1024`。
 
 ### query_queue_mem_used_pct_limit (global)
 
