@@ -570,6 +570,12 @@ public class Config extends ConfigBase {
     public static int http_max_chunk_size = 8192;
 
     /**
+     * If a request takes longer than the configured time, a log will be generated to trace it.
+     */
+    @ConfField(mutable = true)
+    public static int http_slow_request_threshold_ms = 5000;
+
+    /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through
      * the oshi library, such as: getent passwd
      * If you have higher requirements for security, you can turn off the acquisition of this information
