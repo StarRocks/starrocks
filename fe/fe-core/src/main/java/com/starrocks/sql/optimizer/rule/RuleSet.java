@@ -398,6 +398,7 @@ public class RuleSet {
                 PruneEmptyScanRule.HUDI_SCAN,
                 PruneEmptyScanRule.ICEBERG_SCAN,
                 PruneEmptyScanRule.PAIMON_SCAN,
+                PruneEmptyScanRule.ODPS_SCAN,
                 PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
                 PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
                 new PruneEmptyDirectRule(),

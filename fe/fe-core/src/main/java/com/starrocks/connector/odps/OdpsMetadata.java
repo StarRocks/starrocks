@@ -122,6 +122,8 @@ public class OdpsMetadata implements ConnectorMetadata {
         OdpsTable odpsTable = (OdpsTable) table;
         TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
         try {
+            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
+                    odpsTable.getTableName(), columnNames);
             TableBatchReadSession
                     scan =
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
