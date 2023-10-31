@@ -30,6 +30,7 @@ import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,6 +39,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -58,6 +60,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
     private final EnvironmentSettings settings;
     private final TableBatchReadSession scan;
     private SplitReader<VectorSchemaRoot> reader;
+    private Map<String, Integer> nameIndexMap;
 
     public OdpsSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -78,9 +81,11 @@ public class OdpsSplitScanner extends ConnectorScanner {
                 .collect(Collectors.toMap(Column::getName, o -> o));
         requireColumns = new Column[requiredFields.length];
         requiredTypes = new ColumnType[requiredFields.length];
+        nameIndexMap = new HashMap<>();
         for (int i = 0; i < requiredFields.length; i++) {
             requireColumns[i] = nameColumnMap.get(requiredFields[i]);
             requiredTypes[i] = OdpsTypeUtils.convertToColumnType(requireColumns[i]);
+            nameIndexMap.put(requiredFields[i], i);
         }
         settings =
                 EnvironmentSettings.newBuilder().withServiceEndpoint(params.get("endpoint"))
@@ -119,6 +124,11 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
     }
 
+    // because of fe must reorder the column name, so the vectorschemaroot 's order are different from requiredFields
+    // we make vectorschemaroot is right order
+    // right order: fieldVectors, columnAccessors
+    // wrong order: requireColumns, requireFields
+
     @Override
     public int getNext() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
@@ -126,19 +136,24 @@ public class OdpsSplitScanner extends ConnectorScanner {
                 VectorSchemaRoot vectorSchemaRoot = reader.get();
                 List<FieldVector> fieldVectors = vectorSchemaRoot.getFieldVectors();
                 ArrowVectorAccessor[] columnAccessors = new ArrowVectorAccessor[requireColumns.length];
+                List<Field> fields = vectorSchemaRoot.getSchema().getFields();
                 for (int i = 0; i < fieldVectors.size(); i++) {
+                    String filedName = fields.get(i).getName();
+                    int fieldIndex = nameIndexMap.get(filedName);
                     columnAccessors[i] =
                             OdpsTypeUtils.createColumnVectorAccessor(fieldVectors.get(i),
-                                    requireColumns[i].getTypeInfo());
+                                    requireColumns[fieldIndex].getTypeInfo());
                 }
-                for (int rowId = 0; rowId < requireColumns.length; rowId++) {
+                for (int rowId = 0; rowId < fieldVectors.size(); rowId++) {
+                    String filedName = fields.get(rowId).getName();
+                    int fieldIndex = nameIndexMap.get(filedName);
                     for (int index = 0; index < vectorSchemaRoot.getRowCount(); index++) {
-                        Object data = OdpsTypeUtils.getData(columnAccessors[rowId], requireColumns[rowId].getTypeInfo(),
+                        Object data = OdpsTypeUtils.getData(columnAccessors[rowId], requireColumns[fieldIndex].getTypeInfo(),
                                 index);
                         if (data == null) {
-                            appendData(rowId, null);
+                            appendData(fieldIndex, null);
                         } else {
-                            appendData(rowId, new OdpsColumnValue(data, requireColumns[rowId].getTypeInfo()));
+                            appendData(fieldIndex, new OdpsColumnValue(data, requireColumns[fieldIndex].getTypeInfo()));
                         }
                     }
                 }

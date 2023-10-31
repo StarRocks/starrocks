@@ -14,8 +14,10 @@
 
 package com.starrocks.connector.odps;
 
+import com.aliyun.odps.Column;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.Partition;
+import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
@@ -41,11 +43,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class OdpsMetadata implements ConnectorMetadata {
 
@@ -121,6 +126,15 @@ public class OdpsMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
+
+        TableSchema schema = odps.tables().get(odpsTable.getProjectName(), odpsTable.getTableName()).getSchema();
+        Set<String> set = columnNames.stream().collect(Collectors.toSet());
+        List<String> orderedColumnNames = new ArrayList<>();
+        for (Column column : schema.getColumns()) {
+            if (set.contains(column.getName())) {
+                orderedColumnNames.add(column.getName());
+            }
+        }
         try {
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
                     odpsTable.getTableName(), columnNames);
@@ -128,7 +142,7 @@ public class OdpsMetadata implements ConnectorMetadata {
                     scan =
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
                             .withSettings(settings)
-                            .requiredDataColumns(columnNames)
+                            .requiredDataColumns(orderedColumnNames)
                             .withSplitOptions(SplitOptions.createDefault())
                             .buildBatchReadSession();
             InputSplitAssigner assigner = scan.getInputSplitAssigner();
