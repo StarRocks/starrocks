@@ -218,7 +218,7 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
 BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
     switch (rhs._type) {
     case EMPTY:
-        clear();
+        reset();
         break;
     case SINGLE:
         switch (_type) {
@@ -227,7 +227,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
         case SINGLE:
             if (_sv != rhs._sv) {
                 _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
@@ -257,12 +257,12 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
         case SINGLE:
             if (!rhs._bitmap->contains(_sv)) {
                 _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
             *_bitmap &= *rhs._bitmap;
-            _convert_to_smaller_type();
+            _from_bitmap_to_smaller_type();
             break;
         case SET: {
             auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
@@ -283,7 +283,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
         case SINGLE:
             if (!rhs._set->contains(_sv)) {
                 _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP: {
@@ -321,7 +321,7 @@ void BitmapValue::remove(uint64_t rhs) {
     case SINGLE:
         if (_sv == rhs) {
             _type = EMPTY;
-            clear();
+            reset();
         }
         break;
     case BITMAP:
@@ -344,7 +344,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
         case SINGLE:
             if (_sv == rhs._sv) {
                 _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
@@ -362,12 +362,12 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
         case SINGLE:
             if (rhs._bitmap->contains(_sv)) {
                 _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP:
             *_bitmap -= *rhs._bitmap;
-            _convert_to_smaller_type();
+            _from_bitmap_to_smaller_type();
             break;
         case SET: {
             auto set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
@@ -388,7 +388,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
         case SINGLE:
             if (rhs._set->contains(_sv)) {
                 _type = EMPTY;
-                clear();
+                reset();
             }
             break;
         case BITMAP: {
@@ -396,7 +396,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             for (auto x : *rhs._set) {
                 _bitmap->remove(x);
             }
-            _convert_to_smaller_type();
+            _from_bitmap_to_smaller_type();
             break;
         }
         case SET: {
@@ -427,7 +427,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
         case SINGLE:
             if (_sv == rhs._sv) {
                 _type = EMPTY;
-                clear();
+                reset();
             } else {
                 add(rhs._sv);
             }
@@ -898,28 +898,35 @@ void BitmapValue::compress() const {
 }
 
 void BitmapValue::clear() {
-    _type = EMPTY;
     if (_bitmap != nullptr) {
         _bitmap->clear();
     }
-    _set.reset();
+    if (_set != nullptr) {
+        _set->clear();
+    }
     _sv = 0;
+    _type = EMPTY;
 }
 
-void BitmapValue::_convert_to_smaller_type() {
-    if (_type == BITMAP) {
-        uint64_t c = _bitmap->cardinality();
-        if (c > 1) return;
-        if (c == 0) {
-            _type = EMPTY;
-        } else {
-            _type = SINGLE;
-            auto min_value = _bitmap->minimum();
-            DCHECK(min_value.has_value());
-            _sv = min_value.value();
-        }
-        _bitmap->clear();
+void BitmapValue::reset() {
+    _bitmap.reset();
+    _set.reset();
+    _sv = 0;
+    _type = EMPTY;
+}
+
+void BitmapValue::_from_bitmap_to_smaller_type() {
+    uint64_t c = _bitmap->cardinality();
+    if (c > 1) return;
+    if (c == 0) {
+        _type = EMPTY;
+    } else {
+        _type = SINGLE;
+        auto min_value = _bitmap->minimum();
+        DCHECK(min_value.has_value());
+        _sv = min_value.value();
     }
+    _bitmap.reset();
 }
 
 int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
