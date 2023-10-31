@@ -291,7 +291,8 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.needReport = context.getSessionVariable().isEnableProfile();
+        this.needReport = context.getSessionVariable().isEnableProfile() ||
+                context.getSessionVariable().isEnableBigQueryProfile();
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
         this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
         this.nextInstanceId = new TUniqueId();
@@ -1645,10 +1646,9 @@ public class Coordinator {
             cancelInternal(cancelReason);
         } finally {
             try {
-                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // Disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
-                if (connectContext.getSessionVariable().isEnableProfile() && profileDoneSignal != null
-                        && cancelledMessage.contains("Backend not found")) {
+                if (profileDoneSignal != null && cancelledMessage.contains("Backend not found")) {
                     profileDoneSignal.countDownToZero(new Status());
                     LOG.info("count down profileDoneSignal since backend has crashed, query id: {}", DebugUtil.printId(queryId));
                 }
@@ -1672,7 +1672,7 @@ public class Coordinator {
         cancelRemoteFragmentsAsync(cancelReason);
         if (profileDoneSignal != null && cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
             // count down to zero to notify all objects waiting for this
-            if (!connectContext.getSessionVariable().isEnableProfile()) {
+            if (!connectContext.isProfileEnabled()) {
                 profileDoneSignal.countDownToZero(new Status());
                 LOG.info("unfinished instance: {}",
                         profileDoneSignal.getLeftMarks().stream().map(e -> DebugUtil.printId(e.getKey())).toArray());
@@ -2662,7 +2662,7 @@ public class Coordinator {
     public void mergeIsomorphicProfiles() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
-        if (!sessionVariable.isEnableProfile()) {
+        if (!connectContext.isProfileEnabled()) {
             return;
         }
 
