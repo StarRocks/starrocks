@@ -62,7 +62,6 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -547,11 +546,6 @@ public class ConnectContext {
         }
         return System.currentTimeMillis() - getStartTime() >
                 1000L * sessionVariable.getBigQueryProfileSecondThreshold();
-    }
-
-    public boolean needMergeProfile() {
-        return isProfileEnabled() &&
-                sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
     }
 
     public byte[] getAuthDataSalt() {
