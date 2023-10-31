@@ -133,7 +133,7 @@ public:
 
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
-            return Status::JitCompileError("JIT of decimal arithmetic not support");
+            return Status::NotSupported("JIT of decimal arithmetic not support");
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
             using CppType = RunTimeCppType<Type>;
@@ -195,7 +195,7 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
-        return Status::JitCompileError("JIT of div arithmetic not support");
+        return Status::NotSupported("JIT of div arithmetic not support");
     }
 
 private:
@@ -248,7 +248,7 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
-        return Status::JitCompileError("JIT of mod arithmetic not support");
+        return Status::NotSupported("JIT of mod arithmetic not support");
     }
 };
 
