@@ -41,7 +41,9 @@ public class CloudConfiguration {
     }
 
     public void applyToConfiguration(Configuration configuration) {
-        configuration.set(HadoopExt.HDFS_CONFIG_RESOURCES, configResources);
+        if (configResources != null) {
+            configuration.set(HadoopExt.HDFS_CONFIG_RESOURCES, configResources);
+        }
         configuration.set(HadoopExt.HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
         HadoopExt.getInstance().rewriteConfiguration(configuration);
     }

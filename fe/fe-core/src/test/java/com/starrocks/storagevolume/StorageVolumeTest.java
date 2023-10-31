@@ -366,7 +366,7 @@ public class StorageVolumeTest {
 
         Configuration conf = new Configuration();
         hdfsCloudConfiguration.applyToConfiguration(conf);
-        Assert.assertEquals(conf.get("XXX"), "YYY");
+        Assert.assertEquals(conf.get("XXX"), null);
     }
 
     @Test
