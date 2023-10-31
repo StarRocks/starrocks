@@ -279,6 +279,12 @@ public class TableFactory {
             if (!column.isAllowNull()) {
                 throw new DdlException("iceberg extern table not support no-nullable column: [" + column.getName() + "]");
             }
+
+            for (String partName : oTable.getPartitionColumnNames()) {
+                if (!columns.stream().map(Column::getName).collect(Collectors.toList()).contains(partName)) {
+                    throw new DdlException("partition column [" + partName + "] must exist in column list");
+                }
+            }
         }
     }
 
