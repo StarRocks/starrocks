@@ -226,7 +226,6 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (_sv != rhs._sv) {
-                _type = EMPTY;
                 reset();
             }
             break;
@@ -256,7 +255,6 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (!rhs._bitmap->contains(_sv)) {
-                _type = EMPTY;
                 reset();
             }
             break;
@@ -282,7 +280,6 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (!rhs._set->contains(_sv)) {
-                _type = EMPTY;
                 reset();
             }
             break;
@@ -320,7 +317,6 @@ void BitmapValue::remove(uint64_t rhs) {
         break;
     case SINGLE:
         if (_sv == rhs) {
-            _type = EMPTY;
             reset();
         }
         break;
@@ -343,7 +339,6 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (_sv == rhs._sv) {
-                _type = EMPTY;
                 reset();
             }
             break;
@@ -361,7 +356,6 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (rhs._bitmap->contains(_sv)) {
-                _type = EMPTY;
                 reset();
             }
             break;
@@ -387,7 +381,6 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (rhs._set->contains(_sv)) {
-                _type = EMPTY;
                 reset();
             }
             break;
@@ -425,7 +418,6 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
             break;
         case SINGLE:
             if (_sv == rhs._sv) {
-                _type = EMPTY;
                 reset();
             } else {
                 add(rhs._sv);
