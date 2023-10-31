@@ -2070,4 +2070,84 @@ public class MvRewriteTest extends MvRewriteTestBase {
             }
         }
     }
+
+    @Test
+    public void testExclusivePredicate_StructType() throws Exception {
+        String createTable = "CREATE TABLE `t1_event_struct` (\n" +
+                "  `c1_event_date` date NOT NULL COMMENT \"\",\n" +
+                "  `c2_event` struct<name varchar(65533)> NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1_event_date`)\n" +
+                "PARTITION BY RANGE(`c1_event_date`)\n" +
+                "(PARTITION p1 VALUES [(\"2023-07-02\"), (\"2023-07-03\")),\n" +
+                "PARTITION p2 VALUES [(\"2023-07-03\"), (\"2023-07-04\")),\n" +
+                "PARTITION p3 VALUES [(\"2023-07-05\"), (\"2023-07-06\")))\n" +
+                "DISTRIBUTED BY HASH(`c1_event_date`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String createMv = "CREATE MATERIALIZED VIEW `mv_filter_1` (`c1_event_date`, `name`)\n" +
+                "PARTITION BY (`c1_event_date`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1_event_struct`.`c1_event_date`, `t1_event_struct`.`c2_event`.`name` AS `name`\n" +
+                "FROM `t1_event_struct`\n" +
+                "WHERE `t1_event_struct`.`c2_event`.`name` != 'haha';";
+        String query = "SELECT c1_event_date FROM t1_event_struct " +
+                "WHERE c2_event.name = 'hehe' and c1_event_date = '2023-07-02'";
+
+        String tableName = "t1_event_struct";
+        String mvName = "mv_filter_1";
+        starRocksAssert.withTable(createTable);
+        createAndRefreshMv("test", mvName, createMv);
+        starRocksAssert.query(query).explainContains(mvName);
+
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testExclusivePredicate_SimpleType() throws Exception {
+        String createTable = "CREATE TABLE `t1_event_struct` (\n" +
+                "  `c1_event_date` date NOT NULL COMMENT \"\",\n" +
+                "  `c2_event_name` string NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1_event_date`)\n" +
+                "PARTITION BY RANGE(`c1_event_date`)\n" +
+                "(PARTITION p1 VALUES [(\"2023-07-02\"), (\"2023-07-03\")),\n" +
+                "PARTITION p2 VALUES [(\"2023-07-03\"), (\"2023-07-04\")),\n" +
+                "PARTITION p3 VALUES [(\"2023-07-05\"), (\"2023-07-06\")))\n" +
+                "DISTRIBUTED BY HASH(`c1_event_date`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String createMv = "CREATE MATERIALIZED VIEW `mv_filter_1` \n" +
+                "PARTITION BY (`c1_event_date`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1_event_struct`.`c1_event_date`, `t1_event_struct`.`c2_event_name` AS `name`\n" +
+                "FROM `t1_event_struct`\n" +
+                "WHERE `t1_event_struct`.`c2_event_name` != 'haha';";
+        String query = "SELECT c1_event_date FROM t1_event_struct " +
+                "WHERE c2_event_name = 'hehe' and c1_event_date = '2023-07-02'";
+
+        String tableName = "t1_event_struct";
+        String mvName = "mv_filter_1";
+        starRocksAssert.withTable(createTable);
+        createAndRefreshMv("test", mvName, createMv);
+        starRocksAssert.query(query).explainContains(mvName);
+
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
 }
