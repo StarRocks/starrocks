@@ -4397,19 +4397,19 @@ select cardinality([row(1,2,3), row(3,4,5)]);
 -- !result
 select array_contains_seq([1,2,3,4], [2,3]);
 -- result:
-0
+1
 -- !result
 select array_contains_seq([1,2,3,4], [3,2]);
 -- result:
-1
+0
 -- !result
 select array_contains_seq([1,2,3,4], [1,2,3]);
 -- result:
-0
+1
 -- !result
 select array_contains_seq([1,2,3,4], [1,2,4]);
 -- result:
-1
+0
 -- !result
 select array_contains_seq([], []);
 -- result:

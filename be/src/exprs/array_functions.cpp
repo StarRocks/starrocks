@@ -762,10 +762,9 @@ private:
                                                      std::is_same_v<MapColumn, ElementColumn> ||
                                                      std::is_same_v<StructColumn, ElementColumn>,
                                              uint8_t, typename ElementColumn::ValueType>;
-
-        [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
-            return (*null_map)[idx] != 0;
-        };
+        if (element_end < target_end) {
+           return false;
+        }
         bool found = false;
         size_t i = target_start;
         size_t j = element_start;
@@ -805,17 +804,17 @@ private:
 
         for (size_t i = 0; i < num_array; i++) {
             uint8_t found = 0;
-            if (ContainsSeq) {
+            if constexpr (ContainsSeq) {
                 DCHECK_EQ(num_array, num_target);
                 found = __process_seq<NullableElement, NullableTarget, ElementColumn>(
-                        elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets, target_offsets_ptr[i],
-                        target_offsets_ptr[i + 1], null_map_elements, null_map_targets);
+                        elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets,
+                        target_offsets_ptr[i], target_offsets_ptr[i + 1], null_map_elements, null_map_targets);
             } else {
                 if constexpr (ConstTarget) {
                    DCHECK_EQ(num_target, 1);
                    found = __process<NullableElement, NullableTarget, ElementColumn>(
-                           elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets, target_offsets_ptr[0],
-                           target_offsets_ptr[1], null_map_elements, null_map_targets);
+                           elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets,
+                           target_offsets_ptr[0], target_offsets_ptr[1], null_map_elements, null_map_targets);
                 } else {
                    DCHECK_EQ(num_array, num_target);
                    found = __process<NullableElement, NullableTarget, ElementColumn>(
