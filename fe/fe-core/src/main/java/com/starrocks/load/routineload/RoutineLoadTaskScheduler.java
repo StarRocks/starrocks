@@ -48,6 +48,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
@@ -112,6 +113,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         updateBackendSlotIfNecessary();
 
         int idleSlotNum = routineLoadManager.getClusterIdleSlotNum();
+        MetricRepo.GAUGE_ROUTINE_LOAD_IDLE_SLOT_NUM.setValue((long) idleSlotNum);
         // scheduler will be blocked when there is no slot for task in cluster
         if (idleSlotNum <= 0) {
             LOG.warn("no available be slot to scheduler tasks, wait for {} seconds to scheduler again, " +

@@ -152,6 +152,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
+    public static GaugeMetricImpl<Long> GAUGE_ROUTINE_LOAD_IDLE_SLOT_NUM;
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
@@ -310,6 +311,11 @@ public final class MetricRepo {
                 "editlog_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
         GAUGE_STACKED_JOURNAL_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_JOURNAL_NUM);
+
+        GAUGE_ROUTINE_LOAD_IDLE_SLOT_NUM = new GaugeMetricImpl<>("routine_load_idle_slot_num", MetricUnit.OPERATIONS,
+                "idle slot num for routine load");
+        GAUGE_ROUTINE_LOAD_IDLE_SLOT_NUM.setValue(0L);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_ROUTINE_LOAD_IDLE_SLOT_NUM);
 
         GAUGE_QUERY_LATENCY_MEAN =
                 new GaugeMetricImpl<>("query_latency", MetricUnit.MILLISECONDS, "mean of query latency");
