@@ -1,6 +1,7 @@
 {
   "position": 50,
   "label": "Quick Start",
+  "sidebar_label": "Quick Start",
   "collapsible": true,
   "collapsed": true,
   "link": { "type": "doc", "id": "README" }
