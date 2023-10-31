@@ -15,6 +15,7 @@
 #include "storage/lake/transactions.h"
 
 #include "fs/fs_util.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
@@ -107,7 +108,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
         files_to_delete.emplace_back(log_path);
 
-        tablet_mgr->metacache()->erase(CacheKey(log_path));
+        tablet_mgr->metacache()->erase(log_path);
     }
 
     // Apply vtxn logs for schema change
@@ -135,7 +136,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
             files_to_delete.emplace_back(vlog_path);
 
-            tablet_mgr->metacache()->erase(CacheKey(vlog_path));
+            tablet_mgr->metacache()->erase(vlog_path);
         }
     }
 
@@ -172,7 +173,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
         return st;
     } else {
         delete_files_async({txn_log_path});
-        tablet_mgr->metacache()->erase(CacheKey(txn_log_path));
+        tablet_mgr->metacache()->erase(txn_log_path);
         return Status::OK();
     }
 }
@@ -213,7 +214,7 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_
 
         files_to_delete.emplace_back(log_path);
 
-        tablet_mgr->metacache()->erase(CacheKey(log_path));
+        tablet_mgr->metacache()->erase(log_path);
     }
 
     delete_files_async(std::move(files_to_delete));

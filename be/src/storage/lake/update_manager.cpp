@@ -443,10 +443,9 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, DelVector* delvec) {
-    std::string filepath = _location_provider->tablet_metadata_location(tsid.tablet_id, meta_ver);
-    MetaFileReader reader(filepath, false);
-    RETURN_IF_ERROR(reader.load_by_cache(filepath, _tablet_mgr));
-    RETURN_IF_ERROR(reader.get_del_vec(_tablet_mgr, tsid.segment_id, delvec));
+    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, false));
+    RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, delvec));
     return Status::OK();
 }
 
