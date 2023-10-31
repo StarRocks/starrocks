@@ -19,7 +19,6 @@
 
 #include <atomic>
 #include <utility>
-#include <variant>
 
 #include "agent/master_info.h"
 #include "common/compiler_util.h"
@@ -38,7 +37,6 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vertical_compaction_task.h"

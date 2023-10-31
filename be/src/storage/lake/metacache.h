@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 #include <variant>
 
 #include "gutil/macros.h"
