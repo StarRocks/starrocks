@@ -14,7 +14,7 @@
 
 package com.starrocks.credential.hdfs;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationProvider;
 
@@ -35,7 +35,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME
 
 public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
 
-    private static String getOrDefault(Map<String, String> prop, String... args) {
+    protected static String getOrDefault(Map<String, String> prop, String... args) {
         for (String k : args) {
             String v = prop.get(k);
             if (v != null) {
@@ -45,8 +45,7 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         return "";
     }
 
-    @Override
-    public CloudConfiguration build(Map<String, String> properties) {
+    protected Map<String, String> preprocessProperties(Map<String, String> properties) {
         Preconditions.checkNotNull(properties);
         Map<String, String> prop = new HashMap<>(properties);
 
@@ -59,6 +58,12 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         for (String k : keys) {
             prop.remove(k);
         }
+        return prop;
+    }
+
+    @Override
+    public CloudConfiguration build(Map<String, String> properties) {
+        Map<String, String> prop = preprocessProperties(properties);
 
         HDFSCloudCredential hdfsCloudCredential = new HDFSCloudCredential(
                 getOrDefault(properties, HDFS_AUTHENTICATION),
@@ -72,7 +77,6 @@ public class HDFSCloudConfigurationProvider implements CloudConfigurationProvide
         if (!hdfsCloudCredential.validate()) {
             return null;
         }
-        HDFSCloudConfiguration conf = new HDFSCloudConfiguration(hdfsCloudCredential);
-        return conf;
+        return new HDFSCloudConfiguration(hdfsCloudCredential);
     }
 }

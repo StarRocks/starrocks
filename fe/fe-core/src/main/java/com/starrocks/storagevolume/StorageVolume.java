@@ -21,6 +21,7 @@ import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
+import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -29,7 +30,6 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
-import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -43,9 +43,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_CONTAINER;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
 
 public class StorageVolume implements Writable, GsonPostProcessable {
     public enum StorageVolumeType {
@@ -93,7 +90,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.params = new HashMap<>(params);
         Map<String, String> configurationParams = new HashMap<>(params);
         preprocessAuthenticationIfNeeded(configurationParams);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(configurationParams, true);
         if (!isValidCloudConfiguration()) {
             Gson gson = new Gson();
             throw new SemanticException("Storage params is not valid " + gson.toJson(params));
@@ -107,7 +104,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         this.locations = new ArrayList<>(sv.locations);
         this.comment = sv.comment;
         this.enabled = sv.enabled;
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(sv.params, true);
         this.params = new HashMap<>(sv.params);
     }
 
@@ -249,7 +246,12 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 }
                 return params;
             case HDFS:
-                // TODO
+                HDFSFileStoreInfo hdfsFileStoreInfo = fsInfo.getHdfsFsInfo();
+                params.putAll(hdfsFileStoreInfo.getConfigurationMap());
+                String userName = hdfsFileStoreInfo.getUsername();
+                if (!Strings.isNullOrEmpty(userName)) {
+                    params.put(CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED, userName);
+                }
                 return params;
             case AZBLOB:
                 AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
@@ -270,11 +272,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     private void preprocessAuthenticationIfNeeded(Map<String, String> params) {
-        if (svt == StorageVolumeType.HDFS) {
-            params.computeIfAbsent(HDFS_AUTHENTICATION, key -> HDFSCloudCredential.EMPTY);
-        } else if (svt == StorageVolumeType.AZBLOB) {
+        if (svt == StorageVolumeType.AZBLOB) {
             String container = locations.get(0).split("/")[0];
-            params.put(AZURE_BLOB_CONTAINER, container);
+            params.put(CloudConfigurationConstants.AZURE_BLOB_CONTAINER, container);
         }
     }
 

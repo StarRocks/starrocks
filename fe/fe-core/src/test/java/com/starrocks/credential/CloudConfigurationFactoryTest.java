@@ -206,6 +206,13 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(cc.toConfString(),
                 "HDFSCloudConfiguration{resources='', jars='', cred=HDFSCloudCredential{authentication='simple', username='XX'," +
                         " password='XX', krbPrincipal='', krbKeyTabFile='', krbKeyTabData=''}}");
+
+        map.clear();
+        cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertEquals(CloudType.DEFAULT, cc.getCloudType());
+
+        cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map, true);
+        Assert.assertEquals(CloudType.HDFS, cc.getCloudType());
     }
 
     @Test
