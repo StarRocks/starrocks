@@ -244,7 +244,7 @@ public class TypeTest {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
         ));
         MapType mapType =
                 new MapType(ScalarType.createType(PrimitiveType.INT), c1);
@@ -262,7 +262,7 @@ public class TypeTest {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
         ));
         StructType root = new StructType(Lists.newArrayList(
                 new StructField("struct_test", ScalarType.createType(PrimitiveType.INT), "comment test"),

@@ -69,7 +69,7 @@ public class IcebergApiConverterTest {
 
     @Test
     public void testString() {
-        Type stringType = ScalarType.createDefaultExternalTableString();
+        Type stringType = ScalarType.createDefaultCatalogString();
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType, stringType);
@@ -115,7 +115,7 @@ public class IcebergApiConverterTest {
                 Types.StringType.get(), Types.IntegerType.get());
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType,
-                new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
     }
 
     @Test

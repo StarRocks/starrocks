@@ -170,7 +170,7 @@ public class EsUtil {
             case "nested":
             case "object":
             default:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
         }
     }
 
