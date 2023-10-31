@@ -180,14 +180,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     // REQUIRE: has acquired the exclusive lock of database
-    void addShadowIndexToCatalog(@NotNull LakeTable table) {
-        Preconditions.checkState(watershedTxnId != -1);
+    void addShadowIndexToCatalog(@NotNull LakeTable table, long visibleTxnId) {
+        Preconditions.checkState(visibleTxnId != -1);
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkState(partition != null);
             Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                shadowIndex.setVisibleTxnId(watershedTxnId);
+                shadowIndex.setVisibleTxnId(visibleTxnId);
                 Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                         shadowIndex.getState());
                 partition.createRollupIndex(shadowIndex);
@@ -261,6 +261,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+    }
+
+    @VisibleForTesting
+    public static long peekNextTransactionId() {
+        return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
     }
 
     @Override
@@ -377,7 +382,21 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
-            addShadowIndexToCatalog(table);
+            addShadowIndexToCatalog(table, watershedTxnId);
+        }
+
+        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
+        // transaction A begins between these operations. This is safe as long as A gets the tablet
+        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
+        // writes to it. All current import transactions do this (beginTransaction first), so even
+        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
+        // is just a convention not a requirement. If violated, transactions with IDs greater than
+        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
+        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
+        long nextTxnId = peekNextTransactionId();
+        if (nextTxnId != watershedTxnId + 1) {
+            throw new AlterCancelException(
+                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
         }
 
         jobState = JobState.WAITING_TXN;
@@ -733,7 +752,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 addTabletToTabletInvertedIndex(table);
                 table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             } else if (jobState == JobState.WAITING_TXN) {
-                addShadowIndexToCatalog(table);
+                addShadowIndexToCatalog(table, watershedTxnId);
             } else if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
