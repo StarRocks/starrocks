@@ -3727,7 +3727,7 @@ public abstract class FileSystem extends Configured
      */
     private static FileSystem createFileSystem(URI uri, Configuration conf)
             throws IOException {
-        HadoopExt.addConfigResourcesToConfiguration(conf);
+        HadoopExt.getInstance().rewriteConfiguration(conf);
         LOGGER.info(String.format("%s FileSystem.createFileSystem", HadoopExt.LOGGER_MESSAGE_PREFIX));
         Tracer tracer = FsTracer.get(conf);
         try (TraceScope scope = tracer.newScope("FileSystem#createFileSystem");
@@ -4027,7 +4027,7 @@ public abstract class FileSystem extends Configured
 
                 this.ugi = UserGroupInformation.getCurrentUser();
 
-                this.cloudConf = HadoopExt.getCloudConfString(conf);
+                this.cloudConf = HadoopExt.getInstance().getCloudConfString(conf);
             }
 
             @Override
