@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -218,6 +219,11 @@ public class RoutineLoadMgr implements Writable {
 
         routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
+    }
+
+    @VisibleForTesting
+    public Map<Long, Integer> getBeTasksNum() {
+        return beTasksNum;
     }
 
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
