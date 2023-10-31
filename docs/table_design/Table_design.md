@@ -1,4 +1,4 @@
-# Introduction
+# Table Design
 
 This chapter introduces the following topics:
 
