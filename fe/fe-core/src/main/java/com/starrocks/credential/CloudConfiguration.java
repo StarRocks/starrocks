@@ -41,8 +41,9 @@ public class CloudConfiguration {
     }
 
     public void applyToConfiguration(Configuration configuration) {
-        HadoopExt.addConfigResourcesToConfiguration(configResources, configuration);
+        configuration.set(HadoopExt.HDFS_CONFIG_RESOURCES, configResources);
         configuration.set(HadoopExt.HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
+        HadoopExt.getInstance().rewriteConfiguration(configuration);
     }
 
     // Hadoop FileSystem has a cache itself, it used request uri as a cache key by default,
