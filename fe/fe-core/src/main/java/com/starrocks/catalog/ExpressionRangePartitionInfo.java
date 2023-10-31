@@ -31,8 +31,11 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -51,6 +54,7 @@ import static java.util.stream.Collectors.toList;
 public class ExpressionRangePartitionInfo extends RangePartitionInfo implements GsonPreProcessable, GsonPostProcessable {
     public static final String AUTOMATIC_SHADOW_PARTITION_NAME = "$shadow_automatic_partition";
     public static final String SHADOW_PARTITION_PREFIX = "$";
+    private static final Logger LOG = LogManager.getLogger(ExpressionRangePartitionInfo.class);
 
     private List<Expr> partitionExprs;
 
@@ -93,7 +97,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
                         slotRef.setType(partitionColumn.getType());
                         slotRef.setNullable(partitionColumn.isAllowNull());
-                        PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                        try {
+                            PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                        } catch (SemanticException ex) {
+                            LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
+                        }
                     }
                 }
             }
