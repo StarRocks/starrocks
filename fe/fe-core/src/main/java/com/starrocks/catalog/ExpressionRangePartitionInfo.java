@@ -31,6 +31,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.SqlParser;
 
@@ -85,6 +86,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
 
         for (Expr expr : partitionExprs) {
             if (expr instanceof FunctionCallExpr) {
+<<<<<<< HEAD
                 SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
                 // TODO: Later, for automatically partitioned tables,
                 //  partitions of materialized views (also created automatically),
@@ -95,6 +97,29 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                         slotRef.setNullable(partitionColumn.isAllowNull());
                         PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
                     }
+=======
+                slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+            } else if (expr instanceof CastExpr) {
+                slotRef = AnalyzerUtils.getSlotRefFromCast(expr);
+            } else if (expr instanceof SlotRef) {
+                slotRef = (SlotRef) expr;
+            } else {
+                LOG.warn("Unknown expr type: {}", expr.toSql());
+                continue;
+            }
+
+            // TODO: Later, for automatically partitioned tables,
+            //  partitions of materialized views (also created automatically),
+            //  and partition by expr tables will use ExpressionRangePartitionInfoV2
+            if (partitionNameColumnMap.containsKey(slotRef.getColumnName())) {
+                Column partitionColumn = partitionNameColumnMap.get(slotRef.getColumnName());
+                slotRef.setType(partitionColumn.getType());
+                slotRef.setNullable(partitionColumn.isAllowNull());
+                try {
+                    PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                } catch (SemanticException ex) {
+                    LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
+>>>>>>> a916db1536 ([Enhancement] Add exception handling to avoid FE startup failure (#33999))
                 }
             }
         }
