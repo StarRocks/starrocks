@@ -341,9 +341,8 @@ public class TabletSchedulerTest {
                 null,
                 false,
                 false,
-                1,
                 TTabletType.TABLET_TYPE_DISK,
-                TCompressionType.LZ4_FRAME);
+                TCompressionType.LZ4_FRAME, false);
 
         Replica replica = new Replica(replicaId, beId, -1, Replica.ReplicaState.RECOVER);
 
