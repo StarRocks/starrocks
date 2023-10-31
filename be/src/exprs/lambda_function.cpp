@@ -28,6 +28,11 @@ namespace starrocks {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _common_sub_expr_num(node.output_column) {}
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    if (UNLIKELY(!_captured_slot_ids.empty() || !_arguments_ids.empty() || !_common_sub_expr_ids.empty() ||
+                 !_common_sub_expr.empty())) {
+        LOG(WARNING) << "Lambda function's prepare() again";
+        return Status::OK();
+    }
     RETURN_IF_ERROR(Expr::prepare(state, context));
     // common sub expressions include 2 parts in a pair: (slot id, expression)
     const int child_num = get_num_children() - 2 * _common_sub_expr_num;
