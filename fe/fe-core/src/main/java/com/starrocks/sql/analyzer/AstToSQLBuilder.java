@@ -15,7 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.ParseUtil;
