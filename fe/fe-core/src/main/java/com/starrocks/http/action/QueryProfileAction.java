@@ -48,10 +48,11 @@ public class QueryProfileAction extends WebBaseAction {
             response.appendContent("");
             response.appendContent("<p class=\"text-error\"> Must specify a query_id[]</p>");
         }
-
-        String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
+        boolean simple = "1".equals(request.getSingleParameter("simple"));
+        String queryProfileStr = ProfileManager.getInstance().getProfile(queryId, simple);
         if (queryProfileStr != null) {
             appendCopyButton(response.getContent());
+            appendSwitchSimpleOrDetailButton(response.getContent(), queryId, simple);
             appendQueryProfile(response.getContent(), queryProfileStr);
             getPageFooter(response.getContent());
             writeResponse(request, response);
@@ -82,5 +83,19 @@ public class QueryProfileAction extends WebBaseAction {
                 "}\n" +
                 "</script>");
         buffer.append("<input type=\"button\" onclick=\"copyProfile();\" value=\"Copy Profile\"></input>");
+    }
+
+    private void appendSwitchSimpleOrDetailButton(StringBuilder buffer, String queryId, boolean simple) {
+        String href = simple ? "/query_profile?query_id=" + queryId : "/query_profile?query_id=" + queryId + "&simple=1";
+        String name = simple ? "Switch Detail" : "Switch Simple";
+        buffer.append("<script type=\"text/javascript\">\n" +
+                "function switchMode(){\n" +
+                "  window.location.href = '" + href +
+                "';\n" +
+                "}\n"  +
+                "</script>");
+        buffer.append("<input type=\"button\" onclick=\"switchMode();\" value=\"" +
+                name +
+                "\"></input>");
     }
 }

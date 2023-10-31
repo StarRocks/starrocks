@@ -62,6 +62,12 @@ public class RuntimeProfile {
     private Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
     private List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
 
+
+    //Simple mode distinct profile
+    private static List<String> needDistinctProfile = Lists.newArrayList("Instance");
+    //Simple mode filter counter
+    private static List<String> filterCounter = Lists.newArrayList();
+
     private String name;
 
     public RuntimeProfile(String name) {
@@ -176,12 +182,16 @@ public class RuntimeProfile {
         }
     }
 
+    public void prettyPrint(StringBuilder builder, String prefix) {
+        this.prettyPrint(builder, prefix, false);
+    }
+
     // Print the profile:
     //  1. Profile Name
     //  2. Info Strings
     //  3. Counters
     //  4. Children
-    public void prettyPrint(StringBuilder builder, String prefix) {
+    public void prettyPrint(StringBuilder builder, String prefix, boolean simple) {
         Counter counter = this.counterMap.get("TotalTime");
         Preconditions.checkState(counter != null);
         // 1. profile name
@@ -208,35 +218,47 @@ public class RuntimeProfile {
         }
 
         // 3. counters
-        printChildCounters(prefix, ROOT_COUNTER, builder);
+        printChildCounters(prefix, ROOT_COUNTER, builder, simple);
 
         // 4. children
         for (int i = 0; i < childList.size(); i++) {
             Pair<RuntimeProfile, Boolean> pair = childList.get(i);
             boolean indent = pair.second;
             RuntimeProfile profile = pair.first;
-            profile.prettyPrint(builder, prefix + (indent ? "  " : ""));
+            profile.prettyPrint(builder, prefix + (indent ? "  " : ""), simple);
+            if (simple && needDistinctProfile.stream().anyMatch(a -> profile.name.startsWith(a))) {
+                break;
+            }
         }
     }
 
     public String toString() {
         StringBuilder builder = new StringBuilder();
-        prettyPrint(builder, "");
+        prettyPrint(builder, "", false);
         return builder.toString();
     }
 
-    private void printChildCounters(String prefix, String counterName, StringBuilder builder) {
+    public String toSimpleString() {
+        StringBuilder builder = new StringBuilder();
+        prettyPrint(builder, "", true);
+        return builder.toString();
+    }
+
+    private void printChildCounters(String prefix, String counterName, StringBuilder builder, boolean simple) {
         if (childCounterMap.get(counterName) == null) {
             return;
         }
         Set<String> childCounterSet = new TreeSet<>(childCounterMap.get(counterName));
 
         for (String childCounterName : childCounterSet) {
+            if (simple && filterCounter.contains(childCounterName)) {
+                continue;
+            }
             Counter counter = this.counterMap.get(childCounterName);
             Preconditions.checkState(counter != null);
             builder.append(prefix).append("   - ").append(childCounterName).append(": ")
                     .append(printCounter(counter.getValue(), counter.getType())).append("\n");
-            this.printChildCounters(prefix + "  ", childCounterName, builder);
+            this.printChildCounters(prefix + "  ", childCounterName, builder, simple);
         }
     }
 
