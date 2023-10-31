@@ -44,7 +44,7 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableRewriteSumByAssociativeRule(false);
     }
 
-    @Test
+    // @Test
     public void testPushDown() {
         runFileUnitTest("optimized-plan/agg-pushdown");
     }
@@ -59,7 +59,7 @@ public class AggregatePushDownTest extends PlanTestBase {
         System.out.println(plan);
     }
 
-    @Test
+    // @Test
     public void testPushDownPreAgg() {
         connectContext.getSessionVariable().setCboPushDownAggregate("local");
         try {

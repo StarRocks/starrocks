@@ -107,23 +107,32 @@ class ArrayFlattenAggregateFunction
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {
-        // const auto* column = down_cast<const InputColumnType*>(columns[0]);
-        //// TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
-        //this->data(state).update(ctx->mem_pool(), column, row_num, 1);
-
+    void update_state(FunctionContext* ctx, const ArrayColumn* input_column, AggDataPtr __restrict state,
+                      size_t row_num) const {
         // Array element is nullable, so we need to extract the data from nullable column first
-        const auto* input_column = down_cast<const ArrayColumn*>(columns[0]);
         auto offset_size = input_column->get_element_offset_size(row_num);
         auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
         auto* element_data_column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
         size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
         DCHECK_LE(element_null_count, offset_size.second);
 
-        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
-                                 offset_size.second - element_null_count);
+        if (element_null_count == 0) {
+            this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first, offset_size.second);
+        } else {
+            for (size_t i = offset_size.first; i < offset_size.first + offset_size.second; i++) {
+                if (!array_element.is_null(i)) {
+                    this->data(state).update(ctx->mem_pool(), *element_data_column, i, 1);
+                }
+            }
+        }
+
         this->data(state).append_null(element_null_count);
+    }
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        const auto* input_column = down_cast<const ArrayColumn*>(columns[0]);
+        update_state(ctx, input_column, state, row_num);
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
@@ -131,17 +140,8 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        // Array element is nullable, so we need to extract the data from nullable column first
         const auto* input_column = down_cast<const ArrayColumn*>(column);
-        auto offset_size = input_column->get_element_offset_size(row_num);
-        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
-        auto* element_data_column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
-        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
-        DCHECK_LE(element_null_count, offset_size.second);
-
-        this->data(state).update(ctx->mem_pool(), *element_data_column, offset_size.first,
-                                 offset_size.second - element_null_count);
-        this->data(state).append_null(element_null_count);
+        update_state(ctx, input_column, state, row_num);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

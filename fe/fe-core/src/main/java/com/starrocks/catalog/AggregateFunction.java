@@ -124,6 +124,10 @@ public class AggregateFunction extends Function {
         this.isDistinct = isDistinct;
     }
 
+    public boolean getIsDistinct() {
+        return isDistinct;
+    }
+
     // only used for serialization
     protected AggregateFunction() {
     }
