@@ -140,13 +140,13 @@ public class AstToSQLBuilder {
                 sqlBuilder.append("DISTINCT ");
             }
 
-            Map<FunctionCallExpr, String> selectFuncCallExprAliasMap = new HashMap<>();
+            Map<Expr, String> selectExprAliasMap = new HashMap<>();
             for (SelectListItem selectListItem : selectList.getItems()) {
                 if (selectListItem.getExpr() != null
                         && !(selectListItem.getExpr() instanceof FieldReference)
                         && !(selectListItem.getExpr() instanceof SlotRef)
                 ) {
-                    selectFuncCallExprAliasMap.put((FunctionCallExpr)selectListItem.getExpr(),
+                    selectExprAliasMap.put(selectListItem.getExpr(),
                             selectListItem.getAlias());
                 }
             }
@@ -170,7 +170,7 @@ public class AstToSQLBuilder {
                                     columnName));
                         }
                     } else {
-                        String aliasColumn = selectFuncCallExprAliasMap.get(expr);
+                        String aliasColumn = selectExprAliasMap.get(expr);
                         selectListString.add(
                                 aliasColumn == null ?
                                         visit(expr) : visit(expr) + " AS `" + aliasColumn + "`");
