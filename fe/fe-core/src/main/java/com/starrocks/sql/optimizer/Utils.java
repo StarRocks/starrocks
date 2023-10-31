@@ -77,8 +77,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
-import static com.starrocks.qe.SessionVariableConstants.AUTO_AGG;
-import static com.starrocks.qe.SessionVariableConstants.ONE_STAGE_AGG;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.ONE_STAGE;
 import static java.util.function.Function.identity;
 
 public class Utils {
@@ -662,8 +662,8 @@ public class Utils {
 
         // 3. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-        if (aggStage == ONE_STAGE_AGG ||
-                (aggStage == AUTO_AGG && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
+        if (aggStage == ONE_STAGE.ordinal() ||
+                (aggStage ==  AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
             return false;
         }
 
@@ -677,14 +677,14 @@ public class Utils {
         // (BE does this for efficiency reasons).
         // Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
         // on top of the repeat node.
-        if (OperatorType.LOGICAL_REPEAT.equals(childOp) || OperatorType.PHYSICAL_REPEAT.equals(childOp.getOpType())) {
+        if (OperatorType.LOGICAL_REPEAT.equals(childOp.getOpType()) || OperatorType.PHYSICAL_REPEAT.equals(childOp.getOpType())) {
             return true;
         }
 
         Map<ColumnRefOperator, CallOperator> aggs = Maps.newHashMap();
-        if (OperatorType.LOGICAL_AGGR.equals(inputOp)) {
+        if (OperatorType.LOGICAL_AGGR.equals(inputOp.getOpType())) {
             aggs = ((LogicalAggregationOperator) inputOp).getAggregations();
-        } else if (OperatorType.PHYSICAL_HASH_AGG.equals(inputOp)) {
+        } else if (OperatorType.PHYSICAL_HASH_AGG.equals(inputOp.getOpType())) {
             aggs = ((PhysicalHashAggregateOperator) inputOp).getAggregations();
         }
 

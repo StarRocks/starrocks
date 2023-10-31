@@ -58,9 +58,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
-import static com.starrocks.qe.SessionVariableConstants.AUTO_AGG;
-import static com.starrocks.qe.SessionVariableConstants.FOUR_STAGE_AGG;
-import static com.starrocks.qe.SessionVariableConstants.TWO_STAGE_AGG;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.FOUR_STAGE;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
@@ -124,7 +124,7 @@ public class SplitAggregateRule extends TransformationRule {
 
 
     private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys) {
-        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE_AGG) {
+        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
             return false;
         }
 
@@ -226,12 +226,12 @@ public class SplitAggregateRule extends TransformationRule {
             return false;
         }
 
-        if (aggMode == TWO_STAGE_AGG) {
+        if (aggMode == TWO_STAGE.ordinal()) {
             return true;
         }
 
         return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
-                && aggMode == AUTO_AGG
+                && aggMode == AUTO.ordinal()
                 && isTwoStageMoreEfficient(input, distinctColumns);
     }
 

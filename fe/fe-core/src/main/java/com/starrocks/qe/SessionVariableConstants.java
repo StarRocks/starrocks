@@ -32,13 +32,11 @@ public class SessionVariableConstants {
 
     public static final String DECIMAL = "decimal";
 
-    public static final int AUTO_AGG = 0;
-
-    public static final int ONE_STAGE_AGG = 1;
-
-    public static final int TWO_STAGE_AGG = 2;
-
-    public static final int THREE_STAGE_AGG = 3;
-
-    public static final int FOUR_STAGE_AGG = 4;
+    public enum AggregationStage {
+        AUTO,
+        ONE_STAGE,
+        TWO_STAGE,
+        THREE_STAGE,
+        FOUR_STAGE
+    }
 }

@@ -30,7 +30,7 @@ public class GroupingSetTest extends PlanTestBase {
     @Test
     public void testPredicateOnRepeatNode() throws Exception {
         FeConstants.runningUnitTest = true;
-        String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
+        String sql = "select xx.sum(v3) from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
