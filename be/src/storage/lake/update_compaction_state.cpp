@@ -21,6 +21,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -35,7 +36,12 @@ CompactionState::~CompactionState() {
     _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
 }
 
+<<<<<<< HEAD
 Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
+=======
+Status CompactionState::load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
+>>>>>>> 24ac8a4e6d ([Enhancement] add trace for cloud native pk table (#33605))
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
         std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
         LOG(WARNING) << msg;
