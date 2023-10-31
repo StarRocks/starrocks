@@ -65,6 +65,13 @@ class Roaring64Map;
 // for streaming load scenario.
 class BitmapValue {
 public:
+    enum BitmapDataType {
+        EMPTY = 0,
+        SINGLE = 1, // single element
+        BITMAP = 2, // more than one elements
+        SET = 3
+    };
+
     // Construct an empty bitmap.
     BitmapValue();
 
@@ -159,16 +166,11 @@ public:
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
                                             BitmapValue* ret_bitmap);
 
+    BitmapDataType type() const { return _type; }
+
 private:
     void _from_bitmap_to_smaller_type();
     void _from_set_to_bitmap();
-
-    enum BitmapDataType {
-        EMPTY = 0,
-        SINGLE = 1, // single element
-        BITMAP = 2, // more than one elements
-        SET = 3
-    };
 
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
