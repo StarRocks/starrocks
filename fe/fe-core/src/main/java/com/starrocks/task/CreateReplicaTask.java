@@ -110,15 +110,6 @@ public class CreateReplicaTask extends AgentTask {
 
     private RecoverySource recoverySource;
 
-    // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
-    private boolean isRecoverTask = false;
-<<<<<<< HEAD
-=======
-
-    private boolean isFromScheduler = false;
-
-    private int primaryIndexCacheExpireSec = 0;
->>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
     private boolean createSchemaFile = true;
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
