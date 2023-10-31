@@ -767,26 +767,15 @@ Status JsonReader::_check_ndjson() {
 
 // read one json string from file read and parse it to json doc.
 Status JsonReader::_read_and_parse_json() {
-#ifdef BE_TEST
-    _payload_buffer_capacity = 1024 * 1024;
-    _payload_buffer.reset(new char[_payload_buffer_capacity]);
-
-    ASSIGN_OR_RETURN(auto nread, _file->read(_payload_buffer.get(), _payload_buffer_capacity));
-    if (nread == 0) {
-        return Status::EndOfFile("EOF of reading file");
-    }
-
-    _payload_buffer_size = nread;
-#else
     const auto& file_type = _scanner->_scan_range.ranges[0].file_type;
     if (file_type == TFileType::FILE_STREAM) {
         RETURN_IF_ERROR(_read_file_stream());
-    } else if (file_type == TFileType::FILE_BROKER) {
+    } else if (file_type == TFileType::FILE_BROKER || file_type == TFileType::FILE_LOCAL) {
+        // TFileType::FILE_LOCAL is only used in test.
         RETURN_IF_ERROR(_read_file_broker());
     } else {
         return Status::NotSupported(fmt::format("not support file type: {}", file_type));
     }
-#endif
 
     RETURN_IF_ERROR(_check_ndjson());
 
