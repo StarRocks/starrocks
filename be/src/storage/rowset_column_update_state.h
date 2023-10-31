@@ -168,9 +168,14 @@ private:
     Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t start_idx, uint32_t end_idx,
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
 
+<<<<<<< HEAD
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(Rowset* rowset,
                                                                                 std::shared_ptr<TabletSchema> tschema,
                                                                                 uint32_t rssid, int64_t ver);
+=======
+    StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
+            Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver, int idx);
+>>>>>>> dae7cb33c2 ([Enhancement] split columns when there are too many columns update at once (#33509))
 
     // to build `_partial_update_states`
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t start_idx, uint32_t end_idx,
