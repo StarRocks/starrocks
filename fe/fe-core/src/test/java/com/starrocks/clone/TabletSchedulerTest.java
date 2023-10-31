@@ -15,6 +15,7 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -45,7 +46,6 @@ import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
-import org.assertj.core.util.Lists;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -360,7 +360,6 @@ public class TabletSchedulerTest {
                 null,
                 false,
                 false,
-                1,
                 TTabletType.TABLET_TYPE_DISK,
                 TCompressionType.LZ4_FRAME);
 
