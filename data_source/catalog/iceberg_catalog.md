@@ -241,7 +241,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
 );
 ```
 
