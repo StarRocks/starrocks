@@ -43,7 +43,8 @@ public:
             : ScanNode(pool, tnode, descs),
               _scan_range(scan_range),
               _runtime_profile(runtime_profile),
-              _common_request(common_request) {}
+              _common_request(common_request),
+              _tuple_id(tnode.olap_scan_node.tuple_id)  {}
 
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
     Status open(RuntimeState* state);

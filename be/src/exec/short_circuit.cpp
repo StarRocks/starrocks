@@ -187,14 +187,16 @@ Status ShortCircuitExecutor::execute() {
     RETURN_IF_ERROR(_sink->open(runtime_state()));
 
     ChunkPtr chunk;
-    bool eos;
+    bool eos = false;
     while (true) {
         RETURN_IF_ERROR(_source->get_next(runtime_state(), &chunk, &eos));
-        RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
-        // TODO(many records iterator)
         if (eos) {
+            if (chunk->has_rows()) {
+                RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
+            }
             break;
         }
+        RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
         if (!_results.empty()) {
             return Status::NotSupported("Not support multi result set yet");
         }

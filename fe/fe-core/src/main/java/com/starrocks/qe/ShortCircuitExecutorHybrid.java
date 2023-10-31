@@ -97,7 +97,7 @@ public class ShortCircuitExecutorHybrid extends ShortCircuitExecutor {
                 }
 
                 if (null != shortCircuitResult.affectedRows) {
-                    affectedRows.set(result.getAffectedRows() + shortCircuitResult.affectedRows);
+                    affectedRows.getAndAdd(shortCircuitResult.affectedRows);
                 }
 
                 byte[] serialResult = pRequest.getSerializedResult();
@@ -177,7 +177,7 @@ public class ShortCircuitExecutorHybrid extends ShortCircuitExecutor {
             TNetworkAddress be = pick(internalScanRange.getHosts());
             idToBackend.forEach((id, backend) -> {
                 if (backend.getHost().equals(be.getHostname()) && (backend.getBePort() == be.getPort())) {
-                    backend2Tablets.put(be, tabletWithVersion);
+                    backend2Tablets.put(new TNetworkAddress(be.getHostname(), backend.getBrpcPort()), tabletWithVersion);
                 }
             });
         });

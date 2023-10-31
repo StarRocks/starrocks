@@ -61,6 +61,9 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
 }
 
 Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+    if (*eos) {
+        return Status::OK();
+    }
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     std::vector<bool> found(_num_rows, false);
     Buffer<uint8_t> selections;

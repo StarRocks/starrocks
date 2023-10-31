@@ -86,7 +86,7 @@ public class ShortCircuitExecutor {
         if (collections.size() == 1) {
             return collections.get(0);
         } else {
-            return  collections.get(new Random().nextInt(collections.size()));
+            return collections.get(new Random().nextInt(collections.size()));
         }
     }
 
