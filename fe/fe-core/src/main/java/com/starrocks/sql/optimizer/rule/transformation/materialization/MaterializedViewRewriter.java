@@ -1951,9 +1951,10 @@ public class MaterializedViewRewriter {
                 // outer join on predicates can not be used to construct equivalence class
                 continue;
             }
-            Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
+            if (!(equalPredicate.getChild(0).isColumnRef() && equalPredicate.getChild(1).isColumnRef())) {
+                continue;
+            }
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
-            Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
             ColumnRefOperator leftTarget = columnRewriter == null ? left : columnRewriter.rewriteViewToQuery(left).cast();
             ColumnRefOperator rightTarget = columnRewriter == null ? right : columnRewriter.rewriteViewToQuery(right).cast();
