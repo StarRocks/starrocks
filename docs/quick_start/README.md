@@ -1,4 +1,4 @@
-# Basic Concepts of StarRocks
+# Quick Start
 
 * FE: The StarRocks frontend node is responsible for metadata management, management of client connectors, query planning, query scheduling, and so on.
 * BE: The StarRocks backend node is responsible for data storage, calculation execution, compaction, replication management, and so on.
