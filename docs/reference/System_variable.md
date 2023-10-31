@@ -503,7 +503,11 @@ The variables are described **in alphabetical order**. Variables with the `globa
   * `auto`: Spilling is automatically triggered when the memory usage threshold is reached.
   * `force`: StarRocks forcibly executes spilling for all relevant operators, regardless of memory usage.
 
+<<<<<<< HEAD
   This variable takes effect only when the variable `enable_spill` is set to `true`.
+=======
+The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `1024`.
+>>>>>>> 5812ac23fb ([Doc] Fix Max Queue default (#34041))
 
 * SQL_AUTO_IS_NULL
 
