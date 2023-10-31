@@ -2098,14 +2098,49 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "AS SELECT `t1_event_struct`.`c1_event_date`, `t1_event_struct`.`c2_event`.`name` AS `name`\n" +
                 "FROM `t1_event_struct`\n" +
                 "WHERE `t1_event_struct`.`c2_event`.`name` != 'haha';";
-        String query = "SELECT c1_event_date FROM t1_event_struct " +
-                "WHERE c2_event.name = 'hehe' and c1_event_date = '2023-07-02'";
+
 
         String tableName = "t1_event_struct";
         String mvName = "mv_filter_1";
         starRocksAssert.withTable(createTable);
         createAndRefreshMv("test", mvName, createMv);
-        starRocksAssert.query(query).explainContains(mvName);
+
+        // equal query 1
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name = 'hehe' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', 4: name = 'hehe'\n");
+        }
+        // equal query 2
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name = 'hehe' and c2_event.name != 'haha' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', 4: name = 'hehe'\n");
+        }
+
+        // not-equal query 1
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name <> 'haha' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', (4: name < 'haha') OR (4: name > 'haha')\n");
+        }
+        // not-equal query 2
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name <> 'e1' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainWithout(mvName);
+        }
+
+        // in query
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name in ('e1', 'e2', 'e3') and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', 4: name IN ('e1', 'e2', 'e3')\n");
+        }
 
         starRocksAssert.dropTable(tableName);
         starRocksAssert.dropMaterializedView(mvName);
