@@ -63,7 +63,9 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     @Override
     public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
+        return !table.isUnPartitioned() &&
+                !(((IcebergTable) table).hasPartitionTransformedEvolution()) &&
+                predicates.getSelectedPartitionIds().isEmpty();
     }
 
     @Override

@@ -96,8 +96,9 @@ import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
-import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
@@ -299,7 +300,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec spec = icebergTable.getNativeTable().spec();
         List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
-            StructLike partitionData = fileScanTask.file().partition();
+            org.apache.iceberg.PartitionData partitionData = (org.apache.iceberg.PartitionData) fileScanTask.file().partition();
             List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
 
             if (values.size() != partitionColumns.size()) {
@@ -314,7 +315,32 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
 
             try {
-                partitionKeys.add(createPartitionKey(values, partitionColumns, table.getType()));
+                List<com.starrocks.catalog.Type> srTypes = new ArrayList<>();
+                for (PartitionField partitionField : spec.fields()) {
+                    if (partitionField.transform().isVoid()) {
+                        continue;
+                    }
+
+                    if (!partitionField.transform().isIdentity()) {
+                        Type sourceType = spec.schema().findType(partitionField.sourceId());
+                        Type resultType = partitionField.transform().getResultType(sourceType);
+                        if (resultType == Types.DateType.get()) {
+                            resultType = Types.IntegerType.get();
+                        }
+                        srTypes.add(fromIcebergType(resultType));
+                        continue;
+                    }
+
+                    srTypes.add(icebergTable.getColumn(partitionField.name()).getType());
+                }
+
+                if (icebergTable.hasPartitionTransformedEvolution()) {
+                    srTypes = partitionColumns.stream()
+                            .map(Column::getType)
+                            .collect(Collectors.toList());
+                }
+
+                partitionKeys.add(createPartitionKeyWithType(values, srTypes, table.getType()));
             } catch (Exception e) {
                 LOG.error("create partition key failed.", e);
                 throw new StarRocksConnectorException(e.getMessage());

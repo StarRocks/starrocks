@@ -98,10 +98,10 @@ public class PartitionUtil {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
     }
 
-    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
+    public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
                                                   Table.TableType tableType) throws AnalysisException {
-        Preconditions.checkState(values.size() == columns.size(),
-                "columns size is %s, but values size is %s", columns.size(), values.size());
+        Preconditions.checkState(values.size() == types.size(),
+                "types size is %s, but values size is %s", types.size(), values.size());
 
         PartitionKey partitionKey = null;
         switch (tableType) {
@@ -131,7 +131,7 @@ public class PartitionUtil {
         // change string value to LiteralExpr,
         for (int i = 0; i < values.size(); i++) {
             String rawValue = values.get(i);
-            Type type = columns.get(i).getType();
+            Type type = types.get(i);
             LiteralExpr exprValue;
             // rawValue could be null for delta table
             if (rawValue == null) {
@@ -146,6 +146,14 @@ public class PartitionUtil {
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }
         return partitionKey;
+    }
+
+    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
+                                                  Table.TableType tableType) throws AnalysisException {
+        Preconditions.checkState(values.size() == columns.size(),
+                "columns size is %s, but values size is %s", columns.size(), values.size());
+
+        return createPartitionKeyWithType(values, columns.stream().map(Column::getType).collect(Collectors.toList()), tableType);
     }
 
     // If partitionName is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
@@ -665,7 +673,7 @@ public class PartitionUtil {
 
             // currently starrocks date literal only support local datetime
             org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
-            if (icebergType.equals(Types.TimestampType.withZone())) {
+            if (partitionField.transform().isIdentity() && icebergType.equals(Types.TimestampType.withZone())) {
                 value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
                         getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
             }

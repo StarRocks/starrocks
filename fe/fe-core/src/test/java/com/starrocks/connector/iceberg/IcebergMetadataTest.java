@@ -55,6 +55,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableScan;
@@ -76,6 +77,8 @@ import java.util.Locale;
 import java.util.Map;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Type.DATE;
+import static com.starrocks.catalog.Type.DATETIME;
 import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
@@ -654,7 +657,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(1, partitionKeys.size());
         Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
         IcebergPartitionKey partitionKey =  (IcebergPartitionKey) partitionKeys.get(0);
-        Assert.assertEquals("types: [VARCHAR]; keys: [0]; ", partitionKey.toString());
+        Assert.assertEquals("types: [INT]; keys: [0]; ", partitionKey.toString());
 
         mockedNativeTableA.newFastAppend().appendFile(FILE_A_2).commit();
         mockedNativeTableA.refresh();
@@ -680,7 +683,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(1, partitionKeys.size());
         Assert.assertTrue(partitionKeys.get(0) instanceof IcebergPartitionKey);
         PartitionKey partitionKey = partitionKeys.get(0);
-        Assert.assertEquals("types: [VARCHAR]; keys: [0]; ", partitionKey.toString());
+        Assert.assertEquals("types: [INT]; keys: [0]; ", partitionKey.toString());
     }
 
     @Test
@@ -723,5 +726,82 @@ public class IcebergMetadataTest extends TableTestBase {
         Statistics statistics = metadata.getTableStatistics(
                 new OptimizerContext(null, null), icebergTable, colRefToColumnMetaMap, null, null, -1);
         Assert.assertEquals(2.0, statistics.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testTimeStampIdentityPartitionPrune() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("ts", DATETIME));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableE, Maps.newHashMap());
+
+        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_D_1, SCHEMA_D);
+        partitionKey.set(0, 1698608756000000L);
+        DataFile tsDataFiles =
+                DataFiles.builder(SPEC_D_1)
+                        .withPath("/path/to/data-b4.parquet")
+                        .withFileSizeInBytes(20)
+                        .withPartition(partitionKey)
+                        .withRecordCount(2)
+                        .build();
+        mockedNativeTableE.newAppend().appendFile(tsDataFiles).commit();
+        mockedNativeTableE.refresh();
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, 1);
+        Assert.assertEquals("2023-10-30 03:45:56", partitionKeys.get(0).getKeys().get(0).getStringValue());
+    }
+
+    @Test
+    public void testTransformedPartitionPrune() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("ts", DATETIME));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableD, Maps.newHashMap());
+
+        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_D, SCHEMA_D);
+        partitionKey.set(0, 438292);
+        DataFile tsDataFiles =
+                DataFiles.builder(SPEC_D)
+                        .withPath("/path/to/data-d.parquet")
+                        .withFileSizeInBytes(20)
+                        .withPartition(partitionKey)
+                        .withRecordCount(2)
+                        .build();
+        mockedNativeTableD.newAppend().appendFile(tsDataFiles).commit();
+        mockedNativeTableD.refresh();
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
+        Assert.assertEquals("438292", partitionKeys.get(0).getKeys().get(0).getStringValue());
+    }
+
+    @Test
+    public void testDateDayPartitionPrune() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("dt", DATE));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableF, Maps.newHashMap());
+
+        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_F, SCHEMA_F);
+        partitionKey.set(0, 19660);
+        DataFile tsDataFiles = DataFiles.builder(SPEC_F)
+                .withPath("/path/to/data-f.parquet")
+                .withFileSizeInBytes(20)
+                .withPartition(partitionKey)
+                .withRecordCount(2)
+                .build();
+        mockedNativeTableF.newAppend().appendFile(tsDataFiles).commit();
+        mockedNativeTableF.refresh();
+        List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
+        Assert.assertEquals("19660", partitionKeys.get(0).getKeys().get(0).getStringValue());
     }
 }
