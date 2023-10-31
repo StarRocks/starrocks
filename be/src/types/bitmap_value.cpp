@@ -237,7 +237,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
                 _type = SINGLE;
                 _sv = rhs._sv;
             }
-            _bitmap->clear();
+            _bitmap.reset();
             break;
         case SET:
             if (!_set->contains(rhs._sv)) {
