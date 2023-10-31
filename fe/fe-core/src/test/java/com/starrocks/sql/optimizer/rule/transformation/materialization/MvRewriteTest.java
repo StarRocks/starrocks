@@ -2029,7 +2029,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "FROM `t1_event_struct`\n" +
                 "WHERE `t1_event_struct`.`c2_event`.`name` != 'haha';";
 
-
         String tableName = "t1_event_struct";
         String mvName = "mv_filter_1";
         starRocksAssert.withTable(createTable);
