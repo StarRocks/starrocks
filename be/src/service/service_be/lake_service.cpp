@@ -147,30 +147,21 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
 
-    auto enable_trace = config::lake_enable_publish_version_trace_log;
     auto start_ts = butil::gettimeofday_us();
     auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
-    Trace* trace = nullptr;
-    scoped_refptr<Trace> trace_gurad;
-
-    if (enable_trace) {
-        trace_gurad = scoped_refptr<Trace>(new Trace());
-        trace = trace_gurad.get();
-        TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0),
-                 request->new_version(), request->tablet_ids_size());
-    }
+    scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
+    Trace* trace = trace_gurad.get();
+    TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
+             request->tablet_ids_size());
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
-            Trace* sub_trace = nullptr;
-            if (enable_trace) {
-                scoped_refptr<Trace> child_trace(new Trace);
-                sub_trace = child_trace.get();
-                trace->AddChildTrace("PublishTablet", sub_trace);
-            }
+            scoped_refptr<Trace> child_trace(new Trace);
+            Trace* sub_trace = child_trace.get();
+            trace->AddChildTrace("PublishTablet", sub_trace);
 
             ADOPT_TRACE(sub_trace);
             TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
@@ -183,6 +174,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto commit_time = request->commit_time();
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
+            TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
             auto res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
                                              commit_time);
             if (res.ok()) {
@@ -215,11 +207,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
-    if (enable_trace && is_slow) {
+    if (config::lake_enable_publish_version_trace_log && is_slow) {
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". cost=" << cost << "us\n" << trace->DumpToString();
     } else if (is_slow) {
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
-                  << " cost=" << cost << "us";
+                  << " cost=" << cost << "us, trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
