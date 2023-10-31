@@ -30,6 +30,7 @@ import com.aliyun.odps.table.arrow.accessor.ArrowVarBinaryAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVarCharAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
 import com.aliyun.odps.table.utils.ConfigConstants;
+import com.aliyun.odps.type.DecimalTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.starrocks.jni.connector.ColumnType;
 import org.apache.arrow.vector.BigIntVector;
@@ -76,7 +77,7 @@ public class OdpsTypeUtils {
             case DOUBLE:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.DOUBLE);
             case DECIMAL:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.DECIMAL128);
+                return parseDecimal((DecimalTypeInfo) column.getTypeInfo(), column.getName());
             case STRING:
             case VARCHAR:
             case CHAR:
@@ -93,6 +94,27 @@ public class OdpsTypeUtils {
             default:
                 throw new UnsupportedOperationException("Datatype not supported");
         }
+    }
+
+    public static final int MAX_DECIMAL32_PRECISION = 9;
+    public static final int MAX_DECIMAL64_PRECISION = 18;
+
+    // convert decimal(x,y) to decimal
+    private static ColumnType parseDecimal(DecimalTypeInfo type, String name) {
+        String typeName;
+        int precision = type.getPrecision();
+        int scale = type.getScale();
+        if (precision <= MAX_DECIMAL32_PRECISION) {
+            typeName = "decimal32";
+        } else if (precision <= MAX_DECIMAL64_PRECISION) {
+            typeName = "decimal64";
+        } else {
+            typeName = "decimal128";
+        }
+
+        ColumnType decimalType = new ColumnType(name, typeName);
+        decimalType.setScale(scale);
+        return decimalType;
     }
 
     public static ArrowVectorAccessor createColumnVectorAccessor(ValueVector vector, TypeInfo typeInfo) {
