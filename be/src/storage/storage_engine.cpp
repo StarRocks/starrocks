@@ -647,6 +647,10 @@ void StorageEngine::stop() {
     if (_update_manager) {
         _update_manager->stop();
     }
+
+    if (_compaction_manager) {
+        _compaction_manager->stop();
+    }
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {
