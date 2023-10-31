@@ -196,7 +196,7 @@ Status HiveDataSource::_init_partition_values() {
         return Status::OK();
     }
 
-    if (_enable_dynamic_prune_scan_range && partition_chunk && _runtime_filters) {
+    if (_enable_dynamic_prune_scan_range && _runtime_filters) {
         _init_rf_counters();
         _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
         if (!partition_chunk->has_rows()) {
