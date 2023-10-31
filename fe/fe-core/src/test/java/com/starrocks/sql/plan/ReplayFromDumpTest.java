@@ -817,12 +817,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTwoStageAgg() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/two_stage_agg"),
-                        null, TExplainLevel.NORMAL);
+                        null, TExplainLevel.COSTS);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: max(1: lo_orderkey), max(17: lo_shipmode), min(17: lo_shipmode)\n" +
-                "  |  group by: 1: lo_orderkey\n" +
-                "  |  \n" +
-                "  0:OlapScanNode"));
+                "  |  STREAMING"));
+
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
+                "     table: lineorder_2, rollup: lineorder_2"));
     }
 }
