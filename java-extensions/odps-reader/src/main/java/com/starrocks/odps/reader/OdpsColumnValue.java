@@ -34,10 +34,6 @@ public class OdpsColumnValue implements ColumnValue {
         this.dataType = dataType;
     }
 
-    public boolean isNull() {
-        return fieldData == null;
-    }
-
     @Override
     public boolean getBoolean() {
         return (boolean) fieldData;
