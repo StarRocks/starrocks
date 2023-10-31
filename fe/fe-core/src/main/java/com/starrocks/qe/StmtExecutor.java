@@ -895,7 +895,12 @@ public class StmtExecutor {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
+<<<<<<< HEAD
             context.getSessionVariable().setProfileLimitFold(false);
+=======
+        } else if (isSchedulerExplain) {
+            // Do nothing.
+>>>>>>> 8c23d3ee20 ([Refactor] Remove unused session variable 'profile_limit_fold' (#33997))
         } else if (parsedStmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
@@ -1554,7 +1559,12 @@ public class StmtExecutor {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
+<<<<<<< HEAD
             context.getSessionVariable().setProfileLimitFold(false);
+=======
+        } else if (isSchedulerExplain) {
+            // Do nothing.
+>>>>>>> 8c23d3ee20 ([Refactor] Remove unused session variable 'profile_limit_fold' (#33997))
         } else if (stmt.isExplain()) {
             handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
