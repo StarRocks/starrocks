@@ -392,7 +392,6 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP: {
-            detail::Roaring64Map bitmap;
             for (auto x : *rhs._set) {
                 _bitmap->remove(x);
             }
