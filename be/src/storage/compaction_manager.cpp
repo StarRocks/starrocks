@@ -15,7 +15,7 @@ namespace starrocks {
 
 CompactionManager::CompactionManager() : _next_task_id(0) {}
 
-CompactionManager::~CompactionManager() {
+void CompactionManager::stop() {
     _stop.store(true, std::memory_order_release);
     if (_scheduler_thread.joinable()) {
         _scheduler_thread.join();
