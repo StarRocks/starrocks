@@ -954,7 +954,6 @@ public class StmtExecutor {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
-            context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
@@ -1752,7 +1751,6 @@ public class StmtExecutor {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
-            context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (stmt.isExplain()) {
