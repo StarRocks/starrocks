@@ -267,6 +267,96 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Void visitOptimizeClause(OptimizeClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, table.getName());
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getColocateGroup() != null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
+        }
+
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
+        if (clause.getSortKeys() != null) {
+            List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
+
+            for (String column : clause.getSortKeys()) {
+                int idx = columnNames.indexOf(column);
+                if (idx == -1) {
+                    throw new SemanticException("Unknown column '%s' does not exist", column);
+                }
+                sortKeyIdxes.add(idx);
+            }
+        }
+        boolean hasReplace = false;
+        Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnDef columnDef : columnDefs) {
+            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
+                hasReplace = true;
+            }
+            if (!columnSet.add(columnDef.getName())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
+            }
+        }
+
+        // analyze key desc
+        KeysType originalKeysType = olapTable.getKeysType();
+        KeysDesc keysDesc = clause.getKeysDesc();
+        if (keysDesc != null) {
+            if (keysDesc.getKeysType() != KeysType.PRIMARY_KEYS || originalKeysType != KeysType.UNIQUE_KEYS) {
+                throw new SemanticException("not support optimize %s to %s keys type",
+                        originalKeysType.toSql(), keysDesc.getKeysType().toSql());
+            }
+        }
+        KeysType targetKeysType = keysDesc == null ? originalKeysType : keysDesc.getKeysType();
+
+        // analyze distribution
+        DistributionDesc distributionDesc = clause.getDistributionDesc();
+        if (distributionDesc != null) {
+            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS
+                    && !(targetKeysType == KeysType.AGG_KEYS && !hasReplace)) {
+                throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
+                        + " must use hash distribution", distributionDesc.getPos());
+            }
+            distributionDesc.analyze(columnSet);
+            clause.setDistributionDesc(distributionDesc);
+        }
+
+        // analyze partitions
+        PartitionNames partitionNames = clause.getPartitionNames();
+        if (partitionNames != null) {
+            if (clause.getSortKeys() != null || clause.getKeysDesc() != null) {
+                throw new SemanticException("not support change sort keys or keys type when specify partitions");
+            }
+            if (partitionNames.isTemp()) {
+                throw new SemanticException("not support optimize temp partition");
+            }
+            List<String> partitionNameList = partitionNames.getPartitionNames();
+            if (partitionNameList == null || partitionNameList.isEmpty()) {
+                throw new SemanticException("partition names is empty");
+            }
+
+            List<Long> partitionIds = Lists.newArrayList();
+            for (String partitionName : partitionNameList) {
+                Partition partition = olapTable.getPartition(partitionName);
+                if (partition == null) {
+                    throw new SemanticException("partition %s does not exist", partitionName);
+                }
+                partitionIds.add(partition.getId());
+            }
+        } else {
+            clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
+        }
+
+
+        return null;
+    }
+
+    @Override
+>>>>>>> 3579c8bf1b ([BugFix] fix format error when create table with invalid sort key (#34059))
     public Void visitAddColumnClause(AddColumnClause clause, ConnectContext context) {
         ColumnDef columnDef = clause.getColumnDef();
         if (columnDef == null) {
