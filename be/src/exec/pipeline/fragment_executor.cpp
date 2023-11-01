@@ -218,7 +218,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& query_globals = request.common().query_globals;
     const auto& query_options = request.common().query_options;
     const auto& t_desc_tbl = request.common().desc_tbl;
-    const int32_t degree_of_parallelism = _calc_dop(exec_env, request);
     auto& wg = _wg;
 
     _fragment_ctx->set_runtime_state(
@@ -228,11 +227,10 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
+    // Only consider the `query_mem_limit` variable
     auto* parent_mem_tracker = wg->mem_tracker();
-    auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
     auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
-    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
-                                                                  degree_of_parallelism, option_query_mem_limit);
+    int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), option_query_mem_limit);
     int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
     _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
 
