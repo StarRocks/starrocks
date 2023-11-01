@@ -540,6 +540,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1407,6 +1409,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
     }
@@ -1434,7 +1439,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
-    
+
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2660,6 +2665,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableExprPrunePartition(boolean enableExprPrunePartition) {
         this.enableExprPrunePartition = enableExprPrunePartition;
+    }
+
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
 
     public boolean isAuditExecuteStmt() {
