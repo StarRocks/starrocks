@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -32,6 +33,7 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -55,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -63,6 +66,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -92,7 +96,9 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     }
 
     public PhysicalPropertySet getOutputProperty() {
-        return groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
+        PhysicalPropertySet result = groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
+        updatePropertyWithProjection(groupExpression.getOp().getProjection(), result);
+        return result;
     }
 
     @NotNull
@@ -503,5 +509,54 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @Override
     public PhysicalPropertySet visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
         return createGatherPropertySet();
+    }
+
+
+    private void updatePropertyWithProjection(Projection projection, PhysicalPropertySet oldProperty) {
+        if (projection == null) {
+            return;
+        }
+
+        if (!(oldProperty.getDistributionProperty().getSpec() instanceof HashDistributionSpec)) {
+            return;
+        }
+
+        HashDistributionSpec distributionSpec =
+                (HashDistributionSpec) oldProperty.getDistributionProperty().getSpec();
+        final Map<Integer, DistributionCol> idToDistributionCol = Maps.newHashMap();
+        distributionSpec.getShuffleColumns().forEach(e -> idToDistributionCol.put(e.getColId(), e));
+
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+            ColumnRefSet usedCols = entry.getValue().getUsedColumns();
+
+            Optional<Boolean> nullStrictInfo = remainDistributionFunc(entry.getValue(), idToDistributionCol);
+            if (nullStrictInfo.isPresent()) {
+                if (nullStrictInfo.get()) {
+                    distributionSpec.getPropertyInfo().unionDistributionCols(
+                            new DistributionCol(entry.getKey().getId(), true),
+                            idToDistributionCol.get(usedCols.getFirstId())
+                    );
+                } else {
+                    distributionSpec.getPropertyInfo().unionNullRelaxCols(
+                            new DistributionCol(entry.getKey().getId(), false),
+                            idToDistributionCol.get(usedCols.getFirstId()).getNullRelaxCol()
+                    );
+                }
+
+            }
+        }
+    }
+
+    private Optional<Boolean> remainDistributionFunc(ScalarOperator scalarOperator,
+                                                     Map<Integer, DistributionCol> idToDistributionCol) {
+        DistributionCol col;
+        if (scalarOperator.isColumnRef()
+                && (col = idToDistributionCol.get(scalarOperator.getUsedColumns().getFirstId())) != null) {
+            return Optional.of(col.isNullStrict());
+        }
+
+        // todo support if(col = x, col, null)
+
+        return Optional.empty();
     }
 }
