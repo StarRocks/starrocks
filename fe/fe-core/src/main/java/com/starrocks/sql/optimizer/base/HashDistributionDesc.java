@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 public class HashDistributionDesc {
     public enum SourceType {
         LOCAL, // hash property from scan node
+        ICEBERG_LOCAL, // hash property from iceberg scan node
         // SHUFFLE AGG required contains column, like:
         // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(a), satisfy
         // e.g. required SHUFFLE_AGG(a, b, c), child SHUFFLE_AGG(b, a), satisfy
@@ -133,6 +134,10 @@ public class HashDistributionDesc {
 
     public boolean isLocal() {
         return this.sourceType == SourceType.LOCAL;
+    }
+
+    public boolean isIcebergLocal() {
+        return this.sourceType == SourceType.ICEBERG_LOCAL;
     }
 
     public boolean isShuffle() {

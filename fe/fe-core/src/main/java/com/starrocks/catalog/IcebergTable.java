@@ -28,6 +28,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -44,6 +45,8 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
@@ -64,6 +67,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
@@ -202,6 +206,66 @@ public class IcebergTable extends Table {
     // day(dt) -> identity dt
     public boolean hasPartitionTransformedEvolution() {
         return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
+    }
+
+    public boolean hasBucketProperties() {
+        PartitionSpec spec = getNativeTable().spec();
+        return spec.isPartitioned() && Partitioning.hasBucketField(spec);
+    }
+
+    public List<BucketProperty> getBucketProperties() {
+        if (!hasBucketProperties()) {
+            return Lists.newArrayList();
+        }
+
+        List<BucketProperty> bucketProperties = new ArrayList<>();
+        List<Pair<Integer, Integer>> bucketSourceIdWithBucketNums = getBucketSourceIdWithBucketNum(getNativeTable().spec());
+
+        for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
+            Column column = getColumn(nativeTable.schema().findColumnName(bucket.first));
+            bucketProperties.add(new BucketProperty(bucket.second, column));
+        }
+
+        return bucketProperties;
+    }
+
+    public boolean isBucketColumn(int fieldId) {
+        PartitionSpec spec = getNativeTable().spec();
+        Optional<PartitionField> partitionField = spec.fields().stream()
+                .filter(field -> field.fieldId() == fieldId).findFirst();
+        if (!partitionField.isPresent()) {
+            throw new StarRocksConnectorException("Can't find partition field with id %d", fieldId);
+        } else {
+            int sourceId = partitionField.get().sourceId();
+            List<Pair<Integer, Integer>> sourceIdToBucketIds = getBucketSourceIdWithBucketNum(spec);
+            return sourceIdToBucketIds.stream().anyMatch(idToBucketId -> idToBucketId.first == sourceId);
+        }
+    }
+
+    public int getTransformedBucketId(List<Integer> bucketIds) {
+        PartitionSpec spec = getNativeTable().spec();
+        List<Integer> bucketNums = getBucketSourceIdWithBucketNum(spec).stream()
+                .map(pair -> pair.second)
+                .collect(Collectors.toList());
+
+        int size = bucketNums.size();
+        if (size != bucketIds.size()) {
+            throw new StarRocksConnectorException("bucket size error. %d vs %d", bucketNums.size(), bucketIds.size());
+        }
+
+        int res = 0;
+        for (int i = 0; i < size; i++) {
+            if (i == size - 1) {
+                res = res + bucketIds.get(i);
+            } else {
+                int tmp = bucketIds.get(i);
+                for (int j = i + 1; j <= size - 1; j++) {
+                    tmp = tmp * bucketNums.get(j);
+                }
+                res = res + tmp;
+            }
+        }
+        return res;
     }
 
     public void resetSnapshot() {
@@ -441,6 +505,24 @@ public class IcebergTable extends Table {
         public IcebergTable build() {
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
                     fullSchema, nativeTable, icebergProperties);
+        }
+    }
+
+    public static class BucketProperty {
+        private int bucketNum;
+        private Column column;
+
+        public BucketProperty(int bucketNum, Column column) {
+            this.bucketNum = bucketNum;
+            this.column = column;
+        }
+
+        public int getBucketNum() {
+            return bucketNum;
+        }
+
+        public Column getColumn() {
+            return column;
         }
     }
 }

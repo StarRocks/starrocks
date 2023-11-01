@@ -81,6 +81,45 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         return null;
     }
 
+    public boolean canColocateJoinForIcebergTable(HashDistributionSpec leftLocalDistributionSpec,
+                                                  HashDistributionSpec rightLocalDistributionSpec,
+                                                  List<DistributionCol> leftShuffleColumns,
+                                                  List<DistributionCol> rightShuffleColumns) {
+        if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
+            return false;
+        }
+
+        IcebergDistributionDesc leftLocalDistributionDesc = (IcebergDistributionDesc) leftLocalDistributionSpec.
+                getHashDistributionDesc();
+        IcebergDistributionDesc rightLocalDistributionDesc = (IcebergDistributionDesc) rightLocalDistributionSpec.
+                getHashDistributionDesc();
+
+        List<IcebergTable.BucketProperty> leftBucketProperties = leftLocalDistributionDesc.getBucketProperties();
+        List<IcebergTable.BucketProperty> rightBucketProperties = rightLocalDistributionDesc.getBucketProperties();
+
+        if (leftBucketProperties.size() != rightBucketProperties.size()) {
+            return false;
+        }
+        for (int i = 0; i < leftBucketProperties.size(); i++) {
+            IcebergTable.BucketProperty leftBucketProperty = leftBucketProperties.get(i);
+            int leftColumnId = leftLocalDistributionDesc.getDistributionCols().get(i).getColId();
+            int idx = 0;
+            for (; idx < leftShuffleColumns.size(); ++ idx) {
+                if (leftShuffleColumns.get(idx).getColId() == leftColumnId) {
+                    break;
+                }
+            }
+            if (idx == leftShuffleColumns.size()) {
+                return false;
+            }
+            IcebergTable.BucketProperty rightBucketProperty = rightBucketProperties.get(idx);
+            if (leftBucketProperty.getBucketNum() != rightBucketProperty.getBucketNum()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public boolean canColocateJoin(HashDistributionSpec leftLocalDistributionSpec,
                                    HashDistributionSpec rightLocalDistributionSpec,
                                    List<DistributionCol> leftShuffleColumns,
@@ -394,6 +433,18 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 //noinspection ConstantConditions
                 checkState(false, "Children output property distribution error");
             }
+        } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isIcebergLocal()) {
+            // iceberg colocate join
+            if (!canColocateJoinForIcebergTable(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
+                    rightShuffleColumns)) {
+                enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
+                enforceChildShuffleDistribution(rightShuffleColumns, rightChild, rightChildOutputProperty, 1);
+            }
+            return visitOperator(node, context);
+        } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isShuffle()) {
+            // iceberg bucket join
+            transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+            return visitOperator(node, context);
         } else {
             checkState(false, "Children output property distribution error");
         }
