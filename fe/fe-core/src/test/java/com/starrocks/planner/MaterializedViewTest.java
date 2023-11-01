@@ -4575,4 +4575,68 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
     }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive1() {
+        // constraints are upper case.
+        String mv = "select a.c1, a.c2 from\n"
+                + "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n"
+                + "join hive0.partitioned_db2.t2 using (c2)";
+        String query = "select c2 from hive0.partitioned_db.t1 where c1 = 1";
+        // catalog name is case-sensitive.
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive2() {
+        // MV and sql are both upper case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2); " +
+                "hive0.PARTITIONED_DB.T1(C3) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive3() {
+        // MV is upper case, but sql is lower case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive4() {
+        // sql is upper case, but MV is lower case.
+        String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, r.c3 from hive0.partitioned_db.t1 " +
+                "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
 }

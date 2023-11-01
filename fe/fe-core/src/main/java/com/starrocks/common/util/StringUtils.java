@@ -70,6 +70,9 @@ public class StringUtils {
         }
     }
 
+    /**
+     * Check two column names are equal or not, column names are always case-insensitive.
+     */
     public static boolean areColumnNamesEqual(String columName, String toCheck) {
         if (columName == null) {
             return false;

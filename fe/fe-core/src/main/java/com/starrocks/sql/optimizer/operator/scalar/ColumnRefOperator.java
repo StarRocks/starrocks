@@ -171,11 +171,10 @@ public final class ColumnRefOperator extends ScalarOperator {
             return true;
         }
 
-        ColumnRefOperator leftColumn = (ColumnRefOperator) this;
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
-        return StringUtils.areColumnNamesEqual(leftColumn.getName(), rightColumn.getName())
-                && leftColumn.getType().equals(rightColumn.getType())
-                && leftColumn.isNullable() == rightColumn.isNullable();
+        return StringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+                && this.getType().equals(rightColumn.getType())
+                && this.isNullable() == rightColumn.isNullable();
     }
 
     /**
