@@ -45,6 +45,19 @@ public class NativeAccessControl implements AccessControl {
     }
 
     @Override
+    public void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
+                                PrivilegeType privilegeType) throws AccessDeniedException {
+        if (!privilegeType.equals(PrivilegeType.IMPERSONATE)) {
+            AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.USER, impersonateUser.getUser());
+        }
+
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        if (!authorizationManager.canExecuteAs(currentUser, roleIds, impersonateUser)) {
+            AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.USER, impersonateUser.getUser());
+        }
+    }
+
+    @Override
     public void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, PrivilegeType privilegeType) {
         if (!checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.CATALOG,
                 Collections.singletonList(catalogName))) {
@@ -271,6 +284,15 @@ public class NativeAccessControl implements AccessControl {
     public void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume) {
         if (!checkAnyActionOnObject(currentUser, roleIds, ObjectType.STORAGE_VOLUME, Collections.singletonList(storageVolume))) {
             AccessDeniedException.reportAccessDenied("ANY", ObjectType.STORAGE_VOLUME, storageVolume);
+        }
+    }
+
+    @Override
+    public void withGrantOption(UserIdentity currentUser, Set<Long> roleIds, ObjectType type, List<PrivilegeType> wants,
+                                List<PEntryObject> objects) throws AccessDeniedException {
+        AuthorizationMgr authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        if (!authorizationManager.allowGrant(currentUser, roleIds, type, wants, objects)) {
+            AccessDeniedException.reportAccessDenied(PrivilegeType.GRANT.name(), ObjectType.SYSTEM, null);
         }
     }
 

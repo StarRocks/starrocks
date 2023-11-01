@@ -771,7 +771,8 @@ public class AuthorizationMgrTest {
 
         // on all users
         AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
-        Assert.assertFalse(authorizationManager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -779,8 +780,8 @@ public class AuthorizationMgrTest {
         manager.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertTrue(authorizationManager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
 
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
@@ -788,8 +789,8 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertFalse(authorizationManager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
     }
 
     @Test
@@ -797,8 +798,8 @@ public class AuthorizationMgrTest {
         AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertFalse(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
 
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT IMPERSONATE ON USER root, test_user TO test_user", ctx);
@@ -806,8 +807,8 @@ public class AuthorizationMgrTest {
         manager.grant(grantStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
 
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE IMPERSONATE ON USER root FROM test_user", ctx);
@@ -815,8 +816,8 @@ public class AuthorizationMgrTest {
         manager.revoke(revokeStmt);
 
         setCurrentUserAndRoles(ctx, testUser);
-        ;
-        Assert.assertFalse(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
     }
 
     @Test
@@ -1415,7 +1416,8 @@ public class AuthorizationMgrTest {
         new NativeAccessControl().checkViewAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 new TableName(DB_NAME, "view1"), PrivilegeType.DROP);
 
-        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE root FROM user_test_builtin_role"), ctx), ctx);
@@ -1468,7 +1470,8 @@ public class AuthorizationMgrTest {
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.DROP));
         Assert.assertThrows(AccessDeniedException.class, () -> new NativeAccessControl().checkViewAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), new TableName(DB_NAME, "view1"), PrivilegeType.DROP));
-        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE user_admin FROM user_test_builtin_role"), ctx), ctx);
@@ -1543,7 +1546,8 @@ public class AuthorizationMgrTest {
         }
 
         setCurrentUserAndRoles(ctx, user);
-        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Authorizer.checkUserAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), UserIdentity.ROOT, PrivilegeType.IMPERSONATE);
         Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
                 DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT);
     }
