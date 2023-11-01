@@ -121,7 +121,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitOperator(Operator node, ExpressionContext context) {
         List<PhysicalPropertySet> requiredProps = new ArrayList<>();
         for (int childIndex = 0; childIndex < context.arity(); ++childIndex) {
-            requiredProps.add(PhysicalPropertySet.EMPTY);
+            requiredProps.add(PhysicalPropertySet.empty());
         }
         requiredProperties.add(requiredProps);
         return null;
@@ -132,7 +132,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // 1 For broadcast join
         PhysicalPropertySet rightBroadcastProperty =
                 new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty(), rightBroadcastProperty));
 
         JoinHelper joinHelper = JoinHelper.of(node, context.getChildOutputColumns(0), context.getChildOutputColumns(1));
 
@@ -215,7 +215,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             PhysicalPropertySet rightBroadcastProperty =
                     new PhysicalPropertySet(
                             new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty(), rightBroadcastProperty));
         }
         return null;
     }
@@ -226,7 +226,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage <= 1 && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
                 && node.isOnePhaseAgg()) {
-            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
+            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty()));
             return null;
         }
 
@@ -247,13 +247,13 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             return null;
         }
 
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty()));
         return null;
     }
 
     @Override
     public Void visitPhysicalTopN(PhysicalTopNOperator topN, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty()));
         return null;
     }
 
@@ -278,7 +278,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         } else {
             // If scan tablet sum less than 1, no distribution property is required
             if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
-                distributionProperty = DistributionProperty.EMPTY;
+                distributionProperty = DistributionProperty.empty();
             } else {
                 List<DistributionCol> distributionCols = partitionColumnRefSet.stream()
                         .map(e -> new DistributionCol(e, true)).collect(
@@ -312,7 +312,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     private void processSetOperationChildProperty(ExpressionContext context) {
         List<PhysicalPropertySet> childProperty = new ArrayList<>();
         for (int i = 0; i < context.arity(); ++i) {
-            childProperty.add(PhysicalPropertySet.EMPTY);
+            childProperty.add(PhysicalPropertySet.empty());
         }
 
         // Use Any to forbidden enforce some property, will add shuffle in FragmentBuilder
@@ -325,7 +325,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         //
         // If scan tablet sum less than 1, don't need required gather, because work machine always less than 1?
         // if (context.getRootProperty().isExecuteInOneTablet()) {
-        //     requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
+        //     requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty()));
         //     return null;
         // }
 
@@ -336,7 +336,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, requirementsFromParent));
+        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.empty(), requirementsFromParent));
         return null;
     }
 

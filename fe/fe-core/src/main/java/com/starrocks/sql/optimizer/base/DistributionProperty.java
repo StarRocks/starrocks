@@ -26,7 +26,6 @@ public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
 
-    public static final DistributionProperty EMPTY = new DistributionProperty();
 
     public DistributionProperty() {
         this.spec = DistributionSpec.createAnyDistributionSpec();
@@ -45,6 +44,10 @@ public class DistributionProperty implements PhysicalProperty {
 
     public DistributionSpec getSpec() {
         return spec;
+    }
+
+    public static DistributionProperty empty() {
+        return new DistributionProperty();
     }
 
     public boolean isAny() {

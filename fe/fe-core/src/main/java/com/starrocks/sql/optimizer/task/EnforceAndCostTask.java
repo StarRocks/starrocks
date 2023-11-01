@@ -312,7 +312,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         setPropertyWithCost(groupExpression, outputProperty, childrenOutputProperties);
         if (outputProperty.getCteProperty().isEmpty()) {
             // groupExpression can satisfy the ANY type output property
-            setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.EMPTY, childrenOutputProperties);
+            setPropertyWithCost(groupExpression, outputProperty, PhysicalPropertySet.empty(), childrenOutputProperties);
         }
     }
 
@@ -458,7 +458,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                  * because repartition require sort again
                  */
                 PhysicalPropertySet newProperty =
-                        new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+                        new PhysicalPropertySet(DistributionProperty.empty(), SortProperty.empty(),
                                 outputProperty.getCteProperty());
                 groupExpression.getGroup().replaceBestExpressionProperty(outputProperty, newProperty,
                         groupExpression.getCost(outputProperty));

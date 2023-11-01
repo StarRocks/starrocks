@@ -26,14 +26,16 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
-    public static final SortProperty EMPTY = new SortProperty();
-
     public SortProperty() {
         this.spec = OrderSpec.createEmpty();
     }
 
     public SortProperty(OrderSpec spec) {
         this.spec = spec;
+    }
+
+    public static SortProperty empty() {
+        return new SortProperty();
     }
 
     public OrderSpec getSpec() {

@@ -362,7 +362,7 @@ public class MaterializedViewAnalyzer {
                 OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
                 logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
                 Optimizer optimizer = new Optimizer();
-                PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
+                PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.empty();
                 OptExpression optimizedPlan = optimizer.optimize(
                         ctx,
                         logicalPlan.getRoot(),

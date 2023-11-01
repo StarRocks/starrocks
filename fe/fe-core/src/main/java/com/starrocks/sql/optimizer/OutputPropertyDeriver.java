@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionPropertyInfo;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -77,7 +78,7 @@ import static com.starrocks.sql.optimizer.base.HashDistributionDesc.SourceType.S
 
 // The output property of the node is calculated according to the attributes of the child node and itself.
 // Currently join node enforces a valid property for the child node that cannot meet the requirements.
-public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertySet, ExpressionContext> {
+public final class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertySet, ExpressionContext> {
 
     private static final Logger LOG = LogManager.getLogger(OutputPropertyDeriver.class);
 
@@ -116,13 +117,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitOperator(Operator node, ExpressionContext context) {
-        return mergeCTEProperty(PhysicalPropertySet.EMPTY);
+        return mergeCTEProperty(PhysicalPropertySet.empty());
     }
 
     private PhysicalPropertySet computeColocateJoinOutputProperty(JoinOperator joinType,
                                                                   HashDistributionSpec leftScanDistributionSpec,
                                                                   HashDistributionSpec rightScanDistributionSpec) {
-
         HashDistributionSpec dominatedOutputSpec;
 
         if (joinType.isRightJoin()) {
@@ -133,8 +133,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             dominatedOutputSpec = leftScanDistributionSpec;
         }
 
-        DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPropertyInfo();
-        DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo leftInfo = leftScanDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
 
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
@@ -172,7 +172,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                                                                         PhysicalPropertySet physicalPropertySet,
                                                                         List<DistributionCol> leftOnPredicateColumns,
                                                                         List<DistributionCol> rightOnPredicateColumns) {
-        DistributionSpec.PropertyInfo propertyInfo =
+        DistributionPropertyInfo propertyInfo =
                 physicalPropertySet.getDistributionProperty().getSpec().getPropertyInfo();
 
         JoinOperator joinOperator = node.getJoinType();
@@ -284,7 +284,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                                                                  List<DistributionCol> rightShuffleColumns) {
         Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
         if (!requiredShuffleDesc.isPresent()) {
-            return PhysicalPropertySet.EMPTY;
+            return PhysicalPropertySet.empty();
         }
 
         // Get required properties for children.
@@ -356,7 +356,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         // update null distribution info to null relax for allGroupingRefs
         if (!allGroupingRefs.isEmpty() && childDistribution.isShuffle()) {
             HashDistributionSpec distributionSpec = (HashDistributionSpec) childDistribution.getSpec();
-            DistributionSpec.PropertyInfo newPropertyInfo = childDistribution.getSpec().getPropertyInfo().copy();
+            DistributionPropertyInfo newPropertyInfo = childDistribution.getSpec().getPropertyInfo().copy();
             newPropertyInfo.clearNullStrictDisjointSet();
             HashDistributionSpec newDistributionSpec = distributionSpec.getNullRelaxSpec(newPropertyInfo);
             DistributionProperty newDistributionProperty = childPropertySet.getDistributionProperty()
@@ -371,7 +371,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         DistributionSpec olapDistributionSpec = node.getDistributionSpec();
 
-        DistributionSpec.PropertyInfo physicalPropertyInfo = new DistributionSpec.PropertyInfo();
+        DistributionPropertyInfo physicalPropertyInfo = new DistributionPropertyInfo();
 
         physicalPropertyInfo.tableId = node.getTable().getId();
         physicalPropertyInfo.partitionIds = node.getSelectedPartitionId();
@@ -398,13 +398,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                 outputProperty = new PhysicalPropertySet(new SortProperty(topN.getOrderSpec()));
             }
         } else if (topN.getPartitionByColumns() == null) {
-            outputProperty = PhysicalPropertySet.EMPTY;
+            outputProperty = PhysicalPropertySet.empty();
         } else {
             List<Integer> partitionColumnRefSet = topN.getPartitionByColumns().stream()
                     .flatMap(c -> Arrays.stream(c.getUsedColumns().getColumnIds()).boxed())
                     .collect(Collectors.toList());
             if (partitionColumnRefSet.isEmpty()) {
-                outputProperty = PhysicalPropertySet.EMPTY;
+                outputProperty = PhysicalPropertySet.empty();
             } else {
                 outputProperty = new PhysicalPropertySet(childrenOutputProperties.get(0).getDistributionProperty());
             }
@@ -455,7 +455,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
         DistributionProperty distributionProperty = new DistributionProperty(gather);
-        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY,
+        return new PhysicalPropertySet(distributionProperty, SortProperty.empty(),
                 childrenOutputProperties.get(0).getCteProperty());
 
     }
@@ -478,7 +478,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-        return new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+        return new PhysicalPropertySet(DistributionProperty.empty(), SortProperty.empty(),
                 new CTEProperty(node.getCteId()));
     }
 
