@@ -37,6 +37,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
@@ -120,6 +121,60 @@ public class ShowCreateViewStmtTest {
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
+        }
+    }
+
+    @Test
+    public void testCreateView() throws Exception {
+        List<String[]> testCases = new ArrayList<>();
+        testCases.add(new String[]{"test_view_0",
+                "create view test_view_0 AS SELECT " +
+                        " *, concat('', null) FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_0` (`k1`, `k2`, `v1`, `concat('', NULL)`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, concat('', NULL) AS `concat('', NULL)`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_1",
+                "create view test_view_1 AS SELECT " +
+                        "concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_1` (`concat(test.tbl1.k1, test.tbl1.k2)`) AS SELECT concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) AS `concat(test.tbl1.k1, test.tbl1.k2)`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_2",
+                "create view test_view_2 AS SELECT " +
+                        "`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2` FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_2` (`k1`, `k2`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_3",
+                "create view test_view_3 AS SELECT " +
+                        "*, `test`.`tbl1`.`k2` as k3 FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_3` (`k1`, `k2`, `v1`, `k3`) AS " +
+                        "SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, `test`.`tbl1`.`k2` AS `k3`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_4",
+                "create view test_view_4 AS " +
+                        "SELECT  `test`.`tbl1`.`k1` as c1, `test`.`tbl1`.`k2` as c2 FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_4` (`c1`, `c2`) AS SELECT `test`.`tbl1`.`k1` AS `c1`, `test`.`tbl1`.`k2` AS `c2`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        for (String[] testcase : testCases) {
+            String dropViewSql = "drop view if exists " + testcase[0];
+            DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
+            GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+            CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
+            GlobalStateMgr.getCurrentState().createView(createViewStmt);
+
+            List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+            List<String> res = Lists.newArrayList();
+            GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
+                    null, null, false, false);
+
+            Assert.assertEquals(testcase[2], res.get(0));
+
+            GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
         }
     }
 

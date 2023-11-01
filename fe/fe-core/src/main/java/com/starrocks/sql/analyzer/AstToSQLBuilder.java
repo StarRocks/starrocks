@@ -79,7 +79,9 @@ public class AstToSQLBuilder {
                 res += ".";
             }
 
-            res += '`' + fieldName + '`';
+            res +=  fieldName.startsWith("`") ?
+                    fieldName
+                    : '`' + fieldName + '`';
             if (!fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
@@ -150,8 +152,32 @@ public class AstToSQLBuilder {
                         selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
                                 slot.getColumnName(), columnName));
                     } else {
+<<<<<<< HEAD
                         selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
                                 columnName));
+=======
+                        selectListString.add(
+                                expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
+                                        visit(expr) + " AS `" + columnName.replace("`", "") + "`" :
+                                        visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+                    }
+                }
+            } else {
+                for (SelectListItem item : stmt.getSelectList().getItems()) {
+                    if (item.isStar()) {
+                        if (item.getTblName() != null) {
+                            selectListString.add(item.getTblName() + ".*");
+                        } else {
+                            selectListString.add("*");
+                        }
+                    } else if (item.getExpr() != null) {
+                        Expr expr = item.getExpr();
+                        String str = visit(expr);
+                        if (StringUtils.isNotEmpty(item.getAlias())) {
+                            str += " AS " + ParseUtil.backquote(item.getAlias());
+                        }
+                        selectListString.add(str);
+>>>>>>> a4aa91ef55 ([BugFix] Unexpected exception: failed to init view stmt (#33921))
                     }
                 } else {
                     selectListString.add(
