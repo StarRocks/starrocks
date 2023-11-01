@@ -23,7 +23,6 @@ import java.util.Objects;
 
 public class HashDistributionSpec extends DistributionSpec {
     private final HashDistributionDesc hashDistributionDesc;
-
     private final EquivalentDescriptor equivDesc;
 
     public HashDistributionSpec(HashDistributionDesc distributionDesc) {

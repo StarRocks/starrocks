@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -28,8 +29,8 @@ public class SortProperty implements PhysicalProperty {
 
     public static final SortProperty EMPTY = new SortProperty();
 
-    public SortProperty() {
-        this.spec = OrderSpec.createEmpty();
+    private SortProperty() {
+        this.spec = new OrderSpec(ImmutableList.of());
     }
 
     public SortProperty(OrderSpec spec) {
