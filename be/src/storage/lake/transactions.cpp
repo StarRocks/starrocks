@@ -15,8 +15,8 @@
 #include "storage/lake/transactions.h"
 
 #include "fs/fs_util.h"
-#include "storage/lake/metacache.h"
 #include "gutil/strings/join.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
@@ -25,41 +25,6 @@
 #include "util/lru_cache.h"
 
 namespace starrocks::lake {
-
-// check whether all txn log exists, for versions may be published repeatedly and
-// txn log has been deleted when converting from single publish to batch,
-// there we find the latest txnLog as base_version to skip repeated version.
-// result_base_index indicates the index of first txn in the txn_ids, which the corresponding txn_log is not deleted.
-
-// for example:
-// the mode of publish is single,
-// txn2 has been published successfully and visible version in FE is updated to 2,
-// then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
-// turn the mode of publish to batch,
-// txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped and should return 1, just apply txn_log of txn4 and txn5.
-StatusOr<int64_t> get_base_tablet_metadata_index(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                                 int64_t new_version, std::span<const int64_t> txn_ids) {
-    int result_base_index = -1;
-    for (int i = 0; i < txn_ids.size(); i++) {
-        auto txn_id = txn_ids[i];
-        auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
-        auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
-
-        if (txn_log_st.status().is_not_found()) {
-            auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_id, base_version + i + 1);
-            if (missig_txn_log_meta.status().is_not_found()) {
-                // this should't happen
-                LOG(WARNING) << "txn_log of txn: " << txn_id << " not found, and can not find the tablet_meta";
-                return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
-            }
-        } else {
-            result_base_index = i;
-            break;
-        }
-    }
-
-    return Status::OK();
-}
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
@@ -85,51 +50,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         return base_metadata_or.status();
     }
 
-    int base_version_index = -1;
-    auto index_status = get_base_tablet_metadata_index(tablet_mgr, tablet_id, base_version, new_version, txn_ids,
-                                                       base_version_index);
-
-    if (!index_status.ok()) {
-        return new_version_metadata_or_error(index_status);
-    }
-
-    if (base_version_index == -1) {
-        LOG(WARNING) << "all txn_log missing, txn_ids: " << JoinInts(txn_ids, ",");
-        return tablet_mgr->get_tablet_metadata(tablet_id, new_version);
-    }
-
     auto base_metadata = std::move(base_metadata_or).value();
-    if (UNLIKELY(base_version_index != 0)) {
-        auto latest_published_metadata = tablet_mgr->get_tablet_metadata(tablet_id, base_version + base_version_index);
-        base_metadata = std::move(latest_published_metadata).value();
-    }
-
-    auto new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
-    auto log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_id), new_metadata, new_version);
-
-    if (new_metadata->compaction_inputs_size() > 0) {
-        new_metadata->mutable_compaction_inputs()->Clear();
-    }
-
-    if (new_metadata->orphan_files_size() > 0) {
-        new_metadata->mutable_orphan_files()->Clear();
-    }
-
-    if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
-        new_metadata->set_prev_garbage_version(base_metadata->version());
-    }
-
-    new_metadata->set_commit_time(commit_time);
-
-    auto init_st = log_applier->init();
-    if (!init_st.ok()) {
-        if (init_st.is_already_exist()) {
-            return new_version_metadata_or_error(init_st);
-        } else {
-            return init_st;
-        }
-    }
-
+    std::unique_ptr<TxnLogApplier> log_applier;
+    std::shared_ptr<TabletMetadataPB> new_metadata;
     std::vector<std::string> files_to_delete;
 
     // Apply txn logs
@@ -146,13 +69,42 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // 5. txn4 will be published in later publish task, but we can't judge what's the latest_version in BE and we can not reapply txn_log if
     // txn logs have been deleted.
     bool delete_txn_log = (txn_ids.size() == 1);
-    for (int i = base_version_index; i < txn_ids.size(); i++) {
+    for (int i = 0; i < txn_ids.size(); i++) {
         auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
         if (txn_log_st.status().is_not_found()) {
-            return new_version_metadata_or_error(txn_log_st.status());
+            if (i == 0) {
+                // this may happen in two situations
+                // 1. duplicate publish in mode single
+                if (txn_ids.size() == 1) {
+                    return new_version_metadata_or_error(txn_log_st.status());
+                }
+
+                // 2. when converting from single publish to batch for txn log has been deleted,
+                // for example:
+                // the current mode of publish is single,
+                // txn2 has been published successfully and visible version in FE is updated to 2,
+                // then txn3 is published successfully in BE and the txn_log of txn3 has been deleted, but FE do not get the response for some reason,
+                // turn the mode of publish to batch,
+                // txn3 ,txn4, txn5 will be published in one publish batch task, so txn3 should be skipped just apply txn_log of txn4 and txn5.
+                auto missig_txn_log_meta = tablet_mgr->get_tablet_metadata(tablet_id, base_version + 1);
+                if (missig_txn_log_meta.status().is_not_found()) {
+                    // this should't happen
+                    LOG(WARNING) << "txn_log of txn: " << txn_id << " not found, and can not find the tablet_meta";
+                    return Status::InternalError("Both txn_log and corresponding tablet_meta missing");
+                } else if (!missig_txn_log_meta.status().ok()) {
+                    LOG(WARNING) << "txn_log of txn: " << txn_id << " not found, find the tablet_meta error: "
+                                 << missig_txn_log_meta.status().to_string();
+                    return new_version_metadata_or_error(missig_txn_log_meta.status());
+                } else {
+                    base_metadata = std::move(missig_txn_log_meta).value();
+                    break;
+                }
+            } else {
+                return new_version_metadata_or_error(txn_log_st.status());
+            }
         }
 
         if (!txn_log_st.ok()) {
@@ -163,6 +115,35 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         auto& txn_log = txn_log_st.value();
         if (txn_log->has_op_schema_change()) {
             alter_version = txn_log->op_schema_change().alter_version();
+        }
+
+        if (log_applier == nullptr) {
+            // init log_applier
+            new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+            log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_id), new_metadata, new_version);
+
+            if (new_metadata->compaction_inputs_size() > 0) {
+                new_metadata->mutable_compaction_inputs()->Clear();
+            }
+
+            if (new_metadata->orphan_files_size() > 0) {
+                new_metadata->mutable_orphan_files()->Clear();
+            }
+
+            if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
+                new_metadata->set_prev_garbage_version(base_metadata->version());
+            }
+
+            new_metadata->set_commit_time(commit_time);
+
+            auto init_st = log_applier->init();
+            if (!init_st.ok()) {
+                if (init_st.is_already_exist()) {
+                    return new_version_metadata_or_error(init_st);
+                } else {
+                    return init_st;
+                }
+            }
         }
 
         auto st = log_applier->apply(*txn_log);

@@ -118,8 +118,8 @@ inline Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t
     lake::PublishLogVersionResponse response;
 
     request.add_tablet_ids(tablet_id);
-    request.add_txn_ids(txn_id);
-    request.add_versions(log_version);
+    request.set_txn_id(txn_id);
+    request.set_version(log_version);
 
     auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
     lake_service.publish_log_version(nullptr, &request, &response, nullptr);

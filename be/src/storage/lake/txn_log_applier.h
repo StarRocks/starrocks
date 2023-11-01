@@ -18,8 +18,8 @@
 
 #include "common/status.h"
 #include "gutil/macros.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
-
 namespace starrocks::lake {
 
 class Tablet;
