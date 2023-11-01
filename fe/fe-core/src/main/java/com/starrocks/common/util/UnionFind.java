@@ -80,7 +80,7 @@ public class UnionFind<T> {
     }
 
     public Collection<Set<T>> getAllGroups() {
-        return eqGroupMap.values();
+        return Collections.unmodifiableCollection(eqGroupMap.values());
     }
 
     public void union(T lhs, T rhs) {
@@ -125,7 +125,7 @@ public class UnionFind<T> {
             copied.element2Group.put(e.getKey(), e.getValue());
         }
         for (Map.Entry<Integer, Set<T>> e : eqGroupMap.entrySet()) {
-            copied.eqGroupMap.put(e.getKey(), e.getValue());
+            copied.eqGroupMap.put(e.getKey(), Sets.newHashSet(e.getValue()));
         }
         return copied;
     }
