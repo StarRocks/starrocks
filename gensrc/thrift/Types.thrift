@@ -360,6 +360,7 @@ struct TFunction {
 
   // Ignore nulls
   33: optional bool ignore_nulls
+  34: optional bool cacheable
 }
 
 enum TLoadJobState {
