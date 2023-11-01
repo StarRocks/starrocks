@@ -700,7 +700,7 @@ PROPERTIES (
 
 > **注意**
 >
-> * Unique Key 约束和外键约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+> * `unique_constraints` 约束和 `foreign_key_constraints` 约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
 > * 主键模型表的 Primary Key 或更新模型表的 Unique Key 默认是其 `unique_constraints`，您无需手动设置。
 > * `foreign_key_constraints` 中的 `child_column` 必须对应另一个表的 `unique_constraints` 中的 `unique_key`。
 > * `child_column` 和 `parent_column` 的数量必须一致。
