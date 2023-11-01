@@ -130,9 +130,18 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     // compute the distribution property info, just compute the nullable columns now
     private PhysicalPropertySet computeHashJoinDistributionPropertyInfo(PhysicalJoinOperator node,
                                                                         PhysicalPropertySet physicalPropertySet,
+<<<<<<< HEAD
                                                                         List<Integer> leftOnPredicateColumns,
                                                                         List<Integer> rightOnPredicateColumns,
                                                                         ExpressionContext context) {
+=======
+                                                                        List<DistributionCol> leftOnPredicateColumns,
+                                                                        List<DistributionCol> rightOnPredicateColumns) {
+        // only update propertyInfo in HashDistributionSpec
+        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
+            return physicalPropertySet;
+        }
+>>>>>>> b3cfde4327 ([BugFix] fix concurrency modify propertyInfo in empty PhysicalPropertySet (#34140))
         DistributionSpec.PropertyInfo propertyInfo =
                 physicalPropertySet.getDistributionProperty().getSpec().getPropertyInfo();
 
