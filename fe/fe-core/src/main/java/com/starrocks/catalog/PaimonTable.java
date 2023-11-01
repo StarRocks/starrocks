@@ -92,6 +92,19 @@ public class PaimonTable extends Table {
         return partColumnNames;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public List<Column> getPartitionColumns() {
+        List<Column> partitionColumns = new ArrayList<>();
+        if (!partColumnNames.isEmpty()) {
+            partitionColumns = partColumnNames.stream().map(this::getColumn)
+                    .collect(Collectors.toList());
+        }
+        return partitionColumns;
+    }
+
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     public List<String> getFieldNames() {
         return paimonFieldNames;
     }
