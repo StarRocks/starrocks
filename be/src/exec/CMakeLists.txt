@@ -79,6 +79,7 @@ set(EXEC_FILES
     except_node.cpp
     file_scanner.cpp
     orc_scanner.cpp
+    orc_writer.cpp
     jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp

@@ -198,6 +198,8 @@ public:
 
     static Status RemoteFileNotFound(const Slice& msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
 
+    static Status JitCompileError(const Slice& msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
+
     bool ok() const {
         mark_checked();
         return _state == nullptr;

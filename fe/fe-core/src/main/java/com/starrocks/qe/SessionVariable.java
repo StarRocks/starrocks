@@ -231,7 +231,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String RUNTIME_PROFILE_REPORT_INTERVAL = "runtime_profile_report_interval";
-    public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
     public static final String ENABLE_ASYNC_PROFILE = "enable_async_profile";
 
@@ -462,6 +461,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+    public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -554,6 +554,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String ENABLE_JIT = "enable_jit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -838,14 +840,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = RUNTIME_PROFILE_REPORT_INTERVAL)
     private int runtimeProfileReportInterval = 10;
 
-    @VariableMgr.VarAttr(name = PROFILE_LIMIT_FOLD, flag = VariableMgr.INVISIBLE)
-    private boolean profileLimitFold = true;
-
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
     @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
     private boolean enableAsyncProfile = true;
+
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
+    private int bigQueryProfileSecondThreshold = 0;
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -1407,6 +1409,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
 
+    @VarAttr(name = ENABLE_JIT)
+    private boolean enableJit = false;
+
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
@@ -1651,6 +1656,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
         this.enableLoadProfile = enableLoadProfile;
+    }
+
+    public boolean isEnableBigQueryProfile() {
+        return bigQueryProfileSecondThreshold > 0;
+    }
+
+    public int getBigQueryProfileSecondThreshold() {
+        return bigQueryProfileSecondThreshold;
     }
 
     public int getWaitTimeoutS() {
@@ -2172,14 +2185,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getRuntimeProfileReportInterval() {
         return runtimeProfileReportInterval;
-    }
-
-    public void setProfileLimitFold(boolean profileLimitFold) {
-        this.profileLimitFold = profileLimitFold;
-    }
-
-    public boolean isProfileLimitFold() {
-        return profileLimitFold;
     }
 
     public void setPipelineProfileLevel(int pipelineProfileLevel) {
@@ -2778,6 +2783,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
+        tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);
@@ -2858,6 +2864,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
+        tResult.setEnable_jit(enableJit);
         return tResult;
     }
 

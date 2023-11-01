@@ -371,7 +371,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                                                  _opt.tablet_id, _replica_state_name(_replica_state)));
     }
 
-    if (!_mem_table->check_supported_column_partial_update(chunk)) {
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !_mem_table->check_supported_column_partial_update(chunk)) {
         return Status::InternalError(
                 fmt::format("can't partial update for column with row. tablet_id: {}", _opt.tablet_id));
     }

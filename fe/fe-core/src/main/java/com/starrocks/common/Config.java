@@ -610,6 +610,12 @@ public class Config extends ConfigBase {
     public static int http_max_chunk_size = 8192;
 
     /**
+     * If a request takes longer than the configured time, a log will be generated to trace it.
+     */
+    @ConfField(mutable = true)
+    public static int http_slow_request_threshold_ms = 5000;
+
+    /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through
      * the oshi library, such as: getent passwd
      * If you have higher requirements for security, you can turn off the acquisition of this information
@@ -1651,6 +1657,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
+
+    /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
 
     /**
      * Check expire partition statistics data when StarRocks start up

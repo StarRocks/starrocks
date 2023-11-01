@@ -232,6 +232,10 @@ struct TQueryOptions {
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
+
+  109: optional i64 big_query_profile_second_threshold;
+
+  110: optional bool enable_jit = false;
 }
 
 
