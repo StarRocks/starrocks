@@ -108,8 +108,8 @@ public class SystemInfoService implements GsonPostProcessable {
     @SerializedName(value = "ce")
     private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
-    private long lastBackendIdForCreation = -1;
-    private long lastBackendIdForOther = -1;
+    private long lastNodeIdForCreation = -1;
+    private long lastNodeIdForOther = -1;
 
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
@@ -269,7 +269,7 @@ public class SystemInfoService implements GsonPostProcessable {
         String opMessage;
         formatSb.append("%s:%d's host has been modified to %s");
         if (candidateBackends.size() >= 2) {
-            formatSb.append("\nplease exectue %d times, to modify the remaining backends\n");
+            formatSb.append("\nplease execute %d times, to modify the remaining backends\n");
             for (int i = 1; i < candidateBackends.size(); i++) {
                 Backend be = candidateBackends.get(i);
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
@@ -653,6 +653,12 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToBackendRef.size();
     }
 
+    public int getTotalComputeNodeNumber() {
+        return idToComputeNodeRef.size();
+    }
+
+
+
     public int getAliveComputeNodeNumber() {
         return getComputeNodeIds(true).size();
     }
@@ -741,6 +747,25 @@ public class SystemInfoService implements GsonPostProcessable {
         return Lists.newArrayList(idToBackendRef.values());
     }
 
+<<<<<<< HEAD
+=======
+    public List<Backend> getAvailableBackends() {
+        return getBackends().stream()
+                .filter(ComputeNode::isAvailable)
+                .collect(Collectors.toList());
+    }
+
+    public List<ComputeNode> getComputeNodes() {
+        return Lists.newArrayList(idToComputeNodeRef.values());
+    }
+
+    public List<ComputeNode> getAvailableComputeNodes() {
+        return getComputeNodes().stream()
+                .filter(ComputeNode::isAvailable)
+                .collect(Collectors.toList());
+    }
+
+>>>>>>> ba3575b3d0 ([BugFix] fix shared_data mode query backend  (#33368) (#33371))
     public Stream<ComputeNode> backendAndComputeNodeStream() {
         return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
@@ -759,20 +784,71 @@ public class SystemInfoService implements GsonPostProcessable {
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
+<<<<<<< HEAD
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
                                                        final List<Backend> srcBackends) {
         long lastBackendId;
+=======
+    public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
+
+        final List<ComputeNode> candidateComputeNodes = needAvailable ? getAvailableComputeNodes() : getComputeNodes();
+        if (CollectionUtils.isEmpty(candidateComputeNodes)) {
+            LOG.warn("failed to find any compute nodes, needAvailable={}", needAvailable);
+            return Collections.emptyList();
+        }
+
+        return seqChooseNodeIds(computeNodeNum, isCreate, candidateComputeNodes);
+    }
+
+    private List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
+                                           Predicate<? super Backend> predicate) {
+        final List<Backend> candidateBackends = needAvailable ? getAvailableBackends() : getBackends();
+        if (CollectionUtils.isEmpty(candidateBackends)) {
+            LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
+            return Collections.emptyList();
+        }
+
+        final List<ComputeNode> filteredBackends = candidateBackends.stream()
+                .filter(predicate)
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(filteredBackends)) {
+            String backendInfo = candidateBackends.stream()
+                    .map(backend -> "[host=" + backend.getHost() + ", bePort=" + backend.getBePort() + "]")
+                    .collect(Collectors.joining("; "));
+
+            LOG.warn(
+                    "failed to find any backend with qualified disk usage from {} candidate backends, needAvailable={}, [{}]",
+                    candidateBackends.size(), needAvailable, backendInfo);
+            return Collections.emptyList();
+        }
+        return seqChooseNodeIds(backendNum, isCreate, filteredBackends);
+    }
+
+    /**
+     * choose nodes by round-robin
+     *
+     * @param nodeNum  number of node wanted
+     * @param isCreate    last node id for creation
+     * @param srcNodes list of the candidate nodes
+     * @return empty list if not enough node, otherwise return a list of node's id
+     */
+    public synchronized List<Long> seqChooseNodeIds(int nodeNum, boolean isCreate, final List<ComputeNode> srcNodes) {
+
+        long lastNodeId;
+>>>>>>> ba3575b3d0 ([BugFix] fix shared_data mode query backend  (#33368) (#33371))
 
         if (isCreate) {
-            lastBackendId = lastBackendIdForCreation;
+            lastNodeId = lastNodeIdForCreation;
         } else {
-            lastBackendId = lastBackendIdForOther;
+            lastNodeId = lastNodeIdForOther;
         }
 
         // host -> BE list
+<<<<<<< HEAD
         Map<String, List<Backend>> backendMaps = Maps.newHashMap();
         for (Backend backend : srcBackends) {
             // If needAvailable is true, unavailable backend won't go into the pick list
@@ -787,35 +863,46 @@ public class SystemInfoService implements GsonPostProcessable {
                 list.add(backend);
                 backendMaps.put(backend.getHost(), list);
             }
+=======
+        Map<String, List<ComputeNode>> nodeMaps = Maps.newHashMap();
+        for (ComputeNode node : srcNodes) {
+            String host = node.getHost();
+
+            if (!nodeMaps.containsKey(host)) {
+                nodeMaps.put(host, Lists.newArrayList());
+            }
+
+            nodeMaps.get(host).add(node);
+>>>>>>> ba3575b3d0 ([BugFix] fix shared_data mode query backend  (#33368) (#33371))
         }
 
         // if more than one backend exists in same host, select a backend at random
-        List<Backend> backends = Lists.newArrayList();
-        for (List<Backend> list : backendMaps.values()) {
+        List<ComputeNode> nodes = Lists.newArrayList();
+        for (List<ComputeNode> list : nodeMaps.values()) {
             Collections.shuffle(list);
-            backends.add(list.get(0));
+            nodes.add(list.get(0));
         }
 
-        List<Long> backendIds = Lists.newArrayList();
-        // get last backend index
-        int lastBackendIndex = -1;
+        List<Long> nodeIds = Lists.newArrayList();
+        // get last node index
+        int lastNodeIndex = -1;
         int index = -1;
-        for (Backend backend : backends) {
+        for (ComputeNode node : nodes) {
             index++;
-            if (backend.getId() == lastBackendId) {
-                lastBackendIndex = index;
+            if (node.getId() == lastNodeId) {
+                lastNodeIndex = index;
                 break;
             }
         }
-        Iterator<Backend> iterator = Iterators.cycle(backends);
+        Iterator<ComputeNode> iterator = Iterators.cycle(nodes);
         index = -1;
         boolean failed = false;
         // 2 cycle at most
-        int maxIndex = 2 * backends.size();
-        while (iterator.hasNext() && backendIds.size() < backendNum) {
-            Backend backend = iterator.next();
+        int maxIndex = 2 * nodes.size();
+        while (iterator.hasNext() && nodeIds.size() < nodeNum) {
+            ComputeNode node = iterator.next();
             index++;
-            if (index <= lastBackendIndex) {
+            if (index <= lastNodeIndex) {
                 continue;
             }
 
@@ -824,35 +911,51 @@ public class SystemInfoService implements GsonPostProcessable {
                 break;
             }
 
-            long backendId = backend.getId();
-            if (!backendIds.contains(backendId)) {
-                backendIds.add(backendId);
-                lastBackendId = backendId;
+            long nodeId = node.getId();
+            if (!nodeIds.contains(nodeId)) {
+                nodeIds.add(nodeId);
+                lastNodeId = nodeId;
             } else {
                 failed = true;
                 break;
             }
         }
 
-        if (backendIds.size() != backendNum) {
+        if (nodeIds.size() != nodeNum) {
             failed = true;
         }
 
+<<<<<<< HEAD
         if (!failed) {
             if (isCreate) {
                 lastBackendIdForCreation = lastBackendId;
             } else {
                 lastBackendIdForOther = lastBackendId;
+=======
+        if (failed) {
+            // debug: print backend info when the selection failed
+            for (ComputeNode node : nodes) {
+                LOG.debug("random select: {}", node);
+>>>>>>> ba3575b3d0 ([BugFix] fix shared_data mode query backend  (#33368) (#33371))
             }
             return backendIds;
         }
 
+<<<<<<< HEAD
         // debug
         for (Backend backend : backends) {
             LOG.debug("random select: {}", backend);
         }
 
         return Collections.emptyList();
+=======
+        if (isCreate) {
+            lastNodeIdForCreation = lastNodeId;
+        } else {
+            lastNodeIdForOther = lastNodeId;
+        }
+        return nodeIds;
+>>>>>>> ba3575b3d0 ([BugFix] fix shared_data mode query backend  (#33368) (#33371))
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
