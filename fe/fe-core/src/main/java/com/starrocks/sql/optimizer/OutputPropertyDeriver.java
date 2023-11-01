@@ -534,12 +534,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             Optional<Boolean> nullStrictInfo = remainDistributionFunc(entry.getValue(), idToDistributionCol);
             if (nullStrictInfo.isPresent()) {
                 if (nullStrictInfo.get()) {
-                    distributionSpec.getPropertyInfo().unionDistributionCols(
+                    distributionSpec.getEquivDesc().unionDistributionCols(
                             new DistributionCol(entry.getKey().getId(), true),
                             idToDistributionCol.get(usedCols.getFirstId())
                     );
                 } else {
-                    distributionSpec.getPropertyInfo().unionNullRelaxCols(
+                    distributionSpec.getEquivDesc().unionNullRelaxCols(
                             new DistributionCol(entry.getKey().getId(), false),
                             idToDistributionCol.get(usedCols.getFirstId()).getNullRelaxCol()
                     );
