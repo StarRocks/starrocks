@@ -247,9 +247,6 @@ build_llvm() {
         "LLVMJITLink"
         "LLVMCFGuard"
         "LLVMInstrumentation"
-        "LLVMInstCombine"
-        "LLVMipo"
-        "LLVMVectorize"
         "LLVMIRReader"
         "LLVMCore"
         "LLVMTarget"
@@ -314,6 +311,7 @@ build_llvm() {
 
     restore_compile_flags
 }
+
 # protobuf
 build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
