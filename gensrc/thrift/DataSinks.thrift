@@ -94,6 +94,7 @@ struct TResultFileSinkOptions {
     10: optional PlanNodes.THdfsProperties hdfs_properties
     11: optional TParquetOptions parquet_options
     12: optional list<string> file_column_names
+    13: optional bool csv_header
 }
 
 struct TMemoryScratchSink {

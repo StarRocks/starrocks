@@ -101,7 +101,7 @@ Status FileResultWriter::_create_file_writer() {
     switch (_file_opts->file_format) {
     case TFileFormatType::FORMAT_CSV_PLAIN:
         _file_builder = std::make_unique<PlainTextBuilder>(
-                PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter},
+                PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter, _file_opts->file_column_names, _file_opts->csv_header},
                 std::move(writable_file), _output_expr_ctxs);
         break;
     case TFileFormatType::FORMAT_PARQUET: {

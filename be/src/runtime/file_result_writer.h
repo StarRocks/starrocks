@@ -62,6 +62,7 @@ struct ResultFileOptions {
     bool use_broker;
     std::vector<std::string> file_column_names;
     parquet::ParquetBuilderOptions parquet_options;
+    bool csv_header;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
         file_path = t_opt.file_path;
@@ -69,6 +70,7 @@ struct ResultFileOptions {
         column_separator = t_opt.__isset.column_separator ? t_opt.column_separator : "\t";
         row_delimiter = t_opt.__isset.row_delimiter ? t_opt.row_delimiter : "\n";
         max_file_size_bytes = t_opt.__isset.max_file_size_bytes ? t_opt.max_file_size_bytes : max_file_size_bytes;
+        csv_header = t_opt.csv_header;
 
         if (t_opt.__isset.broker_addresses) {
             broker_addresses = t_opt.broker_addresses;
