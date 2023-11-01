@@ -946,7 +946,7 @@ E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Det
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+E: (1064, 'Getting analyzing error. Detail message: Can not add column after Generated Column.')
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after testcol1;
 -- result:
