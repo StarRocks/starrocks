@@ -440,7 +440,7 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * query_queue_max_queued_queries (global)
 
-  The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `0`.
+  The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `1024`.
 
 * query_queue_mem_used_pct_limit (global)
 
@@ -501,14 +501,11 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 * streaming_preaggregation_mode
 
-<<<<<<< HEAD
   Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination. Valid values:
+
   * `auto`: The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
   * `force_preaggregation`: The system directly performs local preaggregation.
   * `force_streaming`: The system directly performs streaming.
-=======
-The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `1024`.
->>>>>>> 5812ac23fb ([Doc] Fix Max Queue default (#34041))
 
 * system_time_zone
 
