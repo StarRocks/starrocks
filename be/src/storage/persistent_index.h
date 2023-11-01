@@ -666,7 +666,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    Status get(size_t n, const Slice* keys, IndexValue* values);
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values);
 
     Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
                                         std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
@@ -677,21 +677,21 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
-    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  IOStat* stat = nullptr);
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                          IOStat* stat = nullptr);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -709,8 +709,8 @@ public:
     // |values|: value array
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
-    Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                       std::vector<uint32_t>* failed);
+    virtual Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
+                               std::vector<uint32_t>* failed);
 
     Status flush_advance();
 
