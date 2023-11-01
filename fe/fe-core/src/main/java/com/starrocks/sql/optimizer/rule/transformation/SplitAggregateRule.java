@@ -159,7 +159,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         // no need to do multiple stage agg
-        if (!Utils.needGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(), input.inputAt(0).getOp())) {
+        if (!Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(), input.inputAt(0).getOp())) {
             return Lists.newArrayList();
         }
 

@@ -646,8 +646,8 @@ public class Utils {
         return eqColumnRefs;
     }
 
-    public static boolean needGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
-                                                          Operator inputOp, Operator childOp) {
+    public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
+                                                           Operator inputOp, Operator childOp) {
         // 1. Must do one stage aggregate If the child contains limit,
         //    the aggregation must be a single node to ensure correctness.
         //    eg. select count(*) from (select * table limit 2) t
@@ -663,7 +663,7 @@ public class Utils {
         // 3. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == ONE_STAGE.ordinal() ||
-                (aggStage ==  AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
+                (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
             return false;
         }
 

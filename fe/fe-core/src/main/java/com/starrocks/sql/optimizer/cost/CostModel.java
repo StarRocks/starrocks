@@ -30,12 +30,12 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -224,20 +224,23 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            LogicalProperty inputLogicalProperty = context.getRootProperty();
-            if (Utils.needGenerateMultiStageAggregate(inputLogicalProperty, node, context.getChildOperator(0))
-                    && node.getDistinctColumnDataSkew() == null && !node.isSplit() && node.getType().isGlobal()) {
+
+            if (Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0)) &&
+                    node.getDistinctColumnDataSkew() == null && !node.isSplit() && node.getType().isGlobal()) {
+                // use cost to eliminate invalid one phase agg plan
                 return CostEstimate.infinite();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            double penalty = 1.0;
+            double factor = 1.0;
             if (node.getDistinctColumnDataSkew() != null) {
-                penalty = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+                factor = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+            } else if (node.isSplit() && node.getType().isLocal()) {
+                factor = 0.1;
             }
 
-            return CostEstimate.of(inputStatistics.getComputeSize() * penalty, statistics.getComputeSize() * penalty,
+            return CostEstimate.of(inputStatistics.getComputeSize() * factor, statistics.getComputeSize() * factor,
                     0);
         }
 
@@ -301,13 +304,15 @@ public class CostModel {
             SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             double outputSize = statistics.getOutputSize(outputColumns);
-            double penalty = 1.0;
+            double factor = 1.0;
             Operator childOp = context.getChildOperator(0);
-            if (childOp instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator childAggOp = (PhysicalHashAggregateOperator) childOp;
+            if (childOp instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator childAggOp = (LogicalAggregationOperator) childOp;
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
                 if (skewInfo != null && skewInfo.getStage() == 3) {
-                    penalty = skewInfo.getPenaltyFactor();
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
                 }
             }
             // set network start cost 1 at least
@@ -339,7 +344,7 @@ public class CostModel {
                             && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
-                    result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);
+                    result = CostEstimate.of(outputSize * factor, 0, networkCost * factor);
                     break;
                 case GATHER:
                     result = CostEstimate.of(outputSize, 0,
