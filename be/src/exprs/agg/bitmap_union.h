@@ -30,10 +30,35 @@ public:
         this->data(state) |= *(col->get_object(row_num));
     }
 
+    bool support_update_with_rows() const override { return true; }
+
+    void update_with_rows(FunctionContext* ctx, const Column** columns, AggDataPtr state,
+                          std::vector<int>& rows) const override {
+        const BitmapColumn* col = down_cast<const BitmapColumn*>(columns[0]);
+        std::vector<const BitmapValue*> values;
+        for (int i = 0; i < rows.size(); ++i) {
+            values.push_back(col->get_object(rows[i]));
+        }
+        this->data(state).fast_union(values);
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* col = down_cast<const BitmapColumn*>(column);
         DCHECK(col->is_object());
         this->data(state) |= *(col->get_object(row_num));
+    }
+
+    bool support_merge_with_rows() const override { return true; }
+
+    void merge_with_rows(FunctionContext* ctx, const Column* column, AggDataPtr state,
+                         std::vector<int>& rows) const override {
+        const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
+        DCHECK(col->is_object());
+        std::vector<const BitmapValue*> values;
+        for (int i = 0; i < rows.size(); ++i) {
+            values.push_back(col->get_object(rows[i]));
+        }
+        this->data(state).fast_union(values);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

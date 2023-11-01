@@ -36,10 +36,37 @@ public:
         }
     }
 
+    bool support_update_with_rows() const override { return true; }
+
+    void update_with_rows(FunctionContext* ctx, const Column** columns, AggDataPtr state,
+                          std::vector<int>& rows) const override {
+        DCHECK((*columns[0]).is_numeric());
+        if constexpr (std::is_integral_v<T>) {
+            const auto& column = static_cast<const InputColumnType&>(*columns[0]);
+            this->data(state).to_bitmap();
+            for (auto i : rows) {
+                this->data(state).add(column.get_data()[i]);
+            }
+        }
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_object());
         const auto* col = down_cast<const BitmapColumn*>(column);
         this->data(state) |= *(col->get_object(row_num));
+    }
+
+    bool support_merge_with_rows() const override { return true; }
+
+    void merge_with_rows(FunctionContext* ctx, const Column* column, AggDataPtr state,
+                         std::vector<int>& rows) const override {
+        DCHECK(column->is_object());
+        const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
+        std::vector<const BitmapValue*> values;
+        for (int i = 0; i < rows.size(); ++i) {
+            values.push_back(col->get_object(rows[i]));
+        }
+        this->data(state).fast_union(values);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
