@@ -44,9 +44,9 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
                 INNER JOIN (join-predicate [12: ps_partkey = 28: l_partkey AND 13: ps_suppkey = 29: l_suppkey AND cast(14: ps_availqty as decimal128(38, 3)) > multiply(0.5, 43: sum)] post-join-predicate [null])
                     LEFT SEMI JOIN (join-predicate [12: ps_partkey = 17: p_partkey] post-join-predicate [null])
                         EXCHANGE SHUFFLE[12]
-                            SCAN (columns{12,13,14} predicate[13: ps_suppkey IS NOT NULL])
+                            HIVE SCAN (columns{12,13,14} predicate[13: ps_suppkey IS NOT NULL])
                         EXCHANGE SHUFFLE[17]
-                            SCAN (columns{17,18} predicate[17: p_partkey IS NOT NULL AND 18: p_name LIKE sienna%])
+                            HIVE SCAN (columns{17,18} predicate[17: p_partkey IS NOT NULL AND 18: p_name LIKE sienna%])
                     EXCHANGE SHUFFLE[28]
                         AGGREGATE ([GLOBAL] aggregate [{145: sum=sum(145: sum)}] group by [[65: l_partkey, 63: l_suppkey]] having [null]
                             EXCHANGE SHUFFLE[65, 63]
@@ -54,6 +54,7 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
                                     SCAN (mv[lineitem_agg_mv2] columns[63: l_suppkey, 64: l_shipdate, 65: l_partkey, 66: sum_qty] predicate[64: l_shipdate >= 1993-01-01 AND 64: l_shipdate < 1994-01-01])
             EXCHANGE SHUFFLE[1]
                 INNER JOIN (join-predicate [4: s_nationkey = 8: n_nationkey] post-join-predicate [null])
-                    SCAN (columns{1,2,3,4} predicate[4: s_nationkey IS NOT NULL])
+                    HIVE SCAN (columns{1,2,3,4} predicate[4: s_nationkey IS NOT NULL])
                     EXCHANGE BROADCAST
-                        SCAN (columns{8,9} predicate[9: n_name = ARGENTINA])
+                        HIVE SCAN (columns{8,9} predicate[9: n_name = ARGENTINA])
+[end]
