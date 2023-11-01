@@ -544,7 +544,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid as col2, emps.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where emps.locationid > 10");
-        // TODO: Query's left outer join will be converted to Inner Join.
+        // no locations.locationid in mv
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
@@ -3229,7 +3229,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " from lineorder left outer join customer" +
                     " on lo_custkey = c_custkey where c_name = 'name' and c_custkey = 100";
             MVRewriteChecker checker = testRewriteOK(mv, query);
-            checker.contains("TABLE: mv0\n" +
+            checker.contains("0:OlapScanNode\n" +
+                    "     TABLE: mv0\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 30: c_custkey = 100, 31: c_name = 'name'\n" +
                     "     partitions=1/1");
@@ -3340,6 +3341,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     PREDICATES: 30: lo_custkey IS NOT NULL\n" +
                     "     partitions=1/1");
         }
+
+
 
         {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
@@ -4806,5 +4809,316 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         starRocksAssert.dropTable("table_d");
         starRocksAssert.dropTable("table_e");
         starRocksAssert.dropMaterializedView("mv_view_delta_1");
+    }
+
+    @Test
+    public void testJoinDeriveRewriteOnNestedMv() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `IDX_BASE_DIM_TRACEID` (\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_BASE_OBJ_STRATEGY` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_type` varchar(65533) DEFAULT NULL,\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(strategy_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_COMMON_EV_BANKAPP_CLICK_INFO` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_CUST_COMMON_DIM` (\n" +
+                "  `sales_new_cust` varchar(65533) DEFAULT NULL,\n" +
+                "  `payroll_flag` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(becif_no)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `page_name_gy` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv1`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`TRACE_ID`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                f.TRACE_ID AS TRACE_ID,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                SUM(f.PV) AS pv1\n" +
+                "            FROM\n" +
+                "                IDX_COMMON_EV_BANKAPP_CLICK_INFO f\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                f.TRACE_ID;");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv2`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`BECIF_NO`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                SUM(f.PV) AS pv2\n" +
+                "            FROM\n" +
+                "                IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO f\n" +
+                "            LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON\n" +
+                "                f.TRACE_ID = dim0.TRACE_ID\n" +
+                "                AND f.DT = dim0.DT\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                dim0.STRATEGY_ID_PDL;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv3`\n" +
+                "PARTITION BY dt \n" +
+                "DISTRIBUTED BY HASH(`BECIF_NO`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                                COUNT(f.PAGE_NAME_GY) AS cnt1\n" +
+                "            FROM\n" +
+                "                D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3 f\n" +
+                "            LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON\n" +
+                "                f.TRACE_ID = dim0.TRACE_ID\n" +
+                "                AND f.DT = dim0.DT\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                dim0.STRATEGY_ID_PDL;");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW `test_perf_mv_pv4`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(DT, SALES_NEW_CUST, PAYROLL_FLAG, STRATEGY_TYPE, CUST_GROUP_NAME)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT q.DT, f1.SALES_NEW_CUST AS SALES_NEW_CUST, f1.PAYROLL_FLAG AS PAYROLL_FLAG," +
+                " f7.STRATEGY_TYPE AS STRATEGY_TYPE, f7.CUST_GROUP_NAME AS CUST_GROUP_NAME\n" +
+                "        , SUM(q.cnt1) AS cnt1, SUM(q.pv1) AS pv1\n" +
+                "        , SUM(q.pv2) AS pv2\n" +
+                "FROM (\n" +
+                "        SELECT t0.pv1 AS pv1, t1.pv2 AS pv2, t2.cnt1 AS cnt1\n" +
+                "                , t0.DT AS DT\n" +
+                "                , COALESCE(t0.BECIF_NO, t1.BECIF_NO, t2.BECIF_NO) AS pk1\n" +
+                "                , COALESCE(t0.TRACE_ID, t1.STRATEGY_ID_PDL, t2.STRATEGY_ID_PDL) AS pk7\n" +
+                "        FROM (\n" +
+                "                SELECT f.pv1, f.TRACE_ID, f.BECIF_NO, f.DT\n" +
+                "                FROM test_perf_mv_pv1 f\n" +
+                "        ) t0\n" +
+                "                FULL JOIN (\n" +
+                "                        SELECT f.STRATEGY_ID_PDL, f.BECIF_NO, f.pv2, f.DT\n" +
+                "                        FROM test_perf_mv_pv2 f\n" +
+                "                ) t1\n" +
+                "                ON t1.DT = t0.DT\n" +
+                "                        AND t1.BECIF_NO = t0.BECIF_NO\n" +
+                "                        AND t1.STRATEGY_ID_PDL = t0.TRACE_ID\n" +
+                "                FULL JOIN (\n" +
+                "                        SELECT f.STRATEGY_ID_PDL, f.cnt1, f.BECIF_NO, f.DT\n" +
+                "                        FROM test_perf_mv_pv3 f\n" +
+                "                ) t2\n" +
+                "                ON t2.DT = COALESCE(t0.DT , t1.DT)\n" +
+                "                        AND t2.BECIF_NO = COALESCE(t0.BECIF_NO, t1.BECIF_NO)\n" +
+                "                        AND t2.STRATEGY_ID_PDL = COALESCE(t0.TRACE_ID, t1.STRATEGY_ID_PDL)\n" +
+                ") q\n" +
+                "        LEFT JOIN (\n" +
+                "                SELECT f.SALES_NEW_CUST AS SALES_NEW_CUST," +
+                " f.PAYROLL_FLAG AS PAYROLL_FLAG, f.BECIF_NO AS BECIF_NO, f.DT\n" +
+                "                FROM IDX_CUST_COMMON_DIM f\n" +
+                "        ) f1\n" +
+                "        ON f1.BECIF_NO = q.pk1\n" +
+                "                AND f1.DT = q.DT\n" +
+                "        LEFT JOIN (\n" +
+                "                SELECT f.STRATEGY_ID AS STRATEGY_ID, f.STRATEGY_TYPE AS STRATEGY_TYPE," +
+                " f.CUST_GROUP_NAME AS CUST_GROUP_NAME, f.DT\n" +
+                "                FROM IDX_BASE_OBJ_STRATEGY f\n" +
+                "        ) f7\n" +
+                "        ON f7.STRATEGY_ID = q.pk7\n" +
+                "                AND f7.DT = q.DT\n" +
+                "GROUP BY q.DT, f1.PAYROLL_FLAG, f7.CUST_GROUP_NAME, f7.STRATEGY_TYPE, f1.SALES_NEW_CUST;");
+        String query = "SELECT SUM(q.pv1) AS pv1,\n" +
+                "       f1.SALES_NEW_CUST AS SALES_NEW_CUST,\n" +
+                "       SUM(q.cnt1) AS cnt1,\n" +
+                "       f1.PAYROLL_FLAG AS PAYROLL_FLAG,\n" +
+                "       f7.STRATEGY_TYPE AS STRATEGY_TYPE,\n" +
+                "       f7.CUST_GROUP_NAME AS CUST_GROUP_NAME,\n" +
+                "       SUM(q.pv2) AS pv2\n" +
+                "FROM\n" +
+                "  ( SELECT t0.pv1 AS pv1,\n" +
+                "           t1.pv2 AS pv2,\n" +
+                "           t2.cnt1 AS cnt1,\n" +
+                "           t0.DT AS DT ,\n" +
+                "           COALESCE(t0.BECIF_NO , t1.BECIF_NO , t2.BECIF_NO) AS pk1 ,\n" +
+                "           COALESCE(t0.TRACE_ID , t1.STRATEGY_ID_PDL , t2.STRATEGY_ID_PDL) AS pk7\n" +
+                "   FROM\n" +
+                "     ( SELECT SUM(f.PV) AS pv1,\n" +
+                "              f.TRACE_ID AS TRACE_ID,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              f.DT\n" +
+                "      FROM IDX_COMMON_EV_BANKAPP_CLICK_INFO f\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               f.TRACE_ID) AS t0\n" +
+                "   FULL JOIN\n" +
+                "     ( SELECT dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              SUM(f.PV) AS pv2,\n" +
+                "              f.DT\n" +
+                "      FROM IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO f\n" +
+                "      LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON f.TRACE_ID = dim0.TRACE_ID\n" +
+                "      AND f.DT = dim0.DT\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               dim0.STRATEGY_ID_PDL) AS t1 \n" +
+                "   ON t1.DT = t0.DT\n" +
+                "   AND t1.BECIF_NO = t0.BECIF_NO\n" +
+                "   AND t1.STRATEGY_ID_PDL = t0.TRACE_ID\n" +
+                "   FULL JOIN\n" +
+                "     ( SELECT dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "              COUNT(f.PAGE_NAME_GY) AS cnt1,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              f.DT\n" +
+                "      FROM D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3 f\n" +
+                "      LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON f.TRACE_ID = dim0.TRACE_ID\n" +
+                "      AND f.DT = dim0.DT\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               dim0.STRATEGY_ID_PDL) AS t2\n" +
+                "   ON t2.DT = COALESCE(t0.DT , t1.DT)\n" +
+                "   AND t2.BECIF_NO = COALESCE(t0.BECIF_NO , t1.BECIF_NO)\n" +
+                "   AND t2.STRATEGY_ID_PDL = COALESCE(t0.TRACE_ID , t1.STRATEGY_ID_PDL)) AS q\n" +
+                "LEFT JOIN\n" +
+                "  ( SELECT f.SALES_NEW_CUST AS SALES_NEW_CUST,\n" +
+                "           f.PAYROLL_FLAG AS PAYROLL_FLAG,\n" +
+                "           f.BECIF_NO AS BECIF_NO,\n" +
+                "           f.DT\n" +
+                "   FROM IDX_CUST_COMMON_DIM f) AS f1 ON f1.BECIF_NO = q.pk1\n" +
+                "AND f1.DT = q.DT\n" +
+                "LEFT JOIN\n" +
+                "  ( SELECT f.STRATEGY_ID AS STRATEGY_ID,\n" +
+                "           f.STRATEGY_TYPE AS STRATEGY_TYPE,\n" +
+                "           f.CUST_GROUP_NAME AS CUST_GROUP_NAME,\n" +
+                "           f.DT\n" +
+                "   FROM IDX_BASE_OBJ_STRATEGY f) AS f7 ON f7.STRATEGY_ID = q.pk7\n" +
+                "AND f7.DT = q.DT\n" +
+                "WHERE q.DT IN ('20230924')\n" +
+                "  AND f1.PAYROLL_FLAG IN ('Y')\n" +
+                "GROUP BY f1.PAYROLL_FLAG,\n" +
+                "         f7.CUST_GROUP_NAME,\n" +
+                "         f7.STRATEGY_TYPE,\n" +
+                "         f1.SALES_NEW_CUST";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "test_perf_mv_pv4");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv1");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv2");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv3");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv4");
+        starRocksAssert.dropTable("IDX_BASE_DIM_TRACEID");
+        starRocksAssert.dropTable("IDX_BASE_OBJ_STRATEGY");
+        starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO");
+        starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_CLICK_INFO");
+        starRocksAssert.dropTable("IDX_CUST_COMMON_DIM");
+        starRocksAssert.dropTable("D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3");
     }
 }
