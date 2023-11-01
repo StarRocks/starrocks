@@ -22,10 +22,14 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 
 public class PartitionExprAnalyzer {
+
+    private static final Logger LOG = LogManager.getLogger(PartitionExprAnalyzer.class);
 
     /**
      * Recursive analyze the date_trunc function
@@ -96,7 +100,7 @@ public class PartitionExprAnalyzer {
             if (builtinFunction == null) {
                 String msg = String.format("Unsupported partition type %s for function %s", targetColType,
                         functionCallExpr.toSql());
-                throw new SemanticException(msg, expr.getPos());
+                LOG.warn(msg);
             }
 
             functionCallExpr.setFn(builtinFunction);
