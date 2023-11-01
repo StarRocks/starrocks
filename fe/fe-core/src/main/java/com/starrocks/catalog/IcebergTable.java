@@ -119,6 +119,7 @@ public class IcebergTable extends Table {
         this.cachedSnapshotId = snapshot.map(Snapshot::snapshotId).orElse(-1L);
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
@@ -215,23 +216,7 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
-<<<<<<< HEAD
-=======
-    // day(dt) -> identity dt
-    public boolean hasPartitionTransformedEvolution() {
-        return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
-    }
-
-    public void resetSnapshot() {
-        snapshot = Optional.empty();
-    }
-
-    public boolean isV2Format() {
-        return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
-    }
-
     @Override
->>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     public boolean isUnPartitioned() {
         return getPartitionColumns().size() == 0;
     }
