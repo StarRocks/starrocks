@@ -75,7 +75,7 @@ public class TransactionLoadAction extends RestBaseAction {
     private static final String CHANNEL_ID_STR = "channel_id";
     private static TransactionLoadAction ac;
 
-    private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
+    private Map<String, Long> txnNodeMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
             // TODO: whether it needs to adapt to multi-warehouse
             int totalNodeNum = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
@@ -90,9 +90,9 @@ public class TransactionLoadAction extends RestBaseAction {
         super(controller);
     }
 
-    public int txnBackendMapSize() {
+    public int txnNodeMapSize() {
         synchronized (this) {
-            return txnBackendMap.size();
+            return txnNodeMap.size();
         }
     }
 
@@ -246,10 +246,10 @@ public class TransactionLoadAction extends RestBaseAction {
                     }
 
                     nodeID = nodeIds.get(0);
-                    // txnBackendMap is LRU cache, it automic remove unused entry
-                    txnBackendMap.put(label, nodeID);
+                    // txnNodeMap is LRU cache, it automic remove unused entry
+                    txnNodeMap.put(label, nodeID);
                 } else if (channelIdStr == null) {
-                    nodeID = txnBackendMap.get(label);
+                    nodeID = txnNodeMap.get(label);
                 }
             }
         }
@@ -303,7 +303,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (op.equalsIgnoreCase(TXN_COMMIT) && channelIdStr != null) {
-            int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, resp);
             sendResult(request, response, resp);
@@ -311,7 +310,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (op.equalsIgnoreCase(TXN_ROLLBACK) && channelIdStr != null) {
-            int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().rollbackLoadTask(label, resp);
             sendResult(request, response, resp);
@@ -334,6 +332,22 @@ public class TransactionLoadAction extends RestBaseAction {
                         "db: {}, table: {}, op: {}, label: {}, warehouse: {}",
                 redirectAddr, dbName, tableName, op, label, warehouseName);
         redirectTo(request, response, redirectAddr);
+    }
+
+    private static Long getBackendOrComputeId() throws UserException {
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true,
+                false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No backend or compute node alive.");
     }
 }
 
