@@ -25,6 +25,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.thrift.TAuthInfo;
@@ -39,6 +40,8 @@ import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -667,6 +670,7 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetLoadTxnStatus() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
@@ -693,5 +697,45 @@ public class FrontendServiceImplTest {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+=======
+    public void testSetFrontendConfig() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.keys = Lists.newArrayList("mysql_server_version");
+        request.values = Lists.newArrayList("5.1.1");
+
+        TSetConfigResponse result = impl.setConfig(request);
+        Assert.assertEquals("5.1.1", GlobalVariable.version);
+    }
+
+    @Test
+    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        doThrow(new CommitRateExceededException(1001, now + 100)).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.SR_EAGAIN, result.status.status_code);
+        Assert.assertTrue(result.retry_interval_ms >= (now + 100 - System.currentTimeMillis()));
+    }
+
+    @Test
+    public void testLoadTxnCommitFailed() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+>>>>>>> 8a93789612 ([Enhancement] Supports modifying the version to take effect without restarting (#34033))
     }
 }
