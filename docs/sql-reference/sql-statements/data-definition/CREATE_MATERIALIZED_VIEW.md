@@ -258,6 +258,7 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
 
 - Asynchronous materialized views created based on the StarRocks default catalog support the following data types:
 
+<<<<<<< HEAD
   - DATE
   - DATETIME
   - CHAR
@@ -276,6 +277,13 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
   - BITMAP
   - HLL
   - PERCENTILE
+=======
+  - **Date**: DATE, DATETIME
+  - **String**: CHAR, VARCHAR
+  - **Numeric**: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL, PERCENTILE
+  - **Semi-structured**: ARRAY, JSON, MAP (from v3.1 onwards), STRUCT (from v3.1 onwards)
+  - **Other**: BITMAP, HLL
+>>>>>>> e6f6f60310 ([Doc] MV docs minor fix (#34109))
 
 > **NOTE**
 >
@@ -285,47 +293,24 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
 
   - Hive Catalog
 
-    - INT/INTEGER
-    - BIGINT
-    - TIMESTAMP
-    - STRING
-    - VARCHAR
-    - CHAR
-    - DOUBLE
-    - FLOAT
-    - DECIMAL
-    - ARRAY
+    - **Numeric**: INT/INTEGER, BIGINT, DOUBLE, FLOAT, DECIMAL
+    - **Date**: TIMESTAMP
+    - **String**: STRING, VARCHAR, CHAR
+    - **Semi-structured**: ARRAY
 
   - Hudi Catalog
 
-    - BOOLEAN
-    - INT
-    - DATE
-    - TimeMillis/TimeMicros
-    - TimestampMillis/TimestampMicros
-    - LONG
-    - FLOAT
-    - DOUBLE
-    - STRING
-    - ARRAY
-    - DECIMAL
+    - **Numeric**: BOOLEAN, INT, LONG, FLOAT, DOUBLE, DECIMAL
+    - **Date**: DATE, TimeMillis/TimeMicros, TimestampMillis/TimestampMicros
+    - **String**: STRING
+    - **Semi-structured**: ARRAY
 
   - Iceberg Catalog
 
-    - BOOLEAN
-    - INT
-    - LONG
-    - FLOAT
-    - DOUBLE
-    - DECIMAL(P, S)
-    - DATE
-    - TIME
-    - TIMESTAMP
-    - STRING
-    - UUID
-    - FIXED(L)
-    - BINARY
-    - LIST
+    - **Numeric**: BOOLEAN, INT, LONG, FLOAT, DOUBLE, DECIMAL(P, S)
+    - **Date**: DATE, TIME, TIMESTAMP
+    - **String**: STRING, UUID, FIXED(L), BINARY
+    - **Semi-structured**: LIST
 
 ## Usage notes
 

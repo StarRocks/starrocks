@@ -555,7 +555,7 @@ PROPERTIES (
 
 > **CAUTION**
 >
-> - The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+> - `unique_constraints` and `foreign_key_constraints` are only used for query rewrite. Foreign Key constraints checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
 > - The primary keys of a Primary Key table or the unique keys of a Unique Key table are, by default, the corresponding `unique_constraints`. You do not need to set it manually.
 > - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
 > - The number of `child_column` and `parent_column` must agree.
