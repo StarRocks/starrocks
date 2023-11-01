@@ -943,6 +943,7 @@ under the License.
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar -Xmx2048m
                         -Duser.timezone=Asia/Shanghai @{jacocoArgLine}
                     </argLine>
+                    <forkedProcessExitTimeoutInSeconds>300</forkedProcessExitTimeoutInSeconds>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <excludes>
