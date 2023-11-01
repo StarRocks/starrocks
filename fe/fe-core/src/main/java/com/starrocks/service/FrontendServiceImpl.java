@@ -70,6 +70,11 @@ import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.GlobalVariable;
+>>>>>>> 8a93789612 ([Enhancement] Supports modifying the version to take effect without restarting (#34033))
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.VariableMgr;
@@ -1461,7 +1466,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
             Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
-                configs.put(request.getKeys().get(i), request.getValues().get(i));
+                String key = request.getKeys().get(i);
+                String value = request.getValues().get(i);
+                configs.put(key, value);
+                if ("mysql_server_version".equalsIgnoreCase(key)) {
+                    if (!Strings.isNullOrEmpty(value)) {
+                        GlobalVariable.version = value;
+                    }
+                }
             }
 
             GlobalStateMgr.getCurrentState().setFrontendConfig(configs);

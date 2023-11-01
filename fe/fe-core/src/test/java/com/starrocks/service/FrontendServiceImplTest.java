@@ -9,7 +9,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+<<<<<<< HEAD
 import com.starrocks.qe.QueryQueueManager;
+=======
+import com.starrocks.qe.GlobalVariable;
+>>>>>>> 8a93789612 ([Enhancement] Supports modifying the version to take effect without restarting (#34033))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -19,6 +23,15 @@ import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TResourceUsage;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStreamLoadPutRequest;
+import com.starrocks.thrift.TStreamLoadPutResult;
+>>>>>>> 8a93789612 ([Enhancement] Supports modifying the version to take effect without restarting (#34033))
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
@@ -212,4 +225,75 @@ public class FrontendServiceImplTest {
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testStreamLoadPutColumnMapException() {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setDb("test");
+        request.setTbl("site_access_hour");
+        request.setUser("root");
+        request.setTxnId(1024);
+        request.setColumnSeparator(",");
+        request.setSkipHeader(1);
+        request.setFileType(TFileType.FILE_STREAM);
+
+        // wrong format of str_to_date()
+        request.setColumns("col1,event_day=str_to_date(col1)");
+
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        TStatus status = result.getStatus();
+        request.setFileType(TFileType.FILE_STREAM);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code());
+        List<String> errMsg = status.getError_msgs();
+        Assert.assertEquals(1, errMsg.size());
+        Assert.assertEquals(
+                "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
+                        "No matching function with signature: str_to_date(varchar).",
+                errMsg.get(0));
+    }
+
+    @Test
+    public void testSetFrontendConfig() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.keys = Lists.newArrayList("mysql_server_version");
+        request.values = Lists.newArrayList("5.1.1");
+
+        TSetConfigResponse result = impl.setConfig(request);
+        Assert.assertEquals("5.1.1", GlobalVariable.version);
+    }
+
+    @Test
+    public void testLoadTxnCommitRateLimitExceeded() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        doThrow(new CommitRateExceededException(1001, now + 100)).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.SR_EAGAIN, result.status.status_code);
+        Assert.assertTrue(result.retry_interval_ms >= (now + 100 - System.currentTimeMillis()));
+    }
+
+    @Test
+    public void testLoadTxnCommitFailed() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+>>>>>>> 8a93789612 ([Enhancement] Supports modifying the version to take effect without restarting (#34033))
 }
