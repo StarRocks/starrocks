@@ -28,6 +28,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.thrift.TAuthInfo;
@@ -50,6 +51,8 @@ import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -911,6 +914,17 @@ public class FrontendServiceImplTest {
                 "Getting analyzing error from line 1, column 24 to line 1, column 40. Detail message: " +
                         "No matching function with signature: str_to_date(varchar).",
                 errMsg.get(0));
+    }
+
+    @Test
+    public void testSetFrontendConfig() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.keys = Lists.newArrayList("mysql_server_version");
+        request.values = Lists.newArrayList("5.1.1");
+
+        TSetConfigResponse result = impl.setConfig(request);
+        Assert.assertEquals("5.1.1", GlobalVariable.version);
     }
 
     @Test
