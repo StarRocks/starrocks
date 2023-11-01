@@ -241,11 +241,6 @@ public class PartitionBasedMvRefreshProcessorTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
-                        "partition by k1\n" +
-                        "distributed by hash(k2) buckets 10\n" +
-                        "refresh deferred manual\n" +
-                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
@@ -2060,14 +2055,26 @@ public class PartitionBasedMvRefreshProcessorTest {
 
     @Test
     public void testFilterPartitionByRefreshNumber() throws Exception {
+        // PARTITION p0 values [('2021-12-01'),('2022-01-01'))
+        // PARTITION p1 values [('2022-01-01'),('2022-02-01'))
+        // PARTITION p2 values [('2022-02-01'),('2022-03-01'))
+        // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
+        // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
+
+        String mvName = "mv_with_test_refresh";
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_test_refresh"));
+        starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
+                "partition by k1\n" +
+                "distributed by hash(k2) buckets 10\n" +
+                "refresh deferred manual\n" +
+                "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
 
         taskRun.executeTaskRun();
-        materializedView.getTableProperty().setPartitionRefreshNumber(1);
+        materializedView.getTableProperty().setPartitionRefreshNumber(3);
         PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
 
         MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
@@ -2085,6 +2092,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         mvContext = processor.getMvContext();
         Assert.assertNull(mvContext.getNextPartitionStart());
         Assert.assertNull(mvContext.getNextPartitionEnd());
+        starRocksAssert.dropMaterializedView(mvName);
     }
 
     @Test

@@ -359,6 +359,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (partitionRefreshNumber <= 0) {
             return;
         }
+        if (CollectionUtils.isEmpty(partitionsToRefresh)) {
+            mvContext.setNextPartitionStart(null);
+            mvContext.setNextPartitionEnd(null);
+            return;
+        }
         Map<String, Range<PartitionKey>> rangePartitionMap = materializedView.getRangePartitionMap();
         if (partitionRefreshNumber >= rangePartitionMap.size()) {
             return;
