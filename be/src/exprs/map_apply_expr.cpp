@@ -39,11 +39,11 @@ MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false), _maybe_duplicated_keys(true) {}
 
 Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
     if (_is_prepared) {
         return Status::OK();
     }
     _is_prepared = true;
-    RETURN_IF_ERROR(Expr::prepare(state, context));
     if (_children.size() < 2) {
         return Status::InternalError("map expression's children size should not less than 2");
     }
