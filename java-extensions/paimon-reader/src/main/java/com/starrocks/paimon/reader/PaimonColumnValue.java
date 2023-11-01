@@ -151,7 +151,11 @@ public class PaimonColumnValue implements ColumnValue {
 
     private void toPaimonColumnValue(List<ColumnValue> values, InternalArray array, DataType dataType) {
         for (int i = 0; i < array.size(); i++) {
-            PaimonColumnValue cv = new PaimonColumnValue(InternalRowUtils.get(array, i, dataType), dataType);
+            PaimonColumnValue cv = null;
+            Object o = InternalRowUtils.get(array, i, dataType);
+            if (o != null) {
+                cv = new PaimonColumnValue(o, dataType);
+            }
             values.add(cv);
         }
     }

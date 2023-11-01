@@ -36,7 +36,6 @@ import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.types.DataType;
-import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
@@ -135,9 +134,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
             DataType dataType = table.rowType().getTypeAt(index);
             String type = PaimonTypeUtils.fromPaimonType(dataType);
             requiredTypes[i] = new ColumnType(type);
-            if (dataType instanceof DecimalType) {
-                requiredTypes[i].setScale(((DecimalType) dataType).getScale());
-            }
             logicalTypes[i] = dataType;
         }
 
