@@ -252,26 +252,11 @@ DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>
 
 - 基于 StarRocks 内部数据目录（Default Catalog）创建的异步物化视图支持以下数据类型：
 
-  - DATE
-  - DATETIME
-  - CHAR
-  - VARCHAR
-  - BOOLEAN
-  - TINYINT
-  - SMALLINT
-  - INT
-  - BIGINT
-  - LARGEINT
-  - FLOAT
-  - DOUBLE
-  - DECIMAL
-  - ARRAY
-  - JSON
-  - BITMAP
-  - HLL
-  - PERCENTILE
-  - MAP（自 v3.1 起）
-  - STRUCT（自 v3.1 起）
+  - **日期类型**：DATE、DATETIME
+  - **字符串类型**：CHAR、VARCHAR
+  - **数值类型**：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMAL、PERCENTILE
+  - **半结构化类型**：ARRAY、JSON
+  - **其他类型**：BITMAP、HLL
 
 > **说明**
 >
@@ -281,47 +266,24 @@ DISTRIBUTED BY HASH (<bucket_key1>[,<bucket_key2> ...]) [BUCKETS <bucket_number>
 
   - Hive Catalog
 
-    - INT/INTEGER
-    - BIGINT
-    - TIMESTAMP
-    - STRING
-    - VARCHAR
-    - CHAR
-    - DOUBLE
-    - FLOAT
-    - DECIMAL
-    - ARRAY
+    - **数值类型**：INT/INTEGER、BIGINT、DOUBLE、FLOAT、DECIMAL
+    - **日期类型**：TIMESTAMP
+    - **字符串类型**：STRING、VARCHAR、CHAR
+    - **半结构化类型**：ARRAY
 
   - Hudi Catalog
 
-    - BOOLEAN
-    - INT
-    - DATE
-    - TimeMillis/TimeMicros
-    - TimestampMillis/TimestampMicros
-    - LONG
-    - FLOAT
-    - DOUBLE
-    - STRING
-    - ARRAY
-    - DECIMAL
+    - **数值类型**：BOOLEAN、INT、LONG、FLOAT、DOUBLE、DECIMAL
+    - **日期类型**：DATE、TimeMillis/TimeMicros、TimestampMillis/TimestampMicros
+    - **字符串类型**：STRING
+    - **半结构化类型**：ARRAY
 
   - Iceberg Catalog
 
-    - BOOLEAN
-    - INT
-    - LONG
-    - FLOAT
-    - DOUBLE
-    - DECIMAL(P, S)
-    - DATE
-    - TIME
-    - TIMESTAMP
-    - STRING
-    - UUID
-    - FIXED(L)
-    - BINARY
-    - LIST
+    - **数值类型**：BOOLEAN、INT、LONG、FLOAT、DOUBLE、DECIMAL(P, S)
+    - **日期类型**：DATE、TIME、TIMESTAMP
+    - **字符串类型**：STRING、UUID、FIXED(L)、BINARY
+    - **半结构化类型**：LIST
 
 ## 注意事项
 
