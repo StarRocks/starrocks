@@ -15,9 +15,6 @@
 #pragma once
 
 #include "column/type_traits.h"
-#include "exprs/jit/ir_helper.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Value.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
@@ -150,13 +147,7 @@ struct ArithmeticBinaryOperator {
                 return l / (r + (r == 0));
             }
         } else if constexpr (is_mod_op<Op>) {
-            if constexpr (lt_is_float<Type>) {
-                auto result = fmod(l, (r + (r == 0)));
-                if (UNLIKELY(result == -0)) {
-                    return 0;
-                }
-                return result;
-            } else if constexpr (may_cause_fpe<ResultType>) {
+            if constexpr (may_cause_fpe<ResultType>) {
                 if (UNLIKELY(check_fpe_of_min_div_by_minus_one(l, r))) {
                     return 0;
                 } else {
@@ -191,61 +182,6 @@ struct ArithmeticBinaryOperator {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }
     }
-
-    template <typename ResultType>
-    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l, llvm::Value* r) {
-        return generate_ir<ResultType, ResultType, ResultType>(b, l, r);
-    }
-
-    template <typename LType, typename RType, typename ResultType>
-    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l, llvm::Value* r) {
-        if constexpr (is_add_op<Op>) {
-            if constexpr (lt_is_float<Type>) {
-                return b.CreateFAdd(l, r);
-            } else {
-                return b.CreateAdd(l, r);
-            }
-        } else if constexpr (is_sub_op<Op>) {
-            if constexpr (lt_is_float<Type>) {
-                return b.CreateFSub(l, r);
-            } else {
-                return b.CreateSub(l, r);
-            }
-        } else if constexpr (is_mul_op<Op>) {
-            // TODO(Yueyang): implement float type * 0.
-            if constexpr (lt_is_float<Type>) {
-                return b.CreateFMul(l, r);
-            } else {
-                return b.CreateMul(l, r);
-            }
-        } else if constexpr (is_div_op<Op>) {
-            // TODO(Yueyang): Support JIT compile of div operator.
-            LOG(WARNING) << "JIT compile of div operator is not supported.";
-            return nullptr;
-        } else if constexpr (is_mod_op<Op>) {
-            // TODO(Yueyang): Support JIT compile of mod operator.
-            LOG(WARNING) << "JIT compile of mod operator is not supported.";
-            return nullptr;
-        } else if constexpr (is_bitand_op<Op>) {
-            return b.CreateAnd(l, r);
-        } else if constexpr (is_bitor_op<Op>) {
-            return b.CreateOr(l, r);
-        } else if constexpr (is_bitxor_op<Op>) {
-            return b.CreateXor(l, r);
-        } else if constexpr (is_bit_shift_left_op<Op>) {
-            return b.CreateShl(l, r);
-        } else if constexpr (is_bit_shift_right_op<Op>) {
-            if constexpr (lt_is_unsigned<Type>) {
-                return b.CreateLShr(l, r);
-            } else {
-                return b.CreateAShr(l, r);
-            }
-        } else if constexpr (is_bit_shift_right_logical_op<Op>) {
-            return b.CreateLShr(l, r);
-        } else {
-            static_assert(is_binary_op<Op>, "Invalid binary operators");
-        }
-    }
 };
 
 TYPE_GUARD(DivModOpGuard, is_divmod_op, DivOp, ModOp)
@@ -268,17 +204,17 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
             static_assert(is_divmod_op<Op>, "Invalid float operators");
         }
     }
+};
 
-    template <typename ResultType>
-    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l, llvm::Value* r) {
-        return generate_ir<ResultType, ResultType, ResultType>(b, l, r);
-    }
-
+template <LogicalType Type>
+struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatLTGuard<Type>> {
     template <typename LType, typename RType, typename ResultType>
-    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l, llvm::Value* r) {
-        // JIT compile of DecimalV2 type is not supported.
-        LOG(WARNING) << "JIT compile of DecimalV2 type is not supported.";
-        return nullptr;
+    static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
+        auto result = fmod(l, (r + (r == 0)));
+        if (UNLIKELY(result == -0)) {
+            return 0;
+        }
+        return result;
     }
 };
 
@@ -483,12 +419,6 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalLTGuard<Typ
             return apply<check_overflow, LType, RType, ResultType>(l, r, result);
         }
     }
-
-    llvm::Value* generate_ir(llvm::IRBuilder<>& b, const std::vector<llvm::Value*>& args) const {
-        // TODO(Yueyang): Support JIT compile of DecimalV3 type.
-        LOG(WARNING) << "JIT compile of DecimalV3 type is not supported.";
-        return nullptr;
-    }
 };
 
 template <typename Op, LogicalType Type>
@@ -511,14 +441,6 @@ struct ArithmeticUnaryOperator {
     static inline ReturnType<Type, ResultType> apply(const UType& l) {
         if constexpr (is_bitnot_op<Op>) {
             return ~l;
-        } else {
-            static_assert(is_bitnot_op<Op>, "Invalid unary operators");
-        }
-    }
-
-    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l) {
-        if constexpr (is_bitnot_op<Op>) {
-            return b.CreateNot(l);
         } else {
             static_assert(is_bitnot_op<Op>, "Invalid unary operators");
         }

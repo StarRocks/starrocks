@@ -15,10 +15,7 @@
 #pragma once
 
 #include "column/chunk.h"
-#include "common/object_pool.h"
-#include "common/status.h"
 #include "exprs/array_expr.h"
-#include "exprs/jit/jit_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -27,7 +24,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -167,29 +163,6 @@ public:
             expr.nodes.push_back(child);
         }
         return expr;
-    }
-
-    static void verify_with_jit(ColumnPtr ptr, Expr* expr, RuntimeState* runtime_state,
-                                const std::function<void(ColumnPtr const&)>& test_func) {
-        // Verify the original result.
-        test_func(ptr);
-
-        auto jit_wrapper = JITWapper::get_instance();
-        if (!jit_wrapper->init().ok()) {
-            return;
-        }
-
-        ObjectPool pool;
-        auto* jit_expr = JITExpr::create(&pool, expr);
-        ExprContext exprContext(jit_expr);
-        std::vector<ExprContext*> expr_ctxs = {&exprContext};
-
-        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
-        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
-
-        ptr = expr->evaluate(&exprContext, nullptr);
-        // Verify the result after JIT.
-        test_func(ptr);
     }
 };
 

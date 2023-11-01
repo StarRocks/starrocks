@@ -234,8 +234,6 @@ struct TQueryOptions {
   108: optional i64 runtime_filter_rpc_http_min_size;
 
   109: optional i64 big_query_profile_second_threshold;
-
-  110: optional bool enable_jit = false;
 }
 
 
