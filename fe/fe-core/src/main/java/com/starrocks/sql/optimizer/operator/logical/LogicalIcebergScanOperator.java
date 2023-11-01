@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
+    private boolean hasUnknownColumn = true;
+
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -66,6 +68,14 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         return !table.isUnPartitioned() &&
                 !(((IcebergTable) table).hasPartitionTransformedEvolution()) &&
                 predicates.getSelectedPartitionIds().isEmpty();
+    }
+
+    public boolean hasUnknownColumn() {
+        return hasUnknownColumn;
+    }
+
+    public void setHasUnknownColumn(boolean hasUnknownColumn) {
+        this.hasUnknownColumn = hasUnknownColumn;
     }
 
     @Override

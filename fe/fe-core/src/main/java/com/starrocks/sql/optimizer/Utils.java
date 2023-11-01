@@ -397,9 +397,7 @@ public class Utils {
                 }
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
-                // TODO(stephen): support `analyze table` to collect iceberg table ndv
-                // iceberg metadata doesn't have ndv, we default to unknown for all iceberg table column statistics.
-                return true;
+                return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
