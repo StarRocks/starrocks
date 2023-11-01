@@ -14,8 +14,11 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -26,9 +29,14 @@ import java.util.Set;
 // UnionFind support equivalence inferring based on equivalence classes
 // TODO(by satanson): There are many UnionFind utilities, in future, all of them will be
 //  unified into one
-public class UnionFind<T> {
+public final class UnionFind<T> {
+    private static final Logger LOG = LogManager.getLogger(UnionFind.class);
     private final Map<T, Integer> element2Group = Maps.newHashMap();
     private final Map<Integer, Set<T>> eqGroupMap = Maps.newHashMap();
+
+    public Map<Integer, Set<T>> getEqGroupMap() {
+        return eqGroupMap;
+    }
 
     public Map<T, Set<T>> getEquivGroups(Set<T> elements) {
         Map<T, Set<T>> elm2group = Maps.newHashMap();
@@ -86,6 +94,9 @@ public class UnionFind<T> {
         if (!lhsGroupIdx.equals(rhsGroupIdx)) {
             Set<T> lhsGroup = eqGroupMap.get(lhsGroupIdx);
             Set<T> rhsGroup = eqGroupMap.get(rhsGroupIdx);
+
+            Preconditions.checkState(lhsGroup != null);
+            Preconditions.checkState(rhsGroup != null);
             lhsGroup.addAll(rhsGroup);
             rhsGroup.forEach(s -> element2Group.put(s, lhsGroupIdx));
             eqGroupMap.remove(rhsGroupIdx);
@@ -109,4 +120,16 @@ public class UnionFind<T> {
             eqGroupMap.get(groupIdx).remove(key);
         }
     }
+
+    public UnionFind<T> copy() {
+        UnionFind<T> copied = new UnionFind<>();
+        for (Map.Entry<T, Integer> e : element2Group.entrySet()) {
+            copied.element2Group.put(e.getKey(), e.getValue());
+        }
+        for (Map.Entry<Integer, Set<T>> e : eqGroupMap.entrySet()) {
+            copied.eqGroupMap.put(e.getKey(), e.getValue());
+        }
+        return copied;
+    }
+
 }

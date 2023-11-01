@@ -14,10 +14,11 @@
 
 package com.starrocks.sql.optimizer.base;
 
-import com.google.common.collect.Maps;
+import com.starrocks.common.util.UnionFind;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-import java.util.Map;
-import java.util.function.Function;
+import java.util.Optional;
 
 // it's a disjoint-set data structure to record derived distribution cols from equalPredicate in on clause.
 // Given the following example：
@@ -36,55 +37,39 @@ import java.util.function.Function;
 // Naturally, using a disjoint-set data structure (also known as a union-find data structure) to describe this procedure
 // is a suitable approach.
 public class DistributionDisjointSet {
-
-    private Map<DistributionCol, DistributionCol> parent;
+    private static final Logger LOG = LogManager.getLogger(DistributionDisjointSet.class);
+    private final UnionFind<DistributionCol> parent;
 
     public DistributionDisjointSet() {
-        parent = Maps.newHashMap();
+        this.parent = new UnionFind<>();
     }
 
-    public Map<DistributionCol, DistributionCol> getParentMap() {
+    public DistributionDisjointSet(UnionFind<DistributionCol> parent) {
+        this.parent = parent;
+    }
+
+    public UnionFind<DistributionCol> getParent() {
         return parent;
     }
 
-    public void updateParentMap(Map<DistributionCol, DistributionCol> parentMap) {
-        this.parent = parentMap;
-    }
-
-    public DistributionCol find(DistributionCol col) {
-        parent.computeIfAbsent(col, Function.identity());
-
-        DistributionCol root = col;
-        while (!parent.get(root).equals(root)) {
-            root = parent.get(root);
-        }
-
-        // path compress
-        while (!col.equals(root)) {
-            DistributionCol next = parent.get(col);
-            parent.put(col, root);
-            col = next;
-        }
-
-        return root;
+    public void add(DistributionCol col) {
+        parent.add(col);
     }
 
     public void union(DistributionCol col1, DistributionCol col2) {
-        DistributionCol root1 = find(col1);
-        DistributionCol root2 = find(col2);
-
-        if (!root1.equals(root2)) {
-            parent.put(root2, root1);
-        }
+        parent.union(col1, col2);
     }
 
     public DistributionDisjointSet copy() {
-        DistributionDisjointSet copy = new DistributionDisjointSet();
-        copy.parent = Maps.newHashMap(parent);
-        return copy;
+        return new DistributionDisjointSet(parent.copy());
     }
 
     public boolean isEquivalent(DistributionCol col1, DistributionCol col2) {
-        return find(col1).equals(find(col2));
+        add(col1);
+        add(col2);
+
+        Optional<Integer> opt1 = parent.getGroupId(col1);
+        Optional<Integer> opt2 = parent.getGroupId(col2);
+        return opt1.get() == opt2.get();
     }
 }
