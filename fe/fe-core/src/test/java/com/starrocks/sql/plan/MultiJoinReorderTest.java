@@ -220,6 +220,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join (select * from t1 join t3 on t1.v4 = t3.v10 join t0 on t1.v4 = t0.v2 join t2 on t1.v5 = t2.v8) as a  " +
                 "on t1.v5 = a.v8 ";
         String planFragment = getCostExplain(sql);
+<<<<<<< HEAD
         Assert.assertTrue(planFragment, planFragment.contains("  23:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [1: v4, BIGINT, true] = [4: v10, BIGINT, true]\n" +
@@ -229,6 +230,19 @@ public class MultiJoinReorderTest extends PlanTestBase {
         Assert.assertTrue(planFragment, planFragment.contains("  18:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [13: v10, BIGINT, true] = [10: v4, BIGINT, true]\n"));
+=======
+        Assert.assertTrue(planFragment, planFragment.contains("23:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [4: v10, BIGINT, true] = [1: v4, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 5, build_expr = (1: v4), remote = false\n" +
+                "  |  output columns: 7\n" +
+                "  |  cardinality: 56250000"));
+
+        Assert.assertTrue(planFragment, planFragment.contains("20:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  equal join conjunct: [11: v5, BIGINT, true] = [20: v8, BIGINT, true]"));
+>>>>>>> ccab0f1371 ([Enhancement] support statistics for iceberg table and optimize statistics calculation  (#33737))
     }
 
     @Test
@@ -300,6 +314,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
 
         // Top join tree
+<<<<<<< HEAD
         assertContains(planFragment, "  28:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -312,12 +327,16 @@ public class MultiJoinReorderTest extends PlanTestBase {
 
         // Left sub join tree (b)
         Assert.assertTrue(planFragment, planFragment.contains("  26:HASH JOIN\n" +
+=======
+        assertContains(planFragment, "29:HASH JOIN\n" +
+>>>>>>> ccab0f1371 ([Enhancement] support statistics for iceberg table and optimize statistics calculation  (#33737))
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: count = 12: v5\n" +
+                "  |  equal join conjunct: 12: v5 = 10: count\n" +
                 "  |  \n" +
-                "  |----25:EXCHANGE\n" +
+                "  |----28:EXCHANGE\n" +
                 "  |    \n" +
+<<<<<<< HEAD
                 "  23:Project\n" +
                 "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
@@ -352,6 +371,43 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  15:AGGREGATE (merge finalize)");
+=======
+                "  9:Project\n" +
+                "  |  <slot 12> : 12: v5");
+
+        Assert.assertTrue(planFragment, planFragment.contains("27:Project\n" +
+                "  |  <slot 10> : 10: count\n" +
+                "  |  \n" +
+                "  26:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----25:EXCHANGE\n" +
+                "  |    \n" +
+                "  11:Project\n" +
+                "  |  <slot 26> : 1\n" +
+                "  |  \n" +
+                "  10:OlapScanNode\n" +
+                "     TABLE: t2"));
+
+        // Right sub join tree (a)
+        assertContains(planFragment, "22:AGGREGATE (update serialize)\n" +
+                "  |  output: count(2: v5)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  21:Project\n" +
+                "  |  <slot 2> : 2: v5\n" +
+                "  |  \n" +
+                "  20:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v10 = 1: v4\n" +
+                "  |  \n" +
+                "  |----19:EXCHANGE\n" +
+                "  |    \n" +
+                "  12:OlapScanNode\n" +
+                "     TABLE: t3");
+>>>>>>> ccab0f1371 ([Enhancement] support statistics for iceberg table and optimize statistics calculation  (#33737))
     }
 
     @Test
@@ -400,20 +456,23 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join t2 on t1.v5 = t2.v8 ";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:OlapScanNode\n" +
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("2:OlapScanNode\n" +
                 "     TABLE: t0"));
-        Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
-                "  |    \n" +
-                "  2:OlapScanNode\n" +
-                "     TABLE: t1"));
-        Assert.assertTrue(planFragment.contains("  |----6:EXCHANGE\n" +
+        Assert.assertTrue(planFragment.contains("|----3:EXCHANGE\n" +
                 "  |    \n" +
                 "  1:OlapScanNode\n" +
-                "     TABLE: t2"));
-        Assert.assertTrue(planFragment.contains("  |----8:EXCHANGE\n" +
+                "     TABLE: t1"));
+        Assert.assertTrue(planFragment.contains("|----5:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t3"));
+        Assert.assertTrue(planFragment.contains("9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v5 = 11: v8\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE"));
     }
 
     @Test
