@@ -31,10 +31,9 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.IcebergPartitionKey;
@@ -43,6 +42,8 @@ import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
+=======
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -52,9 +53,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -98,6 +97,7 @@ public class PartitionUtil {
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
                                                   Table.TableType tableType) throws AnalysisException {
+<<<<<<< HEAD
         Preconditions.checkState(values.size() == columns.size(),
                 "columns size is %s, but values size is %s", columns.size(), values.size());
 
@@ -141,6 +141,9 @@ public class PartitionUtil {
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }
         return partitionKey;
+=======
+        return ConnectorPartitionTraits.build(tableType).createPartitionKey(values, types);
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     }
 
     // If partitionName is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
@@ -243,6 +246,7 @@ public class PartitionUtil {
     }
 
     public static List<String> getPartitionNames(Table table) {
+<<<<<<< HEAD
         List<String> partitionNames = null;
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
@@ -272,6 +276,9 @@ public class PartitionUtil {
                     table.getType());
         }
         return partitionNames;
+=======
+        return ConnectorPartitionTraits.build(table).getPartitionNames();
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     }
 
     // use partitionValues to filter partitionNames
@@ -299,6 +306,7 @@ public class PartitionUtil {
     }
 
     public static List<Column> getPartitionColumns(Table table) {
+<<<<<<< HEAD
         List<Column> partitionColumns = null;
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
@@ -314,6 +322,9 @@ public class PartitionUtil {
                     "table type %s", table.getType());
         }
         return partitionColumns;
+=======
+        return ConnectorPartitionTraits.build(table).getPartitionColumns();
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     }
 
     /**
@@ -327,6 +338,7 @@ public class PartitionUtil {
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn,
                                                                         Expr partitionExpr)
             throws UserException {
+<<<<<<< HEAD
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
@@ -337,6 +349,16 @@ public class PartitionUtil {
         }
     }
 
+=======
+        return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
+    }
+
+    public static Map<String, List<List<String>>> getPartitionList(Table table, Column partitionColumn)
+            throws UserException {
+        return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumn);
+    }
+
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     // check the partitionColumn exist in the partitionColumns
     private static int checkAndGetPartitionColumnIndex(List<Column> partitionColumns, Column partitionColumn)
             throws AnalysisException {
@@ -367,26 +389,7 @@ public class PartitionUtil {
     }
 
     public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table) {
-        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
-        List<String> partitionNames = getPartitionNames(table);
-
-        List<PartitionInfo> partitions;
-        if (table.isHiveTable()) {
-            HiveTable hiveTable = (HiveTable) table;
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), table, partitionNames);
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(jdbcTable.getCatalogName(), table, partitionNames);
-        } else {
-            LOG.warn("Only support get partition for hive table and jdbc table type");
-            return null;
-        }
-        for (int index = 0; index < partitionNames.size(); ++index) {
-            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
-        }
-        return partitionNameWithPartition;
+        return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
     }
 
     // Get partition name generated for mv from hive/hudi/iceberg partition name,
