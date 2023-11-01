@@ -933,7 +933,7 @@ under the License.
             <!-- jmockit -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.22.2</version>
+                <version>3.0.0-M1</version>
                 <configuration>
                     <!-->set larger, eg, 3, to reduce the time or running FE unit tests<-->
                     <forkCount>${fe_ut_parallel}</forkCount>
