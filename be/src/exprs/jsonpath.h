@@ -95,8 +95,12 @@ struct JsonPathPiece {
     static Status parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_path);
 
     static vpack::Slice extract(const JsonValue* json, const std::vector<JsonPathPiece>& jsonpath, vpack::Builder* b);
+
     static vpack::Slice extract(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
                                 vpack::Builder* b);
+
+    static void collect(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
+                        vpack::Builder* b);
 };
 
 struct JsonPath {
