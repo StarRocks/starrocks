@@ -1028,18 +1028,24 @@ public class MaterializedViewRewriter {
             // 2. childKeys should be not null
             // 3. parentKeys should be unique
             if (!isUniqueKeys(materializedView, parentTable, parentKeys)) {
+                logMVRewrite(mvRewriteContext, "FKs {} are not unique keys of parent table {} for inner join",
+                        parentKeys, parentTable.getName());
                 return false;
             }
             // foreign keys are not null
             // if child table has foreign key constraint in mv, we assume that the foreign key is not null
             if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull()) &&
                     !hasForeignKeyConstraintInMv(childTable, materializedView, childKeys)) {
+                logMVRewrite(mvRewriteContext, "FKs {} are not totally not-null in child table {}",
+                        childKeys, childTable.getName());
                 return false;
             }
         } else if (parentJoinType.isLeftOuterJoin()) {
             // make sure that all join keys are in foreign keys
             // the join keys of parent table should be unique
             if (!isUniqueKeys(materializedView, parentTable, parentKeys)) {
+                logMVRewrite(mvRewriteContext, "FKs {} are not unique keys of parent table {} for left join",
+                        parentKeys, parentTable.getName());
                 return false;
             }
         } else {
@@ -1052,9 +1058,14 @@ public class MaterializedViewRewriter {
             ColumnRefOperator childColumn = getColumnRef(pair.first, tableScanDesc.getScanOperator());
             ColumnRefOperator parentColumn = getColumnRef(pair.second, parentTableScanDesc.getScanOperator());
             if (childColumn == null || parentColumn == null) {
+                logMVRewrite(mvRewriteContext, "child column {}/parent column {} cannot be found " +
+                        "in scan operator, is_child_found:{}, is_parent_found:{}", childColumn, parentColumn, 
+                        childColumn == null, parentColumn == null);
                 return false;
             }
             if (!isJoinOnCondition(joinOptExpr, childColumn, parentColumn)) {
+                logMVRewrite(mvRewriteContext, "UK/FK relation(child {}, parent {}) is not in join's on predicate{}",
+                        childColumn, parentColumn, joinOperator.getOnPredicate());
                 return false;
             }
             constraintCompensationJoinColumns.put(parentColumn, childColumn);
@@ -1695,6 +1706,7 @@ public class MaterializedViewRewriter {
                 return null;
             }
 
+            deriveLogicalProperty(queryExpression);
             OptExpression newQueryExpr = pushdownPredicatesForJoin(queryExpression, queryCompensationPredicate);
             deriveLogicalProperty(newQueryExpr);
             if (mvRewriteContext.getEnforcedColumns() != null && !mvRewriteContext.getEnforcedColumns().isEmpty()) {
@@ -1753,22 +1765,18 @@ public class MaterializedViewRewriter {
                 builder.setPredicate(MvUtils.canonizePredicateForRewrite(
                         Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
                 Operator newQueryOp = builder.build();
-                return OptExpression.create(newQueryOp, optExpression.getInputs());
+                return deriveOptExpression(OptExpression.create(newQueryOp, optExpression.getInputs()));
             } else {
                 return optExpression;
             }
         }
+
         OptExpression newJoin = doPushdownPredicate(optExpression, predicate);
-        // pushdown predicates in children
         List<OptExpression> children = Lists.newArrayList();
-        for (int i = 0; i < 2; i++) {
-            if (optExpression.inputAt(i).getOp() instanceof LogicalJoinOperator) {
-                children.add(pushdownPredicatesForJoin(newJoin.inputAt(i), null));
-            } else {
-                children.add(newJoin.inputAt(i));
-            }
+        for (OptExpression child : newJoin.getInputs()) {
+            children.add(pushdownPredicatesForJoin(child, null));
         }
-        return OptExpression.create(newJoin.getOp(), children);
+        return deriveOptExpression(OptExpression.create(newJoin.getOp(), children));
     }
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
@@ -2098,6 +2106,11 @@ public class MaterializedViewRewriter {
             matchMode = MatchMode.VIEW_DELTA;
         }
         return matchMode;
+    }
+
+    protected OptExpression deriveOptExpression(OptExpression root) {
+        deriveLogicalProperty(root);
+        return root;
     }
 
     protected void deriveLogicalProperty(OptExpression root) {
