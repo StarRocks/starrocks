@@ -61,6 +61,7 @@ public class PaimonTable extends Table {
                 .collect(Collectors.toList());
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }
