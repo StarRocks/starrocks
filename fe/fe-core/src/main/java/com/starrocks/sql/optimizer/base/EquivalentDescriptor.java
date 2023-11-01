@@ -71,7 +71,7 @@ public final class EquivalentDescriptor {
         return partitionIds.size() == 0;
     }
 
-    public void initDistributionUnionFind (List<DistributionCol> distributionCols) {
+    public void initDistributionUnionFind(List<DistributionCol> distributionCols) {
         for (DistributionCol col : distributionCols) {
             if (col.isNullStrict()) {
                 nullStrictUnionFind.add(col);
@@ -131,9 +131,11 @@ public final class EquivalentDescriptor {
 
     private boolean isEquivalent(UnionFind<DistributionCol> unionFind, DistributionCol requiredCol,
                                  DistributionCol existDistributionCol) {
+        unionFind.add(requiredCol);
+        unionFind.add(requiredCol);
         Optional<Integer> leftGroupId = unionFind.getGroupId(requiredCol);
         Optional<Integer> rightGroupId = unionFind.getGroupId(existDistributionCol);
-        return leftGroupId.isPresent() && rightGroupId.isPresent() && leftGroupId.get() == rightGroupId.get();
+        return leftGroupId.isPresent() && rightGroupId.isPresent() && leftGroupId.get().equals(rightGroupId.get());
 
     }
 }
