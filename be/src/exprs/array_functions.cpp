@@ -816,10 +816,10 @@ private:
                             elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets,
                             target_offsets_ptr[0], target_offsets_ptr[1], null_map_elements, null_map_targets);
                 } else {
-                    DCHECK_EQ(num_target, 1);
+                    DCHECK_EQ(num_array, num_target);
                     found = __process<NullableElement, NullableTarget, ElementColumn>(
                             elements, element_offsets_ptr[i], element_offsets_ptr[i + 1], targets,
-                            target_offsets_ptr[0], target_offsets_ptr[1], null_map_elements, null_map_targets);
+                            target_offsets_ptr[i], target_offsets_ptr[i + 1], null_map_elements, null_map_targets);
                 }
             }
             result_ptr[i] = found;
