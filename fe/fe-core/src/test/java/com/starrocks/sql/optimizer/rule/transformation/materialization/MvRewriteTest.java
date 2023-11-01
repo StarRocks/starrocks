@@ -1289,7 +1289,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv1");
     }
 
-    @Ignore("outer join and pushdown predicate does not work")
     @Test
     public void testJoinPredicatePushdown1() throws Exception {
         cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
