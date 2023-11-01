@@ -103,6 +103,7 @@ public class JDBCTable extends Table {
         return jdbcTable;
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         return partitionColumns;
     }

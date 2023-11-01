@@ -134,6 +134,7 @@ public class IcebergTable extends Table {
         }
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
@@ -194,6 +195,7 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
 
+    @Override
     public boolean isUnPartitioned() {
         return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
     }
