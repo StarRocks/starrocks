@@ -550,7 +550,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
-    parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
 }
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,

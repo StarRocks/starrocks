@@ -387,10 +387,10 @@ void MemTable::_aggregate(bool is_final) {
     }
 }
 
-Status MemTable::_sort(bool is_final) {
+void MemTable::_sort(bool is_final) {
     SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
-    RETURN_IF_ERROR(_sort_column_inc());
+    _sort_column_inc();
     if (is_final) {
         // No need to reserve, it will be reserve in IColumn::append_selective(),
         // Otherwise it will use more peak memory
@@ -404,7 +404,6 @@ Status MemTable::_sort(bool is_final) {
     }
     _chunk_memory_usage = 0;
     _chunk_bytes_usage = 0;
-    return Status::OK();
 }
 
 void MemTable::_append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final) {
@@ -485,15 +484,6 @@ void MemTable::_sort_column_inc() {
             LOG(FATAL) << msg;
         }
     }
-    /*
-    if (!by_sort_key) {
-        for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
-            sort_key_idxes.push_back(i);
-        }
-    } else {
-        sort_key_idxes = _vectorized_schema->sort_key_idxes();
-    }
-    */
 
     for (auto sort_key_idx : sort_key_idxes) {
         columns.push_back(_chunk->get_column_by_index(sort_key_idx));

@@ -254,33 +254,29 @@ public class KeysDesc implements ParseNode, Writable {
             }
         }
 
-        // we should check sort key column type if table is primary key table
-        if (type == KeysType.PRIMARY_KEYS) {
-            for (int i = 0; i < sortKeyIdxes.size(); i++) {
-                String name = cols.get(sortKeyIdxes.get(i)).getName();
-                ColumnDef cd = cols.get(sortKeyIdxes.get(i));
-                Type t = cd.getType();
-                if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
-                        t.isDatetime())) {
-                    throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
+        if (!sortKeyIdxes.isEmpty()) {
+            // we should check sort key column type if table is primary key table
+            if (type == KeysType.PRIMARY_KEYS) {
+                for (int i = 0; i < sortKeyIdxes.size(); i++) {
+                    String name = cols.get(sortKeyIdxes.get(i)).getName();
+                    ColumnDef cd = cols.get(sortKeyIdxes.get(i));
+                    Type t = cd.getType();
+                    if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                            t.isDatetime())) {
+                        throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
+                    }
                 }
+            } else if (type == KeysType.DUP_KEYS) {
+                // do nothing
+            } else if (type == KeysType.AGG_KEYS || type == KeysType.UNIQUE_KEYS) {
+                boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
+                if (!res) {
+                    throw new SemanticException("The sort columns of " + type.toSql() + " table must include all key " +
+                                                "columns and cannot have any columns other than key columns.");
+                }
+            } else {
+                throw new SemanticException("sort key is not support:" + type.toSql());
             }
-        } else if (type == KeysType.DUP_KEYS) {
-            // do nothing
-        } else if (type == KeysType.AGG_KEYS) {
-            boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
-            if (!res) {
-                throw new SemanticException("sort key column of AGG Table should be key column");
-            }
-        } else if (type == KeysType.UNIQUE_KEYS) {
-            // TODO zhangqiang
-            // support or not
-            boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
-            if (!res) {
-                throw new SemanticException("sort key column of UNIQUE Table should be key column");
-            }
-        } else {
-            throw new SemanticException("sort key is not support:" + type.toSql());
         }
     }
 }
