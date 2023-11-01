@@ -62,7 +62,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.ScalarType.OLAP_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.BOOLEAN;
 import static com.starrocks.catalog.Type.DATE;
