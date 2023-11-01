@@ -258,32 +258,11 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
 
 - Asynchronous materialized views created based on the StarRocks default catalog support the following data types:
 
-<<<<<<< HEAD
-  - DATE
-  - DATETIME
-  - CHAR
-  - VARCHAR
-  - BOOLEAN
-  - TINYINT
-  - SMALLINT
-  - INT
-  - BIGINT
-  - LARGEINT
-  - FLOAT
-  - DOUBLE
-  - DECIMAL
-  - ARRAY
-  - JSON
-  - BITMAP
-  - HLL
-  - PERCENTILE
-=======
   - **Date**: DATE, DATETIME
   - **String**: CHAR, VARCHAR
   - **Numeric**: BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, DECIMAL, PERCENTILE
-  - **Semi-structured**: ARRAY, JSON, MAP (from v3.1 onwards), STRUCT (from v3.1 onwards)
+  - **Semi-structured**: ARRAY, JSON
   - **Other**: BITMAP, HLL
->>>>>>> e6f6f60310 ([Doc] MV docs minor fix (#34109))
 
 > **NOTE**
 >
