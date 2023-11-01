@@ -27,7 +27,6 @@ import java.util.ArrayList;
 
 public class PartitionExprAnalyzer {
 
-
     /**
      * Recursive analyze the date_trunc function
      */
