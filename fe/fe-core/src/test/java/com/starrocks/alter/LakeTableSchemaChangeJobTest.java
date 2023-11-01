@@ -973,7 +973,7 @@ public class LakeTableSchemaChangeJobTest {
     public void testTransactionRaceCondition() throws AlterCancelException {
         new MockUp<Utils>() {
             @Mock
-            public Long chooseBackend(LakeTablet tablet) {
+            public Long chooseBackend(LakeTablet tablet, long workerGroupId) {
                 return 1L;
             }
         };

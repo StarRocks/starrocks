@@ -1,4 +1,4 @@
--- name: test_builtin_role
+-- name: __test_builtin_role
 show grants for role db_admin;
 -- result:
 db_admin	default_catalog	GRANT APPLY, DROP, ALTER ON ALL MASKING POLICIES IN ALL DATABASES TO ROLE 'db_admin'
