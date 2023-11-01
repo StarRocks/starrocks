@@ -43,6 +43,8 @@ import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonPartitionKey;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -51,6 +53,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -61,13 +64,17 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
+import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -85,15 +92,16 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     private static final Logger LOG = LogManager.getLogger(PartitionUtil.class);
+    public static final String ICEBERG_DEFAULT_PARTITION = "ICEBERG_DEFAULT_PARTITION";
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
         return createPartitionKey(values, columns, Table.TableType.HIVE);
     }
 
-    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
+    public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
                                                   Table.TableType tableType) throws AnalysisException {
-        Preconditions.checkState(values.size() == columns.size(),
-                "columns size is %s, but values size is %s", columns.size(), values.size());
+        Preconditions.checkState(values.size() == types.size(),
+                "types size is %s, but values size is %s", types.size(), values.size());
 
         PartitionKey partitionKey = null;
         switch (tableType) {
@@ -112,6 +120,9 @@ public class PartitionUtil {
             case JDBC:
                 partitionKey = new JDBCPartitionKey();
                 break;
+            case PAIMON:
+                partitionKey = new PaimonPartitionKey();
+                break;
             default:
                 Preconditions.checkState(false, "Do not support create partition key for " +
                         "table type %s", tableType);
@@ -120,7 +131,7 @@ public class PartitionUtil {
         // change string value to LiteralExpr,
         for (int i = 0; i < values.size(); i++) {
             String rawValue = values.get(i);
-            Type type = columns.get(i).getType();
+            Type type = types.get(i);
             LiteralExpr exprValue;
             // rawValue could be null for delta table
             if (rawValue == null) {
@@ -135,6 +146,14 @@ public class PartitionUtil {
             partitionKey.pushColumn(exprValue, type.getPrimitiveType());
         }
         return partitionKey;
+    }
+
+    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
+                                                  Table.TableType tableType) throws AnalysisException {
+        Preconditions.checkState(values.size() == columns.size(),
+                "columns size is %s, but values size is %s", columns.size(), values.size());
+
+        return createPartitionKeyWithType(values, columns.stream().map(Column::getType).collect(Collectors.toList()), tableType);
     }
 
     // If partitionName is `par_col=0/par_date=2020-01-01`, return ["0", "2020-01-01"]
@@ -251,9 +270,17 @@ public class PartitionUtil {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
+        } else if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            if (paimonTable.isUnPartitioned()) {
+                // return table name if table is unpartitioned
+                return Lists.newArrayList(paimonTable.getTableName());
+            }
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
         } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
+            Preconditions.checkState(false, "Not support getPartitionNames for table type %s",
+                    table.getType());
         }
         return partitionNames;
     }
@@ -292,6 +319,9 @@ public class PartitionUtil {
         } else if (table.isJDBCTable()) {
             JDBCTable jdbcTable = (JDBCTable) table;
             partitionColumns = jdbcTable.getPartitionColumns();
+        } else if (table.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            partitionColumns = paimonTable.getPartitionColumns();
         } else {
             Preconditions.checkState(false, "Do not support get partition names and columns for" +
                     "table type %s", table.getType());
@@ -322,7 +352,8 @@ public class PartitionUtil {
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()) {
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()
+                || table.isPaimonTable()) {
             return PartitionUtil.getRangePartitionMapOfExternalTable(
                     table, partitionColumn, getPartitionNames(table), partitionExpr);
         } else {
@@ -334,7 +365,7 @@ public class PartitionUtil {
             throws UserException {
         if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getListPartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
+        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
             return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames(table));
         } else {
             throw new DmlException("Can not get partition list from table with type : %s", table.getType());
@@ -601,11 +632,18 @@ public class PartitionUtil {
         return partitionKeyList;
     }
 
+    // return partition name in forms of `col1=value1/col2=value2`
+    // if the partition field is explicitly named, use this name without change
+    // if the partition field is not identity transform, column name is appended by its transform name (e.g. col1_hour)
+    // if all partition fields are no longer active (dropped by partition evolution), return "ICEBERG_DEFAULT_PARTITION"
     public static String convertIcebergPartitionToPartitionName(PartitionSpec partitionSpec, StructLike partition) {
-        int filePartitionFields = partition.size();
         StringBuilder sb = new StringBuilder();
-        for (int index = 0; index < filePartitionFields; ++index) {
+        for (int index = 0; index < partition.size(); ++index) {
             PartitionField partitionField = partitionSpec.fields().get(index);
+            // skip inactive partition field
+            if (partitionField.transform().isVoid()) {
+                continue;
+            }
             sb.append(partitionField.name());
             sb.append("=");
             String value = partitionField.transform().toHumanString(getPartitionValue(partition, index,
@@ -613,7 +651,37 @@ public class PartitionUtil {
             sb.append(value);
             sb.append("/");
         }
-        return sb.substring(0, sb.length() - 1);
+
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return ICEBERG_DEFAULT_PARTITION;
+    }
+
+    public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
+        PartitionData partitionData = (PartitionData) partition;
+        List<String> partitionValues = new ArrayList<>();
+        boolean existPartitionEvolution = spec.fields().stream().anyMatch(field -> field.transform().isVoid());
+        for (int i = 0; i < spec.fields().size(); i++) {
+            PartitionField partitionField = spec.fields().get(i);
+            if ((!partitionField.transform().isIdentity() && existPartitionEvolution) || partitionData.get(i) == null) {
+                continue;
+            }
+
+            Class<?> clazz = spec.javaClasses()[i];
+            String value = partitionField.transform().toHumanString(getPartitionValue(partitionData, i, clazz));
+
+            // currently starrocks date literal only support local datetime
+            org.apache.iceberg.types.Type icebergType = spec.schema().findType(partitionField.sourceId());
+            if (partitionField.transform().isIdentity() && icebergType.equals(Types.TimestampType.withZone())) {
+                value = ChronoUnit.MICROS.addTo(Instant.ofEpochSecond(0).atZone(TimeUtils.getTimeZone().toZoneId()),
+                        getPartitionValue(partitionData, i, clazz)).toLocalDateTime().toString();
+            }
+
+            partitionValues.add(value);
+        }
+
+        return partitionValues;
     }
 
     public static <T> T getPartitionValue(StructLike partition, int position, Class<?> javaClass) {

@@ -116,6 +116,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -201,6 +202,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionConvertContext;
@@ -248,6 +250,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -881,6 +884,11 @@ public class LocalMetastore implements ConnectorMetadata {
             addPartitions(db, tableName,
                     Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
                     addPartitionClause);
+        } else if (partitionDesc instanceof ListPartitionDesc) {
+            checkNotSystemTableForAutoPartition(partitionInfo, partitionDesc);
+            addPartitions(db, tableName,
+                    Lists.newArrayList(((ListPartitionDesc) partitionDesc).getPartitionDescs()),
+                    addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
 
             if (!(partitionInfo instanceof RangePartitionInfo)) {
@@ -1250,31 +1258,34 @@ public class LocalMetastore implements ConnectorMetadata {
                                      AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
                                      List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
-        if (partitionList == null || partitionList.size() > 1) {
-            throw new DdlException("Only support add one partition when add list partition now");
+        if (partitionList == null) {
+            throw new DdlException("partitionList should not null");
         } else if (partitionList.size() == 0) {
             return;
         }
 
-        boolean isTempPartition = addPartitionClause.isTempPartition();
-        Partition partition = partitionList.get(0);
-        if (existPartitionNameSet.contains(partition.getName())) {
-            LOG.info("add partition[{}] which already exists", partition.getName());
-            return;
+        // TODO: add only 1 log for multi list partition
+        int i = 0;
+        for (Partition partition : partitionList) {
+            boolean isTempPartition = addPartitionClause.isTempPartition();
+            if (existPartitionNameSet.contains(partition.getName())) {
+                LOG.info("add partition[{}] which already exists", partition.getName());
+                return;
+            }
+            long partitionId = partition.getId();
+            PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
+                    partitionDescs.get(i).getPartitionDataProperty(),
+                    partitionInfo.getReplicationNum(partitionId),
+                    partitionInfo.getIsInMemory(partitionId),
+                    isTempPartition,
+                    ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
+                    ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId),
+                    partitionDescs.get(i).getDataCacheInfo());
+            GlobalStateMgr.getCurrentState().getEditLog().logAddPartition(info);
+            LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
+                    partition.getName(), isTempPartition);
+            i++;
         }
-        long partitionId = partition.getId();
-        PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
-                partitionDescs.get(0).getPartitionDataProperty(),
-                partitionInfo.getReplicationNum(partitionId),
-                partitionInfo.getIsInMemory(partitionId),
-                isTempPartition,
-                ((ListPartitionInfo) partitionInfo).getIdToValues().get(partitionId),
-                ((ListPartitionInfo) partitionInfo).getIdToMultiValues().get(partitionId),
-                partitionDescs.get(0).getDataCacheInfo());
-        GlobalStateMgr.getCurrentState().getEditLog().logAddPartition(info);
-
-        LOG.info("succeed in creating list partition[{}], name: {}, temp: {}", partitionId,
-                partition.getName(), isTempPartition);
     }
 
     private void addPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
@@ -1690,7 +1701,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 physicalParition.createRollupIndex(index);
             }
         }
-        
+
         return physicalParition;
     }
 
@@ -1899,63 +1910,62 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions, int numReplicas,
+    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                             int numReplicas,
                                              int numBackends) throws DdlException {
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(
                 partition -> partition.getMaterializedIndices(IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
-        Thread t = new Thread(() -> {
-            Map<Long, List<Long>> taskSignatures = new HashMap<>();
-            try {
-                int numFinishedTasks;
-                int numSendedTasks = 0;
-                for (PhysicalPartition partition : partitions) {
-                    if (!countDownLatch.getStatus().ok()) {
-                        break;
+        Map<Long, List<Long>> taskSignatures = new HashMap<>();
+        try {
+            int numFinishedTasks;
+            int numSendedTasks = 0;
+            long startTime = System.currentTimeMillis();
+            long maxWaitTimeMs = Math.min(timeout, maxTimeout) * 1000L;
+            for (PhysicalPartition partition : partitions) {
+                if (!countDownLatch.getStatus().ok()) {
+                    break;
+                }
+                List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
+                for (CreateReplicaTask task : tasks) {
+                    List<Long> signatures =
+                            taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                    signatures.add(task.getSignature());
+                }
+                sendCreateReplicaTasks(tasks, countDownLatch);
+                numSendedTasks += tasks.size();
+                numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
+                // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
+                // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
+                // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
+                // than 200.
+                // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
+                while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
+                    long currentTime = System.currentTimeMillis();
+                    // Add timeout check
+                    if (currentTime > startTime + maxWaitTimeMs) {
+                        throw new TimeoutException("Wait in buildPartitionsConcurrently exceeded timeout");
                     }
-                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
-                    for (CreateReplicaTask task : tasks) {
-                        List<Long> signatures =
-                                taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
-                        signatures.add(task.getSignature());
-                    }
-                    sendCreateReplicaTasks(tasks, countDownLatch);
-                    numSendedTasks += tasks.size();
+                    ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
                     numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
-                    // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
-                    // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
-                    // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
-                    // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
-                    // than 200.
-                    // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
-                    while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
-                        ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
-                        numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
-                    }
                 }
-                countDownLatch.await();
-                if (countDownLatch.getStatus().ok()) {
-                    taskSignatures.clear();
-                }
-            } catch (Exception e) {
-                LOG.warn(e);
-                countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.toString()));
-            } finally {
+            }
+            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+        } catch (Exception e) {
+            LOG.warn(e);
+            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
+            throw new DdlException(e.getMessage());
+        }  finally {
+            if (!countDownLatch.getStatus().ok()) {
                 for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
                     for (Long signature : entry.getValue()) {
                         AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
                     }
                 }
             }
-        }, "partition-build");
-        t.start();
-        try {
-            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
-        } catch (Exception e) {
-            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
-            throw e;
         }
     }
 
@@ -1979,6 +1989,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
                                                             MaterializedIndex index) throws DdlException {
+        boolean createSchemaFile = true;
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
@@ -2016,7 +2027,10 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.getPersistentIndexType(),
                         TTabletType.TABLET_TYPE_LAKE,
                         table.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                        indexMeta.getSortKeyUniqueIds());
+                        indexMeta.getSortKeyUniqueIds(),
+                        createSchemaFile);
+                // For each partition, the schema file is created only when the first Tablet is created
+                createSchemaFile = false;
                 task.setSchemaVersion(indexMeta.getSchemaVersion());
                 tasks.add(task);
             } else {
@@ -3070,6 +3084,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // set base index id
         long baseIndexId = getNextId();
         materializedView.setBaseIndexId(baseIndexId);
+        // set query output indexes
+        materializedView.setQueryOutputIndices(stmt.getQueryOutputIndices());
         // set base index meta
         int schemaVersion = 0;
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
@@ -3189,9 +3205,22 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
             }
+            // partition ttl
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL
+                            + " is only supported by partitioned materialized-view");
+                }
+
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+                materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+
             // partition ttl number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-                int number = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+                int number = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
@@ -3943,6 +3972,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         tableProperty.buildEnablePersistentIndex();
 
+        if (table.isCloudNativeTable()) {
+            // now default to LOCAL
+            tableProperty.buildPersistentIndexType();
+        }
+
         ModifyTablePropertyOperationLog info =
                 new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyEnablePersistentIndex(info);
@@ -4198,6 +4232,9 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 } else if (opCode == OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX) {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
+                    if (olapTable.isCloudNativeTable()) {
+                        olapTable.setPersistentIndexType(tableProperty.getPersistentIndexType());
+                    }
                 } else if (opCode == OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
                     olapTable.setPrimaryIndexCacheExpireSec(tableProperty.primaryIndexCacheExpireSec());
                 } else if (opCode == OperationType.OP_MODIFY_BINLOG_CONFIG) {
@@ -5150,4 +5187,3 @@ public class LocalMetastore implements ConnectorMetadata {
         defaultCluster = new Cluster(SystemInfoService.DEFAULT_CLUSTER, NEXT_ID_INIT_VALUE);
     }
 }
-

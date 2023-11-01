@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -43,6 +42,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -1032,6 +1032,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
         ctx.setThreadLocalInfo();
+
+        // TODO: Support use mv when refreshing mv.
         ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
@@ -1039,7 +1041,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         // insert overwrite mv must set system = true
         insertStmt.setSystem(true);
+
+        // if materialized view has set sort keys, materialized view's output columns
+        // may be different from the defined query's output.
+        // so set materialized view's defined outputs as target columns.
+        List<Integer> queryOutputIndexes = materializedView.getQueryOutputIndices();
+        List<Column> baseSchema = materializedView.getBaseSchema();
+        if (queryOutputIndexes != null && baseSchema.size() == queryOutputIndexes.size()) {
+            List<String> targetColumnNames = queryOutputIndexes.stream()
+                    .map(i -> baseSchema.get(i))
+                    .map(Column::getName)
+                    .map(String::toLowerCase) // case insensitive
+                    .collect(Collectors.toList());
+            insertStmt.setTargetColumnNames(targetColumnNames);
+        }
+
         Analyzer.analyze(insertStmt, ctx);
+
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Multimap<String, TableRelation> tableRelations =
@@ -1327,6 +1345,36 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
+                } else if (snapshotTable.isPaimonTable()) {
+                    PaimonTable snapShotPaimonTable = (PaimonTable) snapshotTable;
+                    if (snapShotPaimonTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
+                            return true;
+                        }
+                    } else {
+                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
+                        // TODO: Support list partition later.
+                        // do not need to check base partition table changed when mv is not partitioned
+                        if (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
+                            return false;
+                        }
+
+                        Pair<Table, Column> partitionTableAndColumn =
+                                getRefBaseTableAndPartitionColumn(snapshotBaseTables);
+                        Column partitionColumn = partitionTableAndColumn.second;
+                        // For Non-partition based base table, it's not necessary to check the partition changed.
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapShotPaimonTable.containColumn(partitionColumn.getName())) {
+                            continue;
+                        }
+
+                        Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(snapshotTable, partitionColumn, partitionExpr);
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                                getPartitionKeyRange(table, partitionColumn, partitionExpr);
+                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
+                    }
                 }
             } catch (UserException e) {
                 LOG.warn("Materialized view compute partition change failed", e);
@@ -1341,7 +1389,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt)
             throws Exception {
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         Preconditions.checkNotNull(execPlan);
         Preconditions.checkNotNull(insertStmt);
         ConnectContext ctx = mvContext.getCtx();
@@ -1353,8 +1400,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        ctx.getSessionVariable().setEnableInsertStrict(false);
         try {
-            executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
+            executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
             throw e;
@@ -1580,18 +1628,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<Table, Set<String>> tableNamePartitionNames = Maps.newHashMap();
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table table = tablePair.second;
-            if (partitionTable != null && partitionTable == table) {
-                // do nothing.
+            if (partitionTable != null && partitionTable.equals(table)) {
+                // do nothing
             } else {
                 if (table.isNativeTableOrMaterializedView()) {
                     tableNamePartitionNames.put(table, ((OlapTable) table).getVisiblePartitionNames());
-                } else if (table.isHiveTable()) {
-                    tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 } else if (table.isView()) {
-                    continue;
+                    // do nothing
                 } else {
-                    LOG.warn("Do not support get partition names and columns for" +
-                            " table type {}", table.getType());
+                    tableNamePartitionNames.put(table, Sets.newHashSet(PartitionUtil.getPartitionNames(table)));
                 }
             }
         }

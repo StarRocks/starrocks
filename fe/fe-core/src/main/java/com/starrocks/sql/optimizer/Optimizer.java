@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MinMaxCountOptOnScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -393,6 +394,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -651,6 +653,7 @@ public class Optimizer {
         expression.setRequiredProperties(inputProperties);
         expression.setStatistics(groupExpression.getGroup().getStatistics());
         expression.setCost(groupExpression.getCost(requiredProperty));
+        expression.setOutputProperty(requiredProperty);
 
         // When build plan fragment, we need the output column of logical property
         expression.setLogicalProperty(rootGroup.getLogicalProperty());

@@ -76,6 +76,9 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     @SerializedName(value = "id")
     private long id;
+
+    private long beforeRestoreId;
+
     @SerializedName(value = "name")
     private String name;
     @SerializedName(value = "state")
@@ -128,7 +131,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     @SerializedName(value = "nextVersion")
     private long nextVersion;
 
-    private volatile long nextVacuumTime = 0;
+    private volatile long lastVacuumTime = 0;
 
     private volatile long minRetainVersion = 0;
 
@@ -176,12 +179,19 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return partition;
     }
 
+    @Override
     public void setIdForRestore(long id) {
+        this.beforeRestoreId = this.id;
         this.id = id;
     }
 
     public long getId() {
         return this.id;
+    }
+
+    @Override
+    public long getBeforeRestoreId() {
+        return beforeRestoreId;
     }
 
     @Override
@@ -200,6 +210,10 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         }
     }
 
+    public void removeSubPartition(long id) {
+        idToSubPartition.remove(id);
+    }
+
     public Collection<PhysicalPartition> getSubPartitions() {
         List<PhysicalPartition> subPartitions = idToSubPartition.values().stream().collect(Collectors.toList());
         subPartitions.add(this);
@@ -214,8 +228,16 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return this.id;
     }
 
+    public void setParentId(long parentId) {
+        return;
+    }
+
     public long getShardGroupId() {
         return this.shardGroupId;
+    }
+
+    public void setShardGroupId(long newShardGroupId) {
+        this.shardGroupId = newShardGroupId;
     }
 
     public void setName(String newName) {
@@ -629,12 +651,12 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return hasChanged;
     }
 
-    public long getNextVacuumTime() {
-        return nextVacuumTime;
+    public long getLastVacuumTime() {
+        return lastVacuumTime;
     }
 
-    public void setNextVacuumTime(long nextVacuumTime) {
-        this.nextVacuumTime = nextVacuumTime;
+    public void setLastVacuumTime(long lastVacuumTime) {
+        this.lastVacuumTime = lastVacuumTime;
     }
 
     public long getMinRetainVersion() {

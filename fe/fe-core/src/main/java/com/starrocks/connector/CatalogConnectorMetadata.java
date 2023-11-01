@@ -134,6 +134,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+        return normal.getPrunedPartitions(table, predicate, limit);
+    }
+
+    @Override
     public void clear() {
         normal.clear();
     }

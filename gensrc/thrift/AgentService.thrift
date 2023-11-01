@@ -112,6 +112,8 @@ struct TCreateTabletReq {
     17: optional TBinlogConfig binlog_config;
     18: optional TPersistentIndexType persistent_index_type;
     19: optional i32 primary_index_cache_expire_sec;
+    // Whether or not need to create a separate file to hold schema information.
+    20: optional bool create_schema_file = true;
 }
 
 struct TDropTabletReq {
@@ -363,6 +365,9 @@ struct TTabletMetaInfo {
 
 struct TUpdateTabletMetaInfoReq {
     1: optional list<TTabletMetaInfo> tabletMetaInfos
+    // for update lake tablet meta
+    2: optional TTabletType tablet_type
+    3: optional i64 txn_id
 }
 
 struct TPluginMetaInfo {

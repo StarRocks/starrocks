@@ -142,6 +142,9 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -567,6 +570,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             row.setPipe_name(pipe.getName());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
+            row.setTable_name(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
+            row.setLast_error(pipe.getLastErrorInfo().toJson());
+            row.setCreated_time(pipe.getCreatedTime());
+
+            row.setLoad_status(pipe.getLoadStatus().toJson());
             row.setLoaded_files(pipe.getLoadStatus().loadedFiles);
             row.setLoaded_rows(pipe.getLoadStatus().loadRows);
             row.setLoaded_bytes(pipe.getLoadStatus().loadedBytes);
@@ -1117,6 +1125,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } else {
                 desc.setColumnKey("");
             }
+            desc.setDataType(column.getType().toMysqlDataTypeString());
+            desc.setColumnTypeStr(column.getType().toMysqlColumnTypeString());
             final TColumnDef colDef = new TColumnDef(desc);
             final String comment = column.getComment();
             if (comment != null) {
@@ -2238,10 +2248,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        Map<String, AddPartitionClause> addPartitionClauseMap;
+        AddPartitionClause addPartitionClause;
+        List<String> partitionColNames = Lists.newArrayList();
         try {
-            addPartitionClauseMap = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
+            PartitionDesc partitionDesc =  addPartitionClause.getPartitionDesc();
+            if (partitionDesc instanceof RangePartitionDesc) {
+                partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
+            } else if (partitionDesc instanceof ListPartitionDesc) {
+                partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
+            }
+            if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_automatic_partition_number) {
+                throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
+                        Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
+                        " max_automatic_partition_number larger.");
+            }
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
             result.setStatus(errorStatus);
@@ -2249,27 +2271,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        for (AddPartitionClause addPartitionClause : addPartitionClauseMap.values()) {
-            try {
-                if (olapTable.getNumberOfPartitions() > Config.max_automatic_partition_number) {
-                    throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
-                            Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
-                            " max_automatic_partition_number larger.");
-                }
-                state.addPartitions(db, olapTable.getName(), addPartitionClause);
-            } catch (Exception e) {
-                LOG.warn(e);
-                errorStatus.setError_msgs(Lists.newArrayList(
-                        String.format("automatic create partition failed. error:%s", e.getMessage())));
-                result.setStatus(errorStatus);
-                return result;
-            }
+
+        try {
+            state.addPartitions(db, olapTable.getName(), addPartitionClause);
+        } catch (Exception e) {
+            LOG.warn(e);
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error:%s", e.getMessage())));
+            result.setStatus(errorStatus);
+            return result;
         }
+
 
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-        for (String partitionName : addPartitionClauseMap.keySet()) {
+
+        for (String partitionName : partitionColNames) {
             Partition partition = table.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());

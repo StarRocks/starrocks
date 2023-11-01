@@ -63,13 +63,15 @@ struct TTupleDescriptor {
 }
 
 enum THdfsFileFormat {
-  TEXT,
-  LZO_TEXT,
-  RC_FILE,
-  SEQUENCE_FILE,
-  AVRO,
-  PARQUET,
-  ORC,
+  TEXT = 0,
+  LZO_TEXT = 1,
+  RC_FILE = 2,
+  SEQUENCE_FILE = 3,
+  AVRO = 4,
+  PARQUET = 5,
+  ORC = 6,
+
+  UNKNOWN = 100
 }
 
 
@@ -158,7 +160,8 @@ enum TSchemaTableType {
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
-    SCH_PIPES
+    SCH_PIPES,
+    SCH_FE_METRICS
 }
 
 enum THdfsCompression {

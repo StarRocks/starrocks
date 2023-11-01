@@ -56,12 +56,12 @@
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from S3](./loading/s3.md)
+  + [Load data from GCS](./loading/gcs.md)
   + [Load data from HDFS](./loading/hdfs_load.md)
   + [Load data from cloud storage](./loading/cloud_storage_load.md)
   + Load data from Apache Kafka®
-    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
-    + [Load data using Routine Load](/loading/RoutineLoad.md)
-  + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
+    + [Load data using Kafka connector](./loading/Kafka-connector-starrocks.md)
+    + [Load data using Routine Load](./loading/RoutineLoad.md)
   + Load data from Apache Spark™
     + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
     + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
@@ -73,6 +73,7 @@
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
   + [Export data using EXPORT](./unloading/Export.md)
+  + [Unload data using INSERT INTO FILES](./unloading/unload_using_insert_into_files.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
 + Query Data Lakes
@@ -132,6 +133,7 @@
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
+    + [Dataphin](./integrations/IDE_integrations/Dataphin.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
@@ -166,9 +168,9 @@
     + [Query planning](./administration/Query_planning.md)
     + [Analyze query profile](./administration/query_profile.md)
     + [Profiling](./administration/Profiling.md)
-+ Reference
-  + SQL Reference
-    + [All commands](./sql-reference/sql-statements/all-commands.md)
++ SQL Reference
+  + SQL Statements
+    + [All statements](./sql-reference/sql-statements/all-commands.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER_USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE_ROLE.md)
@@ -368,7 +370,7 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
-  + Function Reference
+  + SQL Functions
     + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -496,6 +498,7 @@
         + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
+        + [to_json](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/to_json.md)
     + Map Functions
       + [cardinality](./sql-reference/sql-functions/map-functions/cardinality.md)
       + [distinct_map_keys](./sql-reference/sql-functions/map-functions/distinct_map_keys.md)
@@ -510,8 +513,8 @@
       + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
       + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
     + Binary Functions
-      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
-      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
+      + [to_binary](./sql-reference/sql-functions/binary-functions/to_binary.md)
+      + [from_binary](./sql-reference/sql-functions/binary-functions/from_binary.md)
     + Conditional Functions
       + [case](./sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
@@ -623,18 +626,18 @@
       + [bin](./sql-reference/sql-functions/math-functions/bin.md)
       + [ceil](./sql-reference/sql-functions/math-functions/ceil.md)
       + [ceiling](./sql-reference/sql-functions/math-functions/ceiling.md)
-      + [conv](/sql-reference/sql-functions/math-functions/conv.md)
+      + [conv](./sql-reference/sql-functions/math-functions/conv.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
       + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
       + [cosine_similarity](./sql-reference/sql-functions/math-functions/cos_similarity.md)
       + [cosine_similarity_norm](./sql-reference/sql-functions/math-functions/cos_similarity_norm.md)
-      + [cot](/sql-reference/sql-functions/math-functions/cot.md)
-      + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
+      + [cot](./sql-reference/sql-functions/math-functions/cot.md)
+      + [degrees](./sql-reference/sql-functions/math-functions/degrees.md)
       + [divide](./sql-reference/sql-functions/math-functions/divide.md)
-      + [e](/sql-reference/sql-functions/math-functions/e.md)
-      + [exp](/sql-reference/sql-functions/math-functions/exp.md)
-      + [floor](/sql-reference/sql-functions/math-functions/floor.md)
-      + [fmod](/sql-reference/sql-functions/math-functions/fmod.md)
+      + [e](./sql-reference/sql-functions/math-functions/e.md)
+      + [exp](./sql-reference/sql-functions/math-functions/exp.md)
+      + [floor](./sql-reference/sql-functions/math-functions/floor.md)
+      + [fmod](./sql-reference/sql-functions/math-functions/fmod.md)
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
       + [ln](./sql-reference/sql-functions/math-functions/ln.md)
@@ -745,6 +748,7 @@
   + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
+  + [Prepared statements](./sql-reference/sql-statements/prepared_statement.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
   + [AWS IAM policies](./reference/aws_iam_policies.md)
@@ -757,7 +761,7 @@
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
-      + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
+      + [Synchronize data from MySQL in real time](./faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [Privilege](./administration/privilege_faq.md)

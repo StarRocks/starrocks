@@ -155,6 +155,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
+    public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
@@ -302,7 +303,7 @@ public class PropertyAnalyzer {
         return shortKeyColumnCount;
     }
 
-    public static int analyzePartitionTimeToLive(Map<String, String> properties) {
+    public static int analyzePartitionTTLNumber(Map<String, String> properties) {
         int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
@@ -316,6 +317,21 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
+    }
+
+    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties) {
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL)) {
+            String ttlStr = properties.get(PROPERTIES_PARTITION_TTL);
+            PeriodDuration duration;
+            try {
+                duration = TimeUtils.parseHumanReadablePeriodOrDuration(ttlStr);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("illegal %s: %s", PROPERTIES_PARTITION_TTL, e.getMessage()));
+            }
+            properties.remove(PROPERTIES_PARTITION_TTL);
+            return Pair.create(ttlStr, duration);
+        }
+        return Pair.create(null, PeriodDuration.ZERO);
     }
 
     public static int analyzePartitionLiveNumber(Map<String, String> properties,

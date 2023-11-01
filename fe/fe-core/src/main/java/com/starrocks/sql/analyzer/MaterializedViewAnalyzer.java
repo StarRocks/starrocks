@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
@@ -21,6 +22,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.google.common.collect.Streams;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -44,6 +46,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -99,12 +102,14 @@ import org.apache.logging.log4j.util.Strings;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
@@ -121,6 +126,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.ICEBERG,
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
+                    Table.TableType.PAIMON,
                     Table.TableType.VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -183,6 +189,10 @@ public class MaterializedViewAnalyzer {
             IcebergTable icebergTable = (IcebergTable) table;
             String catalogName = icebergTable.getCatalogName();
             return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else if (table instanceof PaimonTable) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            String catalogName = paimonTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
         } else {
             return true;
         }
@@ -202,6 +212,15 @@ public class MaterializedViewAnalyzer {
             // view itself is considered as base-table
             baseTableInfos.add(BaseTableInfo.fromTableName(viewRelation.getName(), viewRelation.getView()));
         }
+    }
+
+    @VisibleForTesting
+    protected static List<Integer> getQueryOutputIndices(List<Pair<Column, Integer>> mvColumnPairs) {
+        return Streams
+                .mapWithIndex(mvColumnPairs.stream(), (pair, idx) -> Pair.create(pair.second, (int) idx))
+                .sorted(Comparator.comparingInt(x -> x.first))
+                .map(x -> x.second)
+                .collect(Collectors.toList());
     }
 
     static class MaterializedViewAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -254,6 +273,12 @@ public class MaterializedViewAnalyzer {
             List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement);
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
+
+            List<Integer> queryOutputIndices = getQueryOutputIndices(mvColumnPairs);
+            // to avoid disturbing original codes, only set query output indices when column orders have changed.
+            if (IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i))) {
+                statement.setQueryOutputIndices(queryOutputIndices);
+            }
 
             // set the Indexes into createMaterializedViewStatement
             List<Index> mvIndexes = genMaterializedViewIndexes(statement);
@@ -424,8 +449,8 @@ public class MaterializedViewAnalyzer {
                 keyCols.add(column.getName());
             }
             if (theBeginIndexOfValue == skip) {
-                throw new SemanticException("Data type of first column cannot be " +
-                        mvColumns.get(theBeginIndexOfValue).getType());
+                throw new SemanticException("Data type of {}th column cannot be " +
+                        mvColumns.get(theBeginIndexOfValue).getType(), theBeginIndexOfValue);
             }
             return keyCols;
         }
@@ -722,6 +747,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
             } else if (table.isJDBCTable()) {
                 checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
+            } else if (table.isPaimonTable()) {
+                checkPartitionColumnWithBasePaimonTable(slotRef, (PaimonTable) table);
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
@@ -830,6 +857,27 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        @VisibleForTesting
+        public void checkPartitionColumnWithBasePaimonTable(SlotRef slotRef, PaimonTable table) {
+            if (table.isUnPartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                boolean found = false;
+                for (String partitionColumnName : table.getPartitionColumnNames()) {
+                    if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(table.getColumn(partitionColumnName));
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
+        }
+
         private SlotRef getSlotRef(Expr expr) {
             if (expr instanceof SlotRef) {
                 return ((SlotRef) expr);
@@ -872,8 +920,24 @@ public class MaterializedViewAnalyzer {
                                 baseTableInfo.getDbName(), table.getName()));
                         break;
                     }
+                } else if (table.isPaimonTable()) {
+                    PaimonTable paimonTable = (PaimonTable) table;
+                    if (replacePaimonTableAlias(slotRef, paimonTable, baseTableInfo)) {
+                        break;
+                    }
                 }
             }
+        }
+
+        boolean replacePaimonTableAlias(SlotRef slotRef, PaimonTable paimonTable, BaseTableInfo baseTableInfo) {
+            if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                    paimonTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                    paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), paimonTable.getName()));
+                return true;
+            }
+            return false;
         }
 
         private void checkPartitionColumnType(Column partitionColumn) {

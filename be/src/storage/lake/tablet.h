@@ -64,7 +64,7 @@ public:
 
     [[nodiscard]] Status put_metadata(const TabletMetadata& metadata);
 
-    [[nodiscard]] Status put_metadata(TabletMetadataPtr metadata);
+    [[nodiscard]] Status put_metadata(const TabletMetadataPtr& metadata);
 
     StatusOr<TabletMetadataPtr> get_metadata(int64_t version);
 
@@ -76,19 +76,11 @@ public:
 
     [[nodiscard]] Status put_txn_log(const TxnLog& log);
 
-    [[nodiscard]] Status put_txn_log(TxnLogPtr log);
+    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
-
-    [[nodiscard]] Status delete_txn_log(int64_t txn_id);
-
-    [[nodiscard]] Status delete_txn_vlog(int64_t version);
-
-    [[nodiscard]] Status put_tablet_metadata_lock(int64_t version, int64_t expire_time);
-
-    [[nodiscard]] Status delete_tablet_metadata_lock(int64_t version, int64_t expire_time);
 
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint

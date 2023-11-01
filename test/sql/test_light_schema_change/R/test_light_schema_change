@@ -54,8 +54,8 @@ insert into t1 values(2, 2, 3);
 select * from t1 order by k;
 -- result:
 1	None	None
-2	2	3
 2	3	5
+2	2	3
 -- !result
 alter table t1 add column k2 int key;
 -- result:
@@ -67,8 +67,8 @@ None
 select * from t1 order by k;
 -- result:
 1	None	None	None
-2	None	2	3
 2	None	3	5
+2	None	2	3
 -- !result
 insert into t1 values(3, 2, 3, 4);
 -- result:
@@ -76,8 +76,8 @@ insert into t1 values(3, 2, 3, 4);
 select * from t1 order by k;
 -- result:
 1	None	None	None
-2	None	2	3
 2	None	3	5
+2	None	2	3
 3	2	3	4
 -- !result
 delete from t1 where v3>4;
@@ -280,5 +280,145 @@ drop table tab1;
 -- result:
 -- !result
 drop database test_light_schema_change;
+-- result:
+-- !result
+-- name: test_meta_scan
+create database meta_scan;
+-- result:
+-- !result
+use meta_scan;
+-- result:
+-- !result
+CREATE TABLE `reproducex4` (
+    `id_int` int(11) NULL COMMENT "",
+    `v1` varchar(255) NULL COMMENT ""
+)
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "light_schema_change" = "true"
+);
+-- result:
+-- !result
+insert into reproducex4 values (1,2),(3,4),(5,6);
+-- result:
+-- !result
+alter table reproducex4 add column v2 varchar(256) default "-1000" after v1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table reproducex4;
+-- result:
+reproducex4	CREATE TABLE `reproducex4` (
+  `id_int` int(11) NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(256) NULL DEFAULT "-1000" COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into reproducex4 values (7,8,9);
+-- result:
+-- !result
+function: manual_compact("meta_scan", "reproducex4")
+-- result:
+None
+-- !result
+select dict_merge(v2) from reproducex4 [_META_];
+-- result:
+{"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
+-- !result
+analyze full table reproducex4;
+-- result:
+meta_scan.reproducex4	analyze	status	OK
+-- !result
+function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
+-- result:
+None
+-- !result
+drop table reproducex4;
+-- result:
+-- !result
+CREATE TABLE `reproducex4` (
+    `id_int` int(11) NULL COMMENT "",
+    `v1` varchar(255) NULL COMMENT ""
+)
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "false",
+    "light_schema_change" = "false"
+);
+-- result:
+-- !result
+insert into reproducex4 values (1,2),(3,4),(5,6);
+-- result:
+-- !result
+alter table reproducex4 add column v2 varchar(256) default "-1000" after v1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table reproducex4;
+-- result:
+reproducex4	CREATE TABLE `reproducex4` (
+  `id_int` int(11) NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(256) NULL DEFAULT "-1000" COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id_int`, `v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id_int`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+insert into reproducex4 values (7,8,9);
+-- result:
+-- !result
+function: manual_compact("meta_scan", "reproducex4")
+-- result:
+None
+-- !result
+select dict_merge(v2) from reproducex4 [_META_];
+-- result:
+{"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
+-- !result
+analyze full table reproducex4;
+-- result:
+meta_scan.reproducex4	analyze	status	OK
+-- !result
+function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
+-- result:
+None
+-- !result
+drop database meta_scan;
 -- result:
 -- !result

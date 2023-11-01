@@ -58,8 +58,7 @@ public:
         }
     }
 
-    RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  Column* one_delete = nullptr) {
+    RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys, bool add_v3 = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -81,13 +80,14 @@ public:
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
             cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+            if (add_v3) {
+                cols[3]->append_datum(Datum((int32_t)(key % 1000 + 3)));
+            }
         }
-        if (one_delete == nullptr && !keys.empty()) {
+        if (!keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
-        } else if (one_delete == nullptr) {
+        } else {
             CHECK_OK(writer->flush());
-        } else if (one_delete != nullptr) {
-            CHECK_OK(writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
         return *writer->build();
     }
@@ -169,17 +169,18 @@ public:
         auto schema = ChunkHelper::convert_schema(partial_schema);
 
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        EXPECT_TRUE(2 == chunk->num_columns());
         auto& cols = chunk->columns();
         for (long key : keys) {
+            int idx = 0;
             for (int colid : column_indexes) {
                 if (colid == 0) {
-                    cols[0]->append_datum(Datum(key));
+                    cols[idx]->append_datum(Datum(key));
                 } else if (colid == 1) {
-                    cols[1]->append_datum(Datum(v1_func(key)));
+                    cols[idx]->append_datum(Datum(v1_func(key)));
                 } else {
-                    cols[1]->append_datum(Datum(v2_func(key)));
+                    cols[idx]->append_datum(Datum(v2_func(key)));
                 }
+                idx++;
             }
         }
         for (int i = 0; i < segment_num; i++) {
@@ -927,6 +928,97 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_check)
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
     }));
+    // check refcnt
+    for (const auto& rs_ptr : rowsets) {
+        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+    }
+    ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_limit_mem_tracker) {
+    const int N = 10;
+    // generate M upt files in each partial rowset
+    const int M = 1000;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    // write full rowset first
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(tablet, keys));
+    }
+    std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+    // partial update v1 and v2 one by one
+    for (int i = 0; i < 10; i++) {
+        std::vector<int32_t> column_indexes = {0, (i % 2) + 1};
+        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        rowsets.emplace_back(
+                create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
+        ASSERT_EQ(rowsets.back()->num_update_files(), M);
+    }
+
+    MemTracker* tracker = StorageEngine::instance()->update_manager()->mem_tracker();
+    const int64_t old_limit = tracker->limit();
+    tracker->set_limit(1);
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+    tracker->set_limit(old_limit);
+    // check refcnt
+    for (const auto& rs_ptr : rowsets) {
+        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+    }
+    ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_column_batch) {
+    const int N = 10;
+    // generate M upt files in each partial rowset
+    const int M = 100;
+    auto tablet = create_tablet(rand(), rand(), true);
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    // write full rowset first
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(tablet, keys, true));
+    }
+    std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+    // partial update v1 and v2 at once
+    for (int i = 0; i < 10; i++) {
+        std::vector<int32_t> column_indexes = {0, 1, 2};
+        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        rowsets.emplace_back(
+                create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
+        ASSERT_EQ(rowsets.back()->num_update_files(), M);
+    }
+
+    int32_t old_val = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+    config::vertical_compaction_max_columns_per_group = old_val;
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
         ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));

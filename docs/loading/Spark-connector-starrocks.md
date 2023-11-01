@@ -372,7 +372,7 @@ The following example explains how to load data with Spark SQL by using the `INS
 ### Load data to Primary Key table
 
 This section will show how to load data to StarRocks Primary Key table to achieve partial updates, and conditional updates.
-You can see [Change data through loading](../loading/Load_to_Primary_Key_tables) for the detailed introduction of these features.
+You can see [Change data through loading](../loading/Load_to_Primary_Key_tables.md) for the detailed introduction of these features.
 These examples use Spark SQL.
 
 #### Preparations
@@ -701,4 +701,3 @@ The following example explains how to load data into columns of the [`ARRAY`](..
    +------+-----------------------+--------------------+
    2 rows in set (0.01 sec)
    ```
->>>>>>> 20ce8b8e70 ([Doc] fix file without .md (#33063))

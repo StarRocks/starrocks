@@ -176,13 +176,13 @@ struct TQueryOptions {
 
   64: optional TLoadJobType load_job_type
 
-  66: optional bool use_scan_block_cache;
+  66: optional bool enable_scan_datacache;
 
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
   
-  69: optional bool enable_populate_block_cache;
+  69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
 
@@ -228,6 +228,8 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
+
+  109: optional i64 big_query_profile_second_threshold;
 }
 
 

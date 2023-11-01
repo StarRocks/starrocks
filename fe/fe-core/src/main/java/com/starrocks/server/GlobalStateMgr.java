@@ -290,6 +290,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -374,6 +375,8 @@ public class GlobalStateMgr {
      * Alter Job Manager
      */
     private final AlterJobMgr alterJobMgr;
+
+    private final PortConnectivityChecker portConnectivityChecker;
 
     private Load load;
     private LoadMgr loadMgr;
@@ -579,12 +582,12 @@ public class GlobalStateMgr {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
-                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
+                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
             }
         } else {
             for (Long id : systemInfoService.getBackendIds(false)) {
                 Backend backend = systemInfoService.getBackend(id);
-                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getIP(), backend.getBrpcPort()));
             }
         }
 
@@ -662,6 +665,7 @@ public class GlobalStateMgr {
         // System Manager
         this.nodeMgr = new NodeMgr();
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
+        this.portConnectivityChecker = new PortConnectivityChecker();
 
         // Alter Job Manager
         this.alterJobMgr = new AlterJobMgr();
@@ -1412,6 +1416,7 @@ public class GlobalStateMgr {
 
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
+        portConnectivityChecker.start();
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();

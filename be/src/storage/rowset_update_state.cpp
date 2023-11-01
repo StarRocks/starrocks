@@ -204,7 +204,7 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     }
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
     std::unique_ptr<Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     return _load_upserts(rowset, upsert_id, pk_column.get());
@@ -526,24 +526,24 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         return Status::InternalError(msg);
     }
 
-    // _read_version is equal to latest_applied_version which means there is no other rowset is applied
-    // the data of write_columns can be write to segment file directly
-    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
-            << _partial_update_states[segment_id].read_version.to_string();
-    if (latest_applied_version == _partial_update_states[segment_id].read_version &&
-        _partial_update_states[segment_id].schema_version >= tablet_schema->schema_version()) {
-        return Status::OK();
-    }
-
     // TODO
     // we don't need to rebuil all partial update state but just resolve the conflict rows and columns
-    if (_partial_update_states[segment_id].schema_version >= tablet_schema->schema_version()) {
+    if (_partial_update_states[segment_id].schema_version < tablet_schema->schema_version()) {
         Status st = _rebuild_partial_update_states(tablet, rowset, rowset_id, segment_id, tablet_schema);
         LOG(INFO) << "tablet schema version change from " << _partial_update_states[segment_id].schema_version << " to "
                   << tablet_schema->schema_version() << " before partial state apply finished, rebuild"
                   << " segment: " << segment_id << ", status: " << st;
         return st;
     }
+
+    // _read_version is equal to latest_applied_version which means there is no other rowset is applied
+    // the data of write_columns can be write to segment file directly
+    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+            << _partial_update_states[segment_id].read_version.to_string();
+    if (latest_applied_version == _partial_update_states[segment_id].read_version) {
+        return Status::OK();
+    }
+
     // check if there are delta column files generated from read_version to now.
     // If yes, then need to force resolve conflict.
     const bool need_resolve_conflict = tablet->updates()->check_delta_column_generate_from_version(

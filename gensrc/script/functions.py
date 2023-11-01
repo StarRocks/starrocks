@@ -1011,4 +1011,7 @@ vectorized_functions = [
     # struct functions
     [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::new_struct'],
     [170501, 'named_struct', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
+
+    # user function
+    [180000, 'is_role_in_session', 'BOOLEAN', ['VARCHAR'], 'nullptr']
 ]

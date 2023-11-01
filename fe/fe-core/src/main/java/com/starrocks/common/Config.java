@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle profile processing
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store profile process task
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField
@@ -596,6 +608,12 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int http_max_chunk_size = 8192;
+
+    /**
+     * If a request takes longer than the configured time, a log will be generated to trace it.
+     */
+    @ConfField(mutable = true)
+    public static int http_slow_request_threshold_ms = 5000;
 
     /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through
@@ -1641,6 +1659,12 @@ public class Config extends ConfigBase {
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
+
+    /**
      * Check expire partition statistics data when StarRocks start up
      */
     @ConfField(mutable = true)
@@ -2556,4 +2580,17 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
+
+    /**
+     * Checking the connectivity of port opened by FE,
+     * mainly used for checking edit log port currently.
+     */
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_interval_sec = 60;
+
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int port_connectivity_check_timeout_ms = 10000;
 }

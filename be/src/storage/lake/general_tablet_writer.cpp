@@ -21,6 +21,7 @@
 #include "fs/fs_util.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/vacuum.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {
@@ -60,17 +61,12 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
 
 void HorizontalGeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
-        // Delete files
-        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
-        if (maybe_fs.ok()) {
-            auto fs = std::move(maybe_fs).value();
-            // TODO: batch delete
-            for (const auto& name : _files) {
-                auto path = _tablet.segment_location(name);
-                auto st = fs->delete_file(path);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path;
-            }
+        std::vector<std::string> full_paths_to_delete;
+        full_paths_to_delete.reserve(_files.size());
+        for (const auto& f : _files) {
+            full_paths_to_delete.emplace_back(_tablet.segment_location(f));
         }
+        delete_files_async(std::move(full_paths_to_delete));
     }
     _files.clear();
 }
@@ -217,15 +213,12 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
 
 void VerticalGeneralTabletWriter::close() {
     if (!_finished && !_files.empty()) {
-        // Delete files
-        auto maybe_fs = FileSystem::CreateSharedFromString(_tablet.root_location());
-        if (maybe_fs.ok()) {
-            auto fs = std::move(maybe_fs).value();
-            for (const auto& name : _files) {
-                auto path = _tablet.segment_location(name);
-                (void)fs->delete_file(path);
-            }
+        std::vector<std::string> full_paths_to_delete;
+        full_paths_to_delete.reserve(_files.size());
+        for (const auto& f : _files) {
+            full_paths_to_delete.emplace_back(_tablet.segment_location(f));
         }
+        delete_files_async(std::move(full_paths_to_delete));
     }
     _files.clear();
 }
