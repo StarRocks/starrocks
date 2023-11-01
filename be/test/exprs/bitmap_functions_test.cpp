@@ -2041,7 +2041,6 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
         Columns columns;
         auto s = BitmapColumn::create();
         BitmapValue empty;
-        empty.clear();
         s->append(&empty);
         columns.push_back(s);
 
@@ -2381,7 +2380,6 @@ TEST_F(VecBitmapFunctionsTest, sub_bitmap_special_cases) {
     {
         auto bitmap_column = BitmapColumn::create();
         BitmapValue empty;
-        empty.clear();
         bitmap_column->append(&empty);
 
         Columns columns;

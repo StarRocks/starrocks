@@ -16,8 +16,6 @@
 
 #include <gtest/gtest.h>
 
-#include "util/phmap/phmap.h"
-
 namespace starrocks {
 
 class BitmapTest : public testing::Test {};
