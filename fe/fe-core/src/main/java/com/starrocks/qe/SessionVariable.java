@@ -558,8 +558,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
-    public static final String ENABLE_JIT = "enable_jit";
-
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1413,9 +1411,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
-
-    @VarAttr(name = ENABLE_JIT)
-    private boolean enableJit = false;
 
     private int exprChildrenLimit = -1;
 
@@ -2877,7 +2872,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
-        tResult.setEnable_jit(enableJit);
         return tResult;
     }
 

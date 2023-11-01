@@ -21,8 +21,6 @@
 #include "column/column_hash.h"
 #include "column/fixed_length_column.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "runtime/runtime_state.h"
-#include "testutil/exprs_test_helper.h"
 
 namespace starrocks {
 
@@ -39,12 +37,11 @@ public:
     }
 
 public:
-    RuntimeState runtime_state;
     TExprNode expr_node;
 };
 
 TEST_F(VectorizedArithmeticExprTest, addExpr) {
-    // Normal int8
+    // normal int8
     {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
@@ -59,20 +56,18 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
 
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<Int8Column>(ptr);
-            ASSERT_EQ(10, v->size());
+        auto v = std::static_pointer_cast<Int8Column>(ptr);
+        ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(3, v->get_data()[j]);
+        }
     }
 
-    // Normal int
+    // normal int
     {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.type = gen_type_desc(TPrimitiveType::INT);
@@ -87,48 +82,17 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
 
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
-            ASSERT_EQ(10, v->size());
+        auto v = std::static_pointer_cast<Int32Column>(ptr);
+        ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(3, v->get_data()[j]);
+        }
     }
 
-    // Large int
-    {
-        expr_node.opcode = TExprOpcode::ADD;
-        expr_node.type = gen_type_desc(TPrimitiveType::LARGEINT);
-
-        std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
-
-        MockVectorizedExpr<TYPE_LARGEINT> col1(expr_node, 10, 3);
-        MockVectorizedExpr<TYPE_LARGEINT> col2(expr_node, 10, 4);
-
-        expr->_children.push_back(&col1);
-        expr->_children.push_back(&col2);
-
-        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
-
-            auto v = std::static_pointer_cast<Int128Column>(ptr);
-            ASSERT_EQ(10, v->size());
-
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(7, v->get_data()[j]);
-            }
-        });
-    }
-
-    // Normal float
     {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.type = gen_type_desc(TPrimitiveType::FLOAT);
@@ -143,17 +107,15 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
 
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<FloatColumn>(ptr);
-            ASSERT_EQ(10, v->size());
+        auto v = std::static_pointer_cast<FloatColumn>(ptr);
+        ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(3, v->get_data()[j]);
+        }
     }
 }
 
@@ -170,18 +132,15 @@ TEST_F(VectorizedArithmeticExprTest, mulExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
-            ASSERT_EQ(10, v->size());
+        auto v = std::static_pointer_cast<Int32Column>(ptr);
+        ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(20, v->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(20, v->get_data()[j]);
+        }
     }
 }
 
-// TODO(Yueyang: Implement null)
 TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
     expr_node.opcode = TExprOpcode::MULTIPLY;
     std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
@@ -228,17 +187,15 @@ TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_TRUE(ptr->is_nullable());
-            ASSERT_FALSE(ptr->is_numeric());
+        ASSERT_TRUE(ptr->is_nullable());
+        ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<NullableColumn>(ptr);
-            ASSERT_EQ(10, v->size());
+        auto v = std::static_pointer_cast<NullableColumn>(ptr);
+        ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_TRUE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
     }
 }
 
@@ -403,14 +360,12 @@ TEST_F(VectorizedArithmeticExprTest, constVectorMulExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
-            ASSERT_EQ(10, v->size());
+        auto v = std::static_pointer_cast<Int32Column>(ptr);
+        ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(50, v->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(50, v->get_data()[j]);
+        }
     }
 }
 
@@ -427,16 +382,14 @@ TEST_F(VectorizedArithmeticExprTest, constConstAddExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_TRUE(ptr->is_constant());
+        ASSERT_TRUE(ptr->is_constant());
 
-            auto v = std::static_pointer_cast<ConstColumn>(ptr)->data_column();
-            ASSERT_EQ(1, v->size());
+        auto v = std::static_pointer_cast<ConstColumn>(ptr)->data_column();
+        ASSERT_EQ(1, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(13, std::static_pointer_cast<Int32Column>(v)->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(13, std::static_pointer_cast<Int32Column>(v)->get_data()[j]);
+        }
     }
 }
 
@@ -493,17 +446,15 @@ TEST_F(VectorizedArithmeticExprTest, bitNotExpr) {
         expr->_children.push_back(&col1);
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+        auto v = std::static_pointer_cast<Int32Column>(ptr);
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(~1, v->get_data()[j]);
-            }
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_EQ(~1, v->get_data()[j]);
+        }
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
     }
 }
 
@@ -516,21 +467,18 @@ TEST_F(VectorizedArithmeticExprTest, constBitNotExpr) {
     {
         expr->_children.push_back(&col1);
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ASSERT_TRUE(ptr->is_constant());
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_TRUE(ptr->is_constant());
+        auto re = std::static_pointer_cast<ConstColumn>(ptr);
+        auto v = std::static_pointer_cast<Int32Column>(re->data_column());
 
-            auto re = std::static_pointer_cast<ConstColumn>(ptr);
-            auto v = std::static_pointer_cast<Int32Column>(re->data_column());
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_EQ(~2, v->get_data()[j]);
+        }
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(~2, v->get_data()[j]);
-            }
-
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
     }
 }
 
@@ -564,22 +512,20 @@ TEST_F(VectorizedArithmeticExprTest, constModExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_FALSE(ptr->is_numeric());
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<ConstColumn>(ptr);
-            ASSERT_EQ(1, v->size());
+        auto v = std::static_pointer_cast<ConstColumn>(ptr);
+        ASSERT_EQ(1, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_BIGINT>(v->data_column())->get_data()[j]);
-            }
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_BIGINT>(v->data_column())->get_data()[j]);
+        }
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
     }
 }
 
