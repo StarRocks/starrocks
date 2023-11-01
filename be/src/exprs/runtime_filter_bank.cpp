@@ -434,27 +434,26 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             continue;
         }
 
+        auto is_existent_slot_ref = [&](ExprContext* expr) {
+            auto* root = expr->root();
+            if (!root->is_slotref()) {
+                return false;
+            }
+
+            auto* col_ref = down_cast<ColumnRef*>(root);
+            return partial_chunk->is_slot_exist(col_ref->slot_id());
+        };
+
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        // skip if (conditions can be relaxed later)
-        //  1. multi-column runtime filter
-        //  2. runtime filter that is not slot ref, or a slot ref of a non-existent column
-        auto can_use_rf_on_partial_chunk = [&]() {
-            if (!partition_by_exprs->empty()) {
-                return false;
-            }
-            SlotId slot_id;
-            if (!rf_desc->is_probe_slot_ref(&slot_id)) {
-                return false;
-            }
-            if (!partial_chunk->is_slot_exist(slot_id)) {
-                return false;
-            }
-            return true;
-        };
+        bool can_use_rf_on_partial_chunk = is_existent_slot_ref(probe_expr);
+        for (auto* part_by_expr : *partition_by_exprs) {
+            can_use_rf_on_partial_chunk &= is_existent_slot_ref(part_by_expr);
+        }
 
-        if (!can_use_rf_on_partial_chunk()) {
+        // skip runtime filter that references a non-existent column for the partial chunk
+        if (!can_use_rf_on_partial_chunk) {
             continue;
         }
 
