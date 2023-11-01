@@ -85,7 +85,9 @@ public class AstToSQLBuilder {
                 res += ".";
             }
 
-            res += '`' + fieldName + '`';
+            res +=  fieldName.startsWith("`") ?
+                    fieldName
+                    : '`' + fieldName + '`';
             if (!fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
@@ -163,7 +165,7 @@ public class AstToSQLBuilder {
                     } else {
                         selectListString.add(
                                 expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
-                                        visit(expr) :
+                                        visit(expr) + " AS `" + columnName.replace("`", "") + "`" :
                                         visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
                     }
                 }

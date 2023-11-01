@@ -150,15 +150,13 @@ public class ShowCreateViewStmtTest {
         testCases.add(new String[]{"test_view_0",
                 "create view test_view_0 AS SELECT " +
                         " *, concat('', null) FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_0` (`k1`, `k2`, `v1`, `concat('', NULL)`) " +
-                        "AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, concat('', NULL)\n" +
+                "CREATE VIEW `test_view_0` (`k1`, `k2`, `v1`, `concat('', NULL)`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, concat('', NULL) AS `concat('', NULL)`\n" +
                         "FROM `test`.`tbl1`;"
         });
         testCases.add(new String[]{"test_view_1",
                 "create view test_view_1 AS SELECT " +
                         "concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_1` (`concat(test.tbl1.k1, test.tbl1.k2)`) " +
-                        "AS SELECT concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`)\n" +
+                "CREATE VIEW `test_view_1` (`concat(test.tbl1.k1, test.tbl1.k2)`) AS SELECT concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) AS `concat(test.tbl1.k1, test.tbl1.k2)`\n" +
                         "FROM `test`.`tbl1`;"
         });
         testCases.add(new String[]{"test_view_2",
