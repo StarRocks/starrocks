@@ -236,17 +236,9 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-<<<<<<< HEAD
-        tSink.setSchema(createSchema(tSink.getDb_id(), dstTable));
-        tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
-        tSink.setLocation(createLocation(dstTable));
-=======
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
-        tSink.setPartition(
-                createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                                enableAutomaticPartition, automaticBucketSize, partitionIds));
-        tSink.setLocation(createLocation(dstTable, clusterId, partitionIds, enableReplicatedStorage));
->>>>>>> 3b8380d0a6 ([BugFix] Fix automatic partition fail when insert column has expr on it (#33513))
+        tSink.setPartition(createPartition(tSink.getDb_id(), dstTable, tupleDescriptor));
+        tSink.setLocation(createLocation(dstTable));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
     }
