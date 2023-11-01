@@ -95,11 +95,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * The mem limit of query on BE. It takes effects only when enabling pipeline engine.
-     * - If `query_mem_limit` > 0, use it to limit the memory of a query.
-     * The memory a query able to be used is just `query_mem_limit`.
-     * - Otherwise, use `exec_mem_limit` to limit the memory of a query.
-     * The memory a query able to be used is `exec_mem_limit * num_fragments * pipeline_dop`.
-     * To maintain compatibility, the default value is 0.
+     * If `query_mem_limit` > 0, use it to limit the memory of a query.
+     * Otherwise, no limitation
      */
     public static final String QUERY_MEM_LIMIT = "query_mem_limit";
 
@@ -673,7 +670,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
 
-    // max memory used on every backend.
+    // max memory used on each fragment instance
+    // NOTE: only used for non-pipeline engine and stream_load
+    // The pipeline engine uses the query_mem_limit
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
     public long maxExecMemByte = DEFAULT_EXEC_MEM_LIMIT;
