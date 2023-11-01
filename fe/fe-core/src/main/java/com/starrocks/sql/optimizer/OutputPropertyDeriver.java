@@ -172,6 +172,10 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                                                                         PhysicalPropertySet physicalPropertySet,
                                                                         List<DistributionCol> leftOnPredicateColumns,
                                                                         List<DistributionCol> rightOnPredicateColumns) {
+        // only update propertyInfo in HashDistributionSpec
+        if (!physicalPropertySet.getDistributionProperty().isShuffle()) {
+            return physicalPropertySet;
+        }
         DistributionSpec.PropertyInfo propertyInfo =
                 physicalPropertySet.getDistributionProperty().getSpec().getPropertyInfo();
 
