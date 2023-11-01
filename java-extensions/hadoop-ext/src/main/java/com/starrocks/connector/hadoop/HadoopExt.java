@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 public class HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HadoopExt.class);
-    private static final HadoopExt INSTANCE = new HadoopExt();
+    private static final HadoopExt INSTANCE = new CelerDataHadoopExt();
     public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
     public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
     public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
