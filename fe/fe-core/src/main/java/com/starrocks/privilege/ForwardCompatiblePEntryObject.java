@@ -76,4 +76,7 @@ public class ForwardCompatiblePEntryObject implements PEntryObject {
 
     public static class PolicyForwardCompatiblePEntryObject extends ForwardCompatiblePEntryObject {
     }
+
+    public static class PipePFCEntryObject extends ForwardCompatiblePEntryObject {
+    }
 }

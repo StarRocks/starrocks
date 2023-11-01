@@ -304,7 +304,8 @@ public class GsonUtils {
                     .registerSubtype(ForwardCompatiblePEntryObject.PolicyForwardCompatiblePEntryObject.class,
                             "PolicyPEntryObject")
                     .registerSubtype(ForwardCompatiblePEntryObject.WarehouseForwardCompatiblePEntryObject.class,
-                            "WarehousePEntryObject");
+                            "WarehousePEntryObject")
+                    .registerSubtype(ForwardCompatiblePEntryObject.PipePFCEntryObject.class, "PipePEntryObject");
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
