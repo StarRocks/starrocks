@@ -59,6 +59,6 @@ public class  PrivilegeBuiltinConstants {
 
     public static final String ALL_STORAGE_VOLUMES_ID = "ALL_STORAGE_VOLUMES_ID";
 
-    public static final String ALL_PIPES_ID = "ALL_PIPES_ID";
+    public static final long ALL_PIPES_ID = -5;
 
 }

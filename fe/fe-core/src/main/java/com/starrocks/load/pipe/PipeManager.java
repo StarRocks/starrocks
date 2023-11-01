@@ -224,6 +224,18 @@ public class PipeManager {
         }
     }
 
+    public List<Pipe> getAllPipesOfDb(long dbId) {
+        try {
+            lock.readLock().lock();
+            return pipeMap.entrySet().stream()
+                    .filter(x -> x.getKey().getDbId() == dbId)
+                    .map(Map.Entry::getValue)
+                    .collect(Collectors.toList());
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public String getPipesOfDb(long dbId) {
         try {
             lock.readLock().lock();

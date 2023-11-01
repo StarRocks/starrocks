@@ -14,26 +14,33 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Pair;
 import com.starrocks.load.pipe.Pipe;
+import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaNotFoundException;
+import org.apache.commons.collections4.ListUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class PipePEntryObject implements PEntryObject {
 
-    @SerializedName(value = "name")
-    private String name;
+    @SerializedName(value = "id")
+    private long id;
     @SerializedName(value = "database")
     private String dbUUID;
 
-    protected PipePEntryObject(String dbUUID, String name) {
-        this.name = name;
+    protected PipePEntryObject(String dbUUID, long id) {
+        this.id = id;
         this.dbUUID = dbUUID;
     }
 
@@ -42,11 +49,11 @@ public class PipePEntryObject implements PEntryObject {
             throw new PrivilegeException("invalid object tokens, should have two: " + tokens);
         }
         String dbUUID;
-        String pipeName;
+        long pipeId;
 
         if (Objects.equals(tokens.get(0), "*")) {
             dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
-            pipeName = PrivilegeBuiltinConstants.ALL_PIPES_ID;
+            pipeId = PrivilegeBuiltinConstants.ALL_PIPES_ID;
         } else {
             String dbName = tokens.get(0);
             Database database = mgr.getDb(dbName);
@@ -56,7 +63,7 @@ public class PipePEntryObject implements PEntryObject {
             dbUUID = database.getUUID();
 
             if (Objects.equals(tokens.get(1), "*")) {
-                pipeName = PrivilegeBuiltinConstants.ALL_PIPES_ID;
+                pipeId = PrivilegeBuiltinConstants.ALL_PIPES_ID;
             } else {
                 String name = tokens.get(1);
                 Optional<Pipe> pipe = mgr.getPipeManager().mayGetPipe(new PipeName(dbName, name));
@@ -65,15 +72,15 @@ public class PipePEntryObject implements PEntryObject {
                         new PrivObjNotFoundException(
                                 "cannot find pipe " + tokens.get(1) + " in db " + tokens.get(0))
                 );
-                pipeName = pipe.get().getName();
+                pipeId = pipe.get().getId();
             }
         }
 
-        return new PipePEntryObject(dbUUID, pipeName);
+        return new PipePEntryObject(dbUUID, pipeId);
     }
 
-    public String getName() {
-        return name;
+    public long getId() {
+        return id;
     }
 
     public String getDbUUID() {
@@ -89,17 +96,17 @@ public class PipePEntryObject implements PEntryObject {
         if (Objects.equals(other.getDbUUID(), PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return true;
         }
-        if (Objects.equals(other.getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
+        if (Objects.equals(other.getId(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
             return Objects.equals(getDbUUID(), other.getDbUUID());
         }
         return Objects.equals(getDbUUID(), other.getDbUUID()) &&
-                Objects.equals(getName(), other.getName());
+                Objects.equals(getId(), other.getId());
     }
 
     @Override
     public boolean isFuzzyMatching() {
         return Objects.equals(getDbUUID(), PrivilegeBuiltinConstants.ALL_DATABASES_UUID) ||
-                Objects.equals(getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID);
+                Objects.equals(getId(), PrivilegeBuiltinConstants.ALL_PIPES_ID);
     }
 
     @Override
@@ -108,7 +115,41 @@ public class PipePEntryObject implements PEntryObject {
         if (db == null) {
             return false;
         }
-        return globalStateMgr.getPipeManager().mayGetPipe(new PipeName(db.getFullName(), getName())).isPresent();
+        return globalStateMgr.getPipeManager().mayGetPipe(getId()).isPresent();
+    }
+
+    public List<List<String>> expandObjectNames() {
+        List<List<String>> objects = new ArrayList<>();
+
+        String dbUUID = getDbUUID();
+        long pipeId = getId();
+        PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
+        if (dbUUID.equals(PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
+            List<Pair<Long, String>> dbAndNames = pipeManager.getAllPipes().stream()
+                    .map(Pipe::getDbAndName)
+                    .collect(Collectors.toList());
+            for (Pair<Long, String> dbAndName : ListUtils.emptyIfNull(dbAndNames)) {
+                Optional<Database> db = GlobalStateMgr.getCurrentState().mayGetDb(dbAndName.first);
+                db.ifPresent(database -> objects.add(
+                        Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                database.getFullName(), dbAndName.second)));
+            }
+        } else {
+            Optional<Database> db = getDatabase();
+            if (db.isPresent()) {
+                List<Pipe> pipes = new ArrayList<>();
+                if (pipeId == PrivilegeBuiltinConstants.ALL_PIPES_ID) {
+                    pipes.addAll(pipeManager.getAllPipesOfDb(db.get().getId()));
+                } else {
+                    pipeManager.mayGetPipe(pipeId).ifPresent(pipes::add);
+                }
+                for (Pipe p : pipes) {
+                    objects.add(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.get().getFullName(), p.getName()));
+                }
+            }
+        }
+        return objects;
     }
 
     @Override
@@ -119,14 +160,14 @@ public class PipePEntryObject implements PEntryObject {
         PipePEntryObject o = (PipePEntryObject) obj;
         // other > all
         if (Objects.equals(this.dbUUID, o.getDbUUID())) {
-            if (Objects.equals(this.getName(), o.getName())) {
+            if (Objects.equals(this.getId(), o.getId())) {
                 return 0;
-            } else if (Objects.equals(getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
+            } else if (Objects.equals(getId(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
                 return -1;
-            } else if (Objects.equals(o.getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
+            } else if (Objects.equals(o.getId(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
                 return 1;
             } else {
-                return getName().compareTo(o.getName());
+                return Long.compare(getId(), o.getId());
             }
         } else if (Objects.equals(getDbUUID(), PrivilegeBuiltinConstants.ALL_DATABASES_UUID)) {
             return -1;
@@ -146,17 +187,17 @@ public class PipePEntryObject implements PEntryObject {
             return false;
         }
         PipePEntryObject that = (PipePEntryObject) o;
-        return Objects.equals(name, that.name) && Objects.equals(dbUUID, that.dbUUID);
+        return Objects.equals(id, that.getId()) && Objects.equals(dbUUID, that.dbUUID);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, dbUUID);
+        return Objects.hash(getId(), dbUUID);
     }
 
     @Override
     public PEntryObject clone() {
-        return new PipePEntryObject(getDbUUID(), getName());
+        return new PipePEntryObject(getDbUUID(), getId());
     }
 
     public Optional<Database> getDatabase() {
@@ -169,6 +210,13 @@ public class PipePEntryObject implements PEntryObject {
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
+    }
+
+    public Optional<Pipe> getPipe() {
+        if (getId() == PrivilegeBuiltinConstants.ALL_PIPES_ID) {
+            return Optional.empty();
+        }
+        return GlobalStateMgr.getCurrentState().getPipeManager().mayGetPipe(getId());
     }
 
     @Override
@@ -185,10 +233,11 @@ public class PipePEntryObject implements PEntryObject {
             }
             dbName = database.getFullName();
 
-            if (Objects.equals(getName(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
+            if (Objects.equals(getId(), PrivilegeBuiltinConstants.ALL_PIPES_ID)) {
                 sb.append("ALL PIPES ").append(" IN DATABASE ").append(dbName);
             } else {
-                sb.append(dbName).append(".").append(getName());
+                Pipe pipe = getPipe().orElseThrow(() -> new MetaNotFoundException("pipe not found: " + getId()));
+                sb.append(dbName).append(".").append(pipe.getName());
             }
         }
 
