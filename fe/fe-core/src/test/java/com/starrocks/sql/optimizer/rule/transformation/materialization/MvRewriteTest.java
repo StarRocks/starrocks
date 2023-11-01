@@ -702,7 +702,9 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "  |  <slot 20> : 20: total_num\n" +
                 "  |  <slot 23> : 17: v1 + 1");
 
+        MaterializedView mv1 = getMv("test", "agg_join_mv_1");
         dropMv("test", "agg_join_mv_1");
+        Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv1));
 
         createAndRefreshMv("test", "agg_join_mv_2", "create materialized view agg_join_mv_2" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +

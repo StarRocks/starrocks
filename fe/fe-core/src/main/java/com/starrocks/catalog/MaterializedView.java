@@ -412,10 +412,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "queryOutputIndices")
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
 
-
-    // it is a property in momery, do not serialize it
-    private PlanMode planMode = PlanMode.UNKNOWN;
-
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -540,14 +536,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setRefreshScheme(MvRefreshScheme refreshScheme) {
         this.refreshScheme = refreshScheme;
-    }
-
-    public void setPlanMode(PlanMode planMode) {
-        this.planMode = planMode;
-    }
-
-    public boolean isValidPlan() {
-        return !planMode.equals(PlanMode.INVALID);
     }
 
     /**
