@@ -248,6 +248,7 @@ public class AlterMaterializedViewTest {
         MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
         Assert.assertTrue(mv.isActive());
 
+
         // drop the base table and try to activate it
         starRocksAssert.dropTable(baseTableName);
         Assert.assertFalse(mv.isActive());
