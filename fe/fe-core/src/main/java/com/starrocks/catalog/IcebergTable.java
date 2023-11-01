@@ -148,6 +148,7 @@ public class IcebergTable extends Table {
         }
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
