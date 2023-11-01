@@ -312,26 +312,8 @@ public class OlapTableSink extends DataSink {
         return distColumns;
     }
 
-<<<<<<< HEAD
-    private TOlapTablePartitionParam createPartition(long dbId, OlapTable table) throws UserException {
-=======
-    public static boolean skipImmutablePartition(PhysicalPartition physicalPartition, long automaticBucketSize) {
-        if (physicalPartition.isImmutable()) {
-            return true;
-        }
-        if (automaticBucketSize > 0 && physicalPartition.getTabletMaxDataSize() > automaticBucketSize) {
-            physicalPartition.setImmutable(true);
-            return true;
-        }
-        return false;
-    }
-
-    public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
-                                                            TupleDescriptor tupleDescriptor,
-                                                            boolean enableAutomaticPartition,
-                                                            long automaticBucketSize,
-                                                            List<Long> partitionIds) throws UserException {
->>>>>>> 3b8380d0a6 ([BugFix] Fix automatic partition fail when insert column has expr on it (#33513))
+    private TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
+                                                            TupleDescriptor tupleDescriptor) throws UserException {
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
