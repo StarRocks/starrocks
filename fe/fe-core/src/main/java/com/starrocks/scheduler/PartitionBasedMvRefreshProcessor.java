@@ -27,6 +27,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -1101,6 +1102,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
+            // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
+            // here we should convert date into '%Y%m%d' format
+            Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
+            Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
+            boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
+            if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
+                    && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+                Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
+                String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
+                List<Range<PartitionKey>> converted = Lists.newArrayList();
+                for (Range<PartitionKey> range : sourceTablePartitionRange) {
+                    Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(range, dateFormat);
+                    converted.add(varcharPartitionKey);
+                }
+                sourceTablePartitionRange = converted;
+            }
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
             // range contains the min value could be null value
@@ -1272,6 +1290,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        ctx.getSessionVariable().setEnableInsertStrict(false);
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
         } catch (Exception e) {
