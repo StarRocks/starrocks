@@ -92,7 +92,7 @@ public class DistributionProperty implements PhysicalProperty {
             HashDistributionSpec hashDistributionSpec = ((HashDistributionSpec) spec);
             if (!hashDistributionSpec.isAllNullStrict()) {
                 return new DistributionProperty(hashDistributionSpec.getNullStrictSpec(
-                        hashDistributionSpec.getPropertyInfo()), isCTERequired);
+                        hashDistributionSpec.getEquivDesc()), isCTERequired);
             }
         }
         return this;

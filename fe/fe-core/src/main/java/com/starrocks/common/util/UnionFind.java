@@ -79,6 +79,10 @@ public class UnionFind<T> {
         return eqGroupMap.getOrDefault(groupId, Collections.emptySet());
     }
 
+    public Collection<Set<T>> getAllGroups() {
+        return eqGroupMap.values();
+    }
+
     public void union(T lhs, T rhs) {
         add(lhs, rhs);
         Integer lhsGroupIdx = element2Group.get(lhs);
@@ -108,5 +112,21 @@ public class UnionFind<T> {
             int groupIdx = element2Group.remove(key);
             eqGroupMap.get(groupIdx).remove(key);
         }
+    }
+
+    public void clear() {
+        element2Group.clear();
+        eqGroupMap.clear();
+    }
+
+    public UnionFind<T> copy() {
+        UnionFind<T> copied = new UnionFind<>();
+        for (Map.Entry<T, Integer> e : element2Group.entrySet()) {
+            copied.element2Group.put(e.getKey(), e.getValue());
+        }
+        for (Map.Entry<Integer, Set<T>> e : eqGroupMap.entrySet()) {
+            copied.eqGroupMap.put(e.getKey(), e.getValue());
+        }
+        return copied;
     }
 }

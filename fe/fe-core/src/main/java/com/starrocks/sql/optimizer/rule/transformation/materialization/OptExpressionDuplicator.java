@@ -23,13 +23,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.UnionFind;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionCol;
-import com.starrocks.sql.optimizer.base.DistributionDisjointSet;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // used in SPJG mv union rewrite
 // OptExpressionDuplicator will duplicate the OptExpression tree,
@@ -285,34 +286,27 @@ public class OptExpressionDuplicator {
             HashDistributionDesc hashDistributionDesc =
                     new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
 
-            // PropertyInfo
-            DistributionSpec.PropertyInfo propertyInfo = originSpec.getPropertyInfo();
+            EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
 
-            DistributionSpec.PropertyInfo newPropertyInfo = new DistributionSpec.PropertyInfo();
-            newPropertyInfo.tableId = propertyInfo.tableId;
-            newPropertyInfo.partitionIds = propertyInfo.partitionIds;
-            newPropertyInfo.setNullStrictDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullStrictDisjointSet()));
-            newPropertyInfo.setNullRelaxDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullRelaxDisjointSet()));
+            EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(), equivDesc.getPartitionIds());
+            updateDistributionUnionFind(equivDesc.getNullStrictUnionFind());
+            updateDistributionUnionFind(equivDesc.getNullRelaxUnionFind());
 
-            return new HashDistributionSpec(hashDistributionDesc, newPropertyInfo);
+            return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
         }
 
-        public DistributionDisjointSet updateDistributionDisJointSet(DistributionDisjointSet disjointSet) {
-            DistributionDisjointSet newDisjointSet = new DistributionDisjointSet();
-            Map<DistributionCol, DistributionCol> parentMap = Maps.newHashMap();
-            for (Map.Entry<DistributionCol, DistributionCol> entry : disjointSet.getParentMap().entrySet()) {
-                DistributionCol oldKey = entry.getKey();
-                DistributionCol oldValue = entry.getValue();
-
-                ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(oldKey.getColId());
-                ColumnRefOperator newKeyCol = columnMapping.get(keyColumn).cast();
-
-                ColumnRefOperator valueColumn = columnRefFactory.getColumnRef(oldValue.getColId());
-                ColumnRefOperator newValueCol = columnMapping.get(valueColumn).cast();
-                parentMap.put(oldKey.updateColId(newKeyCol.getId()), oldValue.updateColId(newValueCol.getId()));
+        public void updateDistributionUnionFind(UnionFind<DistributionCol> unionFind) {
+            UnionFind<DistributionCol> tmp = unionFind.copy();
+            unionFind.clear();
+            for (Set<DistributionCol> distributionColSet : tmp.getAllGroups()) {
+                DistributionCol first = null;
+                for (DistributionCol col : distributionColSet) {
+                    if (first == null) {
+                        first = col;
+                    }
+                    unionFind.union(first, col);
+                }
             }
-            newDisjointSet.updateParentMap(parentMap);
-            return newDisjointSet;
         }
 
         private void processCommon(Operator.Builder opBuilder) {
