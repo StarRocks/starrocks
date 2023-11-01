@@ -19,14 +19,11 @@
 #include <cstdint>
 #include <string>
 
-#include "util/coding.h"
-#define private public
 #include "column/vectorized_fwd.h"
 #include "exprs/bitmap_functions.h"
 #include "exprs/function_context.h"
-#include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
-#include "util/phmap/phmap.h"
+#include "util/coding.h"
 
 namespace starrocks {
 
@@ -331,18 +328,18 @@ TEST(BitmapValueTest, bitmap_single_convert) {
     ASSERT_STREQ("1", bitmap.to_string().c_str());
     bitmap.add(1);
     ASSERT_STREQ("1", bitmap.to_string().c_str());
-    ASSERT_EQ(BitmapValue::SINGLE, bitmap._type);
+    ASSERT_EQ(BitmapValue::SINGLE, bitmap.type());
 
     BitmapValue bitmap_u;
     bitmap_u.add(1);
     bitmap |= bitmap_u;
-    ASSERT_EQ(BitmapValue::SINGLE, bitmap._type);
+    ASSERT_EQ(BitmapValue::SINGLE, bitmap.type());
 
     bitmap_u.add(2);
-    ASSERT_EQ(BitmapValue::SET, bitmap_u._type);
+    ASSERT_EQ(BitmapValue::SET, bitmap_u.type());
 
     bitmap |= bitmap_u;
-    ASSERT_EQ(BitmapValue::SET, bitmap._type);
+    ASSERT_EQ(BitmapValue::SET, bitmap.type());
 }
 
 TEST(BitmapValueTest, bitmap_max) {

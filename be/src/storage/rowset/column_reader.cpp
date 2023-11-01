@@ -570,7 +570,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     }
 }
 
-size_t ColumnReader::mem_usage() {
+size_t ColumnReader::mem_usage() const {
     size_t size = sizeof(ColumnReader) + _meta_mem_usage.load(std::memory_order_relaxed);
 
     if (_sub_readers != nullptr) {

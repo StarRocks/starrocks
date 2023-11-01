@@ -16,7 +16,7 @@
 Steps to enable tracing in SR:
 
 1.  Install [Jaeger](https://www.jaegertracing.io/docs/1.31/getting-started)
-    The guide above uses docker. For simplicity, you can also just download binary package and run locally, `https://github.com/jaegertracing/jaeger/releases`
+    The guide above uses docker. For simplicity, you can also just download [binary package](https://github.com/jaegertracing/jaeger/releases) and run locally.
 
 ```
     decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ll
@@ -33,7 +33,7 @@ Steps to enable tracing in SR:
     decster@decster-MS-7C94:~/soft/jaeger-1.31.0-linux-amd64$ ./jaeger-all-in-one 
 ```
 
-2.  Config FE\&FE to enable tracing
+2.  Config FE\&FE to enable tracing.
     Currently, opentelemetry java & cpp sdk use different protocols, java uses grpc proto, while cpp uses thrift\&UDP, so the endpoint ports are different.
 
 ```
@@ -50,7 +50,7 @@ Steps to enable tracing in SR:
 ```
 
 3.  Open jaeger web UI, usually in `http://localhost:16686/search`
-4.  Do some data ingestion (streamload\/insert into) and search TXN traces on web UI
+4.  Do some data ingestion (streamload/insert into) and search TXN traces on web UI
 
 ![trace_pic2.png](../../assets/trace_pic2.png)(trace_pic2.png) 
 ![trace_pic3.png](../../assets/trace_pic3.png)(trace_pic3.png) 

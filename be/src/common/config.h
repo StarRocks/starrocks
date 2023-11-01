@@ -841,6 +841,9 @@ CONF_Int64(deliver_broadcast_rf_passthrough_bytes_limit, "131072");
 // in passthrough style, the number of inflight RPCs of parallel deliveries are issued is not exceeds this limit.
 CONF_Int64(deliver_broadcast_rf_passthrough_inflight_num, "10");
 CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
+// if runtime filter size is larger than send_runtime_filter_via_http_rpc_min_size, be will transmit runtime filter via http protocol.
+// this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
+CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
@@ -981,6 +984,8 @@ CONF_Bool(datacache_adaptor_enable, "true");
 // the more requests will be sent to the network.
 // Usually there is no need to modify it.
 CONF_Int64(datacache_skip_read_factor, "1");
+// Whether to use block buffer to hold the datacache block data.
+CONF_Bool(datacache_block_buffer_enable, "true");
 // DataCache engines, alternatives: cachelib, starcache.
 // Set the default value empty to indicate whether it is manully configured by users.
 // If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".

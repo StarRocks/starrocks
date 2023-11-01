@@ -80,16 +80,22 @@ jobs:
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
       - uses: articulate/actions-markdownlint@v1.1.0
         with:
           config: "docs/.markdownlint.yaml"
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+
       - name: docusaurus-mdx-checker
         if: always()
         run: |
           npx docusaurus-mdx-checker -c docs
+
       - name: link check
         if: always()
         uses: lycheeverse/lychee-action@v1.8.0
@@ -98,6 +104,31 @@ jobs:
           args: >
             --config docs/lychee.toml
             --offline "docs/**/*.md"
+
+      # To run a Docusaurus build on the docs as a final check
+      # checkout the test-harness
+      - uses: actions/checkout@v4
+        with:
+          repository: 'StarRocks/docusaurus-build'
+          path: 'docusaurus'
+      # mv the docs into the docusaurus dir where the
+      # docusaurus build job expects them to be
+      - run: mv docs docusaurus/
+      # The README and contrib files have some sample markdown that fails
+      # link checking. StarRocks_intro.md uses a Gatsby component and will
+      # be replaced when we switch Gatsby off. Release notes we grab from
+      # main, so don't check in PRs.
+      - run: rm -f docusaurus/docs/README.md
+      - run: rm -f docusaurus/docs/feedback-and-contribute.md
+      - run: rm -f docusaurus/docs/introduction/StarRocks_intro.md
+      - run: rm -f docusaurus/docs/TOC.md
+      - run: rm -rf docusaurus/docs/release_notes
+
+      - name: Run Docusaurus build
+        working-directory: ./docusaurus
+        run: |
+          yarn install --frozen-lockfile
+          yarn build
 
   behavior-unchange:
     runs-on: ubuntu-latest
