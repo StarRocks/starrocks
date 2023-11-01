@@ -26,10 +26,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.UnionFind;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionDisjointSet;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.DistributionPropertyInfo;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -46,15 +47,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 // used in SPJG mv union rewrite
 // OptExpressionDuplicator will duplicate the OptExpression tree,
 // and rewrite all ColumnRefOperator from bottom to up,
 // and put the ColumnRefOperator mapping in columnMapping
 // Now only logical Scan/Filter/Projection/Join/Aggregation operator are supported
-public class OptExpressionDuplicator {
+public final class OptExpressionDuplicator {
     private final ColumnRefFactory columnRefFactory;
     // old ColumnRefOperator -> new ColumnRefOperator
     private final Map<ColumnRefOperator, ScalarOperator> columnMapping;
@@ -286,9 +289,9 @@ public class OptExpressionDuplicator {
                     new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
 
             // PropertyInfo
-            DistributionSpec.PropertyInfo propertyInfo = originSpec.getPropertyInfo();
+            DistributionPropertyInfo propertyInfo = originSpec.getPropertyInfo();
 
-            DistributionSpec.PropertyInfo newPropertyInfo = new DistributionSpec.PropertyInfo();
+            DistributionPropertyInfo newPropertyInfo = new DistributionPropertyInfo();
             newPropertyInfo.tableId = propertyInfo.tableId;
             newPropertyInfo.partitionIds = propertyInfo.partitionIds;
             newPropertyInfo.setNullStrictDisjointSet(updateDistributionDisJointSet(propertyInfo.getNullStrictDisjointSet()));
@@ -298,21 +301,32 @@ public class OptExpressionDuplicator {
         }
 
         public DistributionDisjointSet updateDistributionDisJointSet(DistributionDisjointSet disjointSet) {
-            DistributionDisjointSet newDisjointSet = new DistributionDisjointSet();
-            Map<DistributionCol, DistributionCol> parentMap = Maps.newHashMap();
-            for (Map.Entry<DistributionCol, DistributionCol> entry : disjointSet.getParentMap().entrySet()) {
-                DistributionCol oldKey = entry.getKey();
-                DistributionCol oldValue = entry.getValue();
+            UnionFind<DistributionCol> newParent = new UnionFind<>();
 
-                ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(oldKey.getColId());
-                ColumnRefOperator newKeyCol = columnMapping.get(keyColumn).cast();
+            Map<Integer, Set<DistributionCol>> oldParentEqGroupMap = disjointSet.getParent().getEqGroupMap();
+            for (Map.Entry<Integer, Set<DistributionCol>> entry : oldParentEqGroupMap.entrySet()) {
+                Set<DistributionCol> distributionCols = entry.getValue();
+                if (distributionCols.isEmpty()) {
+                    continue;
+                }
+                Iterator<DistributionCol> iter = distributionCols.iterator();
+                DistributionCol distributionCol = iter.next();
+                if (distributionCols.size() == 1) {
+                    newParent.add(distributionCol);
+                } else {
+                    ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(distributionCol.getColId());
+                    ColumnRefOperator newKeyCol = columnMapping.get(keyColumn).cast();
+                    DistributionCol newDistributionCol = distributionCol.updateColId(newKeyCol.getId());
 
-                ColumnRefOperator valueColumn = columnRefFactory.getColumnRef(oldValue.getColId());
-                ColumnRefOperator newValueCol = columnMapping.get(valueColumn).cast();
-                parentMap.put(oldKey.updateColId(newKeyCol.getId()), oldValue.updateColId(newValueCol.getId()));
+                    while (iter.hasNext()) {
+                        DistributionCol next = iter.next();
+                        ColumnRefOperator valueColumn = columnRefFactory.getColumnRef(next.getColId());
+                        ColumnRefOperator newValueCol = columnMapping.get(valueColumn).cast();
+                        newParent.union(newDistributionCol, next.updateColId(newValueCol.getId()));
+                    }
+                }
             }
-            newDisjointSet.updateParentMap(parentMap);
-            return newDisjointSet;
+            return new DistributionDisjointSet(newParent);
         }
 
         private void processCommon(Operator.Builder opBuilder) {

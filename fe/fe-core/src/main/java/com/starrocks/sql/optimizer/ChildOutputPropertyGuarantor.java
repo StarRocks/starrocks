@@ -23,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionPropertyInfo;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -91,8 +92,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             return false;
         }
 
-        DistributionSpec.PropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
-        DistributionSpec.PropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo leftInfo = leftLocalDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo rightInfo = rightLocalDistributionSpec.getPropertyInfo();
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
@@ -164,7 +165,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                                 GroupExpression child, PhysicalPropertySet childOutputProperty) {
         List<DistributionCol> newRightShuffleColumns = Lists.newArrayList();
         HashDistributionDesc leftDistributionDesc = leftDistributionSpec.getHashDistributionDesc();
-        DistributionSpec.PropertyInfo leftPropertyInfo = leftDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo leftPropertyInfo = leftDistributionSpec.getPropertyInfo();
 
         for (DistributionCol distributionCol : leftDistributionDesc.getDistributionCols()) {
             int idx = 0;
@@ -188,7 +189,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                           List<DistributionCol> rightShuffleColumns) {
         List<DistributionCol> bucketShuffleColumns = Lists.newArrayList();
         HashDistributionDesc leftLocalDistributionDesc = leftLocalDistributionSpec.getHashDistributionDesc();
-        DistributionSpec.PropertyInfo leftPropertyInfo = leftLocalDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo leftPropertyInfo = leftLocalDistributionSpec.getPropertyInfo();
         for (DistributionCol distributionCol : leftLocalDistributionDesc.getDistributionCols()) {
             int idx = 0;
             for (; idx < leftShuffleColumns.size(); idx++) {
@@ -416,8 +417,8 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                                                          List<DistributionCol> rightShuffleColumns) {
         List<DistributionCol> leftDistributionColumns = leftDistributionSpec.getShuffleColumns();
         List<DistributionCol> rightDistributionColumns = rightDistributionSpec.getShuffleColumns();
-        DistributionSpec.PropertyInfo leftPropertyInfo = leftDistributionSpec.getPropertyInfo();
-        DistributionSpec.PropertyInfo rightPropertyInfo = rightDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo leftPropertyInfo = leftDistributionSpec.getPropertyInfo();
+        DistributionPropertyInfo rightPropertyInfo = rightDistributionSpec.getPropertyInfo();
 
         if (leftDistributionColumns.size() != rightDistributionColumns.size()) {
             return false;

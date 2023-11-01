@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.base;
 
 import java.util.Objects;
 
-public class DistributionCol {
+public final class DistributionCol {
 
     private final int colId;
 
@@ -86,16 +86,10 @@ public class DistributionCol {
     }
 
     public DistributionCol getNullRelaxCol() {
-        if (!nullStrict) {
-            return this;
-        }
         return new DistributionCol(colId, false, aggStrict);
     }
 
     public DistributionCol getNullStrictCol() {
-        if (nullStrict) {
-            return this;
-        }
         return new DistributionCol(colId, true, aggStrict);
     }
 
@@ -109,6 +103,11 @@ public class DistributionCol {
         }
 
         return !requiredCol.isNullStrict() || nullStrict;
+    }
+
+    @Override
+    public DistributionCol clone() {
+        return new DistributionCol(this.colId, this.nullStrict, this.aggStrict);
     }
 
     @Override

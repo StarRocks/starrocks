@@ -105,7 +105,7 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
     protected PhysicalPropertySet createLimitGatherProperty(long limit) {
         DistributionSpec distributionSpec = DistributionSpec.createGatherDistributionSpec(limit);
         DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY);
+        return new PhysicalPropertySet(distributionProperty, SortProperty.empty());
     }
 
     protected PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {

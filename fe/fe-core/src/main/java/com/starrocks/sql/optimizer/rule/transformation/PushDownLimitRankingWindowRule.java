@@ -141,7 +141,7 @@ public class PushDownLimitRankingWindowRule extends TransformationRule {
         TopNType topNType = TopNType.parse(callOperator.getFnName());
 
         // If partition by columns is not empty, then we cannot derive sort property from the SortNode
-        // OutputPropertyDeriver will generate PhysicalPropertySet.EMPTY if sortPhase is SortPhase.PARTIAL
+        // OutputPropertyDeriver will generate PhysicalPropertySet.empty() if sortPhase is SortPhase.PARTIAL
         final SortPhase sortPhase = partitionByColumns.isEmpty() ? SortPhase.FINAL : SortPhase.PARTIAL;
         final long limit = partitionByColumns.isEmpty() ? limitValue : Operator.DEFAULT_LIMIT;
         final long partitionLimit = partitionByColumns.isEmpty() ? Operator.DEFAULT_LIMIT : limitValue;

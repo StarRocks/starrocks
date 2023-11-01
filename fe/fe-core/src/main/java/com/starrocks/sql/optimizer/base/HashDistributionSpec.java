@@ -30,7 +30,7 @@ public class HashDistributionSpec extends DistributionSpec {
         propertyInfo.initDistributionDisjointSet(distributionDesc.getDistributionCols());
     }
 
-    public HashDistributionSpec(HashDistributionDesc distributionDesc, PropertyInfo propertyInfo) {
+    public HashDistributionSpec(HashDistributionDesc distributionDesc, DistributionPropertyInfo propertyInfo) {
         super(DistributionType.SHUFFLE, propertyInfo);
         this.hashDistributionDesc = distributionDesc;
     }
@@ -140,11 +140,11 @@ public class HashDistributionSpec extends DistributionSpec {
         return hashDistributionDesc.getDistributionCols();
     }
 
-    public HashDistributionSpec getNullRelaxSpec(PropertyInfo propertyInfo) {
+    public HashDistributionSpec getNullRelaxSpec(DistributionPropertyInfo propertyInfo) {
         return new HashDistributionSpec(hashDistributionDesc.getNullRelaxDesc(), propertyInfo);
     }
 
-    public HashDistributionSpec getNullStrictSpec(PropertyInfo propertyInfo) {
+    public HashDistributionSpec getNullStrictSpec(DistributionPropertyInfo propertyInfo) {
         if (!hashDistributionDesc.isAllNullStrict()) {
             return new HashDistributionSpec(hashDistributionDesc.getNullStrictDesc(), propertyInfo);
         } else {

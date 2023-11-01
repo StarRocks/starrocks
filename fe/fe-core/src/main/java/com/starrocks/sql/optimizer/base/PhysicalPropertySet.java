@@ -25,22 +25,20 @@ public class PhysicalPropertySet {
     private DistributionProperty distributionProperty;
     private CTEProperty cteProperty;
 
-    public static final PhysicalPropertySet EMPTY = new PhysicalPropertySet();
-
     public PhysicalPropertySet() {
-        this(DistributionProperty.EMPTY, SortProperty.EMPTY, CTEProperty.EMPTY);
+        this(DistributionProperty.empty(), SortProperty.empty(), CTEProperty.empty());
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty) {
-        this(distributionProperty, SortProperty.EMPTY, CTEProperty.EMPTY);
+        this(distributionProperty, SortProperty.empty(), CTEProperty.empty());
     }
 
     public PhysicalPropertySet(SortProperty sortProperty) {
-        this(DistributionProperty.EMPTY, sortProperty, CTEProperty.EMPTY);
+        this(DistributionProperty.empty(), sortProperty, CTEProperty.empty());
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty) {
-        this(distributionProperty, sortProperty, CTEProperty.EMPTY);
+        this(distributionProperty, sortProperty, CTEProperty.empty());
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty,
@@ -48,6 +46,10 @@ public class PhysicalPropertySet {
         this.distributionProperty = distributionProperty;
         this.sortProperty = sortProperty;
         this.cteProperty = cteProperty;
+    }
+
+    public static PhysicalPropertySet empty() {
+        return new PhysicalPropertySet();
     }
 
     public SortProperty getSortProperty() {

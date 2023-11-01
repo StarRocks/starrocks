@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -28,8 +27,6 @@ import java.util.stream.Collectors;
 public class CTEProperty implements PhysicalProperty {
     // All cteID will be passed from top to bottom, and prune plan when meet CTENoOp node with same CTEid 
     private final Set<Integer> cteIds;
-
-    public static final CTEProperty EMPTY = new CTEProperty(ImmutableSet.of());
 
     public CTEProperty(Set<Integer> cteIds) {
         this.cteIds = cteIds;
@@ -45,6 +42,10 @@ public class CTEProperty implements PhysicalProperty {
 
     public Set<Integer> getCteIds() {
         return cteIds;
+    }
+
+    public static CTEProperty empty() {
+        return new CTEProperty();
     }
 
     public CTEProperty removeCTE(int cteID) {
