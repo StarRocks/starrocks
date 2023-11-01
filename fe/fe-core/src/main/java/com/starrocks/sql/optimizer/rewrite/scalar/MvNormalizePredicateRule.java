@@ -65,12 +65,16 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     } else if (o2 == null) {
                         return 1;
                     } else {
-                        String s1 = o1.toString();
-                        String s2 = o2.toString();
+                        String s1 = o1.toString().toLowerCase();
+                        String s2 = o2.toString().toLowerCase();
                         String n1 = s1.replaceAll("\\d+: ", "");
                         String n2 = s2.replaceAll("\\d+: ", "");
-                        int ret = n1.compareTo(n2);
-                        return ret == 0 ? s1.compareTo(s2) : ret;
+                        int ret = Integer.compare(n1.length(), n2.length());
+                        if (ret != 0) {
+                            return ret;
+                        }
+                        ret = n1.compareTo(n2);
+                        return (ret == 0) ? s1.compareTo(s2) : ret;
                     }
                 }
             };
