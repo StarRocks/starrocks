@@ -16,6 +16,7 @@
 
 #include <stdint.h>
 
+#include <cstddef>
 #include <vector>
 
 namespace starrocks::lake {

@@ -262,11 +262,12 @@ struct HdfsScannerContext {
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
-    void update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count);
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
 
     void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk，append partition column to chunk，otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 

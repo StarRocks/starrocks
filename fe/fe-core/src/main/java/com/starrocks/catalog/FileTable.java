@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonElement;
@@ -59,6 +60,15 @@ public class FileTable extends Table {
     public static final String JSON_KEY_COLLECTION_DELIMITER = "collection_delimiter";
     public static final String JSON_KEY_MAP_DELIMITER = "map_delimiter";
 
+    private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
+            "parquet", RemoteFileInputFormat.PARQUET,
+            "orc", RemoteFileInputFormat.ORC,
+            "text", RemoteFileInputFormat.TEXT,
+            "avro", RemoteFileInputFormat.AVRO,
+            "rctext", RemoteFileInputFormat.RCTEXT,
+            "rcbinary", RemoteFileInputFormat.RCBINARY,
+            "sequence", RemoteFileInputFormat.SEQUENCE);
+
     @SerializedName(value = "fp")
     private Map<String, String> fileProperties = Maps.newHashMap();
 
@@ -66,7 +76,8 @@ public class FileTable extends Table {
         super(TableType.FILE);
     }
 
-    public FileTable(long id, String name, List<Column> fullSchema, Map<String, String> properties) throws DdlException {
+    public FileTable(long id, String name, List<Column> fullSchema, Map<String, String> properties)
+            throws DdlException {
         super(id, name, TableType.FILE, fullSchema);
         this.fileProperties = properties;
         validate(properties);
@@ -101,20 +112,9 @@ public class FileTable extends Table {
     }
 
     public RemoteFileInputFormat getFileFormat() {
-        if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("parquet")) {
-            return RemoteFileInputFormat.PARQUET;
-        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("orc")) {
-            return RemoteFileInputFormat.ORC;
-        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("text")) {
-            return RemoteFileInputFormat.TEXT;
-        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("avro")) {
-            return RemoteFileInputFormat.AVRO;
-        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("rctext")) {
-            return RemoteFileInputFormat.RCTEXT;
-        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("rcbinary")) {
-            return RemoteFileInputFormat.RCBINARY;
-        } else if (fileProperties.get(JSON_KEY_FORMAT).equalsIgnoreCase("sequence")) {
-            return RemoteFileInputFormat.SEQUENCE;
+        String format = fileProperties.get(JSON_KEY_FORMAT).toLowerCase();
+        if (SUPPORTED_FORMAT.containsKey(format)) {
+            return SUPPORTED_FORMAT.get(format);
         } else {
             return RemoteFileInputFormat.UNKNOWN;
         }

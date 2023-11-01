@@ -581,9 +581,6 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
 
 HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) {
     const auto& scan_range = _scan_range;
-    const auto* hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
-    auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
 
     std::string required_fields;
     for (auto const& slot : _materialize_slots) {
@@ -604,62 +601,44 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     }
 
     std::string data_file_path;
-    if (scan_range.relative_path.empty()) {
-        data_file_path = "";
+    std::string hive_column_names;
+    std::string hive_column_types;
+    std::string serde;
+    std::string input_format;
+
+    if (dynamic_cast<const FileTableDescriptor*>(_hive_table)) {
+        const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
+
+        data_file_path = scan_range.full_path;
+
+        hive_column_names = file_table->get_hive_column_names();
+        hive_column_types = file_table->get_hive_column_types();
+        serde = file_table->get_serde_lib();
+        input_format = file_table->get_input_format();
     } else {
+        const auto* hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
+
+        auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
+        std::string partition_full_path = partition_desc->location();
         data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
+
+        hive_column_names = hdfs_table->get_hive_column_names();
+        hive_column_types = hdfs_table->get_hive_column_types();
+        serde = hdfs_table->get_serde_lib();
+        input_format = hdfs_table->get_input_format();
     }
 
     std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["hive_column_names"] = hdfs_table->get_hive_column_names();
-    jni_scanner_params["hive_column_types"] = hdfs_table->get_hive_column_types();
+
+    jni_scanner_params["hive_column_names"] = hive_column_names;
+    jni_scanner_params["hive_column_types"] = hive_column_types;
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["nested_fields"] = nested_fields;
     jni_scanner_params["data_file_path"] = data_file_path;
     jni_scanner_params["block_offset"] = std::to_string(scan_range.offset);
     jni_scanner_params["block_length"] = std::to_string(scan_range.length);
-    jni_scanner_params["serde"] = hdfs_table->get_serde_lib();
-    jni_scanner_params["input_format"] = hdfs_table->get_input_format();
-    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
-
-    std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
-
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
-    return scanner;
-}
-
-HdfsScanner* HiveDataSource::_create_file_table_jni_scanner(const FSOptions& options) {
-    const auto& scan_range = _scan_range;
-    const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
-
-    std::string required_fields;
-    for (auto const& slot : _materialize_slots) {
-        required_fields.append(slot->col_name());
-        required_fields.append(",");
-    }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
-
-    std::string nested_fields;
-    for (auto slot : _materialize_slots) {
-        const TypeDescriptor& type = slot->type();
-        if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
-        }
-    }
-    if (!nested_fields.empty()) {
-        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
-    }
-
-    std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["hive_column_names"] = file_table->get_hive_column_names();
-    jni_scanner_params["hive_column_types"] = file_table->get_hive_column_types();
-    jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["data_file_path"] = scan_range.full_path;
-    jni_scanner_params["block_offset"] = std::to_string(scan_range.offset);
-    jni_scanner_params["block_length"] = std::to_string(scan_range.length);
-    jni_scanner_params["serde"] = file_table->get_serde_lib();
-    jni_scanner_params["input_format"] = file_table->get_input_format();
+    jni_scanner_params["serde"] = serde;
+    jni_scanner_params["input_format"] = input_format;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
     std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
@@ -759,12 +738,9 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = _pool.add(new HdfsTextScanner());
     } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
                 format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
-               dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr) {
+               (dynamic_cast<const HdfsTableDescriptor*>(_hive_table) != nullptr ||
+                dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr)) {
         scanner = _create_hive_jni_scanner(fsOptions);
-    } else if ((format == THdfsFileFormat::AVRO || format == THdfsFileFormat::RC_BINARY ||
-                format == THdfsFileFormat::RC_TEXT || format == THdfsFileFormat::SEQUENCE_FILE) &&
-               dynamic_cast<const FileTableDescriptor*>(_hive_table) != nullptr) {
-        scanner = _create_file_table_jni_scanner(fsOptions);
     } else {
         std::string msg = fmt::format("unsupported hdfs file format: {}", format);
         LOG(WARNING) << msg;
