@@ -562,4 +562,38 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
     }
 
+    @Test
+    public void testExpressionRangePartitionInfoV2SerializedWrongNotFailed() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE `game_log2` (\n" +
+                "  `cloud_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `user_id` varchar(65533) NULL COMMENT \"\",\n" +
+                "  `day` date NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`cloud_id`, `user_id`)\n" +
+                "PARTITION BY RANGE(cast(substr(cloud_id, 3, 11) as bigint))()\n" +
+                "DISTRIBUTED BY HASH(`cloud_id`, `user_id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"ZSTD\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable olapTable = (OlapTable) db.getTable("game_log2");
+        ExpressionRangePartitionInfoV2 expressionRangePartitionInfo =
+                (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo();
+        expressionRangePartitionInfo.setPartitionExprs(Lists.newArrayList(
+                new FunctionCallExpr("abc", Lists.newArrayList(new SlotRef(
+                        new TableName("test", "game_log2"), "cloud_id")))));
+        // serialize
+        String json = GsonUtils.GSON.toJson(olapTable);
+        // deserialize
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+    }
+
 }
