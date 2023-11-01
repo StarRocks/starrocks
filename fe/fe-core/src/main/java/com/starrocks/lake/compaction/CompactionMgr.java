@@ -98,6 +98,7 @@ public class CompactionMgr {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished loading: {}", statistics);
         }
+        LOG.warn("Load finished, compaction score: {}", statistics);
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
@@ -115,6 +116,7 @@ public class CompactionMgr {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished compaction: {}", statistics);
         }
+        LOG.warn("Compaction finished, compaction score: {}", statistics);
     }
 
     @NotNull

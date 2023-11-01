@@ -92,8 +92,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            List<TransactionState> readyTransactionStates =
-                    globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
+            List<TransactionState> readyTransactionStates = globalTransactionMgr
+                    .getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
                 return;
             }
@@ -159,7 +159,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
-        // traverse all ready transactions and dispatch the version publish task to all backends
+        // traverse all ready transactions and dispatch the version publish task to all
+        // backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
             for (PublishVersionTask task : tasks) {
@@ -221,10 +222,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
-                    // clear publish version tasks to reduce memory usage when state changed to visible.
+                    // clear publish version tasks to reduce memory usage when state changed to
+                    // visible.
                     transactionState.clearAfterPublished();
 
-                    // Refresh materialized view when base table update transaction has been visible if necessary
+                    // Refresh materialized view when base table update transaction has been visible
+                    // if necessary
                     refreshMvIfNecessary(transactionState);
                 }
             }
@@ -249,9 +252,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
-                    // clear publish version tasks to reduce memory usage when state changed to visible.
+                    // clear publish version tasks to reduce memory usage when state changed to
+                    // visible.
                     transactionState.clearAfterPublished();
-                    // Refresh materialized view when base table update transaction has been visible if necessary
+                    // Refresh materialized view when base table update transaction has been visible
+                    // if necessary
                     refreshMvIfNecessary(transactionState);
                 }
             } catch (UserException e) {
@@ -339,7 +344,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Boolean> publishLakeTableAsync(Database db, TransactionState txnState,
-                                                             TableCommitInfo tableCommitInfo) {
+            TableCommitInfo tableCommitInfo) {
         Collection<PartitionCommitInfo> partitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo().values();
         if (partitionCommitInfos.size() == 1) {
             PartitionCommitInfo partitionCommitInfo = partitionCommitInfos.iterator().next();
@@ -347,8 +352,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         } else {
             List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                CompletableFuture<Boolean> future =
-                        publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+                CompletableFuture<Boolean> future = publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo,
+                        txnState);
                 futureList.add(future);
             }
             return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0]))
@@ -357,9 +362,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db,
-                                                                 @NotNull TableCommitInfo tableCommitInfo,
-                                                                 @NotNull PartitionCommitInfo partitionCommitInfo,
-                                                                 @NotNull TransactionState txnState) {
+            @NotNull TableCommitInfo tableCommitInfo,
+            @NotNull PartitionCommitInfo partitionCommitInfo,
+            @NotNull TransactionState txnState) {
         long versionTime = partitionCommitInfo.getVersionTime();
         if (versionTime > 0) {
             return CompletableFuture.completedFuture(true);
@@ -380,8 +385,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
-                                     @NotNull PartitionCommitInfo partitionCommitInfo,
-                                     @NotNull TransactionState txnState) {
+            @NotNull PartitionCommitInfo partitionCommitInfo,
+            @NotNull TransactionState txnState) {
         long tableId = tableCommitInfo.getTableId();
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
@@ -433,9 +438,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 Map<Long, Double> compactionScores = new HashMap<>();
                 Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
                         compactionScores);
-
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 partitionCommitInfo.setCompactionScore(quantiles);
+                LOG.warn(
+                        "Publish version compaction score: {}, quantiles: {}, txn id: {}, version: {}, partition id: {}",
+                        compactionScores, quantiles,
+                        txnId, txnVersion, partitionCommitInfo.getPartitionId());
             }
             return true;
         } catch (Throwable e) {
@@ -446,7 +454,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     /**
-     * Refresh the materialized view if it should be triggered after base table was loaded.
+     * Refresh the materialized view if it should be triggered after base table was
+     * loaded.
      *
      * @param transactionState
      * @throws DdlException

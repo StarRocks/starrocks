@@ -161,6 +161,11 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
     VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
                                    _tablet->id(), tablet_metadata->version(), input_infos.str());
 
+    LOG(WARNING) << "Primary key compaction score pick rowsets: " << input_rowsets.size()
+                 << ", all rowsets: " << tablet_metadata->rowsets_size()
+                 << ", cur_compaction_result_bytes: " << cur_compaction_result_bytes
+                 << ", tablet id: " << tablet_metadata->id()
+                 << ", version: " << tablet_metadata->version();
     return input_rowsets;
 }
 

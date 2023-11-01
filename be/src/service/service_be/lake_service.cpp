@@ -190,6 +190,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 auto score = compaction_score(*metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
+                LOG(WARNING) << "Tablet compaction score: " << score << ", tablet id: " << tablet_id
+                             << ", version: " << new_version << ", txn_id: " << txns[0];
             } else {
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id

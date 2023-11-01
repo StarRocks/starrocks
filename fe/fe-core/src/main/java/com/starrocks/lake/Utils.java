@@ -147,6 +147,7 @@ public class Utils {
                 }
                 if (compactionScores != null && response != null && response.compactionScores != null) {
                     compactionScores.putAll(response.compactionScores);
+                    LOG.warn("Response compaction score: {}", response.compactionScores);
                 }
             } catch (Exception e) {
                 throw new RpcException(backendList.get(i).getHost(), e.getMessage());
