@@ -58,7 +58,7 @@ public abstract class ConnectorPartitionTraits {
     private static final Logger LOG = LoggerFactory.getLogger(ConnectorPartitionTraits.class);
     private static final Map<Table.TableType, Supplier<ConnectorPartitionTraits>> TRAITS_TABLE =
             ImmutableMap.<Table.TableType, Supplier<ConnectorPartitionTraits>>builder()
-                    // Consider all native table as OLA
+                    // Consider all native table as OLAP
                     .put(Table.TableType.OLAP, OlapPartitionTraits::new)
                     .put(Table.TableType.MATERIALIZED_VIEW, OlapPartitionTraits::new)
                     .put(Table.TableType.CLOUD_NATIVE, OlapPartitionTraits::new)
@@ -90,19 +90,37 @@ public abstract class ConnectorPartitionTraits {
         return res;
     }
 
+    /**
+     * Build a partition key for the table, some of them have specific representations for null values
+     */
     abstract PartitionKey createEmptyKey();
 
     abstract String getDbName();
 
-    abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
+    abstract PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException;
 
+    /**
+     * Get all partitions' name
+     */
     abstract List<String> getPartitionNames();
 
+    /**
+     * Get partition columns
+     */
     abstract List<Column> getPartitionColumns();
 
+    /**
+     * Get partition range map with the specified partition column and expression
+     *
+     * @apiNote it must be a range-partitioned table
+     */
     abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
+    /**
+     * Get the list-map with specified partition column and expression
+     * @apiNote it must be a list-partitioned table
+     */
     abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
     abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
@@ -112,16 +130,16 @@ public abstract class ConnectorPartitionTraits {
     abstract static class DefaultTraits extends ConnectorPartitionTraits {
 
         @Override
-        public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
-            Preconditions.checkState(values.size() == columns.size(),
-                    "columns size is %s, but values size is %s", columns.size(), values.size());
+        public PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException {
+            Preconditions.checkState(values.size() == types.size(),
+                    "columns size is %s, but values size is %s", types.size(), values.size());
 
             PartitionKey partitionKey = createEmptyKey();
 
             // change string value to LiteralExpr,
             for (int i = 0; i < values.size(); i++) {
                 String rawValue = values.get(i);
-                Type type = columns.get(i).getType();
+                Type type = types.get(i);
                 LiteralExpr exprValue;
                 // rawValue could be null for delta table
                 if (rawValue == null) {
