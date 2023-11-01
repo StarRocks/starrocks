@@ -368,7 +368,7 @@ public class FileScanNodeTest {
         brokerFileGroup = new BrokerFileGroup(desc);
         Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
         Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
-        Deencapsulation.setField(brokerFileGroup, "fileFormat", "parquet");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "json");
         fileGroups.add(brokerFileGroup);
 
         // file status
