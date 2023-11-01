@@ -35,14 +35,12 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -64,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
@@ -1255,10 +1254,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
-                } else if (snapshotTable.isHiveTable() || snapshotTable.isHudiTable()) {
-                    HiveMetaStoreTable snapShotHMSTable = (HiveMetaStoreTable) snapshotTable;
-                    if (snapShotHMSTable.isUnPartitioned()) {
-                        if (!((HiveMetaStoreTable) table).isUnPartitioned()) {
+                } else if (ConnectorPartitionTraits.isSupported(snapshotTable.getType())) {
+                    if (snapshotTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
                             return true;
                         }
                     } else {
@@ -1285,6 +1283,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
+<<<<<<< HEAD
                 } else if (snapshotTable.isIcebergTable()) {
                     IcebergTable snapShotIcebergTable = (IcebergTable) snapshotTable;
                     if (snapShotIcebergTable.isUnPartitioned()) {
@@ -1375,6 +1374,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                 getPartitionKeyRange(table, partitionColumn, partitionExpr);
                         return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
                     }
+=======
+>>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
                 }
             } catch (UserException e) {
                 LOG.warn("Materialized view compute partition change failed", e);

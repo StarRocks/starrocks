@@ -732,6 +732,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return true;
     }
 
+    public List<Column> getPartitionColumns() {
+        throw new NotImplementedException();
+    }
+
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
     }
