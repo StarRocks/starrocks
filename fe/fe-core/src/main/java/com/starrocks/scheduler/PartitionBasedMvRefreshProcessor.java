@@ -1073,11 +1073,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * @param queryStatement                : the materialized view's defined query statement
      * @param mvPartitionInfo               : the materialized view's partition information
      * @return
-     * @throws AnalysisException
      */
     private Expr generatePartitionPredicate(Set<String> tablePartitionNames, QueryStatement queryStatement,
-                                            PartitionInfo mvPartitionInfo)
-            throws AnalysisException {
+                                            PartitionInfo mvPartitionInfo) {
         SlotRef partitionSlot = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
         List<String> columnOutputNames = queryStatement.getQueryRelation().getColumnOutputNames();
         List<Expr> outputExpressions = queryStatement.getQueryRelation().getOutputExpression();
@@ -1204,68 +1202,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
-<<<<<<< HEAD
-                } else if (snapshotTable.isIcebergTable()) {
-                    IcebergTable snapShotIcebergTable = (IcebergTable) snapshotTable;
-                    if (snapShotIcebergTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotIcebergTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        boolean changed =
-                                SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-                        if (changed) {
-                            return true;
-                        }
-                    }
-                } else if (snapshotTable.isJDBCTable()) {
-                    JDBCTable snapShotJDBCTable = (JDBCTable) snapshotTable;
-                    if (snapShotJDBCTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // TODO: Support list partition later.
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotJDBCTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        return SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
-                    }
-=======
->>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
                 }
             } catch (UserException e) {
                 LOG.warn("Materialized view compute partition change failed", e);

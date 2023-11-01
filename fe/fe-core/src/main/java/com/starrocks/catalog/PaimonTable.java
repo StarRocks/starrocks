@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -92,8 +93,6 @@ public class PaimonTable extends Table {
         return partColumnNames;
     }
 
-<<<<<<< HEAD
-=======
     @Override
     public List<Column> getPartitionColumns() {
         List<Column> partitionColumns = new ArrayList<>();
@@ -104,7 +103,6 @@ public class PaimonTable extends Table {
         return partitionColumns;
     }
 
->>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     public List<String> getFieldNames() {
         return paimonFieldNames;
     }

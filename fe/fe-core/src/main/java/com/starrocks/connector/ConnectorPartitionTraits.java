@@ -35,8 +35,6 @@ import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonPartitionKey;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -68,7 +66,6 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.HIVE, HivePartitionTraits::new)
                     .put(Table.TableType.HUDI, HudiPartitionTraits::new)
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
-                    .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
@@ -97,7 +94,7 @@ public abstract class ConnectorPartitionTraits {
 
     abstract String getDbName();
 
-    abstract PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException;
+    abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
 
     /**
      * Get all partitions' name
@@ -117,12 +114,6 @@ public abstract class ConnectorPartitionTraits {
     abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
-    /**
-     * Get the list-map with specified partition column and expression
-     * @apiNote it must be a list-partitioned table
-     */
-    abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
-
     abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
     // ========================================= Implementations ==============================================
@@ -130,16 +121,16 @@ public abstract class ConnectorPartitionTraits {
     abstract static class DefaultTraits extends ConnectorPartitionTraits {
 
         @Override
-        public PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException {
-            Preconditions.checkState(values.size() == types.size(),
-                    "columns size is %s, but values size is %s", types.size(), values.size());
+        public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
+            Preconditions.checkState(values.size() == columns.size(),
+                    "columns size is %s, but values size is %s", columns.size(), values.size());
 
             PartitionKey partitionKey = createEmptyKey();
 
             // change string value to LiteralExpr,
             for (int i = 0; i < values.size(); i++) {
                 String rawValue = values.get(i);
-                Type type = types.get(i);
+                Type type = columns.get(i).getType();
                 LiteralExpr exprValue;
                 // rawValue could be null for delta table
                 if (rawValue == null) {
@@ -182,11 +173,6 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException {
-            return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
-        }
-
-        @Override
         public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo() {
             Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
             List<String> partitionNames = getPartitionNames();
@@ -222,12 +208,6 @@ public abstract class ConnectorPartitionTraits {
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
             // TODO: check partition type
             return ((OlapTable) table).getRangePartitionMap();
-        }
-
-        @Override
-        public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
-            // TODO: check partition type
-            return ((OlapTable) table).getListPartitionMap();
         }
 
     }
@@ -280,19 +260,6 @@ public abstract class ConnectorPartitionTraits {
         @Override
         PartitionKey createEmptyKey() {
             return new IcebergPartitionKey();
-        }
-    }
-
-    static class PaimonPartitionTraits extends DefaultTraits {
-
-        @Override
-        public String getDbName() {
-            return ((PaimonTable) table).getDbName();
-        }
-
-        @Override
-        PartitionKey createEmptyKey() {
-            return new PaimonPartitionKey();
         }
     }
 
