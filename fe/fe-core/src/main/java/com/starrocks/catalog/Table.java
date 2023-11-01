@@ -254,6 +254,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         this.id = id;
     }
 
+    public String getCatalogName() {
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
+
     public String getName() {
         return name;
     }

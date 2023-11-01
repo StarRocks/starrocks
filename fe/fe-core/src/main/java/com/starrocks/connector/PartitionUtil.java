@@ -246,19 +246,7 @@ public class PartitionUtil {
      */
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
             throws UserException {
-<<<<<<< HEAD
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable()
-                || table.isPaimonTable()) {
-            return PartitionUtil.getRangePartitionMapOfExternalTable(
-                    table, partitionColumn, getPartitionNames(table), partitionExpr);
-        } else {
-            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
-        }
-=======
         return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
->>>>>>> 12a01dcd1b ([Refactor] refactor connector specific code to PartitionTraits (#33756))
     }
 
     public static Map<String, List<List<String>>> getPartitionList(Table table, Column partitionColumn)
