@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -4574,5 +4575,145 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive1() {
+        // constraints are upper case.
+        String mv = "select a.c1, a.c2 from\n"
+                + "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n"
+                + "join hive0.partitioned_db2.t2 using (c2)";
+        String query = "select c2 from hive0.partitioned_db.t1 where c1 = 1";
+        // catalog name is case-sensitive.
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive2() {
+        // MV and sql are both upper case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2); " +
+                "hive0.PARTITIONED_DB.T1(C3) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive3() {
+        // MV is upper case, but sql is lower case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive4() {
+        // sql is upper case, but MV is lower case.
+        String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, r.c3 from hive0.partitioned_db.t1 " +
+                "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive1() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"DEPENDENTS.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("test_mv.DEPENDENTS does not exist."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive2() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"EMPS_NO_CONSTRAINT(empid) references DEPENDENTS(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("table:DEPENDENTS do not exist."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive3() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                + "WHERE EMPID = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive4() {
+        try {
+        String mv = "SELECT EMPS.EMPID, EMPS.DEPTNO, DEPENDENTS.NAME FROM EMPS_NO_CONSTRAINT EMPS\n"
+                + "JOIN DEPENDENTS USING (EMPID)"
+                + "INNER JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO)\n"
+                + "WHERE EMPS.EMPID = 1";
+        String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                + "WHERE EMPID = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
     }
 }
