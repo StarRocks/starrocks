@@ -193,7 +193,7 @@ protected:
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
-                                                      UniqueId::gen_uid(), string(), 1000, std::move(load_mem_tracker));
+                                                      UniqueId::gen_uid(), next_id(), string(), 1000, std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
         _tablets_channel =
                 new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
@@ -745,7 +745,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
         ASSERT_GE(finish_response.status().error_msgs_size(), 1);
         const auto& message = finish_response.status().error_msgs(0);
-        ASSERT_TRUE(message.find("AsyncDeltaWriter has been closed") != std::string::npos) << message;
+        ASSERT_TRUE(message.find("AsyncDeltaWriter has been close()ed") != std::string::npos) << message;
 
         PTabletWriterAddBatchResult finish_response2;
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2);

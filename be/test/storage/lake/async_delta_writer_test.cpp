@@ -492,7 +492,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
     delta_writer->close();
     auto st = delta_writer->open();
     ASSERT_FALSE(st.ok());
-    ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
+    ASSERT_EQ("AsyncDeltaWriter has been close()ed", st.message());
 }
 
 TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {

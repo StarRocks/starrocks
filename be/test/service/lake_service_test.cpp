@@ -17,8 +17,13 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include "column/chunk.h"
+#include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
+#include "runtime/load_channel_mgr.h"
+#include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
@@ -52,7 +57,8 @@ public:
         delete _location_provider;
     }
 
-    void create_tablet() const {
+    void create_tablet() {
+        _tablet_id = next_id();
         auto metadata = std::make_shared<lake::TabletMetadata>();
         metadata->set_id(_tablet_id);
         metadata->set_version(1);
@@ -1180,6 +1186,129 @@ TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {
         _lake_service.unlock_tablet_metadata(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
     }
+}
+
+TEST_F(LakeServiceTest, test_abort_txn2) {
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+
+    auto load_mgr = ExecEnv::GetInstance()->load_channel_mgr();
+    auto db_id = next_id();
+    auto table_id = next_id();
+    auto partition_id = next_id();
+    auto index_id = metadata->schema().id();
+    auto txn_id = next_id();
+    PUniqueId load_id;
+    load_id.set_hi(next_id());
+    load_id.set_lo(next_id());
+    // Open load channel
+    {
+        PTabletWriterOpenRequest request;
+        PTabletWriterOpenResult response;
+        request.set_is_lake_tablet(true);
+        request.mutable_id()->CopyFrom(load_id);
+        request.set_table_id(table_id);
+        request.set_index_id(index_id);
+        request.set_txn_id(txn_id);
+        request.set_num_senders(1);
+        request.set_need_gen_rollup(false);
+        request.set_load_channel_timeout_s(10000000);
+        request.set_is_vectorized(true);
+        request.set_table_id(next_id());
+        request.mutable_schema()->set_db_id(db_id);
+        request.mutable_schema()->set_table_id(table_id);
+        request.mutable_schema()->set_version(1);
+        auto index = request.mutable_schema()->add_indexes();
+        index->set_id(index_id);
+        index->set_schema_hash(0);
+        for (int i = 0, sz = metadata->schema().column_size(); i < sz; i++) {
+            const auto& column = metadata->schema().column(i);
+            auto slot = request.mutable_schema()->add_slot_descs();
+            slot->set_id(i);
+            slot->set_byte_offset(i * sizeof(int) /*unused*/);
+            slot->set_col_name(column.name() /*unused*/);
+            slot->set_slot_idx(i);
+            slot->set_is_materialized(true);
+            ASSERT_EQ("INT", column.type());
+            slot->mutable_slot_type()->add_types()->mutable_scalar_type()->set_type(TYPE_INT);
+
+            index->add_columns(metadata->schema().column(i).name());
+        }
+        request.mutable_schema()->mutable_tuple_desc()->set_id(1);
+        request.mutable_schema()->mutable_tuple_desc()->set_byte_size(8 /*unused*/);
+        request.mutable_schema()->mutable_tuple_desc()->set_num_null_bytes(0 /*unused*/);
+        request.mutable_schema()->mutable_tuple_desc()->set_table_id(10 /*unused*/);
+
+        auto ptablet = request.add_tablets();
+        ptablet->set_partition_id(partition_id);
+        ptablet->set_tablet_id(metadata->id());
+
+        load_mgr->open(nullptr, request, &response, nullptr);
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
+    }
+
+    auto tablet_schema = TabletSchema::create(metadata->schema());
+    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+
+    auto generate_data = [=](int64_t chunk_size) -> Chunk {
+        std::vector<int> v0(chunk_size);
+        std::vector<int> v1(chunk_size);
+        std::iota(v0.begin(), v0.end(), 0);
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        Chunk chunk({c0, c1}, schema);
+        chunk.set_slot_id_to_index(0, 0);
+        chunk.set_slot_id_to_index(1, 1);
+        return chunk;
+    };
+
+    auto do_write = [&]() {
+        auto chunk_size = 10;
+        auto chunk = generate_data(chunk_size);
+        bool cancelled = false;
+        for (int64_t i = 0; i < 1000; i++) {
+            PTabletWriterAddChunkRequest add_chunk_request;
+            PTabletWriterAddBatchResult add_chunk_response;
+            add_chunk_request.mutable_id()->CopyFrom(load_id);
+            add_chunk_request.set_index_id(index_id);
+            add_chunk_request.set_sender_id(0);
+            add_chunk_request.set_eos(false);
+            add_chunk_request.set_packet_seq(i);
+
+            for (int j = 0; j < chunk_size; j++) {
+                add_chunk_request.add_tablet_ids(_tablet_id);
+                add_chunk_request.add_partition_ids(partition_id);
+            }
+
+            ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+            add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+            load_mgr->add_chunk(add_chunk_request, &add_chunk_response);
+            if (add_chunk_response.status().status_code() != TStatusCode::OK) {
+                std::cerr << add_chunk_response.status().error_msgs(0) << '\n';
+                cancelled = MatchPattern(add_chunk_response.status().error_msgs(0), "*has been close()ed*");
+                break;
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        }
+        ASSERT_TRUE(cancelled);
+    };
+
+    auto t1 = std::thread(do_write);
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    {
+        lake::AbortTxnRequest request;
+        lake::AbortTxnResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(txn_id);
+        _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+    }
+
+    t1.join();
 }
 
 } // namespace starrocks
