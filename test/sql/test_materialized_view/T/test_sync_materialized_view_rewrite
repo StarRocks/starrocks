@@ -1,4 +1,7 @@
 -- name: test_sync_materialized_view_rewrite
+
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   
