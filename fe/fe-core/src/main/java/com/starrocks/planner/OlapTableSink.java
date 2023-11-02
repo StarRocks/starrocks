@@ -584,7 +584,7 @@ public class OlapTableSink extends DataSink {
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
-            // `selectedBackedIds` keeps the selected backendIds for 1th index which will be used to choose the later index's
+            // `selectedBackedIds` keeps the selected backendIds for 1st index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -609,8 +609,7 @@ public class OlapTableSink extends DataSink {
                             if (bePathsMap.keySet().size() < quorum) {
                                 throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
                                         "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                                + tablet.getId() + ", backends: " +
-                                                Joiner.on(",").join(localTablet.getBackends()));
+                                                + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
                             }
 
                             List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
