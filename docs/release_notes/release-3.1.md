@@ -6,7 +6,7 @@ Release date: November 2, 2023
 
 ## New Features
 
-- Supports sort keys for Primary Key tables created in StarRocks shared-data clusters.
+- Supports sort keys for Primary Key tables created in shared-data StarRocks clusters.
 - Supports using the str2date function to specify partition expressions for asynchronous materialized views. This helps facilitate incremental updates and query rewrites of asynchronous materialized views created on tables that reside in external catalogs and use the STRING-type data as their partitioning expressions. [#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
 - Added a new session variable `enable_query_tablet_affinity`, which controls whether to direct multiple queries against the same tablet to a fixed replica. This session variable is set to `false` by default. [#33049](https://github.com/StarRocks/starrocks/pull/33049)
 - Added the utility function `is_role_in_session`, which is used to check whether the specified roles are activated in the current session. It supports checking nested roles granted to a user. [#32984](https://github.com/StarRocks/starrocks/pull/32984)
@@ -32,7 +32,7 @@ Fixed the following issues:
 - BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
 - When StarRocks materialized views created on Hive views are refreshed, an error "java.lang.ClassCastException: com.starrocks.catalog.HiveView cannot be cast to com.starrocks.catalog.HiveMetaStoreTable" is returned. [#31004](https://github.com/StarRocks/starrocks/pull/31004)
 - If the ORDER BY clause contains aggregate functions, an error "java.lang.IllegalStateException: null" is returned. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
-- In StarRocks shared-data clusters, the information of table keys is not recorded in `information_schema.COLUMNS`. As a result, DELETE operations cannot be performed when data is loaded by using Flink Connector. [#31458](https://github.com/StarRocks/starrocks/pull/31458)
+- In shared-data StarRocks clusters, the information of table keys is not recorded in `information_schema.COLUMNS`. As a result, DELETE operations cannot be performed when data is loaded by using Flink Connector. [#31458](https://github.com/StarRocks/starrocks/pull/31458)
 - When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP threads and the number of Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
 - When a field of only a few bytes is added, executing SELECT COUNT(*) before the data change finishes returns an error that reads "error: invalid field name". [#33243](https://github.com/StarRocks/starrocks/pull/33243)
 - Query results are incorrect after the query cache is enabled. [#32781](https://github.com/StarRocks/starrocks/pull/32781)
@@ -139,7 +139,7 @@ Release date: August 7, 2023
 - Added support for Primary Key tables, on which persistent indexes cannot be enabled.
 - Supports the [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
 - Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](../table_design/expression_partitioning.md), thereby making partition creation easier to use and more flexible.
-- Supports [abstraction of storage volumes](../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), in which users can configure storage location and authentication information, in StarRocks shared-data clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
+- Supports [abstraction of storage volumes](../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), in which users can configure storage location and authentication information, in shared-data StarRocks clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
 
 #### Data Lake analytics
 
@@ -188,7 +188,7 @@ Added [privilege items](../administration/privilege_item.md#storage-volume) rela
 
 #### Shared-data cluster
 
-Optimized the data cache in StarRocks shared-data clusters. The optimized data cache allows for specifying the range of hot data. It can also prevent queries against cold data from occupying the local disk cache, thereby ensuring the performance of queries against hot data.
+Optimized the data cache in shared-data StarRocks clusters. The optimized data cache allows for specifying the range of hot data. It can also prevent queries against cold data from occupying the local disk cache, thereby ensuring the performance of queries against hot data.
 
 #### Materialized view
 
@@ -261,7 +261,7 @@ Fixed the following issues:
 
 ### Behavior Change
 
-- The `storage_cache_ttl` parameter is deleted from the table creation syntax used for StarRocks shared-data clusters. Now the data in the local cache is evicted based on the LRU algorithm.
+- The `storage_cache_ttl` parameter is deleted from the table creation syntax used for shared-data StarRocks clusters. Now the data in the local cache is evicted based on the LRU algorithm.
 - The BE configuration items `disable_storage_page_cache` and `alter_tablet_worker_count` and the FE configuration item `lake_compaction_max_tasks` are changed from immutable parameters to mutable parameters.
 - The default value of the BE configuration item `block_cache_checksum_enable` is changed from `true` to `false`.
 - The default value of the BE configuration item `enable_new_load_on_memory_limit_exceeded` is changed from `false` to `true`.
