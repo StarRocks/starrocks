@@ -24,7 +24,7 @@
 
 namespace starrocks::bthreads {
 
-// Modeled from std::counting_semaphore.
+// Inspired by std::counting_semaphore.
 // A CountingSemaphore contains an internal counter initialized by the constructor.
 // This counter is decremented by calls to acquire() and related methods, and
 // is incremented by calls to release(). When the counter is zero, acquire()
