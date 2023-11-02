@@ -103,6 +103,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.ShowExecutor;
@@ -1686,7 +1687,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
             Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
-                configs.put(request.getKeys().get(i), request.getValues().get(i));
+                String key = request.getKeys().get(i);
+                String value = request.getValues().get(i);
+                configs.put(key, value);
+                if ("mysql_server_version".equalsIgnoreCase(key)) {
+                    if (!Strings.isNullOrEmpty(value)) {
+                        GlobalVariable.version = value;
+                    }
+                }
             }
 
             GlobalStateMgr.getCurrentState().setFrontendConfig(configs);
