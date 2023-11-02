@@ -404,6 +404,7 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
             if (discard) {
                 return true;
             }
+<<<<<<< HEAD
 
             // skip topn runtime filter, because it has taken effect on min/max filtering
             // if row-group contains exactly one value(i.e. min_value = max_value), use bloom filter to test
@@ -420,6 +421,8 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                     return true;
                 }
             }
+=======
+>>>>>>> 3def3c1d3d ([Feature] Support dynamic partition pruning (#30319))
         }
     }
 

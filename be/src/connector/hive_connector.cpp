@@ -97,6 +97,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_populate_datacache) {
         _enable_populate_datacache = state->query_options().enable_populate_datacache;
     }
+<<<<<<< HEAD
     if (state->query_options().__isset.enable_datacache_async_populate_mode) {
         _enable_datacache_aync_populate_mode = state->query_options().enable_datacache_async_populate_mode;
     }
@@ -111,6 +112,15 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+=======
+    if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
+        _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
+    }
+    // Don't use datacache when priority = -1
+    if (_scan_range.__isset.datacache_options && _scan_range.datacache_options.__isset.priority &&
+        _scan_range.datacache_options.priority == -1) {
+        _use_datacache = false;
+>>>>>>> 3def3c1d3d ([Feature] Support dynamic partition pruning (#30319))
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -171,44 +181,46 @@ Status HiveDataSource::_init_partition_values() {
     }
 
     const auto& partition_values = partition_desc->partition_key_value_evals();
-    _partition_values = partition_values;
+    _partition_values = partition_desc->partition_key_value_evals();
 
-    if (_has_partition_conjuncts || _has_scan_range_indicate_const_column) {
-        ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
-        // append partition data
-        for (int i = 0; i < _partition_slots.size(); i++) {
-            SlotId slot_id = _partition_slots[i]->id();
-            int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-            ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
-            assert(partition_value_col->is_constant());
-            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-            const ColumnPtr& data_column = const_column->data_column();
-            ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
-            if (data_column->is_nullable()) {
-                chunk_part_column->append_default();
-            } else {
-                chunk_part_column->append(*data_column, 0, 1);
+    // init partition chunk
+    auto partition_chunk = std::make_shared<Chunk>();
+    for (int i = 0; i < _partition_slots.size(); i++) {
+        SlotId slot_id = _partition_slots[i]->id();
+        int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
+        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+        DCHECK(partition_value_col->is_constant());
+        partition_chunk->append_column(partition_value_col, slot_id);
+    }
+
+    // eval conjuncts and skip if no rows.
+    if (_has_scan_range_indicate_const_column) {
+        std::vector<ExprContext*> ctxs;
+        for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
+            if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
+                ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
+                            _conjunct_ctxs_by_slot.at(slotId).end());
             }
         }
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+    } else if (_has_partition_conjuncts) {
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+    }
 
-        // eval conjuncts and skip if no rows.
-        if (_has_scan_range_indicate_const_column) {
-            std::vector<ExprContext*> ctxs;
-            for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
-                if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
-                    ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
-                                _conjunct_ctxs_by_slot.at(slotId).end());
-                }
-            }
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
-        } else {
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
-        }
+    if (!partition_chunk->has_rows()) {
+        _filter_by_eval_partition_conjuncts = true;
+        return Status::OK();
+    }
 
+    if (_enable_dynamic_prune_scan_range && _runtime_filters) {
+        _init_rf_counters();
+        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
+            return Status::OK();
         }
     }
+
     return Status::OK();
 }
 
@@ -453,6 +465,187 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     }
 }
 
+<<<<<<< HEAD
+=======
+void HiveDataSource::_init_rf_counters() {
+    auto* root = _runtime_profile;
+    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
+        static const char* prefix = "DynamicPruneScanRange";
+        ADD_COUNTER(root, prefix, TUnit::NONE);
+        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
+    }
+}
+
+static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
+    for (int i = 0; i < type.children.size(); i++) {
+        const auto& t = type.children[i];
+        if (t.is_unknown_type()) continue;
+        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
+        if (t.is_complex_type()) {
+            build_nested_fields(t, p, sb);
+        } else {
+            sb->append(p);
+            sb->append(",");
+        }
+    }
+}
+
+static std::string build_fs_options_properties(const FSOptions& options) {
+    const TCloudConfiguration* cloud_configuration = options.cloud_configuration;
+    static constexpr char KV_SEPARATOR = 0x1;
+    static constexpr char PROP_SEPARATOR = 0x2;
+    std::string data;
+
+    if (cloud_configuration != nullptr) {
+        if (cloud_configuration->__isset.cloud_properties) {
+            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
+                data += cloud_property.key;
+                data += KV_SEPARATOR;
+                data += cloud_property.value;
+                data += PROP_SEPARATOR;
+            }
+        } else {
+            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
+                data += key;
+                data += KV_SEPARATOR;
+                data += value;
+                data += PROP_SEPARATOR;
+            }
+        }
+    }
+
+    if (data.size() > 0 && data.back() == PROP_SEPARATOR) {
+        data.pop_back();
+    }
+    return data;
+}
+
+HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) {
+    const auto& scan_range = _scan_range;
+    const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(_hive_table);
+    auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
+    std::string partition_full_path = partition_desc->location();
+
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
+
+    std::string delta_file_paths;
+    if (!scan_range.hudi_logs.empty()) {
+        for (const std::string& log : scan_range.hudi_logs) {
+            delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
+            delta_file_paths.append(",");
+        }
+        delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
+    }
+
+    std::string data_file_path;
+    if (scan_range.relative_path.empty()) {
+        data_file_path = "";
+    } else {
+        data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
+    }
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["base_path"] = hudi_table->get_base_path();
+    jni_scanner_params["hive_column_names"] = hudi_table->get_hive_column_names();
+    jni_scanner_params["hive_column_types"] = hudi_table->get_hive_column_types();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params["nested_fields"] = nested_fields;
+    jni_scanner_params["instant_time"] = hudi_table->get_instant_time();
+    jni_scanner_params["delta_file_paths"] = delta_file_paths;
+    jni_scanner_params["data_file_path"] = data_file_path;
+    jni_scanner_params["data_file_length"] = std::to_string(scan_range.file_length);
+    jni_scanner_params["serde"] = hudi_table->get_serde_lib();
+    jni_scanner_params["input_format"] = hudi_table->get_input_format();
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
+HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options) {
+    const auto* paimon_table = dynamic_cast<const PaimonTableDescriptor*>(_hive_table);
+
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
+    jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
+    jni_scanner_params["warehouse_path"] = paimon_table->get_warehouse_path();
+    jni_scanner_params["database_name"] = paimon_table->get_database_name();
+    jni_scanner_params["table_name"] = paimon_table->get_table_name();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
+    jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
+    jni_scanner_params["nested_fields"] = nested_fields;
+
+    string option_info = "";
+    if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::AWS) {
+        const AWSCloudConfiguration aws_cloud_configuration =
+                CloudConfigurationFactory::create_aws(*options.cloud_configuration);
+        AWSCloudCredential aws_cloud_credential = aws_cloud_configuration.aws_cloud_credential;
+        if (!aws_cloud_credential.endpoint.empty()) {
+            option_info += "s3.endpoint=" + aws_cloud_credential.endpoint + ",";
+        }
+        if (!aws_cloud_credential.access_key.empty()) {
+            option_info += "s3.access-key=" + aws_cloud_credential.access_key + ",";
+        }
+        if (!aws_cloud_credential.secret_key.empty()) {
+            option_info += "s3.secret-key=" + aws_cloud_credential.secret_key + ",";
+        }
+        string enable_ssl = aws_cloud_configuration.enable_ssl ? "true" : "false";
+        option_info += "s3.connection.ssl.enabled=" + enable_ssl + ",";
+        string enable_path_style_access = aws_cloud_configuration.enable_path_style_access ? "true" : "false";
+        option_info += "s3.path.style.access=" + enable_path_style_access;
+    }
+    jni_scanner_params["option_info"] = option_info;
+    jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
+
+    std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
+>>>>>>> 3def3c1d3d ([Feature] Support dynamic partition pruning (#30319))
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
@@ -600,10 +793,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
 void HiveDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
+<<<<<<< HEAD
         if (!_scanner->has_split_tasks()) {
             COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
         }
         _scanner->close(state);
+=======
+        _scanner->close();
+>>>>>>> 3def3c1d3d ([Feature] Support dynamic partition pruning (#30319))
     }
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
