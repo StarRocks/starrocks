@@ -414,6 +414,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PUSH_DOWN_AGG_TO_WHICH_SIDE = "push_down_agg_to_which_side";
 
+    public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1350,6 +1352,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
     private String chooseExecuteInstancesMode = ADAPTIVE_DECREASE.name();
+
+    @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
+    private boolean enableArrayDistinctAfterAggOpt = true;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -2623,6 +2628,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getPushDownAggToWhichSide() {
         return pushDownAggToWhichSide;
+    }
+
+    public boolean getEnableArrayDistinctAfterAggOpt() {
+        return  enableArrayDistinctAfterAggOpt;
     }
 
 
