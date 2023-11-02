@@ -104,6 +104,9 @@ void repeated_field_add(::google::protobuf::RepeatedField<T>* array, Itr begin, 
 }
 
 Status TabletUpdates::init() {
+    if (max_version() == 0) {
+        return Status::OK();
+    }
     std::unique_ptr<TabletUpdatesPB> updates(_tablet.tablet_meta()->release_updates(this));
     if (!updates) {
         string msg = strings::Substitute("updatable tablet do not have updates meta tablet:$0", _tablet.tablet_id());

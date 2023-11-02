@@ -65,6 +65,7 @@ using strings::Substitute;
 namespace starrocks {
 
 static const char* const kTestFilePath = "/.testfile";
+static const char CREATE_TABLE_TXN_PREFIX[] = "create_txn_";
 
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
                  TxnManager* txn_manager)
@@ -481,7 +482,45 @@ Status DataDir::load() {
         }
     }
 
+    RETURN_IF_ERROR(load_create_table_txn());
+
     return Status::OK();
+}
+
+bool DataDir::decode_create_table_txn(std::string_view key, std::string_view value, int64_t* txn_id,
+                                      CreateTableTxn* create_table_txn) {
+    if (UNLIKELY(key.size() <= sizeof(CREATE_TABLE_TXN_PREFIX))) {
+        return false;
+    }
+    DCHECK_EQ(0, key.compare(0, sizeof(CREATE_TABLE_TXN_PREFIX) - 1, CREATE_TABLE_TXN_PREFIX)) << key;
+    key.remove_prefix(sizeof(CREATE_TABLE_TXN_PREFIX) - 1);
+    const char* str = key.data();
+    const char* end = key.data() + key.size();
+    if (!safe_strto64(str, end - str, txn_id)) {
+        return false;
+    }
+
+    create_table_txn->txn_id = *txn_id;
+    create_table_txn->deserialize(value);
+    return true;
+}
+
+Status DataDir::load_create_table_txn() {
+    auto traverse_create_table_txn_func = [this](std::string_view key, std::string_view value) -> bool {
+        int64_t txn_id;
+        CreateTableTxn create_table_txn;
+        if (!decode_create_table_txn(key, value, &txn_id, &create_table_txn)) {
+            LOG(WARNING) << "invalid tablet_meta key:" << key;
+            return false;
+        }
+        create_table_txn.data_dir = this;
+        Status st = _txn_manager->add_create_txn(create_table_txn.txn_id, create_table_txn);
+        if (!st.ok()) {
+            return false;
+        }
+        return true;
+    };
+    return _kv_store->iterate(TXN_COLUMN_FAMILY_INDEX, CREATE_TABLE_TXN_PREFIX, traverse_create_table_txn_func);
 }
 
 // gc unused tablet schemahash dir

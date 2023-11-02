@@ -81,6 +81,7 @@ public:
     void stop();
 
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
+    void submit_req(TAgentResult& agent_result, const TReq& req);
 
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
 
@@ -304,6 +305,24 @@ void AgentServer::Impl::stop() {
 }
 
 AgentServer::Impl::~Impl() = default;
+
+// TODO(lingbin): each task in the batch may have it own status or FE must check and
+// resend request when something is wrong(BE may need some logic to guarantee idempotence.
+void AgentServer::Impl::submit_req(TAgentResult& agent_result, const TReq& req) {
+    LOG(INFO) << "Submit req, task_type=" << req.task_type << ", txn_id=" << req.txn_id;
+    Status st = Status::OK();
+    TTaskType::type task_type = req.task_type;
+
+    ThreadPool* pool = get_thread_pool(task_type);
+    if (task_type == TTaskType::CREATE) {
+        const TCreateTableReq& create_table_req = req.create_table_req;
+        st = pool->submit_func(std::bind(run_create_table_req, create_table_req, req.txn_id, _exec_env));
+    } else if (task_type == TTaskType::CLEAR_TRANSACTION_TASK) {
+        const TAbortTxnReq& abort_req = req.abort_req;
+        st = pool->submit_func(std::bind(run_abort_req, abort_req, req.txn_id, _exec_env));
+    }
+    st.to_thrift(&agent_result.status);
+}
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -657,6 +676,10 @@ AgentServer::~AgentServer() = default;
 
 void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
     _impl->submit_tasks(agent_result, tasks);
+}
+
+void AgentServer::submit_req(TAgentResult& agent_result, const TReq& req) {
+    _impl->submit_req(agent_result, req);
 }
 
 void AgentServer::make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request) {

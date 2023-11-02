@@ -58,4 +58,35 @@ void finish_task(const TFinishTaskRequest& finish_task_request) {
     }
 }
 
+void finish_req(const TFinishRequest& finish_request) {
+    // Return result to FE
+    TMasterResult result;
+    uint32_t try_time = 0;
+    int32_t sleep_seconds = 1;
+    int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
+
+    MasterServerClient client(&g_frontend_service_client_cache);
+
+    while (try_time < max_retry_times) {
+        AgentStatus client_status = client.finish_req(finish_request, &result);
+
+        if (client_status == STARROCKS_SUCCESS) {
+            // This means FE alter thread pool is full, all alter finish request to FE is meaningless
+            // so that we will sleep && retry 10 times
+            if (result.status.status_code == TStatusCode::TOO_MANY_TASKS &&
+                finish_request.task_type == TTaskType::ALTER) {
+                max_retry_times = ALTER_FINISH_TASK_MAX_RETRY;
+                sleep_seconds = sleep_seconds * 2;
+            } else {
+                break;
+            }
+        }
+        try_time += 1;
+        LOG(WARNING) << "finish failed retry: " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                     << "client_status: " << client_status << " status_code: " << result.status.status_code;
+
+        sleep(sleep_seconds);
+    }
+}
+
 } // namespace starrocks

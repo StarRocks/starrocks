@@ -90,6 +90,23 @@ TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
 
+Status TabletManager::add_tablets(const std::vector<TabletSharedPtr>& new_tablets) {
+    // Register tablet into DataDir, so that we can manage tablet from
+    // the perspective of root path.
+    // Example: unregister all tables when a bad disk found.
+    for (auto& tablet : new_tablets) {
+        std::unique_lock wlock(_get_tablets_shard_lock(tablet->tablet_id()));
+        tablet->register_tablet_into_dir();
+        TabletMap& tablet_map = _get_tablet_map(tablet->tablet_id());
+        auto [it, inserted] = tablet_map.emplace(tablet->tablet_id(), tablet);
+        if (!inserted) {
+            return Status::InternalError(fmt::format("tablet {} already exist in map", tablet->tablet_id()));
+        }
+        _add_tablet_to_partition(*tablet);
+    }
+    return Status::OK();
+}
+
 Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bool update_meta, bool force) {
     TabletSharedPtr old_tablet = _get_tablet_unlocked(new_tablet->tablet_id());
     if (old_tablet == nullptr) {
@@ -842,6 +859,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         _shutdown_tablets.emplace(tablet->tablet_id(), std::move(info));
         return Status::NotFound("tablet state is shutdown");
     }
+    /*
     // NOTE: We do not check tablet's initial version here, because if BE restarts when
     // one tablet is doing schema-change, we may meet empty tablet.
     if (tablet->max_version().first == -1 && tablet->tablet_state() == TABLET_RUNNING) {
@@ -850,6 +868,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         // tablet state is invalid, drop tablet
         return Status::InternalError("tablet in running state but without delta");
     }
+    */
     auto st = _add_tablet_unlocked(tablet, update_meta, force);
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
 
@@ -1260,6 +1279,32 @@ void TabletManager::_build_tablet_stat() {
     }
 }
 
+Status TabletManager::create_inital_rowset_unlocked(const TCreateTabletReq& request, TabletMetaSharedPtr tablet_meta,
+                                                    const string& path_prefix) {
+    DCHECK(request.version == 1);
+    Version version(0, request.version);
+    RowsetWriterContext context;
+    context.rowset_id = StorageEngine::instance()->next_rowset_id();
+    context.tablet_uid = tablet_meta->tablet_uid();
+    context.tablet_id = tablet_meta->tablet_id();
+    context.partition_id = tablet_meta->partition_id();
+    context.tablet_schema_hash = tablet_meta->schema_hash();
+    context.rowset_path_prefix = path_prefix;
+    context.tablet_schema = tablet_meta->tablet_schema_ptr();
+    context.rowset_state = VISIBLE;
+    context.version = version;
+    // there is no data in init rowset, so overlapping info is unknown.
+    context.segments_overlap = OVERLAP_UNKNOWN;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    RETURN_IF_ERROR(RowsetFactory::create_rowset_writer(context, &rowset_writer));
+    RETURN_IF_ERROR(rowset_writer->flush());
+    auto ret = rowset_writer->build();
+    if (!ret.ok()) return ret.status();
+    tablet_meta->add_rs_meta(ret.value()->rowset_meta());
+    return Status::OK();
+}
+
 Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet) {
     Status st;
     if (request.version < 1) {
@@ -1315,6 +1360,21 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
     // NOTE: should not save tablet meta here, because it will be saved if add to map successfully
 
     return st;
+}
+
+Status TabletManager::create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store, uint64_t shard_id,
+                                                  TabletMetaSharedPtr* tablet_meta) {
+    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+    TCreateTabletReq normal_request = request;
+    uint32_t next_unique_id = request.tablet_schema.columns.size();
+    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
+        col_idx_to_unique_id[col_idx] = col_idx;
+    }
+    LOG(INFO) << "creating tablet meta. next_unique_id=" << next_unique_id;
+
+    // We generate a new tablet_uid for this new tablet.
+    return TabletMeta::create(normal_request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
+                              tablet_meta);
 }
 
 Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store,

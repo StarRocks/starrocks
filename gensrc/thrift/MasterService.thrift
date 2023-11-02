@@ -94,6 +94,13 @@ struct TFinishTaskRequest {
     19: optional bool incremental_snapshot
 }
 
+struct TFinishRequest {
+    1: optional i64 txn_id
+    2: optional Types.TBackend backend
+    3: required Types.TTaskType task_type
+    4: required Status.TStatus task_status
+}
+
 struct TTablet {
     1: required list<TTabletInfo> tablet_infos
 }

@@ -93,6 +93,7 @@ import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.CreateReplicaTask.RecoverySource;
+import com.starrocks.task.CreateTableTask;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.DropAutoIncrementMapTask;
@@ -101,6 +102,7 @@ import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
+import com.starrocks.task.TaskQueue;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -115,6 +117,7 @@ import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TDataProperty;
 import com.starrocks.thrift.TDistributionDesc;
+import com.starrocks.thrift.TFinishRequest;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
@@ -357,6 +360,86 @@ public class LeaderImpl {
         return result;
     }
 
+    public TMasterResult finishReq(TFinishRequest request) {
+        LOG.info("finish Req type: {}, backend: {}, txnId: {}", request.getTask_type(),
+                 request.getBackend().getHost(), request.getTxn_id());
+        // if current node is not master, reject the request
+        TMasterResult result = new TMasterResult();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+            result.setStatus(status);
+            return result;
+        }
+        TStatus tStatus = new TStatus(TStatusCode.OK);
+        result.setStatus(tStatus);
+        // check task status
+        // retry task by report process
+        TStatus taskStatus = request.getTask_status();
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("get task report: {}", request.toString());
+        }
+        if (taskStatus.getStatus_code() != TStatusCode.OK) {
+            LOG.warn("finish task reports bad. request: {}", request.toString());
+        }
+
+        // get backend
+        TBackend tBackend = request.getBackend();
+        String host = tBackend.getHost();
+        int bePort = tBackend.getBe_port();
+        // TODO: need to refactor after be has been split into cn + dn.
+        ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+
+        if (cn == null) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+            }
+            if (cn == null) {
+                tStatus.setStatus_code(TStatusCode.CANCELLED);
+                List<String> errorMsgs = new ArrayList<>();
+                errorMsgs.add("backend not exist.");
+                tStatus.setError_msgs(errorMsgs);
+                LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
+                return result;
+            }
+        }
+        long backendId = cn.getId();
+        TTaskType taskType = request.getTask_type();
+        long txnId = request.getTxn_id();
+        CreateTableTask task = TaskQueue.getTask(backendId, txnId);
+        try {
+            switch (taskType) {
+                case CREATE:
+                    finishCreateTable(task, request);
+                    break;
+                default:
+                    break;
+            }
+        } catch (RejectedExecutionException e) {
+            tStatus.setStatus_code(TStatusCode.TOO_MANY_TASKS);
+            String errMsg = "task queue full";
+            List<String> errorMsgs = new ArrayList<>();
+            LOG.warn(errMsg, e);
+            errorMsgs.add(errMsg);
+            tStatus.setError_msgs(errorMsgs);
+        } catch (Exception e) {
+            tStatus.setStatus_code(TStatusCode.CANCELLED);
+            String errMsg = "finish agent task error.";
+            LOG.warn(errMsg, e);
+            List<String> errorMsgs = new ArrayList<>();
+            errorMsgs.add(errMsg);
+            tStatus.setError_msgs(errorMsgs);
+        }
+
+        if (tStatus.getStatus_code() == TStatusCode.OK) {
+            LOG.info("report task success. {}", request.toString());
+        }
+
+        LOG.info("success to create table: {}, backend: {}, txnId: {}", request.getTask_type(),
+                request.getBackend().getHost(), request.getTxn_id());
+        return result;
+    }
+
     private void checkHasTabletInfo(TFinishTaskRequest request) throws Exception {
         if (!request.isSetFinish_tablet_infos() || request.getFinish_tablet_infos().isEmpty()) {
             throw new Exception("tablet info is not set");
@@ -408,6 +491,20 @@ public class LeaderImpl {
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
+        }
+    }
+
+    private void finishCreateTable(CreateTableTask task, TFinishRequest request) {
+        // if we get here, this task will be removed from AgentTaskQueue for certain.
+        // because in this function, the only problem that cause failure is meta missing.
+        // and if meta is missing, we no longer need to resend this task
+        try {
+            LOG.info("status: {}", request.getTask_status().getStatus_code());
+            if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
+                task.countDownLatch(task.getBackendId(), task.getTxnId());
+            }
+        } finally {
+            TaskQueue.removeCreateTableTask(task, task.getTxnId());
         }
     }
 

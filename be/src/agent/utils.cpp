@@ -86,6 +86,42 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
     return STARROCKS_SUCCESS;
 }
 
+AgentStatus MasterServerClient::finish_req(const TFinishRequest& request, TMasterResult* result) {
+    Status client_status;
+    TNetworkAddress network_address = get_master_address();
+    FrontendServiceConnection client(_client_cache, network_address, config::thrift_rpc_timeout_ms, &client_status);
+
+    if (!client_status.ok()) {
+        LOG(WARNING) << "Fail to get master client from cache. "
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", code=" << client_status.code();
+        return STARROCKS_ERROR;
+    }
+
+    try {
+        try {
+            client->finishReq(*result, request);
+        } catch (TTransportException& e) {
+            client_status = client.reopen(config::thrift_rpc_timeout_ms);
+            if (!client_status.ok()) {
+                LOG(WARNING) << "Fail to get master client from cache. "
+                             << "host=" << network_address.hostname << ", port=" << network_address.port
+                             << ", code=" << client_status.code();
+                return STARROCKS_ERROR;
+            }
+            client->finishReq(*result, request);
+        }
+    } catch (TException& e) {
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+        LOG(WARNING) << "Fail to finish_req. "
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", error=" << e.what();
+        return STARROCKS_ERROR;
+    }
+
+    return STARROCKS_SUCCESS;
+}
+
 AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterResult* result) {
     Status client_status;
     TNetworkAddress network_address = get_master_address();

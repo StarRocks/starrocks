@@ -83,8 +83,9 @@ static const double BLOOM_FILTER_DEFAULT_FPP = 0.05;
 
 enum ColumnFamilyIndex {
     DEFAULT_COLUMN_FAMILY_INDEX = 0,
-    STARROCKS_COLUMN_FAMILY_INDEX,
-    META_COLUMN_FAMILY_INDEX,
+    STARROCKS_COLUMN_FAMILY_INDEX = 1,
+    META_COLUMN_FAMILY_INDEX = 2,
+    TXN_COLUMN_FAMILY_INDEX = 3,
     // Newly-added item should be placed above this item.
     NUM_COLUMN_FAMILY_INDEX,
 };
@@ -92,6 +93,7 @@ enum ColumnFamilyIndex {
 static const std::string DEFAULT_COLUMN_FAMILY = "default"; // NOLINT
 static const std::string STARROCKS_COLUMN_FAMILY = "doris"; // NOLINT
 static const std::string META_COLUMN_FAMILY = "meta";       // NOLINT
+static const std::string TXN_COLUMN_FAMILY = "txn";         // NOLINT
 const std::string TABLET_ID_KEY = "tablet_id";              // NOLINT
 
 #define DECLARE_SINGLETON(classname) \

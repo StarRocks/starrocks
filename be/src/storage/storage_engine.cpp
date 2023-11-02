@@ -74,6 +74,7 @@
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
+#include "util/path_util.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
@@ -606,6 +607,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_update_cache_expire_thread)
     JOIN_THREAD(_update_cache_evict_thread)
     JOIN_THREAD(_unused_rowset_monitor_thread)
+    JOIN_THREAD(_unused_txn_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
     wake_finish_publish_vesion_thread();
@@ -658,6 +660,29 @@ void StorageEngine::stop() {
 
     if (_compaction_manager) {
         _compaction_manager->stop();
+    }
+}
+
+void StorageEngine::clear_transaction_task(const TAbortTxnReq& abort_req, long txn_id) {
+    CreateTableTxn* create_txn = nullptr;
+    StatusOr<CreateTableTxn*> get_st = StorageEngine::instance()->txn_manager()->get_create_txn(txn_id);
+    if (!get_st.ok()) {
+        return;
+    }
+    create_txn = get_st.value();
+    for (auto path : create_txn->tablet_paths) {
+        Status st = fs::remove_all(path);
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to remove dir. path: " << path << ", error: " << st.get_error_msg();
+        }
+    }
+    Status delete_st = delete_create_txn(*create_txn);
+    if (!delete_st.ok()) {
+        LOG(WARNING) << "delete txn failed. txn_id: " << txn_id;
+    }
+    delete_st = StorageEngine::instance()->txn_manager()->delete_create_txn(txn_id);
+    if (!delete_st.ok()) {
+        LOG(WARNING) << "delete txn failed. txn_id: " << txn_id;
     }
 }
 
@@ -1201,6 +1226,25 @@ Status StorageEngine::_get_remote_next_increment_id_interval(const TAllocateAuto
             [&request, &result](FrontendServiceConnection& client) { client->allocAutoIncrementId(*result, request); });
 }
 
+Status StorageEngine::delete_unused_create_txn() {
+    std::vector<CreateTableTxn> create_txns;
+    RETURN_IF_ERROR(_txn_manager->list_unused_create_txn(&create_txns));
+    std::vector<TTransactionId> txn_ids;
+    for (auto create_txn : create_txns) {
+        if (create_txn.txn_state != TxnState::TXN_INITAL) {
+            for (auto path : create_txn.tablet_paths) {
+                Status st = fs::remove_all(path);
+                if (!st.ok()) {
+                    LOG(WARNING) << "fail to remove dir. path: " << path << ", error: " << st.get_error_msg();
+                }
+            }
+        }
+        RETURN_IF_ERROR(delete_create_txn(create_txn));
+        txn_ids.push_back(create_txn.txn_id);
+    }
+    return StorageEngine::instance()->txn_manager()->delete_create_txn(txn_ids);
+}
+
 double StorageEngine::delete_unused_rowset() {
     MonotonicStopWatch timer;
     timer.start();
@@ -1287,6 +1331,171 @@ Status StorageEngine::create_tablet(const TCreateTabletReq& request) {
         return Status::InvalidArgument("empty store limit in request");
     }
     return _tablet_manager->create_tablet(request, stores);
+}
+
+Status StorageEngine::create_table(const TCreateTableReq& request, long txn_id) {
+    CreateTableTxn create_txn;
+
+    std::vector<DataDir*> data_dirs;
+
+    // get the whole tablet list
+    std::vector<std::pair<int64_t, int64_t>> tablets;
+
+    // generate dir
+    for (auto& create_tablet_req : request.create_tablet_reqs) {
+        auto stores = get_stores_for_create_tablet(create_tablet_req.storage_medium);
+        if (stores.empty()) {
+            LOG(WARNING) << "there is no available disk that can be used to create tablet.";
+            return Status::InvalidArgument("empty store limit in request");
+        }
+        data_dirs.push_back(stores[0]);
+        tablets.push_back(std::make_pair(create_tablet_req.tablet_id, create_tablet_req.tablet_schema.schema_hash));
+    }
+    for (auto& pair : tablets) {
+        LOG(INFO) << "begin to create tablet:" << pair.first << ", txn_id: " << txn_id;
+    }
+    std::vector<uint64_t> shards;
+    std::vector<string> paths;
+    RETURN_IF_ERROR(generate_paths(data_dirs, tablets, &shards, &paths));
+
+    // prepare the txn
+    create_txn.txn_id = txn_id;
+    create_txn.txn_state = TxnState::TXN_PREPARED;
+    create_txn.txn_start_time = UnixSeconds();
+    create_txn.txn_timeout = request.timeout;
+    create_txn.tablet_paths = paths;
+    create_txn.data_dir = data_dirs[0];
+
+    // save_create_txn
+    RETURN_IF_ERROR(_txn_manager->prepare_create_txn(txn_id, create_txn));
+    RETURN_IF_ERROR(save_create_txn(create_txn));
+
+    // create dir
+    RETURN_IF_ERROR(create_dirs(paths));
+
+    // create new tablet object
+    std::vector<TabletSharedPtr> new_tablets;
+    std::unordered_map<DataDir*, std::vector<TabletMetaSharedPtr>> new_tablet_metas;
+    for (int32_t i = 0; i < data_dirs.size(); ++i) {
+        DataDir* data_dir = data_dirs[i];
+        const TCreateTabletReq& tablet_req = request.create_tablet_reqs[i];
+        uint64_t shard_id = shards[i];
+        TabletMetaSharedPtr tablet_meta;
+        RETURN_IF_ERROR(_tablet_manager->create_tablet_meta_unlocked(tablet_req, data_dir, shard_id, &tablet_meta));
+        if (tablet_meta->tablet_schema_ptr()->keys_type() == KeysType::PRIMARY_KEYS) {
+            tablet_meta->create_inital_updates_meta();
+        } else {
+            RETURN_IF_ERROR(_tablet_manager->create_inital_rowset_unlocked(tablet_req, tablet_meta, paths[i]));
+        }
+        auto it = new_tablet_metas.find(data_dir);
+        if (it == new_tablet_metas.end()) {
+            std::vector<TabletMetaSharedPtr> tablet_metas_vec;
+            tablet_metas_vec.push_back(tablet_meta);
+            new_tablet_metas.emplace(std::make_pair(data_dir, tablet_metas_vec));
+        } else {
+            it->second.push_back(tablet_meta);
+        }
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
+        new_tablets.push_back(new_tablet);
+    }
+
+    // commit txn
+    create_txn.txn_state = TxnState::TXN_COMMITTED;
+    for (auto it : new_tablet_metas) {
+        RETURN_IF_ERROR(TabletMetaManager::save(it.first, it.second));
+    }
+    RETURN_IF_ERROR(save_create_txn(create_txn));
+    RETURN_IF_ERROR(_txn_manager->commit_create_txn(txn_id, create_txn));
+
+    // add to map
+    for (auto& tablet : new_tablets) {
+        if (Status st = tablet->init(); !st.ok()) {
+            LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
+            return Status::InternalError("tablet init failed: " + st.to_string());
+        }
+        tablet->set_cumulative_layer_point(2);
+    }
+    RETURN_IF_ERROR(_tablet_manager->add_tablets(new_tablets));
+    for (auto& pair : tablets) {
+        LOG(INFO) << "finish to create tablet:" << pair.first << ", txn_id: " << txn_id;
+    }
+    return Status::OK();
+}
+
+Status StorageEngine::save_create_txn(const CreateTableTxn& create_txn) {
+    DataDir* data_dir = create_txn.data_dir;
+    std::string txn_info = strings::Substitute("$0$1", "create_txn_", create_txn.txn_id);
+
+    std::string key = txn_info;
+    std::string val = create_txn.serialize();
+
+    rocksdb::WriteBatch batch;
+    rocksdb::ColumnFamilyHandle* cf = data_dir->get_meta()->handle(TXN_COLUMN_FAMILY_INDEX);
+    rocksdb::Status st = batch.Put(cf, key, val);
+    if (!st.ok()) {
+        return Status::IOError("rocksdb save txn failed");
+    }
+
+    return data_dir->get_meta()->write_batch(&batch);
+}
+
+Status StorageEngine::delete_create_txn(const CreateTableTxn& create_txn) {
+    DataDir* data_dir = create_txn.data_dir;
+    std::string txn_info = strings::Substitute("$0_$1", "create_txn_", create_txn.txn_id);
+
+    std::string key = txn_info;
+
+    rocksdb::WriteBatch batch;
+    rocksdb::ColumnFamilyHandle* cf = data_dir->get_meta()->handle(TXN_COLUMN_FAMILY_INDEX);
+    rocksdb::Status st = batch.Delete(cf, key);
+    if (!st.ok()) {
+        return Status::IOError("rocksdb delete txn failed");
+    }
+
+    return data_dir->get_meta()->write_batch(&batch);
+}
+
+Status StorageEngine::generate_paths(const std::vector<DataDir*>& data_dirs,
+                                     const std::vector<std::pair<int64_t, int64_t>>& tablets,
+                                     std::vector<uint64_t>* shards, std::vector<string>* paths) {
+    for (int32_t i = 0; i < data_dirs.size(); ++i) {
+        DataDir* data_dir = data_dirs[i];
+        const std::pair<int64_t, int64_t>& tablet = tablets[i];
+        std::string path = data_dir->path() + DATA_PREFIX;
+
+        uint64_t shard_id = 0;
+        if (!data_dir->get_shard(&shard_id).ok()) {
+            LOG(WARNING) << "Fail to get root path shard";
+            return Status::InternalError("fail to get root path shard");
+        }
+
+        path = path_util::join_path_segments(path, std::to_string(shard_id));
+        path = path_util::join_path_segments(path, std::to_string(tablet.first));
+        path = path_util::join_path_segments(path, std::to_string(tablet.second));
+
+        shards->push_back(shard_id);
+        paths->push_back(path);
+    }
+    return Status::OK();
+}
+
+Status StorageEngine::create_dirs(const std::vector<string>& tablet_paths) {
+    // shard_ids are probably different between different tablets.
+    // If we sync every shard_id dir, the random I/O is the bottleneck
+    // we need to remove the shard_id, use the common dir instead
+    // If yes, the common dir only need to sync once for one table creation.
+    Status st = Status::OK();
+    std::vector<std::filesystem::path> paths;
+    for (const string& path : tablet_paths) {
+        st = fs::create_directories(path);
+        LOG(WARNING) << "create path:" << path;
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to create " << path << ", error:" << st.get_error_msg();
+            continue;
+        }
+    }
+
+    return Status::OK();
 }
 
 Status StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash, std::string* shard_path,

@@ -255,6 +255,49 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature, true);
 }
 
+void run_create_table_req(const TCreateTableReq& create_table_req, long txn_id, ExecEnv* exec_env) {
+    Status status = StorageEngine::instance()->create_table(create_table_req, txn_id);
+    if (status.is_already_exist()) {
+        // If the txn already exist, skip the reply to FE.
+        return;
+    }
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    if (!status.ok()) {
+        LOG(WARNING) << "create table failed. error_msg:" << status.get_error_msg() << ", txn_id: " << txn_id;
+        status_code = TStatusCode::RUNTIME_ERROR;
+        error_msgs.emplace_back("create table failed. error_msg: " + status.get_error_msg() +
+                                ", txn_id: " + std::to_string(txn_id));
+    }
+
+    TStatus req_status;
+    req_status.__set_status_code(status_code);
+    req_status.__set_error_msgs(error_msgs);
+
+    TFinishRequest finish_request;
+    finish_request.__set_backend(BackendOptions::get_localBackend());
+    finish_request.__set_task_type(TTaskType::CREATE);
+    finish_request.__set_txn_id(txn_id);
+    finish_request.__set_task_status(req_status);
+
+    finish_req(finish_request);
+}
+
+void run_abort_req(const TAbortTxnReq& abort_req, long txn_id, ExecEnv* exec_env) {
+    StorageEngine::instance()->clear_transaction_task(abort_req, txn_id);
+    TStatusCode::type status_code = TStatusCode::OK;
+    TStatus req_status;
+    req_status.__set_status_code(status_code);
+
+    TFinishRequest finish_request;
+    finish_request.__set_backend(BackendOptions::get_localBackend());
+    finish_request.__set_task_type(TTaskType::CREATE);
+    finish_request.__set_txn_id(txn_id);
+    finish_request.__set_task_status(req_status);
+
+    finish_req(finish_request);
+}
+
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     int64_t signatrue = agent_task_req->signature;
     std::string alter_msg_head = strings::Substitute("[Alter Job:$0, tablet:$1]: ", agent_task_req->task_req.job_id,

@@ -35,6 +35,7 @@ import com.starrocks.thrift.TMiniLoadEtlStatusRequest;
 import com.starrocks.thrift.TMiniLoadEtlStatusResult;
 import com.starrocks.thrift.TMiniLoadEtlTaskRequest;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReq;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TScanBatchResult;
@@ -140,6 +141,11 @@ public class GenericPoolTest {
 
         @Override
         public TAgentResult submit_tasks(List<TAgentTaskRequest> tasks) throws TException {
+            return null;
+        }
+
+        @Override
+        public TAgentResult submit_req(TReq req) throws TException {
             return null;
         }
 

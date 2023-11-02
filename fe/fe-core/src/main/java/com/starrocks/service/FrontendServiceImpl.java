@@ -183,6 +183,7 @@ import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishRequest;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -1207,6 +1208,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params) throws TException {
         return QeProcessorImpl.INSTANCE.batchReportExecStatus(params, getClientAddr());
+    }
+
+    @Override
+    public TMasterResult finishReq(TFinishRequest request) throws TException {
+        return leaderImpl.finishReq(request);
     }
 
     @Override

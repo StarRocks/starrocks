@@ -246,12 +246,15 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateTableTask;
+import com.starrocks.task.TaskQueue;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.CreateTableTxnState;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -1892,6 +1895,11 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
+
+        long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        CreateTableTxnState txnState = new CreateTableTxnState(txnId, Config.create_table_timeout_second);
+        GlobalStateMgr.getCurrentGlobalTransactionMgr().addCreateTableTxn(txnId, txnState);
+
         int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
             numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
@@ -1907,6 +1915,18 @@ public class LocalMetastore implements ConnectorMetadata {
         int numReplicas = 0;
         for (PhysicalPartition partition : partitions) {
             numReplicas += partition.storageReplicaCount();
+        }
+
+        if (Config.enable_create_table_txn) {
+            try {
+                buildPartitionsOnce(db.getId(), table, partitions, txnId);
+            } catch (DdlException createTableException) {
+                // If the transaction fails, the transaction will be rolled back and the partition will be deleted.
+                // The transaction will be retried later.
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortCreateTableTxn(txnId);
+                throw createTableException;
+            }
+            return;
         }
 
         if (numReplicas > Config.create_table_max_serial_replicas) {
@@ -1960,8 +1980,21 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions,
-                                             int numReplicas,
+    private void buildPartitionsOnce(long dbId, OlapTable table,
+                                     List<PhysicalPartition> partitions, long txnId) throws DdlException {
+        Map<Long, CreateTableTask> tasks = new ConcurrentHashMap<Long, CreateTableTask>();
+        for (int i = 0; i < partitions.size(); i++) {
+            Map<Long, CreateTableTask> createTasks = buildCreateTableTasks(dbId, table, partitions, txnId);
+            createTasks.forEach((k, v) -> tasks.merge(k, v, (v1, v2) -> {
+                v1.getTasks().addAll(v2.getTasks());
+                return v1;
+            }));
+        }
+        sendCreateTableTasksAndWaitForFinished(tasks, txnId, Config.create_table_timeout_second);
+        tasks.clear();
+    }
+
+    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions, int numReplicas,
                                              int numBackends) throws DdlException {
         long start = System.currentTimeMillis();
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
@@ -2039,6 +2072,64 @@ public class LocalMetastore implements ConnectorMetadata {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.storageReplicaCount());
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index));
+        }
+        return tasks;
+    }
+
+    private Map<Long, CreateTableTask> buildCreateTableTasks(long dbId, OlapTable table,
+                                                             List<PhysicalPartition> partitions,
+                                                             long txnId) throws DdlException {
+        Map<Long, CreateTableTask> tasks = new ConcurrentHashMap<Long, CreateTableTask>();
+
+        for (PhysicalPartition partition : partitions) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
+                for (Tablet tablet : index.getTablets()) {
+                    LOG.info("tablet_id: {}", tablet.getId());
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        CreateReplicaTask task = new CreateReplicaTask(
+                                replica.getBackendId(),
+                                dbId,
+                                table.getId(),
+                                partition.getId(),
+                                index.getId(),
+                                tablet.getId(),
+                                indexMeta.getShortKeyColumnCount(),
+                                indexMeta.getSchemaHash(),
+                                partition.getVisibleVersion(),
+                                indexMeta.getKeysType(),
+                                indexMeta.getStorageType(),
+                                table.getPartitionInfo().getDataProperty(partition.getParentId()).getStorageMedium(),
+                                indexMeta.getSchema(),
+                                table.getBfColumns(),
+                                table.getBfFpp(),
+                                null,
+                                table.getIndexes(),
+                                table.getPartitionInfo().getIsInMemory(partition.getParentId()),
+                                table.enablePersistentIndex(),
+                                table.primaryIndexCacheExpireSec(),
+                                table.getCurBinlogConfig(),
+                                table.getPartitionInfo().getTabletType(partition.getParentId()),
+                                table.getCompressionType(), indexMeta.getSortKeyIdxes(),
+                                indexMeta.getSortKeyUniqueIds());
+                        CreateTableTask createTableTask = tasks.get(replica.getBackendId());
+                        if (createTableTask == null) {
+                            createTableTask = new CreateTableTask();
+                            long backendId = replica.getBackendId();
+                            createTableTask.setBackendId(backendId);
+                            createTableTask.setTxnId(txnId);
+                            tasks.put(backendId, createTableTask);
+                            LOG.info("backendId: {}", backendId);
+                        }
+                        createTableTask.addReplicaTask(task);
+                    }
+                }
+            }
+        }
+        for (Map.Entry<Long, CreateTableTask> entry : tasks.entrySet()) {
+            for (CreateReplicaTask task : entry.getValue().getTasks()) {
+                LOG.info("tablet_id: {}", task.getTabletId());
+            }
         }
         return tasks;
     }
@@ -2134,6 +2225,14 @@ public class LocalMetastore implements ConnectorMetadata {
         waitForFinished(countDownLatch, timeout);
     }
 
+    private void sendCreateTableTasksAndWaitForFinished(Map<Long, CreateTableTask> tasks,
+                                                        long txnId, long timeout) throws DdlException {
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+        LOG.info("tasks.size(): {}", tasks.size());
+        sendCreateTableTasks(tasks, txnId, countDownLatch);
+        waitForFinished(countDownLatch, timeout);
+    }
+
     private void sendCreateReplicaTasks(List<CreateReplicaTask> tasks,
                                         MarkedCountDownLatch<Long, Long> countDownLatch) {
         HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
@@ -2150,6 +2249,16 @@ public class LocalMetastore implements ConnectorMetadata {
         for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
             AgentTaskQueue.addBatchTask(entry.getValue());
             AgentTaskExecutor.submit(entry.getValue());
+        }
+    }
+
+    private void sendCreateTableTasks(Map<Long, CreateTableTask> tasks, long txnId,
+                                      MarkedCountDownLatch<Long, Long> countDownLatch) {
+        for (Map.Entry<Long, CreateTableTask> taskEntry : tasks.entrySet()) {
+            taskEntry.getValue().setLatch(countDownLatch);
+            countDownLatch.addMark(taskEntry.getValue().getBackendId(), txnId);
+            TaskQueue.addCreateTableTask(taskEntry.getValue(), txnId);
+            AgentTaskExecutor.submit(taskEntry.getValue());
         }
     }
 

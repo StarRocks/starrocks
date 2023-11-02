@@ -428,6 +428,25 @@ Status TabletMetaManager::save(DataDir* store, const TabletMetaPB& meta_pb) {
     return store->get_meta()->write_batch(&batch);
 }
 
+Status TabletMetaManager::save(DataDir* store, const std::vector<TabletMetaSharedPtr>& tablet_metas) {
+    rocksdb::WriteBatch batch;
+    for (auto& tablet_meta : tablet_metas) {
+        TabletMetaPB meta_pb;
+        tablet_meta->to_meta_pb(&meta_pb);
+
+        std::string key = encode_tablet_meta_key(meta_pb.tablet_id(), meta_pb.schema_hash());
+        std::string val = meta_pb.SerializeAsString();
+
+        rocksdb::ColumnFamilyHandle* cf = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+        rocksdb::Status st = batch.Put(cf, key, val);
+        if (!st.ok()) {
+            return to_status(st);
+        }
+    }
+
+    return store->get_meta()->write_batch(&batch);
+}
+
 Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash) {
     WriteBatch wb;
     RETURN_IF_ERROR(remove_tablet_meta(store, &wb, tablet_id, schema_hash));

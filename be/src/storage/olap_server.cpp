@@ -90,6 +90,9 @@ Status StorageEngine::start_bg_threads() {
     _unused_rowset_monitor_thread = std::thread([this] { _unused_rowset_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_unused_rowset_monitor_thread, "rowset_monitor");
 
+    _unused_txn_monitor_thread = std::thread([this] { _unused_txn_monitor_thread_callback(nullptr); });
+    Thread::set_thread_name(_unused_txn_monitor_thread, "txn_monitor");
+
     // start thread for monitoring the snapshot and trash folder
     _garbage_sweeper_thread = std::thread([this] { _garbage_sweeper_thread_callback(nullptr); });
     Thread::set_thread_name(_garbage_sweeper_thread, "garbage_sweeper");
@@ -781,6 +784,22 @@ void* StorageEngine::_unused_rowset_monitor_thread_callback(void* arg) {
         double deleted_pct = delete_unused_rowset();
         // delete 20% means we nead speedup 5x which make interval 1/5 before
         int32_t interval = config::unused_rowset_monitor_interval * deleted_pct;
+        if (interval <= 0) {
+            interval = 1;
+        }
+        SLEEP_IN_BG_WORKER(interval);
+    }
+
+    return nullptr;
+}
+
+void* StorageEngine::_unused_txn_monitor_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        Status st = delete_unused_create_txn();
+        int32_t interval = config::unused_rowset_monitor_interval;
         if (interval <= 0) {
             interval = 1;
         }

@@ -53,6 +53,10 @@ void BackendService::submit_tasks(TAgentResult& return_value, const std::vector<
     _agent_server->submit_tasks(return_value, tasks);
 }
 
+void BackendService::submit_req(TAgentResult& return_value, const TReq& req) {
+    _agent_server->submit_req(return_value, req);
+}
+
 void BackendService::make_snapshot(TAgentResult& return_value, const TSnapshotRequest& snapshot_request) {
     _agent_server->make_snapshot(return_value, snapshot_request);
 }

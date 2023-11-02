@@ -47,6 +47,7 @@ class Status;
 class TAgentTaskRequest;
 class TAgentResult;
 class TAgentPublishRequest;
+class TReq;
 class TSnapshotRequest;
 class ThreadPool;
 
@@ -62,6 +63,7 @@ public:
     void stop();
 
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
+    void submit_req(TAgentResult& agent_result, const TReq& req);
 
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
 

@@ -122,6 +122,22 @@ struct TCreateTabletReq {
     20: optional bool create_schema_file = true;
 }
 
+struct TCreateTableReq {
+    1: optional list<TCreateTabletReq> create_tablet_reqs;
+    2: optional i32 timeout = 0; // unit: second
+}
+
+struct TAbortTxnReq {
+    1: required Types.TTransactionId txn_id;
+}
+
+struct TReq {
+    1: optional i64 txn_id;
+    2: optional Types.TTaskType task_type;
+    3: optional TCreateTableReq create_table_req;
+    4: optional TAbortTxnReq abort_req;
+}
+
 struct TDropTabletReq {
     1: required Types.TTabletId tablet_id
     2: optional Types.TSchemaHash schema_hash

@@ -100,7 +100,9 @@ Status KVStore::init(bool read_only) {
     cf_descs[2].options = meta_cf_options;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     cf_descs[2].options.compression = rocksdb::kSnappyCompression;
-    static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
+    cf_descs[3].name = TXN_COLUMN_FAMILY;
+    cf_descs[3].options.compression = rocksdb::kSnappyCompression;
+    static_assert(NUM_COLUMN_FAMILY_INDEX == 4);
 
     rocksdb::Status s;
     if (read_only) {

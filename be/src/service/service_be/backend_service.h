@@ -49,6 +49,7 @@ public:
     ~BackendService() override;
 
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
+    void submit_req(TAgentResult& return_value, const TReq& req) override;
 
     void make_snapshot(TAgentResult& return_value, const TSnapshotRequest& snapshot_request) override;
 

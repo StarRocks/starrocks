@@ -1682,6 +1682,7 @@ service FrontendService {
     TBatchReportExecStatusResult batchReportExecStatus(1:TBatchReportExecStatusParams params)
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
+    MasterService.TMasterResult finishReq(1:MasterService.TFinishRequest request)
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)
     
     // Deprecated

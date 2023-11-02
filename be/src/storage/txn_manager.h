@@ -56,6 +56,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
+#include "gutil/strings/split.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -81,6 +82,62 @@ struct TabletTxnInfo {
             : load_id(std::move(load_id)), rowset(std::move(rowset)), creation_time(UnixSeconds()) {}
 
     TabletTxnInfo() = default;
+};
+
+// INITAL -> PREPARED -> COMMITTED -> ABORTED
+//   |          |                       ^^
+//   |          +-----------------------+|
+//   +-----------------------------------+
+enum TxnState { TXN_INITAL, TXN_PREPARED, TXN_COMMITTED, TXN_ABORTED };
+
+const std::string TxnStateNames[4] = {"INITAL", "PREPARED", "COMMITTED", "ABORTED"};
+
+std::string name(TxnState txn_state);
+
+struct CreateTableTxn {
+    int64_t txn_id;
+    int64_t txn_start_time;
+    int64_t txn_timeout;
+    TxnState txn_state;
+    std::vector<string> tablet_paths;
+    DataDir* data_dir = nullptr;
+
+    CreateTableTxn() : txn_id(0), txn_state(TXN_INITAL) {}
+
+    std::string serialize() const {
+        std::string binary = name(txn_state);
+        binary += ";";
+        binary += std::to_string(txn_start_time);
+        binary += ";";
+        binary += std::to_string(txn_timeout);
+        binary += ";";
+        for (auto path : tablet_paths) {
+            binary += ";";
+            binary += path;
+        }
+        return binary;
+    }
+
+    void deserialize(std::string_view binary) {
+        if (binary.empty()) {
+            return;
+        }
+        std::vector<StringPiece> pieces = strings::Split(binary, ";", strings::SkipEmpty());
+        if (pieces[0] == "INITAL") {
+            txn_state = TxnState::TXN_INITAL;
+        } else if (pieces[0] == "PREPARED") {
+            txn_state = TxnState::TXN_PREPARED;
+        } else if (pieces[0] == "COMMITTED") {
+            txn_state = TxnState::TXN_COMMITTED;
+        } else {
+            txn_state = TxnState::TXN_ABORTED;
+        }
+        txn_start_time = strtol(pieces[1].data(), nullptr, 10);
+        txn_timeout = strtol(pieces[2].data(), nullptr, 10);
+        for (int i = 3; i < pieces.size(); ++i) {
+            tablet_paths.emplace_back(pieces[i].data(), pieces[i].size());
+        }
+    }
 };
 
 // txn manager is used to manage mapping between tablet and txns
@@ -119,9 +176,13 @@ public:
     [[nodiscard]] Status prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                                      SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
 
+    [[nodiscard]] Status prepare_create_txn(TTransactionId txn_id, const CreateTableTxn& create_tablet_txn);
+
     [[nodiscard]] Status commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                     TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                     const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+
+    [[nodiscard]] Status commit_create_txn(TTransactionId txn_id, const CreateTableTxn& create_tablet_txn);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     [[nodiscard]] Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
@@ -132,6 +193,12 @@ public:
     // delete rowset related data if it is not null
     [[nodiscard]] Status delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                     TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid);
+
+    [[nodiscard]] Status add_create_txn(TTransactionId txn_id, const CreateTableTxn& create_tablet_txn);
+    [[nodiscard]] Status delete_create_txn(TTransactionId txn_id);
+    [[nodiscard]] Status delete_create_txn(const std::vector<TTransactionId>& txn_ids);
+    [[nodiscard]] StatusOr<CreateTableTxn*> get_create_txn(TTransactionId txn_id);
+    [[nodiscard]] Status list_unused_create_txn(std::vector<CreateTableTxn>* create_table_txns);
 
     void get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                  int64_t* partition_id, std::set<int64_t>* transaction_ids);
@@ -178,6 +245,7 @@ private:
 
     typedef std::unordered_map<TxnKey, std::map<TabletInfo, TabletTxnInfo>, TxnKeyHash, TxnKeyEqual> txn_tablet_map_t;
     typedef std::unordered_map<int64_t, std::unordered_set<int64_t>> txn_partition_map_t;
+    typedef std::unordered_map<int64_t, CreateTableTxn> create_table_txn_map_t;
 
     std::shared_mutex& _get_txn_map_lock(TTransactionId transactionId);
 
@@ -204,6 +272,9 @@ private:
     std::unique_ptr<txn_partition_map_t[]> _txn_partition_maps;
 
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
+
+    std::unique_ptr<create_table_txn_map_t> _create_table_txn_map;
+    std::shared_mutex _create_table_lock;
 
     // Dynamic thread pool used to concurrently flush WAL to disk
     std::unique_ptr<ThreadPool> _flush_thread_pool;

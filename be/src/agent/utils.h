@@ -55,6 +55,7 @@ public:
     // Output parameters:
     // * result: The result of report task
     virtual AgentStatus finish_task(const TFinishTaskRequest& request, TMasterResult* result);
+    virtual AgentStatus finish_req(const TFinishRequest& finish_request, TMasterResult* result);
 
     // Report tasks/olap tablet/disk state to the master server
     //

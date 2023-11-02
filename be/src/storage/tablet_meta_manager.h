@@ -108,6 +108,7 @@ public:
                                      rocksdb::WriteBatch& batch);
 
     static Status save(DataDir* store, const TabletMetaPB& meta_pb);
+    static Status save(DataDir* store, const std::vector<TabletMetaSharedPtr>& tablet_metas);
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 

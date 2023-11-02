@@ -70,6 +70,7 @@ class Executor;
 
 namespace starrocks {
 
+struct CreateTableTxn;
 class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
@@ -138,7 +139,16 @@ public:
     static StorageEngine* instance() { return _s_instance; }
 
     Status create_tablet(const TCreateTabletReq& request);
+    Status create_table(const TCreateTableReq& request, long txn_id);
 
+    Status save_create_txn(const CreateTableTxn& create_txn);
+    Status delete_create_txn(const CreateTableTxn& create_txn);
+    Status generate_paths(const std::vector<DataDir*>& data_dirs,
+                          const std::vector<std::pair<int64_t, int64_t>>& tablets, std::vector<uint64_t>* shards,
+                          std::vector<string>* paths);
+    Status create_dirs(const std::vector<string>& tablet_paths);
+
+    void clear_transaction_task(const TAbortTxnReq& abort_req, long txn_id);
     void clear_transaction_task(const TTransactionId transaction_id);
     void clear_transaction_task(const TTransactionId transaction_id, const std::vector<TPartitionId>& partition_ids);
 
@@ -168,6 +178,7 @@ public:
 
     double delete_unused_rowset();
     void add_unused_rowset(const RowsetSharedPtr& rowset);
+    Status delete_unused_create_txn();
 
     // Obtain shard path for new tablet.
     //
@@ -337,6 +348,9 @@ private:
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
 
+    // unused txn monitor thread
+    void* _unused_txn_monitor_thread_callback(void* arg);
+
     void* _base_compaction_thread_callback(void* arg, DataDir* data_dir,
                                            std::pair<int32_t, int32_t> tablet_shards_range);
     void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir,
@@ -405,6 +419,7 @@ private:
     std::thread _update_cache_expire_thread;
     std::thread _update_cache_evict_thread;
     std::thread _unused_rowset_monitor_thread;
+    std::thread _unused_txn_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat

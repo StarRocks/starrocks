@@ -46,6 +46,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -62,10 +63,19 @@ public class AgentTaskQueue {
     private static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
     private static int taskNum = 0;
 
+    private static Map<Long, Map<Long, List<AgentTask>>> create_tablet_tasks = new HashMap<>();
+
     public static synchronized void addBatchTask(AgentBatchTask batchTask) {
         for (AgentTask task : batchTask.getAllTasks()) {
             addTask(task);
         }
+    }
+
+    public static synchronized boolean addCreateTabletTask(AgentTask task, long txnId) {
+        long backendId = task.getBackendId();
+        Map<Long, List<AgentTask>> txnTasks = create_tablet_tasks.get(backendId);
+        txnTasks.get(txnId).add(task);
+        return true;
     }
 
     public static synchronized boolean addTask(AgentTask task) {

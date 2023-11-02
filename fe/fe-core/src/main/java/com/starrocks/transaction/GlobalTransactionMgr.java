@@ -91,6 +91,8 @@ public class GlobalTransactionMgr {
 
     private final GlobalStateMgr globalStateMgr;
 
+    private Map<Long, CreateTableTxnState> createTableTxnMap = Maps.newConcurrentMap();
+
     public GlobalTransactionMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
@@ -550,12 +552,22 @@ public class GlobalTransactionMgr {
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.abortTimeoutTxns(currentMillis);
         }
+        for (CreateTableTxnState createTableTxnState : createTableTxnMap.values()) {
+            if (createTableTxnState.isTimeout(currentMillis / 1000)) {
+                createTableTxnState.abort();
+            }
+        }
     }
 
     public void removeExpiredTxns() {
         long currentMillis = System.currentTimeMillis();
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.removeExpiredTxns(currentMillis);
+        }
+        for (CreateTableTxnState createTableTxnState : createTableTxnMap.values()) {
+            if (createTableTxnState.isTimeout(currentMillis / 1000)) {
+                createTableTxnMap.remove(createTableTxnState.getTxnId());
+            }
         }
     }
 
@@ -705,6 +717,59 @@ public class GlobalTransactionMgr {
         return this.idGenerator;
     }
 
+    public void addCreateTableTxn(Long txnId, CreateTableTxnState txnState) {
+        if (createTableTxnMap.containsKey(txnId)) {
+            LOG.warn("txnId already exist. txnId: {}", txnId);
+        }
+        createTableTxnMap.put(txnId, txnState);
+    }
+
+    public void abortCreateTableTxn(Long txnId) {
+        if (createTableTxnMap.containsKey(txnId)) {
+            CreateTableTxnState txnState = createTableTxnMap.get(txnId);
+            txnState.abort();
+            createTableTxnMap.remove(txnId);
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        int numTransactions = getTransactionNum();
+        out.writeInt(numTransactions);
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            dbTransactionMgr.unprotectWriteAllTransactionStates(out);
+        }
+        idGenerator.write(out);
+    }
+
+    public void readFields(DataInput in) throws IOException {
+        long now = System.currentTimeMillis();
+        int numTransactions = in.readInt();
+        List<TransactionState> transactionStates = new ArrayList<>(numTransactions);
+        for (int i = 0; i < numTransactions; ++i) {
+            TransactionState transactionState = new TransactionState();
+            transactionState.readFields(in);
+            if (transactionState.isExpired(now)) {
+                LOG.info("discard expired transaction state: {}", transactionState);
+                continue;
+            } else if (transactionState.getTransactionStatus() == TransactionStatus.UNKNOWN) {
+                LOG.info("discard unknown transaction state: {}", transactionState);
+                continue;
+            }
+            transactionStates.add(transactionState);
+        }
+        putTransactionStats(transactionStates);
+        idGenerator.readFields(in);
+    }
+
+    public long loadTransactionState(DataInputStream dis, long checksum) throws IOException {
+        int size = dis.readInt();
+        long newChecksum = checksum ^ size;
+        readFields(dis);
+        LOG.info("finished replay transactionState from image");
+        return newChecksum;
+    }
+
     public void loadTransactionStateV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();
@@ -723,6 +788,12 @@ public class GlobalTransactionMgr {
             transactionStates.add(transactionState);
         }
         putTransactionStats(transactionStates);
+
+        int numCreateTableTxn = reader.readInt();
+        for (int i = 0; i < numCreateTableTxn; ++i) {
+            CreateTableTxnState txnState = reader.readJson(CreateTableTxnState.class);
+            createTableTxnMap.put(txnState.getTxnId(), txnState);
+        }
     }
 
     private void putTransactionStats(List<TransactionState> transactionStates) throws IOException {
@@ -782,12 +853,16 @@ public class GlobalTransactionMgr {
 
     public void saveTransactionStateV2(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
-        final int cnt = 2 + txnNum;
+        final int cnt = 3 + txnNum;
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.GLOBAL_TRANSACTION_MGR, cnt);
         writer.writeJson(idGenerator);
         writer.writeJson(txnNum);
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             dbTransactionMgr.unprotectWriteAllTransactionStatesV2(writer);
+        }
+        writer.writeJson(createTableTxnMap.size());
+        for (Map.Entry<Long, CreateTableTxnState> entry : createTableTxnMap.entrySet()) {
+            writer.writeJson(entry.getValue());
         }
         writer.close();
     }

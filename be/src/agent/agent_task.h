@@ -23,7 +23,9 @@ namespace starrocks {
 
 void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
 void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
+void run_create_table_req(const TCreateTableReq& create_table_req, long txn_id, ExecEnv* exec_env);
 void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);
+void run_abort_req(const TAbortTxnReq& abort_req, long txn_id, ExecEnv* exec_env);
 void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskRequest>& agent_task_req,
                                 ExecEnv* exec_env);
 void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env);

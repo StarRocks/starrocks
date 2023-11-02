@@ -55,6 +55,13 @@
 
 namespace starrocks {
 
+std::string name(TxnState txn_state) {
+    if (txn_state >= 0 && txn_state < 4) {
+        return TxnStateNames[txn_state];
+    }
+    return "INVALID";
+}
+
 // keep recently published txns in memory for a while
 static std::mutex txn_info_history_lock;
 static std::deque<TxnInfo> txn_info_history;
@@ -125,6 +132,7 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, uint3
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
+    _create_table_txn_map = std::unique_ptr<create_table_txn_map_t>(new create_table_txn_map_t());
     // we will get "store_num = 0" if it acts as cn, just ignore flush pool
     if (store_num > 0) {
         auto st = ThreadPoolBuilder("meta-flush")
@@ -144,12 +152,42 @@ Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr&
                        load_id);
 }
 
+Status TxnManager::prepare_create_txn(TTransactionId txn_id, const CreateTableTxn& create_table_txn) {
+    std::unique_lock wr_lock(_create_table_lock);
+    auto it = _create_table_txn_map->find(txn_id);
+    if (it == _create_table_txn_map->end()) {
+        _create_table_txn_map->emplace(txn_id, create_table_txn);
+        return Status::OK();
+    }
+    if (create_table_txn.txn_state == TxnState::TXN_PREPARED || create_table_txn.txn_state == TXN_COMMITTED) {
+        return Status::AlreadyExist(fmt::format("transaction already exist. txn_id: {}", txn_id));
+    } else {
+        return Status::Aborted(fmt::format("transaction aborted. txn_id: {}", txn_id));
+    }
+}
+
 Status TxnManager::commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
                               const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     auto scoped =
             trace::Scope(Tracer::Instance().start_trace_txn_tablet("txn_commit", transaction_id, tablet->tablet_id()));
     return commit_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                       tablet->schema_hash(), tablet->tablet_uid(), load_id, rowset_ptr, is_recovery);
+}
+
+Status TxnManager::commit_create_txn(TTransactionId txn_id, const CreateTableTxn& create_table_txn) {
+    std::unique_lock wr_lock(_create_table_lock);
+    auto it = _create_table_txn_map->find(txn_id);
+    if (it == _create_table_txn_map->end()) {
+        return Status::NotFound(fmt::format("Not found txn. txn_id: {}", txn_id));
+    }
+    if (it->second.txn_state == TxnState::TXN_PREPARED) {
+        _create_table_txn_map->insert_or_assign(txn_id, create_table_txn);
+    } else if (it->second.txn_state == TxnState::TXN_COMMITTED) {
+        return Status::AlreadyExist(fmt::format("transaction already exist. txn_id: {}", txn_id));
+    } else if (it->second.txn_state == TxnState::TXN_ABORTED) {
+        return Status::Aborted(fmt::format("transaction aborted. txn_id: {}", txn_id));
+    }
+    return Status::OK();
 }
 
 // delete the txn from manager if it is not committed(not have a valid rowset)
@@ -164,6 +202,49 @@ Status TxnManager::rollback_txn(TPartitionId partition_id, const TabletSharedPtr
 Status TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id) {
     return delete_txn(tablet->data_dir()->get_meta(), partition_id, transaction_id, tablet->tablet_id(),
                       tablet->schema_hash(), tablet->tablet_uid());
+}
+
+Status TxnManager::add_create_txn(TTransactionId txn_id, const CreateTableTxn& create_table_txn) {
+    std::unique_lock wr_lock(_create_table_lock);
+    _create_table_txn_map->emplace(txn_id, create_table_txn);
+    return Status::OK();
+}
+
+Status TxnManager::delete_create_txn(TTransactionId txn_id) {
+    std::unique_lock wr_lock(_create_table_lock);
+    _create_table_txn_map->erase(txn_id);
+    return Status::OK();
+}
+
+Status TxnManager::delete_create_txn(const std::vector<TTransactionId>& txn_ids) {
+    std::unique_lock wr_lock(_create_table_lock);
+    for (auto txn_id : txn_ids) {
+        _create_table_txn_map->erase(txn_id);
+    }
+    return Status::OK();
+}
+
+StatusOr<CreateTableTxn*> TxnManager::get_create_txn(TTransactionId txn_id) {
+    std::unique_lock wr_lock(_create_table_lock);
+    auto it = _create_table_txn_map->find(txn_id);
+    if (it == _create_table_txn_map->end()) {
+        return Status::NotFound(fmt::format("Not found txn. txn_id: {}", txn_id));
+    }
+    return &(it->second);
+}
+
+Status TxnManager::list_unused_create_txn(std::vector<CreateTableTxn>* create_table_txns) {
+    std::unique_lock wr_lock(_create_table_lock);
+    int64_t now = UnixSeconds();
+    for (auto it : *_create_table_txn_map) {
+        if (it.second.txn_state == TXN_COMMITTED) {
+            continue;
+        }
+        if (difftime(now, it.second.txn_start_time) > it.second.txn_timeout) {
+            create_table_txns->push_back(it.second);
+        }
+    }
+    return Status::OK();
 }
 
 // prepare txn should always be allowed because ingest task will be retried

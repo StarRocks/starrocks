@@ -788,6 +788,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_create_timeout_second = 10;
 
+    @ConfField(mutable = true)
+    public static int create_table_timeout_second = 60;
+
+    @ConfField(mutable = true)
+    public static boolean enable_create_table_txn = true;
+
     /**
      * minimal intervals between two publish version action
      */

@@ -52,6 +52,7 @@
 
 namespace starrocks {
 
+struct CreateTableTxn;
 class Tablet;
 class TabletManager;
 class TxnManager;
@@ -157,6 +158,10 @@ public:
 
     // for test
     size_t get_all_check_dcg_files_cnt() const { return _all_check_dcg_files.size(); }
+
+    Status load_create_table_txn();
+    bool decode_create_table_txn(std::string_view key, std::string_view value, int64_t* txn_id,
+                                 CreateTableTxn* create_table_txn);
 
 private:
     Status _init_data_dir();

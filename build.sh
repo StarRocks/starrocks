@@ -38,6 +38,7 @@ ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
+export BUILD_TYPE=DEBUG
 
 if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release

@@ -196,6 +196,14 @@ public:
 
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
+    Status add_tablets(const std::vector<TabletSharedPtr>& new_tablets);
+
+    Status create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store, uint64_t shard_id,
+                                       TabletMetaSharedPtr* tablet_meta);
+
+    Status create_inital_rowset_unlocked(const TCreateTabletReq& request, TabletMetaSharedPtr tablet_meta,
+                                         const string& path_prefix);
+
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;
@@ -235,7 +243,7 @@ private:
 
     Status _update_tablet_map_and_partition_info(const TabletSharedPtr& tablet);
 
-    static Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
+    Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
     Status _drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag);
 

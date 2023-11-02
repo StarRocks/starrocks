@@ -31,11 +31,24 @@ public class AgentTaskExecutor {
 
     }
 
-    public static void submit(AgentBatchTask task) {
+    public static void submit(CreateTableTask task) {
         if (task == null) {
             return;
         }
         EXECUTOR.submit(task);
     }
 
+    public static void submit(AbortCreateTableTxnTask task) {
+        if (task == null) {
+            return;
+        }
+        EXECUTOR.submit(task);
+    }
+
+    public static void submit(AgentBatchTask task) {
+        if (task == null) {
+            return;
+        }
+        EXECUTOR.submit(task);
+    }
 }
