@@ -927,7 +927,7 @@ VARIANCE(expr) [OVER (partition_by_clause)]
 
 > 注意
 >
-> `VARIANCE()` 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -977,7 +977,7 @@ VAR_SAMP(expr) [OVER (partition_by_clause)]
 
 > 注意
 >
-> VAR_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1027,7 +1027,7 @@ STD(expr) [OVER (partition_by_clause)]
 
 > 注意
 >
-> STD() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1077,7 +1077,7 @@ STDDEV_SAMP(expr) [OVER (partition_by_clause)]
 
 > 注意
 >
-> STDDEV_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1127,7 +1127,7 @@ COVAR_SAMP(expr1, expr2) [OVER (partition_by_clause)]
 
 > 注意
 >
-> COVAR_SAMP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1177,7 +1177,7 @@ COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
 
 > 注意
 >
-> COVAR_POP() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
@@ -1227,7 +1227,7 @@ CORR(expr1, expr2) [OVER (partition_by_clause)]
 
 > 注意
 >
-> CORR() 函数只支持 PARTITION BY，不支持 ORDER BY 和 Window 子句。
+> 从 2.5.13，3.0.7，3.1.4 版本起，该窗口函数支持 ORDER BY 和 Window 子句。
 
 **参数说明：**
 
