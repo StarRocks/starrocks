@@ -183,7 +183,7 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been closed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
     }
 }
 
@@ -196,7 +196,7 @@ inline void AsyncDeltaWriterImpl::flush(Callback cb) {
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been closed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
     }
 }
 
@@ -212,7 +212,7 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been closed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
     }
 }
 
