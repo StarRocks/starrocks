@@ -210,9 +210,10 @@ jobs:
 
   result:
     runs-on: [self-hosted, normal]
-    needs: [ build ]
+    needs: [ pr-label, build ]
     name: RESULT
-    if: always()
+    if: >
+      always() && (!contains(needs.pr-label.outputs.labels, 'conflict') || github.event.action != 'opened')
     env:
       REPO: ${{ github.repository }}
       PR_NUMBER: ${{ github.event.number }}
@@ -235,10 +236,14 @@ jobs:
           labels: ERROR
 
       - name: notify
-        if: needs.build.result == 'failure'
+        if: >
+          needs.build.result == 'failure' ||
+          (needs.build.result == 'success' && contains(needs.pr-label.outputs.labels, 'conflict'))
+        env:
+          build_res: ${{ needs.build.result }}
         run: |
           cd /var/lib/elastic-service && git pull
-          python3 lib/send_pr_notification.py ${PR_NUMBER} ${REPO} ${BRANCH} ${ACTION_URL}
+          python3 lib/send_pr_notification.py ${PR_NUMBER} ${REPO} ${BRANCH} ${ACTION_URL} ${build_res}
 
   auto-merge:
     needs: [pr-label, build]
@@ -273,6 +278,6 @@ jobs:
       - name: automerge
         uses: peter-evans/enable-pull-request-automerge@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.APPROVE_PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
           merge-method: rebase
