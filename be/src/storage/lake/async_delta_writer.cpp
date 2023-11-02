@@ -118,7 +118,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
             st.permit_unchecked_error();
-            iter->cb(Status::InternalError("AsyncDeltaWriter has been close()ed"));
+            iter->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
             continue;
         }
         if (st.ok() && iter->chunk != nullptr && iter->indexes_size > 0) {
@@ -148,7 +148,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
 inline Status AsyncDeltaWriterImpl::open() {
     std::lock_guard l(_mtx);
     if (_closed) {
-        return Status::InternalError("AsyncDeltaWriter has been close()ed");
+        return Status::InternalError("AsyncDeltaWriter has been closed");
     }
     if (_opened) {
         return _status;
@@ -183,7 +183,7 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been closed"));
     }
 }
 
@@ -196,7 +196,7 @@ inline void AsyncDeltaWriterImpl::flush(Callback cb) {
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been closed"));
     }
 }
 
@@ -212,7 +212,7 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been closed"));
     }
 }
 

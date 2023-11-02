@@ -746,7 +746,7 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
         ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
         ASSERT_GE(finish_response.status().error_msgs_size(), 1);
         const auto& message = finish_response.status().error_msgs(0);
-        ASSERT_TRUE(message.find("AsyncDeltaWriter has been close()ed") != std::string::npos) << message;
+        ASSERT_TRUE(message.find("AsyncDeltaWriter has been closed") != std::string::npos) << message;
 
         PTabletWriterAddBatchResult finish_response2;
         _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2);

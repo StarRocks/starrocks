@@ -1288,7 +1288,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
             load_mgr->add_chunk(add_chunk_request, &add_chunk_response);
             if (add_chunk_response.status().status_code() != TStatusCode::OK) {
                 std::cerr << add_chunk_response.status().error_msgs(0) << '\n';
-                cancelled = MatchPattern(add_chunk_response.status().error_msgs(0), "*has been close()ed*");
+                cancelled = MatchPattern(add_chunk_response.status().error_msgs(0), "*has been closed*");
                 break;
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
