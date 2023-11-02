@@ -823,6 +823,20 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         this.lastStatusCheckTime = lastStatusCheckTime;
     }
 
+    private String getReplicaBackendState(long backendId) {
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        Backend backend = infoService.getBackend(backendId);
+        if (backend == null) {
+            return "NIL";
+        } else if (!backend.isAlive()) {
+            return "DEAD";
+        } else if (backend.isDecommissioned()) {
+            return "DECOMM";
+        } else {
+            return "ALIVE";
+        }
+    }
+
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
@@ -830,7 +844,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 sb.append(String.format("%d:%d/%d/%d/%d:%s", replica.getBackendId(), replica.getVersion(),
                         replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
                         replica.getState()));
+                sb.append(String.format("%d:%d/%d/%d/%d:%s:%s,", replica.getBackendId(), replica.getVersion(),
+                        replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
+                        replica.getState(), getReplicaBackendState(replica.getBackendId())));
             }
+
         }
         return sb.toString();
     }
