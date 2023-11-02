@@ -614,7 +614,7 @@ void StorageEngine::stop() {
 
     JOIN_THREAD(_pk_index_major_compaction_thread);
 
-#ifndef USE_STAROS
+#ifdef USE_STAROS
     JOIN_THREAD(_local_pk_index_shard_data_gc_thread)
 #endif
 
