@@ -268,7 +268,7 @@ CONF_mBool(enable_zonemap_index_memory_page_cache, "false");
 // whether to enable the ordinal index memory cache
 CONF_mBool(enable_ordinal_index_memory_page_cache, "false");
 // whether to disable column pool
-CONF_Bool(disable_column_pool, "false");
+CONF_Bool(disable_column_pool, "true");
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(min_base_compaction_num_singleton_deltas, "5");
