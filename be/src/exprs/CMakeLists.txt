@@ -92,6 +92,7 @@ set(EXPR_FILES
   subfield_expr.cpp
   map_apply_expr.cpp
   map_expr.cpp
+        runtime_filter_layout.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})
