@@ -232,8 +232,10 @@ public class CostModel {
                 return CostEstimate.infinite();
             }
 
-            if (!mustMultiStageAgg && !inputProperties.isEmpty() && inputProperties.get(0).getDistributionProperty().isShuffle()
-                    && node.isSplit() && node.getType().isGlobal()) {
+            if (!mustMultiStageAgg && node.isSplit() && node.getType().isGlobal()
+                    && !inputProperties.isEmpty()
+                    && inputProperties.get(0).getDistributionProperty().isShuffle()) {
+                // If one stage agg is valid, use cost to eliminate local agg -> global agg plan.
                 HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
                 HashDistributionDesc desc = spec.getHashDistributionDesc();
                 if (desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
@@ -314,25 +316,7 @@ public class CostModel {
             SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             double outputSize = statistics.getOutputSize(outputColumns);
-            double factor = 1.0;
-            Operator childOp = context.getChildOperator(0);
-            if (childOp instanceof LogicalAggregationOperator) {
-                LogicalAggregationOperator childAggOp = childOp.cast();
-                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null && skewInfo.getStage() == 3) {
-                    factor = skewInfo.getPenaltyFactor();
-                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
-                    factor = 0.1;
-                }
-            } else if (childOp instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator childAggOp = childOp.cast();
-                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null && skewInfo.getStage() == 3) {
-                    factor = skewInfo.getPenaltyFactor();
-                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
-                    factor = 0.1;
-                }
-            }
+            double factor = setExchangeCostFactor(context.getChildOperator(0));
             // set network start cost 1 at least
             // avoid choose network plan when the cost is same as colocate plans
             switch (distributionSpec.getType()) {
@@ -495,5 +479,36 @@ public class CostModel {
         public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
             return CostEstimate.zero();
         }
+
+        // if there exists a skew hint factor use it
+        // if this is an enforcer above a local agg set 0.1 to reduce this exchange cost.
+        // The reason is as below:
+        // In most scenes, local agg -> exchange -> global agg is better than exchange -> global agg
+        // but when we estimated a very high cardinality of group by key but actually its cardinality is small,
+        // the local agg cost is same as the global agg cost and the planner choose the second one which
+        // is relatively slow when exchange a large amount of data.
+        private double setExchangeCostFactor(Operator childOp) {
+            double factor = 1.0;
+            if (childOp instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            } else if (childOp instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            }
+            return factor;
+        }
     }
+
+
 }
