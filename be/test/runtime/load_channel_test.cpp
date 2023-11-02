@@ -190,8 +190,9 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
-                                                      UniqueId::gen_uid(), next_id(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel =
+                std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
+                                              next_id(), string(), 1000, std::move(load_mem_tracker));
     }
 
     void TearDown() override {
