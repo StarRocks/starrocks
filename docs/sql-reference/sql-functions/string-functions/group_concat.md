@@ -21,11 +21,9 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 - Items in ORDER BY can be unsigned integers (starting from 1), column names, or normal expressions. The results are sorted in ascending order by default. You can also explicitly specify the ASC keyword. If you want to sort results in descending order, add the DESC keyword to the name of the column you are sorting.
 - `sep`: the optional separator used to concatenate non-null values from different rows. If it is not specified, `,` (a comma) is used by default. To eliminate the separator, specify an empty string `''`.
 
-:::tip[Note]
-
-From v3.0.6 and v3.1.3 onwards, there is a behavior change when you specify the separator. You must use `SEPARATOR` before the separator, for example, `select group_concat(name SEPARATOR '-') as res from ss;`.
-
-:::
+> **NOTE**
+>
+> From v3.0.6 and v3.1.3 onwards, there is a behavior change when you specify the separator. You must use `SEPARATOR` to declare the separator, for example, `select group_concat(name SEPARATOR '-') as res from ss;`.
 
 ## Return value
 
