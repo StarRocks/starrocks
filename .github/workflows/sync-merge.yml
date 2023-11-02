@@ -3,14 +3,18 @@ name: SYNC MERGE PIPELINE
 on:
   push:
     branches:
-      - main
+      - 'main'
       - 'branch-[0-9].[0-9]'
   pull_request:
     branches:
-      - main
+      - 'main'
       - 'branch-[0-9].[0-9]'
 
 jobs:
+  info:
+    runs-on: [self-hosted, sync-normal]
+    steps:
+      - run: cat $GITHUB_EVENT_PATH
 
   delete-branch:
     runs-on: [self-hosted, sync-normal]
