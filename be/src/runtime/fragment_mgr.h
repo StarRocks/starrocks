@@ -132,6 +132,7 @@ private:
     std::thread _cancel_thread;
     // every job is a pool
     std::unique_ptr<ThreadPool> _thread_pool;
+    bool _closed = false;
 };
 
 } // namespace starrocks
