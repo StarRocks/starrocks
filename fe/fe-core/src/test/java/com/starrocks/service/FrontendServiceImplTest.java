@@ -25,7 +25,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+<<<<<<< HEAD
 import com.starrocks.qe.QueryQueueManager;
+=======
+import com.starrocks.qe.GlobalVariable;
+>>>>>>> 7d2d88a78c ([Enhancement][Cherry-Pick] Supports modifying the version to take effect without restarting (#34163))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
@@ -43,6 +47,8 @@ import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -759,5 +765,16 @@ public class FrontendServiceImplTest {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+    }
+
+    @Test
+    public void testSetFrontendConfig() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.keys = Lists.newArrayList("mysql_server_version");
+        request.values = Lists.newArrayList("5.1.1");
+
+        TSetConfigResponse result = impl.setConfig(request);
+        Assert.assertEquals("5.1.1", GlobalVariable.version);
     }
 }
