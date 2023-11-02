@@ -276,21 +276,6 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-<<<<<<< HEAD
-    auto thread_pool = abort_txn_thread_pool(_env);
-    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
-    for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto txn_ids = request->txn_ids().data();
-            auto txn_ids_size = request->txn_ids_size();
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_ids_size);
-        };
-        auto st = thread_pool->submit_func(task);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit abort txn  task: " << st;
-            latch.count_down();
-=======
     LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "] tablets=["
               << JoinInts(request->tablet_ids(), ",") << "]";
 
@@ -298,7 +283,6 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
         for (auto txn_id : request->txn_ids()) {
             load_mgr->abort_txn(txn_id);
->>>>>>> d103dc9e06 ([Enhancement] Improve aborting transactions in shared data mode (#34185))
         }
     }
 
@@ -306,9 +290,10 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
-        auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
+        auto txn_ids = request->txn_ids().data();
+        auto txn_ids_size = request->txn_ids_size();
         for (auto tablet_id : request->tablet_ids()) {
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids);
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_ids_size);
         }
     };
     auto st = thread_pool->submit_func(task);

@@ -86,13 +86,9 @@ public:
 
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
-<<<<<<< HEAD
     void clear();
-=======
-    void abort_txn(int64_t txn_id);
 
-    void close();
->>>>>>> d103dc9e06 ([Enhancement] Improve aborting transactions in shared data mode (#34185))
+    void abort_txn(int64_t txn_id);
 
 private:
     static void* load_channel_clean_bg_worker(void* arg);

@@ -1206,30 +1206,6 @@ TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     ASSERT_TRUE(duplicate);
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(LakeServiceTest, test_lock_and_unlock_tablet_metadata) {
-    {
-        lake::LockTabletMetadataRequest request;
-        lake::LockTabletMetadataResponse response;
-        request.set_tablet_id(10);
-        request.set_version(5);
-        brpc::Controller cntl;
-        _lake_service.lock_tablet_metadata(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-    }
-    {
-        lake::UnlockTabletMetadataRequest request;
-        lake::UnlockTabletMetadataResponse response;
-        request.set_tablet_id(10);
-        request.set_version(13);
-        request.set_expire_time(10000);
-        brpc::Controller cntl;
-        _lake_service.unlock_tablet_metadata(&cntl, &request, &response, nullptr);
-        ASSERT_TRUE(cntl.Failed());
-    }
-}
-
 TEST_F(LakeServiceTest, test_abort_txn2) {
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
     ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
@@ -1353,5 +1329,4 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
     t1.join();
 }
 
->>>>>>> d103dc9e06 ([Enhancement] Improve aborting transactions in shared data mode (#34185))
 } // namespace starrocks
