@@ -4465,11 +4465,11 @@ SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3]);
 -- !result
 SELECT array_contains_seq([1, 2, NULL, 3, 4], null);
 -- result:
-NULL
+None
 -- !result
 SELECT array_contains_seq(null, [2,3])
 -- result:
-NULL
+None
 -- !result
 SELECT array_contains_seq([1, 2, NULL, 3, 4], [null,null])
 -- result:
@@ -4481,5 +4481,5 @@ SELECT array_contains_seq([1, 2, NULL], [null,2])
 -- !result
 SELECT array_contains_seq(null, null)
 -- result:
-NULL
+None
 -- !result
