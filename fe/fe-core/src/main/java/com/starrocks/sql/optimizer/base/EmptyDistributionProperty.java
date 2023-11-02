@@ -47,11 +47,6 @@ public class EmptyDistributionProperty extends DistributionProperty {
         return false;
     }
 
-    @Override
-    public boolean isSatisfy(PhysicalProperty other) {
-        return true;
-    }
-
     public GroupExpression appendEnforcers(Group child) {
         throw new StarRocksPlannerException("cannot enforce empty distribution property.", ErrorType.INTERNAL_ERROR);
     }

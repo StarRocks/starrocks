@@ -33,11 +33,6 @@ public class EmptySortProperty extends SortProperty {
         return true;
     }
 
-
-    public boolean isSatisfy(PhysicalProperty other) {
-        return true;
-    }
-
     @Override
     public int hashCode() {
         return System.identityHashCode(this);

@@ -41,11 +41,6 @@ public class EmptyCTEProperty extends CTEProperty {
     }
 
     @Override
-    public boolean isSatisfy(PhysicalProperty other) {
-        return true;
-    }
-
-    @Override
     public int hashCode() {
         return System.identityHashCode(this);
     }
