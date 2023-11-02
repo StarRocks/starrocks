@@ -53,8 +53,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     private static final int SCRAMBLE_LENGTH = 20;
     // Version of handshake packet, since MySQL 3.21.0, Handshake of protocol 10 is used
     private static final int PROTOCOL_VERSION = 10;
-    // JDBC use this version to check which protocol the server support
-    private static final String SERVER_VERSION = Config.mysql_server_version;
+
     // 33 stands for UTF-8 character set
     private static final int CHARACTER_SET = 33;
     // use default capability for all
@@ -94,7 +93,8 @@ public class MysqlHandshakePacket extends MysqlPacket {
         }
 
         serializer.writeInt1(PROTOCOL_VERSION);
-        serializer.writeNulTerminateString(SERVER_VERSION);
+        // JDBC use this version to check which protocol the server support
+        serializer.writeNulTerminateString(Config.mysql_server_version);
         serializer.writeInt4(connectionId);
         // first 8 bytes of auth plugin data
         serializer.writeBytes(authPluginData, 0, 8);
