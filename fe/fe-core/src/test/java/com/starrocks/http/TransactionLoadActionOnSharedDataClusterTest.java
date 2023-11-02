@@ -121,7 +121,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                     })
                     .build();
-            try (Response response1 = networkClient.newCall(request).execute();){
+            try (Response response1 = networkClient.newCall(request).execute()) {
                 Assert.assertTrue(response1.body().string().contains("OK"));
             }
 
@@ -150,7 +150,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        try (Response response1 = networkClient.newCall(request).execute();){
+        try (Response response1 = networkClient.newCall(request).execute()) {
             Assert.assertFalse(response1.body().string().contains("OK"));
         }
 
@@ -173,7 +173,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        try (Response response1 = networkClient.newCall(request).execute();){
+        try (Response response1 = networkClient.newCall(request).execute()) {
             Assert.assertFalse(response1.body().string().contains("OK"));
         }
 
@@ -197,7 +197,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        try (Response response1 = networkClient.newCall(request).execute()){
+        try (Response response1 = networkClient.newCall(request).execute()) {
             Assert.assertTrue(response1.body().string().contains("OK"));
         }
     }
@@ -223,7 +223,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        try (Response response1 = networkClient.newCall(request).execute();){
+        try (Response response1 = networkClient.newCall(request).execute()) {
             Assert.assertFalse(response1.body().string().contains("OK"));
         }
 
@@ -245,11 +245,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                 })
                 .build();
-        try (Response response1 = networkClient.newCall(request).execute();){
+        try (Response response1 = networkClient.newCall(request).execute()) {
             Assert.assertFalse(response1.body().string().contains("OK"));
         }
-
-
 
 
     }
@@ -274,7 +272,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                 })
                 .build();
-        try (Response response = networkClient.newCall(request).execute();) {
+        try (Response response = networkClient.newCall(request).execute()) {
             Assert.assertFalse(response.body().string().contains("OK"));
         }
         request = new Request.Builder()
@@ -295,7 +293,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                 })
                 .build();
-        try (Response response0 = networkClient.newCall(request).execute();) {
+        try (Response response0 = networkClient.newCall(request).execute()) {
             Assert.assertFalse(response0.body().string().contains("OK"));
         }
 
