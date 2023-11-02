@@ -22,11 +22,22 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.List;
 
 public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
-    public SortProperty(OrderSpec spec) {
+
+    public static SortProperty createSortProperty(List<Ordering> orderDescs) {
+        if (CollectionUtils.isEmpty(orderDescs)) {
+            return EmptySortProperty.INSTANCE;
+        } else {
+            return new SortProperty(new OrderSpec(orderDescs));
+        }
+    }
+    protected SortProperty(OrderSpec spec) {
         this.spec = spec;
     }
 

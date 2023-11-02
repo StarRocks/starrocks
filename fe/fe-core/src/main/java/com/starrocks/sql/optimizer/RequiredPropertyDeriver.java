@@ -25,7 +25,6 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -88,12 +87,12 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                     cteIds.retainAll(groupExpression.inputAt(1).getLogicalProperty().getUsedCTEs().getCteIds());
                     cteIds.add(operator.getCteId());
                 }
-                newProperty.setCteProperty(new CTEProperty(cteIds));
+                newProperty.setCteProperty(CTEProperty.createCTEProperty(cteIds));
                 requiredProperties.get(0).set(idx++, newProperty);
             }
         } else if (operatorType == OperatorType.PHYSICAL_NO_CTE) {
             Set<Integer> cteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
-            CTEProperty cteProperty = new CTEProperty(cteIds);
+            CTEProperty cteProperty = CTEProperty.createCTEProperty(cteIds);
             PhysicalPropertySet newProperty = requiredProperties.get(0).get(0).copy();
             DistributionProperty oldDistribution = newProperty.getDistributionProperty();
             newProperty.setDistributionProperty(new DistributionProperty(oldDistribution.getSpec(), true));
@@ -110,7 +109,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                     PhysicalPropertySet property = requiredProperty.get(i).copy();
                     Set<Integer> remainCteIds = Sets.newHashSet(requirementsFromParent.getCteProperty().getCteIds());
                     remainCteIds.retainAll(groupExpression.inputAt(i).getLogicalProperty().getUsedCTEs().getCteIds());
-                    CTEProperty cteProperty = new CTEProperty(remainCteIds);
+                    CTEProperty cteProperty = CTEProperty.createCTEProperty(remainCteIds);
                     property.setCteProperty(cteProperty);
                     requiredProperty.set(i, property);
                 }
@@ -175,8 +174,8 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
                 .map(l -> new Ordering(columnRefFactory.getColumnRef(l.getColId()), true, true))
                 .collect(Collectors.toList());
 
-        SortProperty leftSortProperty = new SortProperty(new OrderSpec(leftOrderings));
-        SortProperty rightSortProperty = new SortProperty(new OrderSpec(rightOrderings));
+        SortProperty leftSortProperty = SortProperty.createSortProperty(leftOrderings);
+        SortProperty rightSortProperty = SortProperty.createSortProperty(rightOrderings);
 
         // 1 For broadcast join
         PhysicalPropertySet leftBroadcastProperty = new PhysicalPropertySet(leftSortProperty);
@@ -270,8 +269,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet
                 .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
-
-        SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
+        SortProperty sortProperty = SortProperty.createSortProperty(node.getEnforceOrderBy());
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {

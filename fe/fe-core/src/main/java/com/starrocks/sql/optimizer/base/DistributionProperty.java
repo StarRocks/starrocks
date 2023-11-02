@@ -15,11 +15,13 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 
+import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.ANY;
 import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.SHUFFLE;
 
 public class DistributionProperty implements PhysicalProperty {
@@ -27,11 +29,13 @@ public class DistributionProperty implements PhysicalProperty {
     private final boolean isCTERequired;
 
     public DistributionProperty(DistributionSpec spec) {
+        Preconditions.checkState(spec.type != ANY, "if spec is ANY type, please use EmptyDistributionProperty");
         this.spec = spec;
         this.isCTERequired = false;
     }
 
     public DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
+        Preconditions.checkState(spec.type != ANY, "if spec is ANY type, please use EmptyDistributionProperty");
         this.spec = spec;
         this.isCTERequired = isCTERequired;
     }

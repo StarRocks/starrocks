@@ -126,7 +126,7 @@ public class LogicalProperty implements Property {
             }
         }
 
-        usedCTEs = new CTEProperty(cteIds);
+        usedCTEs = CTEProperty.createCTEProperty(cteIds);
     }
 
     public static final class OneTabletProperty {

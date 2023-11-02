@@ -15,8 +15,6 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 
 public class EmptyCTEProperty extends CTEProperty {
 
@@ -26,18 +24,8 @@ public class EmptyCTEProperty extends CTEProperty {
         super(ImmutableSet.of());
     }
 
-    public CTEProperty removeCTE(int cteID) {
-        throw new StarRocksPlannerException("cannot remove cte id from empty cte property.",
-                ErrorType.INTERNAL_ERROR);
-    }
-
     public boolean isEmpty() {
         return true;
-    }
-
-    public void merge(CTEProperty other) {
-        throw new StarRocksPlannerException("cannot merge other property with empty cte property.",
-                ErrorType.INTERNAL_ERROR);
     }
 
     @Override

@@ -71,7 +71,6 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
@@ -653,7 +652,7 @@ public class InsertPlanner {
                     Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
                     orderings.add(ordering);
                 }
-                SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+                SortProperty sortProperty = SortProperty.createSortProperty(orderings);
                 return new PhysicalPropertySet(sortProperty);
             }
         }

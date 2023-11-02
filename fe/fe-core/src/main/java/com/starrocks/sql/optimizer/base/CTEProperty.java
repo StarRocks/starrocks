@@ -21,6 +21,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -29,7 +30,15 @@ public class CTEProperty implements PhysicalProperty {
     // All cteID will be passed from top to bottom, and prune plan when meet CTENoOp node with same CTEid 
     private final Set<Integer> cteIds;
 
-    public CTEProperty(Set<Integer> cteIds) {
+    public static CTEProperty createCTEProperty(Set<Integer> cteIds) {
+        if (CollectionUtils.isEmpty(cteIds)) {
+            return EmptyCTEProperty.INSTANCE;
+        } else {
+            return new CTEProperty(cteIds);
+        }
+    }
+
+    protected CTEProperty(Set<Integer> cteIds) {
         this.cteIds = cteIds;
     }
 
@@ -41,18 +50,8 @@ public class CTEProperty implements PhysicalProperty {
         return cteIds;
     }
 
-    public CTEProperty removeCTE(int cteID) {
-        Set newIds = Sets.newHashSet(this.cteIds);
-        newIds.remove(cteID);
-        return new CTEProperty(newIds);
-    }
-
     public boolean isEmpty() {
         return cteIds.isEmpty();
-    }
-
-    public void merge(CTEProperty other) {
-        this.cteIds.addAll(other.cteIds);
     }
 
     @Override

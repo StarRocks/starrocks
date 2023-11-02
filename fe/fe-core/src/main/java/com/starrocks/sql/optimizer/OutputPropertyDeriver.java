@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.base.EmptySortProperty;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
-import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -106,13 +105,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @NotNull
     private PhysicalPropertySet mergeCTEProperty(PhysicalPropertySet output) {
         // set cte property
-        CTEProperty outputCte = new CTEProperty(Sets.newHashSet());
-        outputCte.merge(output.getCteProperty());
+        Set<Integer> cteIds = Sets.newHashSet();
         for (PhysicalPropertySet childrenOutputProperty : childrenOutputProperties) {
-            outputCte.merge(childrenOutputProperty.getCteProperty());
+            cteIds.addAll(childrenOutputProperty.getCteProperty().getCteIds());
         }
         output = output.copy();
-        output.setCteProperty(outputCte);
+        output.setCteProperty(CTEProperty.createCTEProperty(cteIds));
         return output;
     }
 
@@ -396,10 +394,10 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             if (topN.isSplit()) {
                 DistributionSpec distributionSpec = DistributionSpec.createGatherDistributionSpec();
                 DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-                SortProperty sortProperty = new SortProperty(topN.getOrderSpec());
+                SortProperty sortProperty = SortProperty.createSortProperty(topN.getOrderSpec().getOrderDescs());
                 outputProperty = new PhysicalPropertySet(distributionProperty, sortProperty);
             } else {
-                outputProperty = new PhysicalPropertySet(new SortProperty(topN.getOrderSpec()));
+                outputProperty = new PhysicalPropertySet(SortProperty.createSortProperty(topN.getOrderSpec().getOrderDescs()));
             }
         } else if (topN.getPartitionByColumns() == null) {
             outputProperty = PhysicalPropertySet.EMPTY;
@@ -424,7 +422,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet.addAll(
                 Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
 
-        SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
+        SortProperty sortProperty = SortProperty.createSortProperty(node.getEnforceOrderBy());
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
@@ -468,9 +466,10 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
         checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet output = childrenOutputProperties.get(1).copy();
-        CTEProperty cteProperty = childrenOutputProperties.get(1).getCteProperty().removeCTE(node.getCteId());
-        cteProperty.merge(childrenOutputProperties.get(0).getCteProperty());
-        output.setCteProperty(cteProperty);
+        Set<Integer> cteIds = Sets.newHashSet(childrenOutputProperties.get(1).getCteProperty().getCteIds());
+        cteIds.remove(node.getCteId());
+        cteIds.addAll(childrenOutputProperties.get(0).getCteProperty().getCteIds());
+        output.setCteProperty(CTEProperty.createCTEProperty(cteIds));
         return output;
     }
 
