@@ -426,8 +426,7 @@ public class OlapTableSink extends DataSink {
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: " +
-                                            Joiner.on(",").join(localTablet.getBackends()));
+                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
                         }
 
                         List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
