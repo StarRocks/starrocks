@@ -560,6 +560,7 @@ public class ExpressionRangePartitionInfoTest {
         String json = GsonUtils.GSON.toJson(olapTable);
         // deserialize
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+        Assert.assertNotNull(readTable);
     }
 
 }
