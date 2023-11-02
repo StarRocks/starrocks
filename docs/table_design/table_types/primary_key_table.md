@@ -4,8 +4,8 @@ When you create a table, you can define the primary key and sort key separately.
 
 > **NOTE**
 >
-> In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
-> Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. However, enabling the persistent index for a Primary Key table is not supported.
+> - In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
+> - Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. Since version 3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
 
 ## Scenarios
 
@@ -129,7 +129,7 @@ PROPERTIES("replication_num" = "3",
   > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md).
   > - It is recommended to set this property to true if the disk is SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
-  > - StarRocks's shared-data mode does not support enabling the persistent index for a Primary Key table.
+  > - Since version 3.1, StarRocks's shared-data mode supports the Primary Key tables. Since version 3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
 
 - You can specify the sort key as the permutation and combination of any columns by using the `ORDER BY` keyword.
 
