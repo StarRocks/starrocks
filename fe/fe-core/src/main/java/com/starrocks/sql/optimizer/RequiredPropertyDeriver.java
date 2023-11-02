@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
@@ -278,7 +279,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         } else {
             // If scan tablet sum less than 1, no distribution property is required
             if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
-                distributionProperty = DistributionProperty.EMPTY;
+                distributionProperty = EmptyDistributionProperty.INSTANCE;
             } else {
                 List<DistributionCol> distributionCols = partitionColumnRefSet.stream()
                         .map(e -> new DistributionCol(e, true)).collect(

@@ -16,9 +16,9 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 
@@ -29,14 +29,8 @@ public class CTEProperty implements PhysicalProperty {
     // All cteID will be passed from top to bottom, and prune plan when meet CTENoOp node with same CTEid 
     private final Set<Integer> cteIds;
 
-    public static final CTEProperty EMPTY = new CTEProperty(ImmutableSet.of());
-
     public CTEProperty(Set<Integer> cteIds) {
         this.cteIds = cteIds;
-    }
-
-    public CTEProperty() {
-        this.cteIds = Sets.newHashSet();
     }
 
     public CTEProperty(int cteId) {
@@ -48,10 +42,9 @@ public class CTEProperty implements PhysicalProperty {
     }
 
     public CTEProperty removeCTE(int cteID) {
-        CTEProperty p = new CTEProperty();
-        p.getCteIds().addAll(this.cteIds);
-        p.getCteIds().removeIf(c -> c.equals(cteID));
-        return p;
+        Set newIds = Sets.newHashSet(this.cteIds);
+        newIds.remove(cteID);
+        return new CTEProperty(newIds);
     }
 
     public boolean isEmpty() {
@@ -69,8 +62,7 @@ public class CTEProperty implements PhysicalProperty {
 
     @Override
     public GroupExpression appendEnforcers(Group child) {
-        Preconditions.checkState(false, "It's impassible enforce CTE property");
-        return null;
+        throw new StarRocksPlannerException("cannot enforce cte property", ErrorType.INTERNAL_ERROR);
     }
 
     @Override

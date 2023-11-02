@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.base;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -27,12 +26,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
-    public static final SortProperty EMPTY = new SortProperty();
-
-    private SortProperty() {
-        this.spec = new OrderSpec(ImmutableList.of());
-    }
-
     public SortProperty(OrderSpec spec) {
         this.spec = spec;
     }
@@ -42,7 +35,7 @@ public class SortProperty implements PhysicalProperty {
     }
 
     public boolean isEmpty() {
-        return spec.getOrderDescs().isEmpty();
+        return false;
     }
 
     @Override
@@ -76,5 +69,10 @@ public class SortProperty implements PhysicalProperty {
                 TopNType.ROW_NUMBER, false,
                 true, null, null),
                 Lists.newArrayList(child));
+    }
+
+    @Override
+    public String toString() {
+        return spec.getOrderDescs().toString();
     }
 }

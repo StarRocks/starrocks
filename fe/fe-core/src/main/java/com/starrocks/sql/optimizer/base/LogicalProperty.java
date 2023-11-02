@@ -79,12 +79,12 @@ public class LogicalProperty implements Property {
 
     public LogicalProperty() {
         this.outputColumns = new ColumnRefSet();
-        this.usedCTEs = CTEProperty.EMPTY;
+        this.usedCTEs = EmptyCTEProperty.INSTANCE;
     }
 
     public LogicalProperty(ColumnRefSet outputColumns) {
         this.outputColumns = outputColumns;
-        this.usedCTEs = CTEProperty.EMPTY;
+        this.usedCTEs = EmptyCTEProperty.INSTANCE;
     }
 
     public LogicalProperty(LogicalProperty other) {

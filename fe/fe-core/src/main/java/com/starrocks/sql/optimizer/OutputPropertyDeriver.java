@@ -27,6 +27,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionCol;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
+import com.starrocks.sql.optimizer.base.EmptySortProperty;
 import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -104,7 +106,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @NotNull
     private PhysicalPropertySet mergeCTEProperty(PhysicalPropertySet output) {
         // set cte property
-        CTEProperty outputCte = new CTEProperty();
+        CTEProperty outputCte = new CTEProperty(Sets.newHashSet());
         outputCte.merge(output.getCteProperty());
         for (PhysicalPropertySet childrenOutputProperty : childrenOutputProperties) {
             outputCte.merge(childrenOutputProperty.getCteProperty());
@@ -365,8 +367,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             EquivalentDescriptor newEquivDesc = distributionSpec.getEquivDesc().copy();
             newEquivDesc.clearNullStrictUnionFind();
             HashDistributionSpec newDistributionSpec = distributionSpec.getNullRelaxSpec(newEquivDesc);
-            DistributionProperty newDistributionProperty = childPropertySet.getDistributionProperty()
-                    .copyWithSpec(newDistributionSpec);
+            DistributionProperty newDistributionProperty = new DistributionProperty(newDistributionSpec,
+                    childPropertySet.getDistributionProperty().isCTERequired());
             return new PhysicalPropertySet(newDistributionProperty, childPropertySet.getSortProperty(),
                     childPropertySet.getCteProperty());
         }
@@ -457,7 +459,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
         DistributionProperty distributionProperty = new DistributionProperty(gather);
-        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY,
+        return new PhysicalPropertySet(distributionProperty, EmptySortProperty.INSTANCE,
                 childrenOutputProperties.get(0).getCteProperty());
 
     }
@@ -480,7 +482,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-        return new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+        return new PhysicalPropertySet(EmptyDistributionProperty.INSTANCE, EmptySortProperty.INSTANCE,
                 new CTEProperty(node.getCteId()));
     }
 

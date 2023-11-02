@@ -26,13 +26,6 @@ public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
 
-    public static final DistributionProperty EMPTY = new DistributionProperty();
-
-    public DistributionProperty() {
-        this.spec = DistributionSpec.createAnyDistributionSpec();
-        this.isCTERequired = false;
-    }
-
     public DistributionProperty(DistributionSpec spec) {
         this.spec = spec;
         this.isCTERequired = false;
@@ -65,10 +58,6 @@ public class DistributionProperty implements PhysicalProperty {
 
     public boolean isCTERequired() {
         return isCTERequired;
-    }
-
-    public DistributionProperty copyWithSpec(DistributionSpec distributionSpec) {
-        return new DistributionProperty(distributionSpec, isCTERequired);
     }
 
     @Override
@@ -114,5 +103,10 @@ public class DistributionProperty implements PhysicalProperty {
 
         DistributionProperty rhs = (DistributionProperty) obj;
         return spec.equals(rhs.getSpec()) && isCTERequired == rhs.isCTERequired;
+    }
+
+    @Override
+    public String toString() {
+        return spec.toString();
     }
 }
