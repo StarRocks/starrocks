@@ -28,6 +28,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessControl;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessControl;
 import com.starrocks.qe.ConnectContext;
@@ -65,6 +67,12 @@ public class Authorizer {
                 .checkSystemAction(userIdentity, roleIds, privilegeType);
     }
 
+    public static void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkUserAction(currentUser, roleIds, impersonateUser, privilegeType);
+    }
+
     public static void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
                                           PrivilegeType privilegeType) {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
@@ -72,8 +80,10 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName) {
-        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                .checkAnyActionOnCatalog(currentUser, roleIds, catalogName);
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                    .checkAnyActionOnCatalog(currentUser, roleIds, catalogName);
+        }
     }
 
     public static void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
@@ -274,14 +284,8 @@ public class Authorizer {
         }
     }
 
-    public static void checkAnyActionOnOrInCatalog(UserIdentity userIdentity, Set<Long> roleIds, String catalogName) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnCatalog(userIdentity, roleIds, catalogName);
-        }
-    }
-
     public static void checkActionForAnalyzeStatement(UserIdentity userIdentity, Set<Long> currentRoleIds,
-                                                       TableName tableName) {
+                                                      TableName tableName) {
         Authorizer.checkActionOnTableLikeObject(userIdentity, currentRoleIds,
                 tableName, PrivilegeType.SELECT);
         Optional<Table> table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName);
@@ -317,6 +321,12 @@ public class Authorizer {
     public static void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String name) {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkAnyActionOnStorageVolume(currentUser, roleIds, name);
+    }
+
+    public static void withGrantOption(UserIdentity currentUser, Set<Long> roleIds, ObjectType type, List<PrivilegeType> wants,
+                                       List<PEntryObject> objects) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME).
+                withGrantOption(currentUser, roleIds, type, wants, objects);
     }
 
     public static Map<String, Expr> getColumnMaskingPolicy(ConnectContext currentUser, TableName tableName,

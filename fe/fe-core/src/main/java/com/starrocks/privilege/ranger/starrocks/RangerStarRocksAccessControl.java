@@ -64,6 +64,14 @@ public class RangerStarRocksAccessControl implements AccessControl {
     }
 
     @Override
+    public void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
+                                PrivilegeType privilegeType) throws AccessDeniedException {
+        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.USER,
+                Lists.newArrayList(impersonateUser.getUser()));
+        hasPermission(resource, currentUser, privilegeType);
+    }
+
+    @Override
     public void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.CATALOG, Lists.newArrayList(catalogName));

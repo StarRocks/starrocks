@@ -34,7 +34,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -691,10 +690,9 @@ public class AuthorizationMgr {
         }
     }
 
-    public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
+    public boolean canExecuteAs(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser) {
         try {
-            PrivilegeCollectionV2 collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(currentUser, roleIds);
             PEntryObject object = provider.generateUserObject(ObjectType.USER, impersonateUser, globalStateMgr);
             return provider.check(ObjectType.USER, PrivilegeType.IMPERSONATE, object, collection);
         } catch (PrivilegeException e) {
@@ -703,11 +701,10 @@ public class AuthorizationMgr {
         }
     }
 
-    public boolean allowGrant(ConnectContext context, ObjectType type,
+    public boolean allowGrant(UserIdentity currentUser, Set<Long> roleIds, ObjectType type,
                               List<PrivilegeType> wants, List<PEntryObject> objects) {
         try {
-            PrivilegeCollectionV2 collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds());
+            PrivilegeCollectionV2 collection = mergePrivilegeCollection(currentUser, roleIds);
             // check for GRANT or WITH GRANT OPTION in the specific type
             return checkAction(collection, ObjectType.SYSTEM, PrivilegeType.GRANT, null)
                     || provider.allowGrant(type, wants, objects, collection);

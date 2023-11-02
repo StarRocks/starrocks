@@ -31,6 +31,11 @@ public interface AccessControl {
         AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.SYSTEM, null);
     }
 
+    default void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
+                                 PrivilegeType privilegeType) throws AccessDeniedException {
+        AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.USER, impersonateUser.toString());
+    }
+
     default void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName,
                                     PrivilegeType privilegeType) {
         AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.CATALOG, catalogName);
@@ -134,6 +139,12 @@ public interface AccessControl {
 
     default void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume) {
         AccessDeniedException.reportAccessDenied("ANY", ObjectType.STORAGE_VOLUME, storageVolume);
+    }
+
+    default void withGrantOption(UserIdentity currentUser, Set<Long> roleIds,
+                                 ObjectType type, List<PrivilegeType> wants, List<PEntryObject> objects)
+            throws AccessDeniedException {
+        AccessDeniedException.reportAccessDenied(PrivilegeType.GRANT.name(), ObjectType.SYSTEM, null);
     }
 
     default Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {

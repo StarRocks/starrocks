@@ -39,7 +39,6 @@ import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
@@ -512,7 +511,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
-        Authorizer.checkAnyActionOnOrInCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
+        Authorizer.checkAnyActionOnCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
         return null;
     }
 
@@ -523,7 +522,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
-        Authorizer.checkAnyActionOnOrInCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
+        Authorizer.checkAnyActionOnCatalog(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), catalogName);
         return null;
     }
 
@@ -779,11 +778,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
-        AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-        if (!authorizationManager.canExecuteAs(context, statement.getToUser())) {
-            AccessDeniedException.reportAccessDenied("IMPERSONATE", ObjectType.USER,
-                    statement.getToUser().getUser());
-        }
+        Authorizer.checkUserAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                statement.getToUser(), PrivilegeType.IMPERSONATE);
         return null;
     }
 
@@ -864,11 +860,13 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext context) {
-        AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-        if (!authorizationManager.allowGrant(context, stmt.getObjectType(), stmt.getPrivilegeTypes(), stmt.getObjectList())) {
-            throw new AccessDeniedException(ErrorReport.reportCommon(null,
-                    ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT"));
+        try {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+        } catch (AccessDeniedException e) {
+            Authorizer.withGrantOption(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), stmt.getObjectType(),
+                    stmt.getPrivilegeTypes(), stmt.getObjectList());
         }
+
         return null;
     }
 
