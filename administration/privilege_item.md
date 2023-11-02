@@ -23,7 +23,7 @@
 | CREATE GLOBAL FUNCTION  | 创建一个全局 UDF。                                           |
 | CREATE STORAGE VOLUME  | 为远程存储系统创建存储卷 (Storage Volume)。                     |
 
-### 资源组权限 （RESOURCE GROUP)
+### 资源组权限 (RESOURCE GROUP)
 
 | 权限  | 用途                                                         |
 | ----- | ------------------------------------------------------------ |
