@@ -70,13 +70,14 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                             return ret;
                         }
                         return Integer.compare(c1.getId(), c2.getId());
+                    } else {
+                        String s1 = o1.toString();
+                        String s2 = o2.toString();
+                        String n1 = s1.replaceAll("\\d+: ", "");
+                        String n2 = s2.replaceAll("\\d+: ", "");
+                        int ret = n1.compareTo(n2);
+                        return (ret == 0) ? s1.compareTo(s2) : ret;
                     }
-                    String s1 = o1.toString();
-                    String s2 = o2.toString();
-                    String n1 = s1.replaceAll("\\d: ", "");
-                    String n2 = s2.replaceAll("\\d: ", "");
-                    int ret = n1.compareTo(n2);
-                    return (ret == 0) ? s1.compareTo(s2) : ret;
                 }
             };
 
