@@ -1,24 +1,30 @@
--- name: test_sync_materialized_view
+-- name: test_sync_materialized_view_with_colocate @sequential
 
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
 
-create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+create table user_tags (time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('colocate_with' = 'colocate_gorup1', 'replication_num' = '3', 'replicated_storage' = 'true');
 insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
 
 -- normal cases
 create materialized view user_tags_mv1
+PROPERTIES ("colocate_mv" = "true")
 as select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;
 function: wait_materialized_view_finish()
 
 create materialized view user_tags_hll_mv1 
+PROPERTIES ("colocate_mv" = "true")
 as select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;
 function: wait_materialized_view_finish()
 
 create materialized view user_tags_percential_mv1 
+PROPERTIES ("colocate_mv" = "true")
 as select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;
 function: wait_materialized_view_finish()
 
 insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
+
+ADMIN SET FRONTEND CONFIG ("enable_colocate_mv_index" = "true");
 
 -- bitmap
 select * from user_tags_mv1 [_SYNC_MV_] order by user_id;

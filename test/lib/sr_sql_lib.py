@@ -909,10 +909,10 @@ class StarrocksSQLApiLib(object):
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
             if status != "FINISHED":
-                time.sleep(5)
+                time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(5)
+                time.sleep(1)
                 break
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")

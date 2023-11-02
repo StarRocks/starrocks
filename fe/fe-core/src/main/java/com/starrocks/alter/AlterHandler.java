@@ -162,6 +162,7 @@ public abstract class AlterHandler extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         clearExpireFinishedOrCancelledAlterJobsV2();
+        setInterval(Config.alter_scheduler_interval_millisecond);
     }
 
     @Override
