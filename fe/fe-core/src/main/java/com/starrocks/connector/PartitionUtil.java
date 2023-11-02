@@ -305,8 +305,15 @@ public class PartitionUtil {
         if (isListPartition) {
             return Sets.newHashSet(getMVPartitionNameWithList(table, partitionColumn, partitionNames).keySet());
         } else {
-            return Sets.newHashSet(getRangePartitionMapOfExternalTable(
-                    table, partitionColumn, partitionNames, partitionExpr).keySet());
+            if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
+                return Sets.newHashSet(getRangePartitionMapOfExternalTable(
+                        table, partitionColumn, partitionNames, partitionExpr).keySet());
+            } else if (table.isJDBCTable()) {
+                return Sets.newHashSet(PartitionUtil.getRangePartitionMapOfJDBCTable(
+                        table, partitionColumn, partitionNames, partitionExpr).keySet());
+            } else {
+                throw new DmlException("Can not get partition range from table with type : %s", table.getType());
+            }
         }
     }
 
@@ -463,7 +470,6 @@ public class PartitionUtil {
 
         // 判断是否是str2date函数
         boolean isConvertToDate = isConvertToDate(partitionExpr, partitionColumn);
-        // Get the index of partitionColumn when table has multi partition columns.
         List<PartitionKey> partitionKeys = new ArrayList<>();
         Map<String, PartitionKey> mvPartitionKeyMap = Maps.newHashMap();
         for (String partitionName : partitionNames) {
