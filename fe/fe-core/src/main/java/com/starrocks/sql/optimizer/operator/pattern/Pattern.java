@@ -28,9 +28,8 @@ import java.util.List;
  * Pattern is used in rules as a placeholder for group
  */
 public class Pattern {
-    private final OperatorType opType;
-    private final List<Pattern> children;
-    private final ImmutableList<OperatorType> scanTypes = ImmutableList.<OperatorType>builder()
+
+    private static final ImmutableList<OperatorType> SCAN_TYPES = ImmutableList.<OperatorType>builder()
             .add(OperatorType.LOGICAL_OLAP_SCAN)
             .add(OperatorType.LOGICAL_HIVE_SCAN)
             .add(OperatorType.LOGICAL_ICEBERG_SCAN)
@@ -42,6 +41,9 @@ public class Pattern {
             .add(OperatorType.LOGICAL_JDBC_SCAN)
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
             .build();
+
+    private final OperatorType opType;
+    private final List<Pattern> children;
 
     protected Pattern(OperatorType opType) {
         this.opType = opType;
@@ -107,7 +109,7 @@ public class Pattern {
             return true;
         }
 
-        if (isPatternScan() && scanTypes.contains(expression.getOp().getOpType())) {
+        if (isPatternScan() && SCAN_TYPES.contains(expression.getOp().getOpType())) {
             return true;
         }
 
@@ -132,7 +134,7 @@ public class Pattern {
             return true;
         }
 
-        if (isPatternScan() && scanTypes.contains(expression.getOp().getOpType())) {
+        if (isPatternScan() && SCAN_TYPES.contains(expression.getOp().getOpType())) {
             return true;
         }
 
@@ -140,7 +142,7 @@ public class Pattern {
     }
 
     private boolean isMultiJoin(OperatorType operatorType, int level) {
-        if (scanTypes.contains(operatorType) && level != 0) {
+        if (SCAN_TYPES.contains(operatorType) && level != 0) {
             return true;
         } else if (operatorType.equals(OperatorType.LOGICAL_JOIN)) {
             return true;
