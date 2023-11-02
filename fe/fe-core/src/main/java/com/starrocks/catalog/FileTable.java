@@ -97,10 +97,8 @@ public class FileTable extends Table {
         if (Strings.isNullOrEmpty(format)) {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
         }
-        if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc") &&
-                !format.equalsIgnoreCase("text") && !format.equalsIgnoreCase("avro") &&
-                !format.equalsIgnoreCase("rctext") && !format.equalsIgnoreCase("rcbinary") &&
-                !format.equalsIgnoreCase("sequence")) {
+
+        if (!SUPPORTED_FORMAT.containsKey(format)) {
             throw new DdlException("not supported format: " + format);
         }
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
@@ -197,8 +195,12 @@ public class FileTable extends Table {
         tFileTable.setInput_format(storageFormat.getInputFormat());
 
         String columnNames = fullSchema.stream().map(Column::getName).collect(Collectors.joining(","));
+        //when create table with string type, sr will change string to varchar(65533) in parser, but hive need string.
+        // we have no choice but to transfer varchar(65533) into string explicitly in external table for avro/rcfile/sequence
         String columnTypes = fullSchema.stream().map(Column::getType).map(ColumnTypeConverter::toHiveType)
+                .map(type -> type.replace("varchar(65533)", "string"))
                 .collect(Collectors.joining("#"));
+
         tFileTable.setHive_column_names(columnNames);
         tFileTable.setHive_column_types(columnTypes);
 
