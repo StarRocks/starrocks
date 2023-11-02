@@ -451,10 +451,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
                     if (refColumn.isGeneratedColumn()) {
-                        throw new SemanticException("Expression can not refers to other generated columns");
+                        throw new SemanticException("Expression can not refers to other generated columns: " +
+                                refColumn.getName());
                     }
                     if (refColumn.isAutoIncrement()) {
-                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                refColumn.getName());
                     }
                 }
             }
@@ -571,10 +573,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                     for (SlotRef slot : slots) {
                         Column refColumn = table.getColumn(slot.getColumnName());
                         if (refColumn.isGeneratedColumn()) {
-                            throw new SemanticException("Expression can not refers to other generated columns");
+                            throw new SemanticException("Expression can not refers to other generated columns: " +
+                                    refColumn.getName());
                         }
                         if (refColumn.isAutoIncrement()) {
-                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                    refColumn.getName());
                         }
                     }
                 }
@@ -694,10 +698,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
                     if (refColumn.isGeneratedColumn()) {
-                        throw new SemanticException("Expression can not refers to other generated columns");
+                        throw new SemanticException("Expression can not refers to other generated columns: " +
+                                refColumn.getName());
                     }
                     if (refColumn.isAutoIncrement()) {
-                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                refColumn.getName());
                     }
                 }
             }
