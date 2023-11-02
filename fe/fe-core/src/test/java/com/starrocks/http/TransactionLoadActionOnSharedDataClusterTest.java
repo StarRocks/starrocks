@@ -20,7 +20,11 @@ import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
@@ -38,6 +42,8 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
 
@@ -53,8 +59,6 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
             }
         };
 
-
-
         ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
         computeNode.setBePort(9300);
         computeNode.setAlive(true);
@@ -66,6 +70,25 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 return true;
             }
         };
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new LocalWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID,
+                        "An internal warehouse contains all compute nodes in this system");
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getAvailableComputeNodeIds() {
+                List<Long> result = new ArrayList<>();
+                result.add(computeNode.getId());
+                return result;
+            }
+        };
+
     }
 
     @After
