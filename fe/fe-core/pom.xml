@@ -949,6 +949,7 @@ under the License.
                         <exclude>**/QueryDumpRegressionTest.java</exclude>
                     </excludes>
                 </configuration>
+
             </plugin>
 
             <!-- run make to generate Version and builtin -->
