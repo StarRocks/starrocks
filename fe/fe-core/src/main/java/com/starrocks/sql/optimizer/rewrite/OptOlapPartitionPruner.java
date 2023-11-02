@@ -166,27 +166,31 @@ public class OptOlapPartitionPruner {
             }
 
             // None/Null bound predicate can't prune
-            if ((null == pcf.lowerBound || pcf.lowerBound.isConstantNull()) &&
-                    (null == pcf.upperBound || pcf.upperBound.isConstantNull())) {
+            LiteralExpr lowerBound = pcf.getLowerBound();
+            LiteralExpr upperBound = pcf.getUpperBound();
+            if ((null == lowerBound || lowerBound.isConstantNull()) &&
+                    (null == upperBound || upperBound.isConstantNull())) {
                 continue;
             }
 
             boolean lowerBind = true;
             boolean upperBind = true;
-            if (null != pcf.lowerBound) {
+            if (null != lowerBound) {
                 lowerBind = false;
                 PartitionKey min = new PartitionKey();
-                min.pushColumn(pcf.lowerBound, column.getPrimitiveType());
+                // TODO: take care `isConvertToDate` for olap table
+                min.pushColumn(pcf.getLowerBound(), column.getPrimitiveType());
                 int cmp = minRange.compareTo(min);
                 if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
                     lowerBind = true;
                 }
             }
 
-            if (null != pcf.upperBound) {
+            if (null != upperBound) {
                 upperBind = false;
                 PartitionKey max = new PartitionKey();
-                max.pushColumn(pcf.upperBound, column.getPrimitiveType());
+                // TODO: take care `isConvertToDate` for olap table
+                max.pushColumn(upperBound, column.getPrimitiveType());
                 int cmp = maxRange.compareTo(max);
                 if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
                     upperBind = true;
