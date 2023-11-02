@@ -88,17 +88,9 @@ class LocalExchangeSourceOperator final : public SourceOperator {
 
 public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-<<<<<<< HEAD
-                                const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
+                                const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager)
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, true, driver_sequence),
               _memory_manager(memory_manager) {}
-=======
-                                const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager)
-            : SourceOperator(factory, id, "local_exchange_source", plan_node_id, driver_sequence),
-              _memory_manager(memory_manager) {
-        _local_memory_limit = _memory_manager->get_memory_limit_per_driver() * 0.8;
-    }
->>>>>>> 357a625dd4 ([Enhancement] reduce chunk buffer size in streaming aggregate (#28962))
 
     Status add_chunk(ChunkPtr chunk);
 
