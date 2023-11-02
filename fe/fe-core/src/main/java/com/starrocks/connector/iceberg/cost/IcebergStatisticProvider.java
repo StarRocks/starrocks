@@ -233,12 +233,25 @@ public class IcebergStatisticProvider {
             IcebergFileStats icebergStats,
             Map<Integer, Long> colIdToNdv) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
-        if (!column.getType().isStringType()) {
-            Optional<Double> minValue = icebergStats.getMinValue(fieldId);
-            minValue.ifPresent(builder::setMinValue);
 
-            Optional<Double> maxValue = icebergStats.getMaxValue(fieldId);
-            maxValue.ifPresent(builder::setMaxValue);
+        if (icebergStats.canUseStats(fieldId, icebergStats.getMinValues())) {
+            if (column.getType().isStringType()) {
+                String minString = icebergStats.getMinValues().get(fieldId).toString();
+                builder.setMinString(minString);
+            } else {
+                Optional<Double> res = icebergStats.getMinValue(fieldId);
+                res.ifPresent(builder::setMinValue);
+            }
+        }
+
+        if (icebergStats.canUseStats(fieldId, icebergStats.getMaxValues())) {
+            if (column.getType().isStringType()) {
+                String maxString = icebergStats.getMaxValues().get(fieldId).toString();
+                builder.setMaxString(maxString);
+            } else {
+                Optional<Double> res = icebergStats.getMaxValue(fieldId);
+                res.ifPresent(builder::setMaxValue);
+            }
         }
 
         Long nullCount = icebergStats.getNullCounts() == null ? null : icebergStats.getNullCounts().get(fieldId);

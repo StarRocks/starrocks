@@ -31,20 +31,8 @@ import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiPartitionKey;
-import com.starrocks.catalog.IcebergPartitionKey;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.JDBCPartitionKey;
-import com.starrocks.catalog.JDBCTable;
-import com.starrocks.catalog.NullablePartitionKey;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonPartitionKey;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
@@ -55,9 +43,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -100,52 +86,7 @@ public class PartitionUtil {
 
     public static PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types,
                                                   Table.TableType tableType) throws AnalysisException {
-        Preconditions.checkState(values.size() == types.size(),
-                "types size is %s, but values size is %s", types.size(), values.size());
-
-        PartitionKey partitionKey = null;
-        switch (tableType) {
-            case HIVE:
-                partitionKey = new HivePartitionKey();
-                break;
-            case HUDI:
-                partitionKey = new HudiPartitionKey();
-                break;
-            case ICEBERG:
-                partitionKey = new IcebergPartitionKey();
-                break;
-            case DELTALAKE:
-                partitionKey = new DeltaLakePartitionKey();
-                break;
-            case JDBC:
-                partitionKey = new JDBCPartitionKey();
-                break;
-            case PAIMON:
-                partitionKey = new PaimonPartitionKey();
-                break;
-            default:
-                Preconditions.checkState(false, "Do not support create partition key for " +
-                        "table type %s", tableType);
-        }
-
-        // change string value to LiteralExpr,
-        for (int i = 0; i < values.size(); i++) {
-            String rawValue = values.get(i);
-            Type type = types.get(i);
-            LiteralExpr exprValue;
-            // rawValue could be null for delta table
-            if (rawValue == null) {
-                rawValue = "null";
-            }
-            if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
-                partitionKey.setNullPartitionValue(rawValue);
-                exprValue = NullLiteral.create(type);
-            } else {
-                exprValue = LiteralExpr.create(rawValue, type);
-            }
-            partitionKey.pushColumn(exprValue, type.getPrimitiveType());
-        }
-        return partitionKey;
+        return ConnectorPartitionTraits.build(tableType).createPartitionKey(values, types);
     }
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
@@ -254,35 +195,7 @@ public class PartitionUtil {
     }
 
     public static List<String> getPartitionNames(Table table) {
-        if (table.isUnPartitioned()) {
-            return Lists.newArrayList(table.getName());
-        }
-        List<String> partitionNames = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    icebergTable.getCatalogName(), icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    jdbcTable.getCatalogName(), jdbcTable.getDbName(), jdbcTable.getJdbcTable());
-        } else if (table.isPaimonTable()) {
-            PaimonTable paimonTable = (PaimonTable) table;
-            if (paimonTable.isUnPartitioned()) {
-                // return table name if table is unpartitioned
-                return Lists.newArrayList(paimonTable.getTableName());
-            }
-            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                    paimonTable.getCatalogName(), paimonTable.getDbName(), paimonTable.getTableName());
-        } else {
-            Preconditions.checkState(false, "Not support getPartitionNames for table type %s",
-                    table.getType());
-        }
-        return partitionNames;
+        return ConnectorPartitionTraits.build(table).getPartitionNames();
     }
 
     // use partitionValues to filter partitionNames
@@ -309,24 +222,7 @@ public class PartitionUtil {
     }
 
     public static List<Column> getPartitionColumns(Table table) {
-        List<Column> partitionColumns = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-            partitionColumns = hmsTable.getPartitionColumns();
-        } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            partitionColumns = icebergTable.getPartitionColumns();
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitionColumns = jdbcTable.getPartitionColumns();
-        } else if (table.isPaimonTable()) {
-            PaimonTable paimonTable = (PaimonTable) table;
-            partitionColumns = paimonTable.getPartitionColumns();
-        } else {
-            Preconditions.checkState(false, "Do not support get partition names and columns for" +
-                    "table type %s", table.getType());
-        }
-        return partitionColumns;
+        return ConnectorPartitionTraits.build(table).getPartitionColumns();
     }
 
     // partition name such like p1=1/p2=__HIVE_DEFAULT_PARTITION__, this function will convert it to
@@ -350,26 +246,12 @@ public class PartitionUtil {
      */
     public static Map<String, Range<PartitionKey>> getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
             throws UserException {
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getRangePartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isJDBCTable() ||
-                table.isPaimonTable()) {
-            return PartitionUtil.getRangePartitionMapOfExternalTable(
-                    table, partitionColumn, getPartitionNames(table), partitionExpr);
-        } else {
-            throw new DmlException("Can not get partition range from table with type : %s", table.getType());
-        }
+        return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
     }
 
     public static Map<String, List<List<String>>> getPartitionList(Table table, Column partitionColumn)
             throws UserException {
-        if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getListPartitionMap();
-        } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable() || table.isPaimonTable()) {
-            return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames(table));
-        } else {
-            throw new DmlException("Can not get partition list from table with type : %s", table.getType());
-        }
+        return ConnectorPartitionTraits.build(table).getPartitionList(partitionColumn);
     }
 
     // check the partitionColumn exist in the partitionColumns
@@ -402,26 +284,7 @@ public class PartitionUtil {
     }
 
     public static Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(Table table) {
-        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
-        List<String> partitionNames = getPartitionNames(table);
-
-        List<PartitionInfo> partitions;
-        if (table.isHiveTable()) {
-            HiveTable hiveTable = (HiveTable) table;
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(hiveTable.getCatalogName(), table, partitionNames);
-        } else if (table.isJDBCTable()) {
-            JDBCTable jdbcTable = (JDBCTable) table;
-            partitions = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                    getPartitions(jdbcTable.getCatalogName(), table, partitionNames);
-        } else {
-            LOG.warn("Only support get partition for hive table and jdbc table type");
-            return null;
-        }
-        for (int index = 0; index < partitionNames.size(); ++index) {
-            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
-        }
-        return partitionNameWithPartition;
+        return ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
     }
 
     // Get partition name generated for mv from hive/hudi/iceberg partition name,
