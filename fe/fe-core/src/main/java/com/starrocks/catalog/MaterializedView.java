@@ -360,8 +360,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
+<<<<<<< HEAD
     // it is a property in momery, do not serialize it
     private PlanMode planMode = PlanMode.UNKNOWN;
+=======
+
+    // Materialized view's output columns may be different from defined query's output columns.
+    // Record the indexes based on materialized view's column output.
+    // eg: create materialized view mv as select col1, col2, col3 from tbl
+    //  desc mv             :  col2, col1, col3
+    //  queryOutputIndexes  :  1, 0, 2
+    // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
+    @SerializedName(value = "queryOutputIndices")
+    protected List<Integer> queryOutputIndices = Lists.newArrayList();
+>>>>>>> 829d083fa3 ([BugFix][Enhancement] optimize mv plan cache and fix npe (#34149))
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -451,6 +463,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.refreshScheme = refreshScheme;
     }
 
+<<<<<<< HEAD
     public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         return getUpdatedPartitionNamesOfTable(base, false);
     }
@@ -461,6 +474,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public boolean isValidPlan() {
         return !planMode.equals(PlanMode.INVALID);
+=======
+    /**
+     * @param base              : The base table of the materialized view to check the updated partition names
+     * @param isQueryRewrite    : Mark the caller is from query rewrite or not, when it's true we can use staleness to
+     *                            optimize.
+     * @return
+     */
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base, boolean isQueryRewrite) {
+        return getUpdatedPartitionNamesOfTable(base, false, isQueryRewrite, MaterializedView.getPartitionExpr(this));
+>>>>>>> 829d083fa3 ([BugFix][Enhancement] optimize mv plan cache and fix npe (#34149))
     }
 
     public int getMaxMVRewriteStaleness() {
