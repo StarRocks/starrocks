@@ -21,6 +21,12 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 - Items in ORDER BY can be unsigned integers (starting from 1), column names, or normal expressions. The results are sorted in ascending order by default. You can also explicitly specify the ASC keyword. If you want to sort results in descending order, add the DESC keyword to the name of the column you are sorting.
 - `sep`: the optional separator used to concatenate non-null values from different rows. If it is not specified, `,` (a comma) is used by default. To eliminate the separator, specify an empty string `''`.
 
+:::tip[Note]
+
+From v3.0.6 and v3.1.3 onwards, there is a behavior change when you specify the separator. You must use `SEPARATOR` before the separator, for example, `select group_concat(name SEPARATOR '-') as res from ss;`.
+
+:::
+
 ## Return value
 
 Returns a string value for each group and returns NULL if there are no non-NULL values.
@@ -87,7 +93,18 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +---------------------------+
   ```
 
-  Example 2: Concatenate distinct names into a string with the default separator and with null values ignored. Duplicate names are removed.
+  Example 2: Concatenate names into a string, connected by the separator `-` and with null values ignored. Duplicate names are retained.
+
+  ```sql
+   select group_concat(name SEPARATOR '-') as res from ss;
+   +---------------------------+
+   | res                       |
+   +---------------------------+
+   | Ti-May-Ti-Tom-Tom-Tom-Tom |
+   +---------------------------+
+  ```
+
+  Example 3: Concatenate distinct names into a string with the default separator and with null values ignored. Duplicate names are removed.
 
   ```sql
    select group_concat(distinct name) as res from ss;
@@ -98,7 +115,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +---------------------------+
   ```
 
-  Example 3: Concatenate the name-subject strings of the same ID in ascending order of `score`. For example, `TomMath` and `TomEnglish` share ID 1 and they are concatenated with a comma in ascending order of `score`.
+  Example 4: Concatenate the name-subject strings of the same ID in ascending order of `score`. For example, `TomMath` and `TomEnglish` share ID 1 and they are concatenated with a comma in ascending order of `score`.
 
   ```sql
    select id, group_concat(distinct name,subject order by score) as res from ss group by id order by id;
@@ -113,10 +130,10 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +------+--------------------+
    ```
 
-  Example 4: group_concat is nested with concat(), which is used to combine `name`, `-`, and `subject` as a string. The strings in the same row are sorted in ascending order of `score`.
+  Example 5: group_concat is nested with concat(), which is used to combine `name`, `-`, and `subject` as a string. The strings in the same row are sorted in ascending order of `score`.
   
   ```sql
-   select id, group_concat(distinct concat(name,'-',subject) order by score) as res from ss group by id order by id;
+   select id, group_concat(distinct concat(name, '-',subject) order by score) as res from ss group by id order by id;
    +------+----------------------+
    | id   | res                  |
    +------+----------------------+
@@ -128,7 +145,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +------+----------------------+
    ```
   
-  Example 5: No matching result is found and NULL is returned.
+  Example 6: No matching result is found and NULL is returned.
 
   ```sql
   select group_concat(distinct name) as res from ss where id < 0;
@@ -139,7 +156,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +------+
    ```
 
-  Example 6: Limit the length of the returned string to six characters.
+  Example :7 Limit the length of the returned string to six characters.
 
   ```sql
    set group_concat_max_len = 6;
