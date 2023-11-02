@@ -21,6 +21,10 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 - ORDER BY 后可以跟 unsigned_integer (从 1 开始)、列名、或普通表达式。ORDER BY 用于指定按升序或降序对要连接的值进行排序。默认按升序排序。如果要按降序排序，需要指定 DESC。
 - `sep`：字符串之间的连接符，可选。如果不指定，则默认使用逗号 `,` 作为连接符。如果要使用空字符来连接，可以使用 `''`。
 
+> **NOTE**
+>
+> 从 v3.0.6 和 v3.1.3 版本起，分隔符必须使用 `SEPARATOR` 关键字来声明。 举例，`select group_concat(name SEPARATOR '-') as res from ss;`。
+
 ## 返回值说明
 
 返回值的数据类型为 VARCHAR。如果没有非 NULL 值，则返回 NULL。
@@ -87,7 +91,18 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>
    +---------------------------+
    ```
 
-   示例二：对 `name` 列的值进行拼接，使用默认连接符，忽略 NULL 值。使用 DISTINCT 对数据进行去重。
+   示例二：对 `name` 列的值进行拼接，使用 `SEPARATOR` 来声明分隔符 `-`，忽略 NULL 值。不对数据进行去重。
+
+   ```sql
+   select group_concat(name SEPARATOR '-') as res from ss;
+   +---------------------------+
+   | res                       |
+   +---------------------------+
+   | Ti-May-Ti-Tom-Tom-Tom-Tom |
+   +---------------------------+
+   ```
+
+   示例三：对 `name` 列的值进行拼接，使用默认连接符，忽略 NULL 值。使用 DISTINCT 对数据进行去重。
 
     ```plain
    select group_concat(distinct name) as res from ss;
@@ -98,7 +113,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>
    +---------------------------+
    ```
 
-   示例三：将相同 ID 的 `name` 和 `subject` 组合按照 `score` 的升序进行连接。比如返回示例中的第二行数据 `TomMath,TomEnglish` 就是将 ID 为 1 的 `TomMath` and `TomEnglish` 组合按照 `score` 进行升序排序。
+   示例四：将相同 ID 的 `name` 和 `subject` 组合按照 `score` 的升序进行连接。比如返回示例中的第二行数据 `TomMath,TomEnglish` 就是将 ID 为 1 的 `TomMath` and `TomEnglish` 组合按照 `score` 进行升序排序。
 
    ```plain
    select id, group_concat(distinct name,subject order by score) as res from ss group by id order by id;
@@ -113,7 +128,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>
    +------+--------------------+
    ```
 
-   示例四：在 group_concat 中嵌套 concat 函数。concat 指定 `name` 和 `subject` 的连接格式为 "name-subject"。查询逻辑和示例三相同。
+   示例五：在 group_concat 中嵌套 concat 函数。concat 指定 `name` 和 `subject` 的连接格式为 "name-subject"。查询逻辑和示例三相同。
 
    ```plain
    select id, group_concat(distinct concat(name,'-',subject) order by score) as res from ss group by id order by id;
@@ -128,7 +143,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>
    +------+----------------------+
    ```
 
-   示例五：没有符合条件的结果，返回 NULL。
+   示例六：没有符合条件的结果，返回 NULL。
 
    ```plain
    select group_concat(distinct name) as res from ss where id < 0;
@@ -139,7 +154,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>
    +------+
    ```
 
-   示例六：将返回字符串的最大长度限制在 6 个字符。查询逻辑和示例三相同。
+   示例七：将返回字符串的最大长度限制在 6 个字符。查询逻辑和示例三相同。
 
    ```plain
    set group_concat_max_len = 6;
