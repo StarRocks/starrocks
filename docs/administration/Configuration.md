@@ -2132,7 +2132,7 @@ BE static parameters are as follows.
 | dictionary_encoding_ratio | 0.7 | N/A | |
 | dictionary_speculate_min_chunk_size | 10000 | N/A | |
 | directory_of_inject |  | N/A | |
-| disable_column_pool | 0 | N/A | |
+| disable_column_pool | 1 | N/A | |
 | disable_mem_pools | 0 | N/A | |
 | download_worker_count | 1 | N/A | |
 | enable_check_string_lengths | 1 | N/A | |
