@@ -1037,7 +1037,7 @@ VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1102,7 +1102,7 @@ VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause win
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1167,7 +1167,7 @@ STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_c
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1232,7 +1232,7 @@ STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause 
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1297,7 +1297,7 @@ COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1362,7 +1362,7 @@ COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_c
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1427,7 +1427,7 @@ CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause
 
 > **NOTE**
 >
-> From 2.5.13 onwards, this window function supports the ORDER BY and Window clauses.
+> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
