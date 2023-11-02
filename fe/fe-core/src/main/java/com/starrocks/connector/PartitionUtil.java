@@ -42,6 +42,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.common.RangePartitionDiff;
@@ -399,7 +400,6 @@ public class PartitionUtil {
 
     /**
      * If base table column type is string but partition type is date, we need to convert the string to date
-     *
      * @param partitionExpr   PARTITION BY expr
      * @param partitionColumn PARTITION BY referenced column
      * @return
@@ -408,21 +408,76 @@ public class PartitionUtil {
         if (!(partitionExpr instanceof FunctionCallExpr)) {
             return false;
         }
-        PrimitiveType columnType = partitionColumn.getPrimitiveType();
-        PrimitiveType partitionType = partitionExpr.getType().getPrimitiveType();
-        return partitionType.isDateType() && !columnType.isDateType();
+        return isConvertToDate(partitionExpr.getType(), partitionColumn.getType());
     }
 
-    private static PartitionKey convertToDate(PartitionKey partitionKey) {
-        PartitionKey newPartitionKey = new PartitionKey();
-        String dateLiteral = partitionKey.getKeys().get(0).getStringValue();
-        LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
+    /**
+     * Check whether convert filter to date type.
+     * @param partitionType     : Partition defined type.
+     * @param filterType        : Filter type from query.
+     * @return: true if convert is needed, false if not.
+     */
+    public static boolean isConvertToDate(Type partitionType, Type filterType) {
+        if (partitionType == null || filterType == null) {
+            return false;
+        }
+
+        PrimitiveType filterPrimitiveType = filterType.getPrimitiveType();
+        PrimitiveType partitionPrimitiveType = partitionType.getPrimitiveType();
+        return partitionPrimitiveType.isDateType() && !filterPrimitiveType.isDateType();
+    }
+
+    /**
+     * Check whether convert partition column filter to date type.
+     * @param partitionColumn           : Partition column which is defined in adding partitions.
+     * @param partitionColumnFilter     : Partition column filter from query.
+     * @return : true if partition column is defined as date type but filter is not date type.
+     */
+    public static boolean isConvertToDate(Column partitionColumn, PartitionColumnFilter partitionColumnFilter) {
+        if (partitionColumnFilter == null || partitionColumn == null) {
+            return false;
+        }
+        LiteralExpr lowerBound = partitionColumnFilter.getLowerBound();
+        LiteralExpr upperBound = partitionColumnFilter.getUpperBound();
+        LiteralExpr literalExpr = (lowerBound == null) ? upperBound : lowerBound;
+        if (literalExpr == null) {
+            return false;
+        }
+        return isConvertToDate(partitionColumn.getType(), literalExpr.getType());
+    }
+
+    /**
+     * Convert a string literal expr to a date literal.
+     * @param stringLiteral: input string literal to convert.
+     * @return             : date literal if string literal can be converted, otherwise throw SemanticException.
+     */
+    public static DateLiteral convertToDateLiteral(LiteralExpr stringLiteral) throws SemanticException {
+        if (stringLiteral == null) {
+            return null;
+        }
         try {
-            newPartitionKey.pushColumn(new DateLiteral(dateValue, Type.DATE), PrimitiveType.DATE);
+            String dateLiteral = stringLiteral.getStringValue();
+            LocalDateTime dateValue = DateUtils.parseStrictDateTime(dateLiteral);
+            return new DateLiteral(dateValue, Type.DATE);
+        } catch (Exception e) {
+            throw new SemanticException("create string to date literal failed:" +  stringLiteral.getStringValue(), e);
+        }
+    }
+
+    /**
+     * Convert a string type partition key to date type partition key.
+     * @param partitionKey : input string partition key to convert.
+     * @return             : partition key with date type if input can be converted.
+     */
+    private static PartitionKey convertToDate(PartitionKey partitionKey) throws SemanticException {
+        PartitionKey newPartitionKey = new PartitionKey();
+        try {
+            DateLiteral dateLiteral = convertToDateLiteral(partitionKey.getKeys().get(0));
+            newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
-        } catch (AnalysisException e) {
-            throw new SemanticException("create date string:{} failed:", partitionKey.getKeys().get(0).getStringValue(),
-                    e);
+        } catch (SemanticException e) {
+            throw new SemanticException("convert string {} to date partition key failed:",
+                    partitionKey.getKeys().get(0).getStringValue(), e);
         }
     }
 
