@@ -125,8 +125,8 @@ GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_nam
 ```SQL
 GRANT
     { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
-    ON { MATERIALIZED_VIEW <mv_name> [, < mv_name >,...]
-       ｜ ALL MATERIALIZED_VIEWS IN 
+    ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+       ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -134,7 +134,7 @@ GRANT
 *注意：需要执行 SET CATALOG 之后才能使用。物化视图还可以用 `<db_name>.<mv_name>` 的方式来进行表示。
 
 ```SQL
-GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>};
+GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>};
 ```
 
 #### Function 相关
