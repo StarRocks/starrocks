@@ -65,7 +65,7 @@ PROPERTIES
 "enable_recursive_listing" = "{ true | false }"
 ```
 
-| 参数                     | 是否必选 | 说明                                                         |
+| 参数                     | 必选 | 说明                                                         |
 | ------------------------ | -------- | ------------------------------------------------------------ |
 | path                     | 是       | 数据文件所在的路径。<ul><li> 若文件在 HDFS 上，则路径格式为 `hdfs://<HDFS的IP地址>:<端口号>/<路径>。`其中端口号默认为 8020，如使用默认端口号可忽略不在路径中指定。</li><li> 若文件在 Amazon S3 或其他兼容 S3 协议的对象存储上，则路径格式为 `s3://<bucket名称>/<folder>/`。</li></ul> 填写路径时，需注意以下两点： <ul><li> 如果要遍历路径下所有文件，则设置路径以 '/' 结尾，例如 `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`。查询时，StarRocks 会遍历该路径下所有文件，但不做递归遍历。</li><li> 如果仅需查询路径下单个文件，则设置路径直接指向文件名，例如 `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`。查询时，StarRocks 会直接扫描该文件。</li></ul> |
 | format                   | 是       | 数据文件格式，目前仅支持设置为 parquet 和 orc。              |
@@ -107,7 +107,7 @@ PROPERTIES
 "aws.s3.region" = "<aws_s3_region>"
 ```
 
-| 参数                        | 是否必须 | 说明                                                         |
+| 参数                        | 必选 | 说明                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。<br />取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。<br />采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 StarRocks 在访问目标数据文件时，会采用此 IAM Role。 |
