@@ -23,6 +23,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
 #include "runtime/load_channel_mgr.h"
@@ -273,6 +274,8 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
+    LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "]";
+
     // Cancel active tasks.
     if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
         for (auto txn_id : request->txn_ids()) {
@@ -291,7 +294,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     };
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit abort txn task: " << st;
+        LOG(WARNING) << "Fail to submit abort transaction task: " << st;
         latch.count_down();
     }
 

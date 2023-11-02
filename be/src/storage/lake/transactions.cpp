@@ -180,7 +180,6 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids) {
     std::vector<std::string> files_to_delete;
     for (auto txn_id : txn_ids) {
-        LOG(INFO) << "Aborting txn=" << txn_id;
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
         if (!txn_log_or.ok()) {
