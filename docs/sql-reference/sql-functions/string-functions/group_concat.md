@@ -154,7 +154,7 @@ SET [GLOBAL | SESSION] group_concat_max_len = <value>;
    +------+
    ```
 
-  Example :7 Limit the length of the returned string to six characters.
+  Example 7: Limit the length of the returned string to six characters.
 
   ```sql
    set group_concat_max_len = 6;
