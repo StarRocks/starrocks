@@ -43,7 +43,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
@@ -81,7 +80,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
             }
         };
 
-        new MockUp<Cluster> () {
+        new MockUp<Cluster>() {
             @Mock
             public List<Long> getAvailableComputeNodeIds() {
                 List<Long> result = new ArrayList<>();
