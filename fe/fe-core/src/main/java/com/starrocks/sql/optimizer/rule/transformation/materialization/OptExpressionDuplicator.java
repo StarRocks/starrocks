@@ -300,11 +300,16 @@ public class OptExpressionDuplicator {
             unionFind.clear();
             for (Set<DistributionCol> distributionColSet : tmp.getAllGroups()) {
                 DistributionCol first = null;
-                for (DistributionCol col : distributionColSet) {
+                for (DistributionCol next : distributionColSet) {
                     if (first == null) {
-                        first = col;
+                        first = next;
                     }
-                    unionFind.union(first, col);
+                    ColumnRefOperator firstCol = columnRefFactory.getColumnRef(first.getColId());
+                    ColumnRefOperator newFirstCol = columnMapping.get(firstCol).cast();
+
+                    ColumnRefOperator nextCol = columnRefFactory.getColumnRef(next.getColId());
+                    ColumnRefOperator newNextCol = columnMapping.get(nextCol).cast();
+                    unionFind.union(first.updateColId(newFirstCol.getId()), next.updateColId(newNextCol.getId()));
                 }
             }
         }
