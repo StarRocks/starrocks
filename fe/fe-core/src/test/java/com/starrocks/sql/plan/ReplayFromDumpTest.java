@@ -533,9 +533,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testCorrelatedPredicateRewrite() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("1201:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
+                "  |  equal join conjunct: [3802: ref_id, BIGINT, true] = [3681: customer_id, BIGINT, true]"));
     }
 
     @Test

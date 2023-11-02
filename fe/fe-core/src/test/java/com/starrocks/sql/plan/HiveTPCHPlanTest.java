@@ -101,7 +101,7 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
 
     @Test
     public void testTPCH11() {
-        runFileUnitTest("external/hive/tpch/q11");
+        runFileUnitTest("external/hive/tpch/q11", true);
     }
 
     @Test
@@ -111,7 +111,7 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
 
     @Test
     public void testTPCH13() {
-        runFileUnitTest("external/hive/tpch/q13");
+        runFileUnitTest("external/hive/tpch/q13", true);
     }
 
     @Test
@@ -156,6 +156,6 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
 
     @Test
     public void testTPCH22() {
-        runFileUnitTest("external/hive/tpch/q22");
+        runFileUnitTest("external/hive/tpch/q22", true);
     }
 }

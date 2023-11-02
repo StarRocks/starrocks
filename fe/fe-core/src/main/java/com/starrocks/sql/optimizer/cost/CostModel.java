@@ -58,11 +58,13 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
@@ -226,26 +228,21 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
-            if (mustMultiStageAgg && node.getDistinctColumnDataSkew() == null && !node.isSplit() && node.getType().isGlobal()) {
-                // use cost to eliminate invalid one phase agg plan
-                return CostEstimate.infinite();
+            Optional<CostEstimate> cost;
+            cost = invalidOneStageAggCost(node, context);
+            if (cost.isPresent()) {
+                return cost.get();
             }
 
-            if (!mustMultiStageAgg && node.isSplit() && node.getType().isGlobal()
-                    && !inputProperties.isEmpty()
-                    && inputProperties.get(0).getDistributionProperty().isShuffle()) {
-                // If one stage agg is valid, use cost to eliminate local agg -> global agg plan.
-                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
-                HashDistributionDesc desc = spec.getHashDistributionDesc();
-                if (desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
-                    return CostEstimate.infinite();
-                }
+            cost = redundantTwoStageAggCost(node, context);
+            if (cost.isPresent()) {
+                return cost.get();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
             double factor = 1.0;
+
             if (node.getDistinctColumnDataSkew() != null) {
                 factor = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
             } else if (node.isSplit() && node.getType().isLocal()) {
@@ -507,6 +504,34 @@ public class CostModel {
                 }
             }
             return factor;
+        }
+
+        // use cost to eliminate invalid one phase agg plan
+        private Optional<CostEstimate> invalidOneStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
+            if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
+
+                return Optional.of(CostEstimate.infinite());
+            }
+            return Optional.empty();
+        }
+
+        // If we already have a one stage agg best plan like input -> global agg, use cost to
+        // eliminate plan like input -> local agg -> global agg plan to remove this unnecessary local agg step.
+        private Optional<CostEstimate> redundantTwoStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            if (node.isSplit() && node.getType().isGlobal()
+                    && CollectionUtils.isNotEmpty(inputProperties)
+                    && context.getGroupExpression() != null) {
+
+                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
+                HashDistributionDesc desc = spec.getHashDistributionDesc();
+                Group group = context.getGroupExpression().getGroup();
+                boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
+                if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                    return Optional.of(CostEstimate.infinite());
+                }
+            }
+            return Optional.empty();
         }
     }
 

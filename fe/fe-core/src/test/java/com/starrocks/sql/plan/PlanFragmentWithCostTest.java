@@ -184,6 +184,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |  group by: 2: v2");
     }
 
+    // still choose two stage agg even it's a high cardinality scene to cover bad case when statistics is uncorrect
     @Test
     public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
@@ -195,13 +196,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select sum(v2) from t0 group by v2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n"
-                + "  |  output: sum(2: v2)\n"
-                + "  |  group by: 2: v2");
-        Assert.assertFalse(plan.contains("  1:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(2: v2)\n" +
-                "  |  group by: 2: v2"));
+                "  |  group by: 2: v2");
     }
 
     @Test
@@ -1601,11 +1599,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(2: v2)\n" +
+            assertContains(plan, " 3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  2:EXCHANGE");
 
             // case 5: use two-phase aggregation for low-cardinality agg.
             isSingleBackendAndComputeNode.setRef(true);
@@ -1636,11 +1634,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(2: v2)\n" +
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  2:EXCHANGE");
 
             // case 7: Plan with join cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
@@ -1650,20 +1648,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "(select v2, sum(v2) from t0 group by v2) t2 on t1.v2=t2.v2";
             execPlan = getExecPlan(sql);
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  6:HASH JOIN\n" +
+            assertContains(plan, "8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 6: v2\n" +
                     "  |  \n" +
-                    "  |----5:AGGREGATE (update finalize)\n" +
+                    "  |----7:AGGREGATE (merge finalize)\n" +
                     "  |    |  group by: 6: v2\n" +
                     "  |    |  \n" +
-                    "  |    4:EXCHANGE\n" +
+                    "  |    6:EXCHANGE\n" +
                     "  |    \n" +
-                    "  2:AGGREGATE (update finalize)\n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  2:EXCHANGE");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
