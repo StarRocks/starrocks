@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/runtime_filter_bank.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
@@ -282,11 +283,10 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
-    Status open(RuntimeState* runtime_state);
-    void close(RuntimeState* runtime_state) noexcept;
-    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void finalize();
+    Status open(RuntimeState* runtime_state);
+    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
+    void close() noexcept;
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
