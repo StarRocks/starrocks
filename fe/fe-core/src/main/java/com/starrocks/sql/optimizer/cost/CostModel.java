@@ -521,8 +521,8 @@ public class CostModel {
         private Optional<CostEstimate> redundantTwoStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
             if (node.isSplit() && node.getType().isGlobal()
                     && CollectionUtils.isNotEmpty(inputProperties)
+                    && inputProperties.get(0).getDistributionProperty().isShuffle()
                     && context.getGroupExpression() != null) {
-
                 HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
                 HashDistributionDesc desc = spec.getHashDistributionDesc();
                 Group group = context.getGroupExpression().getGroup();
