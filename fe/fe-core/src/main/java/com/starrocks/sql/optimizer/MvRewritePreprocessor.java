@@ -189,10 +189,13 @@ public class MvRewritePreprocessor {
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
+<<<<<<< HEAD
             if (!mv.isValidPlan()) {
                 // skip to process unsupported plan tree
                 continue;
             }
+=======
+>>>>>>> 829d083fa3 ([BugFix][Enhancement] optimize mv plan cache and fix npe (#34149))
             try {
                 preprocessMv(mv, queryTables, originQueryColumns, isSyncMV);
             } catch (Exception e) {
@@ -225,7 +228,6 @@ public class MvRewritePreprocessor {
             return;
         }
         if (!mvPlanContext.isValidMvPlan()) {
-            mv.setPlanMode(MaterializedView.PlanMode.INVALID);
             if (mvPlanContext.getLogicalPlan() != null) {
                 logMVPrepare(connectContext, mv, "[SYNC={}] MV plan is not valid: {}, plan:\n {}",
                         isSyncMV, mv.getName(), mvPlanContext.getLogicalPlan().explain());
