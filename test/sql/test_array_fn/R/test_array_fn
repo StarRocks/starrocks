@@ -4467,19 +4467,19 @@ select array_contains_seq([1, 2, NULL, 3, 4], null);
 -- result:
 None
 -- !result
-select array_contains_seq(null, [2,3])
+select array_contains_seq(null, [2,3]);
 -- result:
 None
 -- !result
-select array_contains_seq([1, 2, NULL, 3, 4], [null,null])
+select array_contains_seq([1, 2, NULL, 3, 4], [null,null]);
 -- result:
 0
 -- !result
-select array_contains_seq([1, 2, NULL], [null,2])
+select array_contains_seq([1, 2, NULL], [null,2]);
 -- result:
 0
 -- !result
-select array_contains_seq(null, null)
+select array_contains_seq(null, null);
 -- result:
 None
 -- !result
