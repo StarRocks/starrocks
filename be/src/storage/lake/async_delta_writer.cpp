@@ -168,10 +168,26 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task.cb = std::move(cb); // Do NOT touch |cb| since here
     task.finish_after_write = false;
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
     }
 }
 
+<<<<<<< HEAD
+=======
+inline void AsyncDeltaWriterImpl::flush(Callback cb) {
+    Task task;
+    task.chunk = nullptr;
+    task.indexes = nullptr;
+    task.indexes_size = 0;
+    task.flush_after_write = true;
+    task.cb = std::move(cb); // Do NOT touch |cb| since here
+    if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
+        LOG(WARNING) << "Fail to execution_queue_execute: " << r;
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+    }
+}
+
+>>>>>>> d103dc9e06 ([Enhancement] Improve aborting transactions in shared data mode (#34185))
 inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     Task task;
     task.chunk = nullptr;
@@ -184,7 +200,7 @@ inline void AsyncDeltaWriterImpl::finish(Callback cb) {
     // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.cb(Status::InternalError("AsyncDeltaWriterImpl not open()ed or has been close()ed"));
+        task.cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
     }
 }
 
