@@ -701,7 +701,7 @@ public class Config extends ConfigBase {
      * handshake packet version.
      * global variable version.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
 
     /**
