@@ -938,11 +938,11 @@ E: (1064, 'Unexpected exception: Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10 after xxx, add column testcol2 BIGINT after xxx;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Detail message: columnPosition can not be set when ADD GENERATED COLUMN.')
+E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Detail message: AFTER can not be set when ADD GENERATED COLUMN.')
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10 after v1, add column testcol2 BIGINT after v1;
 -- result:
-E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Detail message: columnPosition can not be set when ADD GENERATED COLUMN.')
+E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Detail message: AFTER can not be set when ADD GENERATED COLUMN.')
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
 -- result:
