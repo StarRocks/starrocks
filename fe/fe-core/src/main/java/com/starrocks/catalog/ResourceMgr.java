@@ -158,7 +158,7 @@ public class ResourceMgr implements Writable {
             String type = resource.getType().name().toLowerCase(Locale.ROOT);
             String catalogName = getResourceMappingCatalogName(resource.getName(), type);
 
-            if (nameToResource.containsKey(resource.name)) {
+            if (containsResource(resource.name)) {
                 DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
                 GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
             }
@@ -202,11 +202,16 @@ public class ResourceMgr implements Writable {
     }
 
     public void replayDropResource(DropResourceOperationLog operationLog) {
-        Resource resource = nameToResource.remove(operationLog.getName());
-        if (resource.needMappingCatalog()) {
-            String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
-            DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
-            GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+        this.writeLock();
+        try {
+            Resource resource = nameToResource.remove(operationLog.getName());
+            if (resource.needMappingCatalog()) {
+                String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+            }
+        } finally {
+            this.writeUnLock();
         }
     }
 
@@ -238,9 +243,14 @@ public class ResourceMgr implements Writable {
     }
 
     public List<Resource> getNeedMappingCatalogResources() {
-        return nameToResource.values().stream()
-                .filter(Resource::needMappingCatalog)
-                .collect(Collectors.toList());
+        this.readLock();
+        try {
+            return nameToResource.values().stream()
+                    .filter(Resource::needMappingCatalog)
+                    .collect(Collectors.toList());
+        } finally {
+            this.readUnlock();
+        }
     }
 
     /**
@@ -327,7 +337,6 @@ public class ResourceMgr implements Writable {
         public ProcResult fetchResult() {
             BaseProcResult result = new BaseProcResult();
             result.setNames(RESOURCE_PROC_NODE_TITLE_NAMES);
-
             for (Map.Entry<String, Resource> entry : nameToResource.entrySet()) {
                 Resource resource = entry.getValue();
                 // Since `nameToResource.entrySet` may change after it is called, resource
@@ -362,7 +371,12 @@ public class ResourceMgr implements Writable {
 
     public void loadResourcesV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        ResourceMgr data = reader.readJson(ResourceMgr.class);
-        this.nameToResource = data.nameToResource;
+        this.writeLock();
+        try {
+            ResourceMgr data = reader.readJson(ResourceMgr.class);
+            this.nameToResource = data.nameToResource;
+        } finally {
+            this.writeUnLock();
+        }
     }
 }
