@@ -1075,7 +1075,9 @@ public class LowCardinalityTest extends PlanTestBase {
                 "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1], version:1), " +
                 "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1], version:1), " +
                 "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1], version:1)])");
+                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:23, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:24, strings:[6D 6F 63 6B], ids:[1], version:1)])");
         // the fragment on the top don't have to send global dicts
         sql = "select upper(ST_S_ADDRESS),\n" +
                 "    upper(ST_S_COMMENT)\n" +
