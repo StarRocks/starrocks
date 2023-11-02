@@ -20,6 +20,7 @@
 
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
+#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -69,7 +70,7 @@ public:
         _runtime_profile->add_info_string("DataSourceType", name());
     }
     void set_predicates(const std::vector<ExprContext*>& predicates) { _conjunct_ctxs = predicates; }
-    void set_runtime_filters(const RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
+    void set_runtime_filters(RuntimeFilterProbeCollector* runtime_filters) { _runtime_filters = runtime_filters; }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     void set_split_context(pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
     Status parse_runtime_filters(RuntimeState* state);
@@ -87,7 +88,8 @@ protected:
     int64_t _read_limit = -1; // no limit
     bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
-    const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
+    RuntimeFilterProbeCollector* _runtime_filters = nullptr;
+    RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
     TupleDescriptor* _tuple_desc = nullptr;
     pipeline::ScanSplitContext* _split_context = nullptr;

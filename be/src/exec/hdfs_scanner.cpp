@@ -193,24 +193,31 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
+void HdfsScanner::close() noexcept {
     VLOG_FILE << "close file success: " << _scanner_params.path << ", scan range = ["
               << _scanner_params.scan_range->offset << ","
               << (_scanner_params.scan_range->length + _scanner_params.scan_range->offset)
               << "], rows = " << _app_stats.rows_read;
 
+    if (!_runtime_state) {
+        return;
+    }
+
+    DCHECK(!has_pending_token());
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
-    do_close(runtime_state);
+    do_close(_runtime_state);
     _file.reset(nullptr);
     _mor_processor->close(_runtime_state);
 }
 
-void HdfsScanner::finalize() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
-    }
+void HdfsScanner::enter_pending_queue() {
+    _pending_queue_sw.start();
+}
+
+uint64_t HdfsScanner::exit_pending_queue() {
+    return _pending_queue_sw.reset();
 }
 
 Status HdfsScanner::open_random_access_file() {

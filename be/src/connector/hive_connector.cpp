@@ -111,8 +111,10 @@ Status HiveDataSource::open(RuntimeState* state) {
     }
     if (state->query_options().__isset.enable_connector_split_io_tasks) {
         _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+    if (state->query_options().__isset.enable_dynamic_prune_scan_range) {
+        _enable_dynamic_prune_scan_range = state->query_options().enable_dynamic_prune_scan_range;
     }
-
+    
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
@@ -171,44 +173,46 @@ Status HiveDataSource::_init_partition_values() {
     }
 
     const auto& partition_values = partition_desc->partition_key_value_evals();
-    _partition_values = partition_values;
+    _partition_values = partition_desc->partition_key_value_evals();
 
-    if (_has_partition_conjuncts || _has_scan_range_indicate_const_column) {
-        ChunkPtr partition_chunk = ChunkHelper::new_chunk(_partition_slots, 1);
-        // append partition data
-        for (int i = 0; i < _partition_slots.size(); i++) {
-            SlotId slot_id = _partition_slots[i]->id();
-            int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
-            ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
-            assert(partition_value_col->is_constant());
-            auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-            const ColumnPtr& data_column = const_column->data_column();
-            ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
-            if (data_column->is_nullable()) {
-                chunk_part_column->append_default();
-            } else {
-                chunk_part_column->append(*data_column, 0, 1);
+    // init partition chunk
+    auto partition_chunk = std::make_shared<Chunk>();
+    for (int i = 0; i < _partition_slots.size(); i++) {
+        SlotId slot_id = _partition_slots[i]->id();
+        int partition_col_idx = _partition_index_in_hdfs_partition_columns[i];
+        ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
+        DCHECK(partition_value_col->is_constant());
+        partition_chunk->append_column(partition_value_col, slot_id);
+    }
+
+    // eval conjuncts and skip if no rows.
+    if (_has_scan_range_indicate_const_column) {
+        std::vector<ExprContext*> ctxs;
+        for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
+            if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
+                ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
+                            _conjunct_ctxs_by_slot.at(slotId).end());
             }
         }
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
+    } else if (_has_partition_conjuncts) {
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
+    }
 
-        // eval conjuncts and skip if no rows.
-        if (_has_scan_range_indicate_const_column) {
-            std::vector<ExprContext*> ctxs;
-            for (SlotId slotId : _scan_range.identity_partition_slot_ids) {
-                if (_conjunct_ctxs_by_slot.find(slotId) != _conjunct_ctxs_by_slot.end()) {
-                    ctxs.insert(ctxs.end(), _conjunct_ctxs_by_slot.at(slotId).begin(),
-                                _conjunct_ctxs_by_slot.at(slotId).end());
-                }
-            }
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(ctxs, partition_chunk.get()));
-        } else {
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_partition_conjunct_ctxs, partition_chunk.get()));
-        }
+    if (!partition_chunk->has_rows()) {
+        _filter_by_eval_partition_conjuncts = true;
+        return Status::OK();
+    }
 
+    if (_enable_dynamic_prune_scan_range && _runtime_filters) {
+        _init_rf_counters();
+        _runtime_filters->evaluate_partial_chunk(partition_chunk.get(), runtime_bloom_filter_eval_context);
         if (!partition_chunk->has_rows()) {
             _filter_by_eval_partition_conjuncts = true;
+            return Status::OK();
         }
     }
+
     return Status::OK();
 }
 
@@ -453,6 +457,24 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     }
 }
 
+void HiveDataSource::_init_rf_counters() {
+    auto* root = _runtime_profile;
+    if (runtime_bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
+        static const char* prefix = "DynamicPruneScanRange";
+        ADD_COUNTER(root, prefix, TUnit::NONE);
+        runtime_bloom_filter_eval_context.join_runtime_filter_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_hash_timer =
+                ADD_CHILD_TIMER(root, "JoinRuntimeFilterHashTime", prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_input_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterInputScanRanges", TUnit::UNIT, prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_output_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterOutputScanRanges", TUnit::UNIT, prefix);
+        runtime_bloom_filter_eval_context.join_runtime_filter_eval_counter =
+                ADD_CHILD_COUNTER(root, "JoinRuntimeFilterEvaluate", TUnit::UNIT, prefix);
+    }
+}
+
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
@@ -603,7 +625,7 @@ void HiveDataSource::close(RuntimeState* state) {
         if (!_scanner->has_split_tasks()) {
             COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
         }
-        _scanner->close(state);
+        _scanner->close();
     }
     Expr::close(_min_max_conjunct_ctxs, state);
     Expr::close(_partition_conjunct_ctxs, state);
