@@ -30,7 +30,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import okio.BufferedSink;
-import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -54,7 +54,6 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         };
 
 
-
         ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
         computeNode.setBePort(9300);
         computeNode.setAlive(true);
@@ -68,9 +67,10 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         };
     }
 
-    @After
-    public void tearDown() {
+    @AfterClass
+    public static void close() {
         GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
+        beServer.shutDown();
     }
 
     @BeforeClass
@@ -121,8 +121,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                     })
                     .build();
-            Response response = networkClient.newCall(request).execute();
-            Assert.assertEquals(true, response.body().string().contains("OK"));
+            try (Response response1 = networkClient.newCall(request).execute();){
+                Assert.assertTrue(response1.body().string().contains("OK"));
+            }
 
             Assert.assertTrue(TransactionLoadAction.getAction().txnNodeMapSize() <= 2048);
         }
@@ -149,9 +150,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response1 = networkClient.newCall(request).execute();){
+            Assert.assertFalse(response1.body().string().contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -172,9 +173,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response1 = networkClient.newCall(request).execute();){
+            Assert.assertFalse(response1.body().string().contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -196,9 +197,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(true, response.body().string().contains("OK"));
+        try (Response response1 = networkClient.newCall(request).execute()){
+            Assert.assertTrue(response1.body().string().contains("OK"));
+        }
     }
 
     @Test
@@ -222,9 +223,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response1 = networkClient.newCall(request).execute();){
+            Assert.assertFalse(response1.body().string().contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -244,10 +245,12 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                 })
                 .build();
+        try (Response response1 = networkClient.newCall(request).execute();){
+            Assert.assertFalse(response1.body().string().contains("OK"));
+        }
 
-        response = networkClient.newCall(request).execute();
 
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+
 
     }
 
@@ -271,11 +274,9 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                 })
                 .build();
-
-        Response response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
-
+        try (Response response = networkClient.newCall(request).execute();) {
+            Assert.assertFalse(response.body().string().contains("OK"));
+        }
         request = new Request.Builder()
                 .get()
                 .addHeader("Authorization", rootAuth)
@@ -294,10 +295,10 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
                 })
                 .build();
+        try (Response response0 = networkClient.newCall(request).execute();) {
+            Assert.assertFalse(response0.body().string().contains("OK"));
+        }
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
 
         request = new Request.Builder()
                 .get()
@@ -318,10 +319,10 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-        String res = response.body().string();
-
-        Assert.assertEquals(false, res.contains("OK"));
+        try (Response response1 = networkClient.newCall(request).execute()) {
+            String res = response1.body().string();
+            Assert.assertFalse(res.contains("OK"));
+        }
     }
 
     @Test
@@ -345,11 +346,11 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-        String res = response.body().string();
-        System.out.println(res);
-
-        Assert.assertEquals(false, res.contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            String res = response.body().string();
+            System.out.println(res);
+            Assert.assertFalse(res.contains("OK"));
+        }
     }
 
 }
