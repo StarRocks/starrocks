@@ -1950,7 +1950,10 @@ public class AuthorizationMgr {
                 // But to keep the correct relationship with roles inherited from them, we still need to persist
                 // an empty role for them, just for the role id.
                 if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(entry.getKey())) {
-                    value = new RolePrivilegeCollectionV2();
+                    // clone to avoid race condition
+                    RolePrivilegeCollectionV2 clone = value.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    value = clone;
                 }
                 writer.writeJson(entry.getKey());
                 writer.writeJson(value);
