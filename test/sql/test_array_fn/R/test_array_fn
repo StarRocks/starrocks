@@ -4455,3 +4455,31 @@ select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2],[2,4])]);
 -- result:
 0
 -- !result
+select array_contains_seq([1, 2, NULL, 3, 4], ['a']);
+-- result:
+0
+-- !result
+SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3]);
+-- result:
+0
+-- !result
+SELECT array_contains_seq([1, 2, NULL, 3, 4], null);
+-- result:
+NULL
+-- !result
+SELECT array_contains_seq(null, [2,3])
+-- result:
+NULL
+-- !result
+SELECT array_contains_seq([1, 2, NULL, 3, 4], [null,null])
+-- result:
+0
+-- !result
+SELECT array_contains_seq([1, 2, NULL], [null,2])
+-- result:
+0
+-- !result
+SELECT array_contains_seq(null, null)
+-- result:
+NULL
+-- !result

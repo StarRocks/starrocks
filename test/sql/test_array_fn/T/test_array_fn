@@ -841,3 +841,10 @@ select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1}')]);
 select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1,"b":2}')]);
 select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2,5],[2,4,5])]);
 select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2],[2,4])]);
+select array_contains_seq([1, 2, NULL, 3, 4], ['a']);
+SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3]);
+SELECT array_contains_seq([1, 2, NULL, 3, 4], null);
+SELECT array_contains_seq(null, [2,3])
+SELECT array_contains_seq([1, 2, NULL, 3, 4], [null,null])
+SELECT array_contains_seq([1, 2, NULL], [null,2])
+SELECT array_contains_seq(null, null)

@@ -762,6 +762,9 @@ private:
                                                      std::is_same_v<MapColumn, ElementColumn> ||
                                                      std::is_same_v<StructColumn, ElementColumn>,
                                              uint8_t, typename ElementColumn::ValueType>;
+        [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
+            return (*null_map)[idx] != 0;
+        };
         if (element_end < target_end) {
             return false;
         }
@@ -775,7 +778,21 @@ private:
             } else {
                 auto elements_ptr = (const ValueType*)(elements.raw_data());
                 auto targets_ptr = (const ValueType*)(targets.raw_data());
-                found = (elements_ptr[j] == targets_ptr[i]);
+                bool null_target = false;
+                if constexpr (NullableTarget) {
+                    null_target = is_null(null_map_targets, i);
+                }
+                bool null_element = false;
+                if constexpr (NullableElement) {
+                    null_element = is_null(null_map_elements, j);
+                }
+                if (null_target && null_element) {
+                    found = true;
+                } else if (null_target || null_element) {
+                    found = false;
+                } else {
+                    found = (elements_ptr[j] == targets_ptr[i]);
+                }
             }
             if (found) {
                 i++;
