@@ -85,7 +85,6 @@ void FileDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         _scanner->close();
     }
-    Expr::close(_conjunct_ctxs, state);
 }
 
 Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
