@@ -381,6 +381,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             return createPropertySetByDistribution(new HashDistributionSpec(
                     new HashDistributionDesc(((HashDistributionSpec) olapDistributionSpec).getShuffleColumns(),
                             HashDistributionDesc.SourceType.LOCAL), equivDesc));
+        } else if (olapDistributionSpec.getType() == DistributionSpec.DistributionType.ANY) {
+            return PhysicalPropertySet.EMPTY;
         } else {
             return createPropertySetByDistribution(olapDistributionSpec);
         }
