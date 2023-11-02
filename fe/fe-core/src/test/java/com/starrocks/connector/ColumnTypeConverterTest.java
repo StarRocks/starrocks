@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
+import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.ScalarType.OLAP_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
@@ -300,6 +302,11 @@ public class ColumnTypeConverterTest {
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
+
+        Assert.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(OLAP_MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
     @Test
@@ -422,9 +429,7 @@ public class ColumnTypeConverterTest {
                 () -> toHiveType(ScalarType.createCharType(10000)));
 
         Assert.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Unsupported Hive type: VARCHAR(200000). Supported VARCHAR types: VARCHAR(<=65535)",
-                () -> toHiveType(ScalarType.createVarcharType(200000)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarcharType(200000)));
 
         Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(OLAP_MAX_VARCHAR_LENGTH)));
 
