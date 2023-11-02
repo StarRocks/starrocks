@@ -73,12 +73,14 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
                         dop, std::move(buffer_limiter)) {
     _io_tasks_mem_limiter = state->obj_pool()->add(new ConnectorScanOperatorIOTasksMemLimiter());
     _io_tasks_mem_limiter->dop = dop;
+    _init_partition_type(scan_node, state);
 }
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
+
     return Status::OK();
 }
 
@@ -95,6 +97,15 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
     auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* provider = connector_scan_node->data_source_provider();
     return provider->partition_exprs();
+}
+
+void ConnectorScanOperatorFactory::_init_partition_type(ScanNode* scan_node, RuntimeState* state) {
+    _partition_type = TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED;
+    auto* connector_scan_node = down_cast<ConnectorScanNode*>(scan_node);
+    auto* tuple_desc = connector_scan_node->data_source_provider()->tuple_descriptor(state);
+    if (dynamic_cast<const IcebergTableDescriptor*>(tuple_desc->table_desc())) {
+        _partition_type = TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED;
+    }
 }
 
 void ConnectorScanOperatorFactory::set_estimated_mem_usage_per_chunk_source(int64_t value) {

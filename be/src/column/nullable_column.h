@@ -212,6 +212,9 @@ public:
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
+    void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to, int32_t* bucket_nums,
+                             int32_t step) const override;
+
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;

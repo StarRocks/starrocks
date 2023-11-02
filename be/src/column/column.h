@@ -350,6 +350,14 @@ public:
 
     virtual void fnv_hash_at(uint32_t* seed, uint32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
+    // For iceberg bucket join.
+    // If there are multiple bucket columns <column, bucket_num> such as <c1, 50>, <c2, 60>, <c3, 10>.
+    // we use the following formula as iceberg unique bucket id.
+    // bucket_id = c1_bucket_id * 60 * 10 + c2_bucket_id * 10 + c3_bucket_id
+    // TODO(stephen): Currently, we only support some simple types, and will fully support all types in the future.
+    virtual void murmur_hash3_x86_32(uint32_t* hash, uint32_t from, uint32_t to, int32_t* bucket_nums,
+                                     int32_t step) const {};
+
     virtual int64_t xor_checksum(uint32_t from, uint32_t to) const = 0;
 
     // Push one row to MysqlRowBuffer

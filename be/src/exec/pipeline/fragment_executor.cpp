@@ -757,10 +757,16 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
 
     bool is_dest_merge = stream_sink.__isset.is_merge && stream_sink.is_merge;
 
+    std::vector<int32_t> iceberg_bucket_modulus;
+    if (stream_sink.output_partition.__isset.iceberg_bucket_modulus) {
+        iceberg_bucket_modulus = stream_sink.output_partition.iceberg_bucket_modulus;
+    }
+
     bool is_pipeline_level_shuffle = false;
     int32_t dest_dop = -1;
     if (sender->get_partition_type() == TPartitionType::HASH_PARTITIONED ||
-        sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        sender->get_partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        sender->get_partition_type() == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         dest_dop = stream_sink.dest_dop;
         is_pipeline_level_shuffle = true;
         DCHECK_GT(dest_dop, 0);
@@ -774,7 +780,8 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
             sender->get_dest_node_id(), sender->get_partition_exprs(),
             !is_dest_merge && sender->get_enable_exchange_pass_through(),
-            sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
+            sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns(),
+            iceberg_bucket_modulus);
     return exchange_sink;
 }
 

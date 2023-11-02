@@ -21,6 +21,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -269,7 +270,15 @@ public class ColocatedBackendSelectorTest {
                                           Map<Integer, Long> expectedSeqToBackendId)
             throws UserException {
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        ColocatedBackendSelector.Assignment colocatedAssignemnt = new ColocatedBackendSelector.Assignment(scanNodes.get(0));
+        OlapScanNode olapScanNode = scanNodes.get(0);
+        int curBucketNum = olapScanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
+        if (olapScanNode.getSelectedPartitionIds().size() <= 1) {
+            for (Long pid : olapScanNode.getSelectedPartitionIds()) {
+                curBucketNum = olapScanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
+            }
+        }
+        ColocatedBackendSelector.Assignment colocatedAssignemnt = new ColocatedBackendSelector.Assignment(
+                curBucketNum, Table.TableType.OLAP);
 
         for (OlapScanNode scanNode : scanNodes) {
             ColocatedBackendSelector backendSelector =

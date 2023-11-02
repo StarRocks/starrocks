@@ -97,6 +97,7 @@ public class IcebergTable extends Table {
     private List<Column> partitionColumns;
     // used for recording the last snapshot time when refresh mv based on mv.
     private long refreshSnapshotTime = -1L;
+    private Optional<Boolean> hasBucketProperties = Optional.empty();
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
@@ -208,9 +209,18 @@ public class IcebergTable extends Table {
         return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
     }
 
+    public List<Integer> getBucketModulus() {
+        return getBucketSourceIdWithBucketNum(getNativeTable().spec()).stream()
+                .map(pair -> pair.second)
+                .collect(Collectors.toList());
+    }
     public boolean hasBucketProperties() {
-        PartitionSpec spec = getNativeTable().spec();
-        return spec.isPartitioned() && Partitioning.hasBucketField(spec);
+        if (!hasBucketProperties.isPresent()) {
+            PartitionSpec spec = getNativeTable().spec();
+            hasBucketProperties = Optional.of(spec.isPartitioned() && Partitioning.hasBucketField(spec));
+        }
+
+        return hasBucketProperties.get();
     }
 
     public List<BucketProperty> getBucketProperties() {
@@ -242,6 +252,11 @@ public class IcebergTable extends Table {
         }
     }
 
+    /**
+     * If there are multiple bucket columns such as <c1, 50>, <c2, 60>, <c3, 10>.
+     * we use the following formula as iceberg unique bucket id.
+     * bucket_id = c1 * 60 * 10 + c2 * 10 + c3
+     */
     public int getTransformedBucketId(List<Integer> bucketIds) {
         PartitionSpec spec = getNativeTable().spec();
         List<Integer> bucketNums = getBucketSourceIdWithBucketNum(spec).stream()
@@ -265,6 +280,7 @@ public class IcebergTable extends Table {
                 res = res + tmp;
             }
         }
+
         return res;
     }
 

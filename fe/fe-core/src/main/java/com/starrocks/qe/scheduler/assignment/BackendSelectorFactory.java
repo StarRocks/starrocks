@@ -28,6 +28,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.HDFSBackendSelector;
+import com.starrocks.qe.IcebergBucketBackendSelector;
 import com.starrocks.qe.NoopBackendSelector;
 import com.starrocks.qe.NormalBackendSelector;
 import com.starrocks.qe.ReplicatedBackendSelector;
@@ -63,9 +64,20 @@ public class BackendSelectorFactory {
         } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
                 scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                 scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
-            return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
-                    sessionVariable.getForceScheduleLocal(),
-                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
+            boolean hasColocate = execFragment.isColocated();
+            boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
+
+            if (scanNode instanceof IcebergScanNode && (hasBucket || hasColocate)) {
+                ColocatedBackendSelector.Assignment colocatedAssignment =
+                        execFragment.getOrCreateColocatedAssignment(scanNode);
+                boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
+                return new IcebergBucketBackendSelector((IcebergScanNode) scanNode, assignment,
+                        colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider);
+            } else {
+                return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
+                        sessionVariable.getForceScheduleLocal(),
+                        sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
+            }
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();
@@ -76,7 +88,7 @@ public class BackendSelectorFactory {
                         execFragment.getColocatedAssignment());
             } else if (hasColocate || hasBucket) {
                 ColocatedBackendSelector.Assignment colocatedAssignment =
-                        execFragment.getOrCreateColocatedAssignment((OlapScanNode) scanNode);
+                        execFragment.getOrCreateColocatedAssignment(scanNode);
                 boolean isRightOrFullBucketShuffleFragment = execFragment.isRightOrFullBucketShuffle();
                 return new ColocatedBackendSelector((OlapScanNode) scanNode, assignment,
                         colocatedAssignment, isRightOrFullBucketShuffleFragment, workerProvider,

@@ -1,0 +1,9 @@
+-- name: testIcebergColocateJoin
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.lineitem_two_bucket join iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_two_bucket on ps_suppkey = l_suppkey and ps_partkey = l_partkey order by l_orderkey limit 3;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_oss_db.lineitem_two_bucket join iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_no_bucket on ps_suppkey = l_suppkey and ps_partkey = l_partkey order by l_orderkey limit 3;
+
+drop catalog iceberg_sql_test_${uuid0}

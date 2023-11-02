@@ -384,7 +384,8 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
            sink.output_partition.type == TPartitionType::HASH_PARTITIONED ||
            sink.output_partition.type == TPartitionType::RANDOM ||
            sink.output_partition.type == TPartitionType::RANGE_PARTITIONED ||
-           sink.output_partition.type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED);
+           sink.output_partition.type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+           sink.output_partition.type == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED);
     // TODO: use something like google3's linked_ptr here (std::unique_ptr isn't copyable
 
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
@@ -411,7 +412,8 @@ Status DataStreamSender::init(const TDataSink& tsink, RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::init(tsink, state));
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        _part_type == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
                                                 &_partition_expr_ctxs, state));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
@@ -455,7 +457,8 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _profile->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        _part_type == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
     }
 

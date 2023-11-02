@@ -18,6 +18,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -144,16 +145,11 @@ public class ColocatedBackendSelector implements BackendSelector {
                 new ColocatedBackendSelector.BucketSeqToScanRange();
         private final Map<Long, Integer> backendIdToBucketCount = Maps.newHashMap();
         private final int bucketNum;
+        private final Table.TableType tableType;
 
-        public Assignment(OlapScanNode scanNode) {
-            int curBucketNum = scanNode.getOlapTable().getDefaultDistributionInfo().getBucketNum();
-            if (scanNode.getSelectedPartitionIds().size() <= 1) {
-                for (Long pid : scanNode.getSelectedPartitionIds()) {
-                    curBucketNum = scanNode.getOlapTable().getPartition(pid).getDistributionInfo().getBucketNum();
-                }
-            }
-
-            this.bucketNum = curBucketNum;
+        public Assignment(int bucketNum, Table.TableType tableType) {
+            this.bucketNum = bucketNum;
+            this.tableType = tableType;
         }
 
         public Map<Integer, Long> getSeqToWorkerId() {
@@ -166,6 +162,10 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         public int getBucketNum() {
             return bucketNum;
+        }
+
+        public Table.TableType getTableType() {
+            return tableType;
         }
     }
 

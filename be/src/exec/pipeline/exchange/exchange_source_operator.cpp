@@ -78,12 +78,14 @@ bool ExchangeSourceOperatorFactory::could_local_shuffle() const {
     // 2. Otherwise, add LocalExchangeOperator
     // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes.
     return _texchange_node.partition_type != TPartitionType::HASH_PARTITIONED &&
-           _texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED;
+           _texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED &&
+           _texchange_node.partition_type != TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED;
 }
 
 TPartitionType::type ExchangeSourceOperatorFactory::partition_type() const {
     DCHECK(_texchange_node.__isset.partition_type);
-    if (_texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+    if (_texchange_node.partition_type != TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED &&
+        _texchange_node.partition_type != TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         return SourceOperatorFactory::partition_type();
     }
     return _texchange_node.partition_type;

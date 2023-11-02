@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -1774,7 +1775,7 @@ public class PlanFragmentBuilder {
 
                 // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
                 if (!withLocalShuffle && node.isMergedLocalAgg() &&
-                        hasColocateOlapScanChildInFragment(aggregationNode)) {
+                        hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
@@ -1824,7 +1825,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.setLimit(node.getLimit());
 
                 // Check colocate for one-phase local agg.
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctGlobal()) {
@@ -1839,7 +1840,7 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIntermediateTuple();
 
-                if (!withLocalShuffle && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                if (!withLocalShuffle && hasColocateScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isDistinctLocal()) {
@@ -1879,11 +1880,17 @@ public class PlanFragmentBuilder {
         }
 
         // Check whether colocate Table exists in the same Fragment
-        public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
+        public boolean hasColocateScanChildInFragment(PlanNode node) {
             if (node instanceof OlapScanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
                 OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
+                    return true;
+                }
+            }
+            if (node instanceof IcebergScanNode) {
+                IcebergScanNode scanNode = (IcebergScanNode) node;
+                if (scanNode.getIcebergTable().hasBucketProperties()) {
                     return true;
                 }
             }
@@ -1892,7 +1899,7 @@ public class PlanFragmentBuilder {
             }
             boolean hasOlapScanChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasOlapScanChild |= hasColocateOlapScanChildInFragment(child);
+                hasOlapScanChild |= hasColocateScanChildInFragment(child);
             }
             return hasOlapScanChild;
         }
@@ -2374,7 +2381,8 @@ public class PlanFragmentBuilder {
                         HashDistributionDesc.SourceType hashSourceType =
                                 ((HashDistributionSpec) (physicalPropertySet.getDistributionProperty().getSpec()))
                                         .getHashDistributionDesc().getSourceType();
-                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL);
+                        return hashSourceType.equals(HashDistributionDesc.SourceType.LOCAL) ||
+                                hashSourceType.equals(HashDistributionDesc.SourceType.ICEBERG_LOCAL);
                     });
         }
 
@@ -2399,9 +2407,24 @@ public class PlanFragmentBuilder {
                                                              PlanFragment removeFragment, JoinNode hashJoinNode) {
             hashJoinNode.setLocalHashBucket(true);
             hashJoinNode.setPartitionExprs(removeFragment.getDataPartition().getPartitionExprs());
-            removeFragment.getChild(0)
-                    .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED,
-                            removeFragment.getDataPartition().getPartitionExprs()));
+            TPartitionType partitionType = TPartitionType.BUCKET_SHUFFLE_HASH_PARTITIONED;
+            List<Integer> icebergBucketModulus = new ArrayList<>();
+            if (hasIcebergScanNode(stayFragment.getPlanRoot())) {
+                partitionType = TPartitionType.ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED;
+                IcebergScanNode icebergScanNode = getIcebergScanNode(stayFragment.getPlanRoot());
+                if (icebergScanNode != null) {
+                    icebergBucketModulus = icebergScanNode.getIcebergTable().getBucketModulus();
+                } else {
+                    throw new StarRocksConnectorException("not found iceberg scan node");
+                }
+            }
+
+            DataPartition dataPartition = new DataPartition(partitionType,
+                    removeFragment.getDataPartition().getPartitionExprs());
+            if (!icebergBucketModulus.isEmpty()) {
+                dataPartition.setBucketModulus(icebergBucketModulus);
+            }
+            removeFragment.getChild(0).setOutputPartition(dataPartition);
 
             // Currently, we always generate new fragment for PhysicalDistribution.
             // So we need to remove exchange node only fragment for Join.
@@ -2414,6 +2437,30 @@ public class PlanFragmentBuilder {
             stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
+        }
+
+        private boolean hasIcebergScanNode(PlanNode node) {
+            if (node instanceof IcebergScanNode) {
+                return true;
+            }
+            for (PlanNode child : node.getChildren()) {
+                if (hasIcebergScanNode(child)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private IcebergScanNode getIcebergScanNode(PlanNode node) {
+            if (node instanceof IcebergScanNode) {
+                return (IcebergScanNode) node;
+            }
+            for (PlanNode child : node.getChildren()) {
+                if (getIcebergScanNode(child) != null) {
+                    return getIcebergScanNode(child);
+                }
+            }
+            return null;
         }
 
         public PlanFragment computeShuffleHashBucketPlanFragment(ExecPlan context,
@@ -2502,7 +2549,7 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
-            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+            if (hasColocateScanChildInFragment(analyticEvalNode)) {
                 analyticEvalNode.setColocate(true);
             }
 

@@ -54,7 +54,11 @@ enum TPartitionType {
 
   // unordered partition on a set of exprs
   // (only use in bucket shuffle join)
-  BUCKET_SHUFFLE_HASH_PARTITIONED
+  BUCKET_SHUFFLE_HASH_PARTITIONED,
+
+  // unordered partition on a set of exprs
+  // (only use in iceberg bucket shuffle join)
+  ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED
 }
 
 enum TDistributionType {
@@ -86,6 +90,8 @@ struct TRangePartition {
 
     // what distribute information in this partition.
     3: optional list<Exprs.TExpr> distributed_exprs
+
+    // If there are bucket columns in the iceberg table, the modulus of each column may be different.
     4: optional i32 distribute_bucket
 }
 
@@ -97,6 +103,7 @@ struct TDataPartition {
   1: required TPartitionType type
   2: optional list<Exprs.TExpr> partition_exprs
   3: optional list<TRangePartition> partition_infos
+  4: optional list<i32> iceberg_bucket_modulus
 }
 
 

@@ -335,7 +335,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
-        bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
+        bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns,
+        const std::vector<int32_t>& iceberg_bucket_modulus)
         : Operator(factory, id, "exchange_sink", plan_node_id, false, driver_sequence),
           _buffer(buffer),
           _part_type(part_type),
@@ -345,7 +346,8 @@ ExchangeSinkOperator::ExchangeSinkOperator(
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs),
           _fragment_ctx(fragment_ctx),
-          _output_columns(output_columns) {
+          _output_columns(output_columns),
+          _iceberg_bucket_modulus(iceberg_bucket_modulus) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
     RuntimeState* state = fragment_ctx->runtime_state();
 
@@ -429,7 +431,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("ChannelNum", std::to_string(_channels.size()));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        _part_type == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
         _unique_metrics->add_info_string("ShuffleNumPerChannel", std::to_string(_num_shuffles_per_channel));
         _unique_metrics->add_info_string("TotalShuffleNum", std::to_string(_num_shuffles));
@@ -565,7 +568,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+               _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+               _part_type == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         // hash-partition batch's rows across channels
         {
             SCOPED_TIMER(_shuffle_hash_timer);
@@ -580,12 +584,18 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                 for (const ColumnPtr& column : _partitions_columns) {
                     column->fnv_hash(&_hash_values[0], 0, num_rows);
                 }
-            } else {
+            } else if (_part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                 // The data distribution was calculated using CRC32_HASH,
                 // and bucket shuffle need to use the same hash function when sending data
                 _hash_values.assign(num_rows, 0);
                 for (const ColumnPtr& column : _partitions_columns) {
                     column->crc32_hash(&_hash_values[0], 0, num_rows);
+                }
+            } else {
+                _hash_values.assign(num_rows, 0);
+                for (int i = 0; i < _partitions_columns.size(); ++i) {
+                    _partitions_columns[i]->murmur_hash3_x86_32(
+                            &_hash_values[0], 0, num_rows, &_iceberg_bucket_modulus[i], _partitions_columns.size() - i);
                 }
             }
 
@@ -765,7 +775,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through, bool enable_exchange_perf,
-        FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns)
+        FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns,
+        std::vector<int32_t> iceberg_bucket_modulus)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
@@ -778,20 +789,22 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _enable_exchange_pass_through(enable_exchange_pass_through),
           _enable_exchange_perf(enable_exchange_perf),
           _fragment_ctx(fragment_ctx),
-          _output_columns(std::move(output_columns)) {}
+          _output_columns(std::move(output_columns)),
+          _iceberg_bucket_modulus(std::move(iceberg_bucket_modulus)) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, _buffer, _part_type, _destinations, _is_pipeline_level_shuffle,
             _num_shuffles_per_channel, _sender_id, _dest_node_id, _partition_expr_ctxs, _enable_exchange_pass_through,
-            _enable_exchange_perf, _fragment_ctx, _output_columns);
+            _enable_exchange_perf, _fragment_ctx, _output_columns, _iceberg_bucket_modulus);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
-        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+        _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED ||
+        _part_type == TPartitionType::ICEBERG_BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
         RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     }
