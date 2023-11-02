@@ -180,21 +180,19 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     return status;
 }
 
-void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
+void HdfsScanner::close() noexcept {
+    if (!_runtime_state) {
+        return;
+    }
+
     DCHECK(!has_pending_token());
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
-    do_close(runtime_state);
+    do_close(_runtime_state);
     _file.reset(nullptr);
     if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
-    }
-}
-
-void HdfsScanner::finalize() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
     }
 }
 
