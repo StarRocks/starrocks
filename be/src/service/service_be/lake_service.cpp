@@ -274,7 +274,8 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "]";
+    LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "] tablets=["
+              << JoinInts(request->tablet_ids(), ",") << "]";
 
     // Cancel active tasks.
     if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
