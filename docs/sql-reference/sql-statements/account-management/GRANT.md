@@ -138,7 +138,7 @@ GRANT
 * You can also use `<db_name>.<mv_name>` to represent an mv.
 
   ```SQL
-  GRANT <priv> ON MATERIALIZED_VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
+  GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USER <user_name>}
   ```
   
 #### Function

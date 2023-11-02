@@ -19,6 +19,10 @@ VARCHAR GROUP_CONCAT([DISTINCT] expr [,expr ...]
 - order-by items can be unsigned integers (identify `expr`, starting from 1), column names or normal expressions. To sort in reverse order, add the DESC (descending) keyword to the name of the column you are sorting by in the ORDER BY clause. The default is ascending order; this may be specified explicitly using the ASC keyword
 - `str_val`: the optional separator is used to concat non-null values from different rows. If it is not specified, `,` (a comma) is used by default.
 
+> **NOTE**
+>
+> From v3.0.6 and v3.1.3 onwards, there is a behavior change when you specify the separator. You must use `SEPARATOR` to declare the separator, for example, `select group_concat(name SEPARATOR '-') as res from ss;`.
+
 ## Return value
 
 Returns a string value for each group, but returns NULL if there are no non-NULL values.
@@ -89,6 +93,7 @@ select group_concat(distinct name) as res from ss where id < 0;
  
 set group_concat_max_len = 6;
 
+<<<<<<< HEAD
 select id, group_concat(distinct name,subject order by score) as res from ss group by id order by id;
 +------+--------+
 | id   | res    |
@@ -100,6 +105,96 @@ select id, group_concat(distinct name,subject order by score) as res from ss gro
 |    4 | NULL   |
 +------+--------+
 ```
+=======
+  ```sql
+   select group_concat(name) as res from ss;
+   +---------------------------+
+   | res                       |
+   +---------------------------+
+   | Tom,Tom,Ti,Tom,Tom,May,Ti |
+   +---------------------------+
+  ```
+
+  Example 2: Concatenate names into a string, connected by the separator `-` and with null values ignored. Duplicate names are retained.
+
+  ```sql
+   select group_concat(name SEPARATOR '-') as res from ss;
+   +---------------------------+
+   | res                       |
+   +---------------------------+
+   | Ti-May-Ti-Tom-Tom-Tom-Tom |
+   +---------------------------+
+  ```
+
+  Example 3: Concatenate distinct names into a string with the default separator and with null values ignored. Duplicate names are removed.
+
+  ```sql
+   select group_concat(distinct name) as res from ss;
+   +---------------------------+
+   | res                       |
+   +---------------------------+
+   | Ti,May,Tom                |
+   +---------------------------+
+  ```
+
+  Example 4: Concatenate the name-subject strings of the same ID in ascending order of `score`. For example, `TomMath` and `TomEnglish` share ID 1 and they are concatenated with a comma in ascending order of `score`.
+
+  ```sql
+   select id, group_concat(distinct name,subject order by score) as res from ss group by id order by id;
+   +------+--------------------+
+   | id   | res                |
+   +------+--------------------+
+   | NULL | TiPhy              |
+   |    1 | TomMath,TomEnglish |
+   |    2 | TomEnglish         |
+   |    3 | TiEnglish          |
+   |    4 | NULL               |
+   +------+--------------------+
+   ```
+
+  Example 5: group_concat is nested with concat(), which is used to combine `name`, `-`, and `subject` as a string. The strings in the same row are sorted in ascending order of `score`.
+  
+  ```sql
+   select id, group_concat(distinct concat(name, '-',subject) order by score) as res from ss group by id order by id;
+   +------+----------------------+
+   | id   | res                  |
+   +------+----------------------+
+   | NULL | Ti-Phy               |
+   |    1 | Tom-Math,Tom-English |
+   |    2 | Tom-English          |
+   |    3 | Ti-English           |
+   |    4 | NULL                 |
+   +------+----------------------+
+   ```
+  
+  Example 6: No matching result is found and NULL is returned.
+
+  ```sql
+  select group_concat(distinct name) as res from ss where id < 0;
+   +------+
+   | res  |
+   +------+
+   | NULL |
+   +------+
+   ```
+
+  Example 7: Limit the length of the returned string to six characters.
+
+  ```sql
+   set group_concat_max_len = 6;
+
+   select id, group_concat(distinct name,subject order by score) as res from ss group by id order by id;
+   +------+--------+
+   | id   | res    |
+   +------+--------+
+   | NULL | TiPhy  |
+   |    1 | TomMat |
+   |    2 | NULL   |
+   |    3 | TiEngl |
+   |    4 | NULL   |
+   +------+--------+
+   ```
+>>>>>>> d8f3ff6c43 ([Doc] update separator in group_concat and fix mv in grant syntax (#34207))
 
 ## keyword
 
