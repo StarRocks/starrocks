@@ -220,7 +220,7 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 ctx.compatibility = false;
                 auto& selection = ctx.selection;
                 selection.assign(chunk_part_column->size(), 1);
-                filter->compute_hash({chunk_part_column.get()}, &ctx);
+                filter->compute_partition_index(rf_desc->layout(), {chunk_part_column.get()}, &ctx);
                 filter->evaluate(chunk_part_column.get(), &ctx);
                 if (selection[0] == 0) {
                     return true;
