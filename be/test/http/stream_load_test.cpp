@@ -216,6 +216,26 @@ TEST_F(StreamLoadActionTest, commit_fail) {
     ASSERT_STREQ("Fail", doc["Status"].GetString());
 }
 
+TEST_F(StreamLoadActionTest, commit_try) {
+    StreamLoadAction action(&_env, _limiter.get());
+
+    HttpRequest request(_evhttp_req);
+    struct evhttp_request ev_req;
+    ev_req.remote_host = nullptr;
+    request._ev_req = &ev_req;
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+    Status status = Status::ServiceUnavailable("service_unavailable");
+    status.to_thrift(&k_stream_load_commit_result.status);
+    request.set_handler(&action);
+    action.on_header(&request);
+    action.handle(&request);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+}
+
 TEST_F(StreamLoadActionTest, begin_fail) {
     StreamLoadAction action(&_env, _limiter.get());
 

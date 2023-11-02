@@ -223,7 +223,16 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
-    return commit_txn_internal(request, rpc_timeout_ms, ctx);
+    auto st = commit_txn_internal(request, rpc_timeout_ms, ctx);
+    // service unavailable implies that the exception occurred in network transmission or Thrift RPC framework,
+    // rather than due to slow publish. Therefore, we can utilize the remaining timeout to retry.
+    if (st.is_service_unavailable()) {
+        auto remain_timeout_ms = ctx->load_deadline_sec > 0 ? (ctx->load_deadline_sec - UnixSeconds()) * 1000 : 0;
+        if (remain_timeout_ms > 0) {
+            return commit_txn_internal(request, remain_timeout_ms, ctx);
+        }
+    }
+    return st;
 }
 
 Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx) {
