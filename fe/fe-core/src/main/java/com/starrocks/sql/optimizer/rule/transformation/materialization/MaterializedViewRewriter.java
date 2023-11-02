@@ -40,6 +40,11 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.StringUtils;
+>>>>>>> 097abdd1eb ([BugFix] Make unique/foreign key constraints case insensitive (#33902))
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -1112,7 +1117,11 @@ public class MaterializedViewRewriter {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (materializedView.hasUniqueConstraints()) {
             mvUniqueConstraints = materializedView.getUniqueConstraints().stream().filter(
+<<<<<<< HEAD
                            uniqueConstraint -> table.getName().equals(uniqueConstraint.getTableName()))
+=======
+                           uniqueConstraint -> StringUtils.areTableNamesEqual(table, uniqueConstraint.getTableName()))
+>>>>>>> 097abdd1eb ([BugFix] Make unique/foreign key constraints case insensitive (#33902))
                    .collect(Collectors.toList());
         }
 
