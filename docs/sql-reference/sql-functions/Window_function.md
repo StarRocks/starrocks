@@ -948,11 +948,7 @@ VARIANCE(expr) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> VARIANCE() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1002,11 +998,7 @@ VAR_SAMP(expr) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> VAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1056,11 +1048,7 @@ STD(expr) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> STD() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1110,11 +1098,7 @@ STDDEV_SAMP(expr) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> STDDEV_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1164,11 +1148,7 @@ COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> COVAR_SAMP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1218,11 +1198,7 @@ COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> COVAR_POP() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
@@ -1272,11 +1248,7 @@ CORR(expr1, expr2) [OVER (partition_by_clause)]
 
 > **NOTE**
 >
-<<<<<<< HEAD
-> CORR() only supports PARTITION BY. It does not support ORDER BY or Window clauses.
-=======
-> From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
->>>>>>> 43bbc1e7a7 ([Doc] update version info for window func (#34195))
+> In versions earlier than 2.5.13, 3.0.7, 3.1.4, this function only supports PARTITION BY. It does not support ORDER BY or Window clauses. From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY and Window clauses.
 
 **Parameters:**
 
