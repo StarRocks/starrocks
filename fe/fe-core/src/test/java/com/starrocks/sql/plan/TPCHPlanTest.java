@@ -64,7 +64,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testWindow() {
-        runFileUnitTest("optimized-plan/window");
+        runFileUnitTest("optimized-plan/window", true);
     }
 
     @Test

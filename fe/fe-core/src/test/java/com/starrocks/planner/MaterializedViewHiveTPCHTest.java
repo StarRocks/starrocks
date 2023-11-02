@@ -126,6 +126,6 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery22() {
-        runFileUnitTest("materialized-view/tpch-hive/q22");
+        runFileUnitTest("materialized-view/tpch-hive/q22", true);
     }
 }

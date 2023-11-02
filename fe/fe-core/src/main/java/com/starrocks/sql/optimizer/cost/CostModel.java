@@ -30,6 +30,8 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -224,11 +226,19 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-
-            if (Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0)) &&
-                    node.getDistinctColumnDataSkew() == null && !node.isSplit() && node.getType().isGlobal()) {
+            boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
+            if (mustMultiStageAgg && node.getDistinctColumnDataSkew() == null && !node.isSplit() && node.getType().isGlobal()) {
                 // use cost to eliminate invalid one phase agg plan
                 return CostEstimate.infinite();
+            }
+
+            if (!mustMultiStageAgg && !inputProperties.isEmpty() && inputProperties.get(0).getDistributionProperty().isShuffle()
+                    && node.isSplit() && node.getType().isGlobal()) {
+                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
+                HashDistributionDesc desc = spec.getHashDistributionDesc();
+                if (desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                    return CostEstimate.infinite();
+                }
             }
 
             Statistics statistics = context.getStatistics();
@@ -307,7 +317,15 @@ public class CostModel {
             double factor = 1.0;
             Operator childOp = context.getChildOperator(0);
             if (childOp instanceof LogicalAggregationOperator) {
-                LogicalAggregationOperator childAggOp = (LogicalAggregationOperator) childOp;
+                LogicalAggregationOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            } else if (childOp instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator childAggOp = childOp.cast();
                 DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
                 if (skewInfo != null && skewInfo.getStage() == 3) {
                     factor = skewInfo.getPenaltyFactor();
