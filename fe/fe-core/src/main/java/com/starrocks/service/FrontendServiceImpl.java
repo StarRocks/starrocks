@@ -34,7 +34,6 @@
 
 package com.starrocks.service;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -2182,7 +2181,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new UserException(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                        + tablet.getId() + ", backends: " + Joiner.on(",").join(localTablet.getBackends()));
+                                        + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
                     }
                     // replicas[0] will be the primary replica
                     // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
@@ -2313,7 +2312,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         } catch (UserException exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: none"));
+                                            + tablet.getId() + ", backends: none(cloud native table)"));
                             result.setStatus(errorStatus);
                             return result;
                         }
@@ -2328,8 +2327,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         if (bePathsMap.keySet().size() < quorum) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", backends: " +
-                                            Joiner.on(",").join(localTablet.getBackends())));
+                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos()));
                             result.setStatus(errorStatus);
                             return result;
                         }
