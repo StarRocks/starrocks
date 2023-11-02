@@ -35,7 +35,7 @@ public:
             LOG(WARNING) << "invalid per_driver_mem_limit";
         }
         size_t res = max_input_dop * _max_memory_usage_per_driver;
-        _max_memory_usage = (res > _max_memory_usage || res <= 0) ? _max_memory_usage : res;
+        _max_memory_usage = (res > _max_memory_usage || res <= 0) ? _max_memory_usage.load() : res;
     }
 
     void update_memory_usage(int64_t memory_usage, int64_t num_rows) {
