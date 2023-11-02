@@ -28,6 +28,11 @@ public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
 
+    protected DistributionProperty() {
+        spec = AnyDistributionSpec.INSTANCE;
+        isCTERequired = false;
+    }
+
     public DistributionProperty(DistributionSpec spec) {
         Preconditions.checkState(spec.type != ANY, "if spec is ANY type, please use EmptyDistributionProperty");
         this.spec = spec;

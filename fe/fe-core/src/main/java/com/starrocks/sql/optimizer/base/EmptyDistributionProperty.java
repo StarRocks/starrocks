@@ -24,7 +24,7 @@ public class EmptyDistributionProperty extends DistributionProperty {
     public static final EmptyDistributionProperty INSTANCE = new EmptyDistributionProperty();
 
     private EmptyDistributionProperty() {
-        super(new AnyDistributionSpec(), false);
+        super();
     }
 
     public boolean isAny() {

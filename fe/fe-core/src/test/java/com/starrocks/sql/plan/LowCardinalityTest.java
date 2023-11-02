@@ -1071,6 +1071,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  group by: 1: S_SUPPKEY");
         plan = getThriftPlan(sql);
         Assert.assertEquals(plan.split("\n").length, 3);
+        System.out.println(plan);
         assertContains(plan.split("\n")[0], "query_global_dicts:" +
                 "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1], version:1), " +
                 "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1], version:1), " +

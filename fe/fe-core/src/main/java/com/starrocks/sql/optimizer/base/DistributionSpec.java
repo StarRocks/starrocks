@@ -34,7 +34,7 @@ public class DistributionSpec {
     }
 
     public static DistributionSpec createAnyDistributionSpec() {
-        return new AnyDistributionSpec();
+        return AnyDistributionSpec.INSTANCE;
     }
 
     public static HashDistributionSpec createHashDistributionSpec(HashDistributionDesc distributionDesc) {
