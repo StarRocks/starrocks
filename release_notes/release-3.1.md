@@ -1,5 +1,49 @@
 # StarRocks version 3.1
 
+## 3.1.4
+
+发布日期：2023 年 11 月 2 日
+
+## 新增特性
+
+- 存算分离下的主键模型（Primary Key）表支持 Sort Key。
+- 异步物化视图支持通过 str2date 函数指定分区表达式，可用于外表分区类型为 STRING 类型数据的物化视图的增量刷新和查询改写。[#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
+- 新增会话变量 [`enable_query_tablet_affinity`](../reference/System_variable.md#enable_query_tablet_affinity25-及以后)，用于控制多次查询同一个 Tablet 时选择固定的同一个副本，默认关闭。[#33049](https://github.com/StarRocks/starrocks/pull/33049)
+- 新增工具函数 `is_role_in_session`，用于查看指定角色是否在当前会话下被激活，并且支持查看嵌套的角色被激活的情况。 [#32984](https://github.com/StarRocks/starrocks/pull/32984)
+- 增加资源组粒度的查询队列，需要通过全局变量 `enable_group_lelvel_query_queue` 开启（默认值为 `false`）。当全局粒度或资源组粒度任一资源消耗达到阈值时，会对查询进行排队，直到所有资源消耗都没有超过阈值，再执行查询。
+  - 每个资源组可以设置 `concurrency_limit` 用于限制单个 BE 节点中并发查询上限。
+  - 每个资源组可以设置 `max_cpu_cores` 用于限制单个 BE 节点可以使用的 CPU 上限。
+- 资源组分类器增加 `plan_cpu_cost_range` 和 `plan_mem_cost_range` 两个参数。
+  - `plan_cpu_cost_range`：系统估计的查询 CPU 开销范围。默认为 `NULL`，表示没有该限制。
+  - `plan_mem_cost_range`：系统估计的查询内存开销范围。默认为 `NULL`，表示没有该限制。
+
+## 功能优化
+
+- 窗口函数 COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、STDDEV_SAMP 支持 ORDER BY 子句和 Window 子句。 [#30786](https://github.com/StarRocks/starrocks/pull/30786)
+- DECIMAL 类型数据查询结果越界时，返回报错而不是 NULL。[#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- 查询队列的并发查询数量改由 Leader FE 管理，每个 Follower FE 在发起和结束一个查询时，会通知 Leader FE。如果超过全局粒度或资源组粒度的 `concurrency_limit` 则查询会被拒绝或进入查询队列。
+
+## 问题修复
+
+修复了如下问题：
+
+- 由于内存统计不准确，有几率会导致 Spark 或者 Flink 读取数据时报错。[#30702](https://github.com/StarRocks/starrocks/pull/30702)  [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- Metadata Cache 的内存使用统计不准确。[#31978](https://github.com/StarRocks/starrocks/pull/31978)
+- 调用 libcurl 时会引起 BE Crash。[#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- 刷新基于 Hive 视图创建的 StarRocks 物化视图时会报错“java.lang.ClassCastException: com.starrocks.catalog.HiveView cannot be cast to com.starrocks.catalog.HiveMetaStoreTable”。[#31004](https://github.com/StarRocks/starrocks/pull/31004)
+- ORDER BY 子句中包含聚合函数时报错“java.lang.IllegalStateException: null”。[#30108](https://github.com/StarRocks/starrocks/pull/30108)
+- 存算分离模式下，表的 Key 信息没有在 `information_schema.COLUMNS` 中记录，导致使用 Flink Connector 导入数据时 DELETE 操作无法执行。[#31458](https://github.com/StarRocks/starrocks/pull/31458)
+- 使用 Flink Connector 导入数据时，如果并发高且 HTTP 和 Scan 线程数受限，会发生卡死。[#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- 如果添加了一个较小字节类型的字段，变更完前执行 SELECT COUNT(*) 会报错“error: invalid field name”。[#33243](https://github.com/StarRocks/starrocks/pull/33243)
+- Query Cache 开启后查询结果有错。[#32781](https://github.com/StarRocks/starrocks/pull/32781)
+- 查询在 Hash Join 时失败了，会引起 BE Crash。[#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- BINARY 或 VARBINARY 类型在 `information_schema.``columns` 视图里面的 `DATA_TYPE` 和 `COLUMN_TYPE` 显示为 `unknown`。[#32678](https://github.com/StarRocks/starrocks/pull/32678)
+
+## 行为变更
+
+- 从 3.1.4 版本开始，新搭建集群的主键模型持久化索引在表创建时默认打开（如若从低版本升级到 3.1.4 版本则保持不变）。[#33374](https://github.com/StarRocks/starrocks/pull/33374)
+- 新增 FE 参数 `enable_sync_publish` 且默认开启。设置为 `true` 时，主键模型表导入的 Publish 过程会等 Apply 完成后才返回结果，这样，导入作业返回成功后数据立即可见，但可能会导致主键模型表导入比原来有延迟。（之前无此参数，导入时 Publish 过程中 Apply 是异步的）。[#27055](https://github.com/StarRocks/starrocks/pull/27055)
+
 ## 3.1.3
 
 发布日期：2023 年 9 月 25 日
