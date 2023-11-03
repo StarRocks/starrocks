@@ -79,7 +79,7 @@ public class JDBCResource extends Resource {
 
     private void computeDriverChecksum() throws DdlException {
         if (FeConstants.runningUnitTest) {
-            // skip checking checksun when running ut
+            // skip checking checksum when running ut
             return;
         }
         try {
