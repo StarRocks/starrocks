@@ -16,6 +16,7 @@ package com.starrocks.odps.reader;
 
 import com.aliyun.odps.Column;
 import com.aliyun.odps.Odps;
+import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
 import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
@@ -77,8 +78,10 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
         Account account = new AliyunAccount(params.get("access_id"), params.get("access_key"));
         Odps odps = new Odps(account);
-        Map<String, Column> nameColumnMap = odps.tables().get(projectName, tableName).getSchema().getColumns().stream()
+        TableSchema schema = odps.tables().get(projectName, tableName).getSchema();
+        Map<String, Column> nameColumnMap = schema.getColumns().stream()
                 .collect(Collectors.toMap(Column::getName, o -> o));
+        nameColumnMap.putAll(schema.getPartitionColumns().stream().collect(Collectors.toMap(Column::getName, o -> o)));
         requireColumns = new Column[requiredFields.length];
         requiredTypes = new ColumnType[requiredFields.length];
         nameIndexMap = new HashMap<>();
@@ -91,8 +94,6 @@ public class OdpsSplitScanner extends ConnectorScanner {
                 EnvironmentSettings.newBuilder().withServiceEndpoint(params.get("endpoint"))
                         .withCredentials(Credentials.newBuilder().withAccount(account).build()).build();
         this.classLoader = this.getClass().getClassLoader();
-
-        LOG.info(toString());
         LOG.info("endpoint: {}", params.get("endpoint"));
     }
 
@@ -189,7 +190,6 @@ public class OdpsSplitScanner extends ConnectorScanner {
         sb.append("fetchSize: ");
         sb.append(fetchSize);
         sb.append("\n");
-        sb.append("fetchSize: ");
         return sb.toString();
     }
 
