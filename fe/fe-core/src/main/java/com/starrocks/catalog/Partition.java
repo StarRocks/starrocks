@@ -236,10 +236,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return this.shardGroupId;
     }
 
-    public void setShardGroupId(long newShardGroupId) {
-        this.shardGroupId = newShardGroupId;
-    }
-
     public void setName(String newName) {
         this.name = newName;
     }

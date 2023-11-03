@@ -91,7 +91,6 @@ public class LakeTableSchemaChangeJobTest {
     private Database db;
     private LakeTable table;
     private List<Long> shadowTabletIds = new ArrayList<>();
-    private long originShardGroupId = 1;
 
     @Mocked
     private WarehouseManagerEpack warehouseMgr;
@@ -135,13 +134,6 @@ public class LakeTableSchemaChangeJobTest {
                 }
                 return shadowTabletIds;
             }
-            @Mock
-            public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
-                return originShardGroupId + 1;
-            }
-            @Mock
-            public void getServiceId() {
-            }
         };
 
         new MockUp<EditLog>() {
@@ -179,7 +171,7 @@ public class LakeTableSchemaChangeJobTest {
 
         table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        Partition partition = new Partition(partitionId, "t0", index, dist, originShardGroupId);
+        Partition partition = new Partition(partitionId, "t0", index, dist);
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta =
                 new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
@@ -942,7 +934,6 @@ public class LakeTableSchemaChangeJobTest {
         Assert.assertSame(partition, table.getPartitions().stream().findFirst().get());
         Assert.assertEquals(3, partition.getVisibleVersion());
         Assert.assertEquals(4, partition.getNextVersion());
-        Assert.assertFalse(originShardGroupId == partition.getShardGroupId());
 
         shadowIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
         Assert.assertEquals(0, shadowIndexes.size());

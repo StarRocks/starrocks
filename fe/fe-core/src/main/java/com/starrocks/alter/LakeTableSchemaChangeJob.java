@@ -106,9 +106,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // shadow index id -> shadow index short key count
     @SerializedName(value = "indexShortKeyMap")
     private Map<Long, Short> indexShortKeyMap = Maps.newHashMap();
-    // partition id -> shadow shard group id
-    @SerializedName(value = "shardGroupIdMap")
-    private Map<Long, Long> shardGroupIdMap = Maps.newHashMap();
 
     // bloom filter info
     @SerializedName(value = "hasBfChange")
@@ -179,9 +176,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         tabletMap.put(shadowTabletId, originTabletId);
     }
 
-    void addPartitionShadowInfo(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx, long shadowShardGroupId) {
+    void addPartitionShadowIndex(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx) {
         partitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
-        shardGroupIdMap.put(partitionId, shadowShardGroupId);
     }
 
     void addIndexSchema(long shadowIdxId, long originIdxId, @NotNull String shadowIndexName,
@@ -761,7 +757,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.indexIdToName = other.indexIdToName;
             this.indexSchemaMap = other.indexSchemaMap;
             this.indexShortKeyMap = other.indexShortKeyMap;
-            this.shardGroupIdMap = other.shardGroupIdMap;
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
@@ -896,13 +891,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 }
 
                 droppedIndexes.add(droppedIdx);
-            }
-
-            // if upgraded from older version, shardGroupIdMap might be null
-            if (shardGroupIdMap != null) {
-                long shadowShardGroupId = shardGroupIdMap.get(partition.getId());
-                Preconditions.checkNotNull(shadowShardGroupId);
-                partition.setShardGroupId(shadowShardGroupId);
             }
         }
 
@@ -1102,9 +1090,4 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
-
-    public Map<Long, Long> getShardGroupIdMap() {
-        return shardGroupIdMap;
-    }
-
 }
