@@ -337,7 +337,6 @@ public class AuthorizationMgrTest {
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
 
-        AuthenticationMgr authenticationMgr = masterGlobalStateMgr.getAuthenticationMgr();
         AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -361,7 +360,6 @@ public class AuthorizationMgrTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationMgr.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
-        ;
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
@@ -395,6 +393,43 @@ public class AuthorizationMgrTest {
         authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testWontSavePrivCollForBuiltInRole() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        authorizationMgr.saveV2(emptyImage.getDataOutputStream());
+
+        SRMetaBlockReader reader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        // read the whole first
+        reader.readJson(AuthorizationMgr.class);
+        // read the number of user
+        int numUser = reader.readJson(int.class);
+        // there should be only 2 users: root and test_user
+        Assert.assertEquals(2, numUser);
+
+        // read users and ignore them
+        for (int i = 0; i != numUser; ++i) {
+            // 2 json for each user(kv)
+            reader.readJson(UserIdentity.class);
+            reader.readJson(UserPrivilegeCollectionV2.class);
+        }
+
+        // read the number of roles
+        int numRole = reader.readJson(int.class);
+        for (int i = 0; i != numRole; ++i) {
+            // 2 json for each role(kv)
+            Long roleId = reader.readJson(Long.class);
+            RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
+            if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                // built-in role's priv collection should not be saved
+                Assert.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
+            }
+        }
     }
 
     @Test
