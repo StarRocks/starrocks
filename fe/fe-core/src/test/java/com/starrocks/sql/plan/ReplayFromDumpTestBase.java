@@ -65,7 +65,9 @@ public class ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
-        FeConstants.showLocalShuffleColumnsInExplain = false;
+        FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
+        FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.showJoinLocalShuffleInExplain = false;
 
         new MockUp<EditLog>() {
             @Mock
@@ -84,7 +86,7 @@ public class ReplayFromDumpTestBase {
     @AfterClass
     public static void afterClass() throws Exception {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        FeConstants.showLocalShuffleColumnsInExplain = true;
+        FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
     }
 
     public String getModelContent(String filename, String model) {
