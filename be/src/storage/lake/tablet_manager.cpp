@@ -106,6 +106,10 @@ std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view d
     return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
+std::string TabletManager::sst_location(int64_t tablet_id, std::string_view sst_name) const {
+    return _location_provider->sst_location(tablet_id, sst_name);
+}
+
 std::string TabletManager::global_schema_cache_key(int64_t schema_id) {
     return fmt::format("GS{}", schema_id);
 }

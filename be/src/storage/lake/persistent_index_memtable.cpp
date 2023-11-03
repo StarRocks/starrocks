@@ -14,7 +14,14 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include "fs/fs_util.h"
+#include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/sstable/lake_persistent_index_sst.h"
+
 namespace starrocks::lake {
+
+PersistentIndexMemtable::PersistentIndexMemtable(Tablet* tablet) : _tablet(tablet) {}
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                        KeyIndexesInfo* not_found, size_t* num_found) {
@@ -100,6 +107,25 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
 
 void PersistentIndexMemtable::clear() {
     _map.clear();
+}
+
+size_t PersistentIndexMemtable::memory_usage() {
+    size_t mem_usage = _map.size() * kIndexValueSize;
+    for (auto const& it : _map) {
+        mem_usage += it.first.size();
+    }
+    return mem_usage;
+}
+
+Status PersistentIndexMemtable::flush(SstableInfo* sstable, int64_t txn_id) {
+    auto name = gen_sst_filename(txn_id);
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet->sst_location(name)));
+    uint64_t filesz;
+    RETURN_IF_ERROR(LakePersistentIndexSstable::build_sstable(_map, wf.get(), &filesz));
+    RETURN_IF_ERROR(wf->close());
+    sstable->filename = std::string(name);
+    sstable->filesz = filesz;
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

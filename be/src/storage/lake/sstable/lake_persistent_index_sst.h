@@ -32,7 +32,7 @@ public:
     LakePersistentIndexSstable() {}
     ~LakePersistentIndexSstable() {}
 
-    static Status build_sstable(phmap::btree_map<std::string, IndexValue>& memtable, WritableFile* wf,
+    static Status build_sstable(phmap::btree_map<std::string, IndexValue, std::less>& memtable, WritableFile* wf,
                                 uint64_t* filesz);
 
 private:

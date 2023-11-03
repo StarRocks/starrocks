@@ -14,15 +14,26 @@
 
 #pragma once
 
-#include <map>
-
 #include "storage/lake/key_index.h"
+#include "storage/lake/tablet.h"
 #include "storage/persistent_index.h"
+#include "util/phmap/btree.h"
 
 namespace starrocks::lake {
+class PersistentIndexSStablePB;
+class Tablet;
+
+struct SstableInfo {
+    std::string filename;
+    uint64_t filesz;
+};
 
 class PersistentIndexMemtable {
 public:
+    PersistentIndexMemtable() = default;
+
+    PersistentIndexMemtable(Tablet* tablet);
+
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexesInfo* not_found, size_t* num_found);
 
@@ -36,8 +47,13 @@ public:
 
     void clear();
 
+    size_t memory_usage();
+
+    Status flush(SstableInfo* sstable, int64_t txn_id);
+
 private:
-    std::map<std::string, IndexValue, std::less<>> _map;
+    phmap::btree_map<std::string, IndexValue, std::less<>> _map;
+    Tablet* _tablet{nullptr};
 };
 
 } // namespace starrocks::lake

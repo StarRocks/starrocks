@@ -14,17 +14,23 @@
 
 #pragma once
 
+#include "storage/lake/tablet.h"
 #include "storage/persistent_index.h"
 
 namespace starrocks::lake {
 
 class PersistentIndexMemtable;
+class PersistentIndexSStablePB;
+class Tablet;
+struct SstableInfo;
 
 class LakePersistentIndex : public PersistentIndex {
 public:
     explicit LakePersistentIndex(std::string path);
 
-    ~LakePersistentIndex();
+    LakePersistentIndex(Tablet* tablet);
+
+    ~LakePersistentIndex() override;
 
     DISALLOW_COPY(LakePersistentIndex);
 
@@ -69,9 +75,24 @@ public:
 
     Status major_compact(int64_t min_retain_version);
 
+    void commit(PersistentIndexSStablePB* pindex_sstable);
+
+    void update_version(int64_t version) { _version = version; }
+
+    void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
+
+private:
+    void flush_to_immutable_memtable();
+
+    bool is_memtable_full();
+
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
-    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable;
+    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
+    std::vector<SstableInfo> _sstables;
+    Tablet* _tablet{nullptr};
+    int64_t _version{0};
+    int64_t _txn_id{0};
 };
 
 } // namespace starrocks::lake
