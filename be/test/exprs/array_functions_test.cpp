@@ -5468,7 +5468,7 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
     }
 }
 // NOLINTNEXTLINE
-TEST_F(ArrayFunctionsTest, array_contains_all) {
+TEST_F(ArrayFunctionsTest, array_contains_seq) {
     // array_contains_seq(["a", "b", "c"], ["c"])         -> 1
     // array_contains_seq(NULL, ["c"])                    -> NULL
     // array_contains_seq(["a", "b", "c"], NULL)          -> NULL
