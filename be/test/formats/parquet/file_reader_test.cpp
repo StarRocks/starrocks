@@ -30,6 +30,7 @@
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
@@ -2896,6 +2897,54 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     ASSERT_TRUE(status2.ok());
     ASSERT_EQ(ctx2->stats->footer_cache_read_count, 1);
     ASSERT_EQ(ctx2->stats->footer_cache_write_count, 0);
+}
+
+TEST_F(FileReaderTest, TestGetPageCache) {
+    const std::string datacache_dir = "./datacache_dir";
+    ASSERT_TRUE(fs::create_directories(datacache_dir).ok());
+
+    starrocks::BlockCache* cache = starrocks::BlockCache::instance();
+    CacheOptions options;
+    options.block_size = 256 * 1024;
+    options.mem_space_size = 10 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = datacache_dir, .size = 1000 * 1024 * 1024});
+    options.max_concurrent_inserts = 100000;
+    options.engine = "starcache";
+    Status status = cache->init(options);
+    ASSERT_TRUE(status.ok());
+
+    auto file = _create_file(_file2_path);
+
+    // read from remote
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path), 100000, nullptr);
+    auto* ctx = _create_context_for_min_max();
+    ctx->use_file_pagecache = true;
+    status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(11, chunk->num_rows());
+    ASSERT_EQ(ctx->stats->pagecache_read_count, 0);
+    ASSERT_EQ(ctx->stats->pagecache_write_count, 6);
+
+    // read from pagecache
+    auto file_reader2 = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file2_path), 100000, nullptr);
+    auto* ctx2 = _create_context_for_min_max();
+    ctx2->use_file_pagecache = true;
+    status = file_reader2->init(ctx2);
+    ASSERT_TRUE(status.ok());
+
+    status = file_reader2->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(11, chunk->num_rows());
+    ASSERT_EQ(ctx2->stats->pagecache_read_count, 6);
+    ASSERT_EQ(ctx2->stats->pagecache_write_count, 0);
+
+    fs::remove_all(datacache_dir);
 }
 
 } // namespace starrocks::parquet

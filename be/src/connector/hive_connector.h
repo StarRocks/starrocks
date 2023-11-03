@@ -88,6 +88,8 @@ private:
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
     bool _use_file_metacache = false;
+    bool _use_file_pagecache = false;
+    int32_t _datacache_populate_probability = 0;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;

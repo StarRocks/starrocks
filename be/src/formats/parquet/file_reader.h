@@ -126,6 +126,7 @@ private:
     bool _is_metadata_cached = false;
     std::string _metacache_key;
     CacheHandle _cache_handle;
+    WriteCacheOptions _write_options;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;

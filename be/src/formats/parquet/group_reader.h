@@ -68,6 +68,12 @@ struct GroupReaderParam {
 
     RandomAccessFile* file = nullptr;
 
+    uint64_t file_size = 0;
+
+    int64_t file_mtime = 0;
+
+    bool use_file_pagecache = false;
+
     FileMetaData* file_metadata = nullptr;
 
     bool case_sensitive = false;
