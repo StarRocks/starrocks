@@ -684,7 +684,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 Type[] argTypes = {targetColumn.getType()};
                 Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
-
                 return new CallOperator(FunctionSet.SUM, aggCall.getFunction().getReturnType(),
                         Lists.newArrayList(targetColumn), sumFn);
             } else {
