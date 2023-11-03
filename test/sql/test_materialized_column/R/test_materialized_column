@@ -347,6 +347,10 @@ ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_1.')
 -- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (incr);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
+-- !result
 ALTER TABLE t ADD COLUMN mc_3 BIGINT AS (sum(id));
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Generated Column don't support aggregation function.")
