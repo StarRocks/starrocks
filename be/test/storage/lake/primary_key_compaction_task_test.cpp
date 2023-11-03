@@ -242,7 +242,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
     if (GetParam().enable_persistent_index) {
@@ -291,7 +293,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
     if (GetParam().enable_persistent_index) {
@@ -349,7 +353,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
     EXPECT_EQ(100, progress.value());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     version++;
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
@@ -453,7 +459,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(4, input_rowsets.size());
 
-    // check the rowset order, pick rowset#1 first, because it have deleted rows.
+    // check the rowset order, pick rowset#1 first, because it is empty.
     // Next order is rowset#4#2#3, by their byte size.
     EXPECT_EQ(input_rowsets[0]->id(), 1);
     EXPECT_EQ(input_rowsets[1]->id(), 4);
@@ -517,16 +523,16 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
-    EXPECT_EQ(3, input_rowsets[1]->num_segments());
+    EXPECT_EQ(1, input_rowsets[1]->num_segments());
     EXPECT_EQ(2, input_rowsets[2]->num_segments());
-    EXPECT_EQ(1, input_rowsets[3]->num_segments());
+    EXPECT_EQ(3, input_rowsets[3]->num_segments());
 
-    // check the rowset order, pick rowset#1 first, because it have deleted rows.
-    // Next order is rowset#4#2#3, by their segment count.
+    // check the rowset order, pick rowset#1 first, because it is empty.
+    // Next order is rowset#7#2#4, by their segment count.
     EXPECT_EQ(input_rowsets[0]->id(), 1);
-    EXPECT_EQ(input_rowsets[1]->id(), 4);
+    EXPECT_EQ(input_rowsets[1]->id(), 7);
     EXPECT_EQ(input_rowsets[2]->id(), 2);
-    EXPECT_EQ(input_rowsets[3]->id(), 7);
+    EXPECT_EQ(input_rowsets[3]->id(), 4);
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
@@ -613,22 +619,28 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     check_task(task);
     CompactionTask::Progress progress;
     ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     EXPECT_EQ(100, progress.value());
     // check compaction state
     ASSIGN_OR_ABORT(auto txn_log, tablet.get_txn_log(txn_id));
     RowsetPtr output_rowset = std::make_shared<Rowset>(
             &tablet, std::make_shared<RowsetMetadata>(txn_log->op_compaction().output_rowset()));
-    auto compaction_state = std::make_unique<CompactionState>(output_rowset.get(), _update_mgr.get());
-    for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
-        ASSERT_OK(compaction_state->load_segments(output_rowset.get(), *_tablet_schema, i));
-        auto& pk_col = compaction_state->pk_cols[i];
-        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), pk_col->memory_usage());
-        compaction_state->release_segments(i);
-        EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
+    {
+        auto compaction_state = std::make_unique<CompactionState>();
+        EXPECT_TRUE(_update_mgr->compaction_state_mem_tracker() != nullptr);
+        auto prev = _update_mgr->compaction_state_mem_tracker()->consumption();
+        for (size_t i = 0; i < output_rowset->num_segments(); i++) {
+            ASSERT_OK(compaction_state->load_segments(output_rowset.get(), _update_mgr.get(), *_tablet_schema, i));
+            auto& pk_col = compaction_state->pk_cols[i];
+            EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), pk_col->memory_usage() + prev);
+            compaction_state->release_segments(i);
+            EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), prev);
+        }
     }
     // publish version
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
     version++;
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_noexist(tablet_id, txn_id));
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
@@ -642,6 +654,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     for (int i = 0; i < key_list.size() - 1; i++) {
         EXPECT_TRUE(key_list[i] < key_list[i + 1]);
     }
+
+    // Make sure all memory consume by compaction have return.
+    EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
