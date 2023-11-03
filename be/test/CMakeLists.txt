@@ -333,6 +333,7 @@ set(EXEC_FILES
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
         ./util/bthreads/promise_test.cpp
+        ./util/bthreads/semaphore_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp
