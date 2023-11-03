@@ -96,11 +96,13 @@ struct JsonPathPiece {
 
     static vpack::Slice extract(const JsonValue* json, const std::vector<JsonPathPiece>& jsonpath, vpack::Builder* b);
 
+    // extract slice from root
     static vpack::Slice extract(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
-                                vpack::Builder* b);
+                                vpack::Builder* builder);
 
+    // collect json object into builder
     static void collect(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
-                        vpack::Builder* b);
+                        vpack::Builder* builder);
 };
 
 struct JsonPath {
