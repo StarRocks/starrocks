@@ -1944,8 +1944,19 @@ public class AuthorizationMgr {
                     roleIdToPrivilegeCollection.entrySet().iterator();
             while (roleIter.hasNext()) {
                 Map.Entry<Long, RolePrivilegeCollectionV2> entry = roleIter.next();
+                RolePrivilegeCollectionV2 value = entry.getValue();
+                // Avoid newly added PEntryObject type corrupt forward compatibility,
+                // since built-in roles are always initialized on startup, we don't need to persist them.
+                // But to keep the correct relationship with roles inherited from them, we still need to persist
+                // an empty role for them, just for the role id.
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(entry.getKey())) {
+                    // clone to avoid race condition
+                    RolePrivilegeCollectionV2 clone = value.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    value = clone;
+                }
                 writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
+                writer.writeJson(value);
             }
             writer.close();
         } catch (SRMetaBlockException e) {
