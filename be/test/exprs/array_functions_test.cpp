@@ -5467,4 +5467,55 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
         ASSERT_TRUE(dest_column->get(0).get_int8());
     }
 }
+// NOLINTNEXTLINE
+TEST_F(ArrayFunctionsTest, array_contains_all) {
+    // array_contains_seq(["a", "b", "c"], ["c"])         -> 1
+    // array_contains_seq(NULL, ["c"])                    -> NULL
+    // array_contains_seq(["a", "b", "c"], NULL)          -> NULL
+    // array_contains_seq(["a", "b", NULL], NULL)         -> NULL
+    // array_contains_seq(["a", "b", NULL], ["a", NULL])  -> 0
+    // array_contains_seq(NULL, ["a", NULL])              -> NULL
+    // array_contains_seq(["a", "b", NULL], [NULL])       -> 1
+    // array_contains_seq(["a", "b", "c"], ["d"])         -> 0
+    // array_contains_seq(["a", "b", "c"], ["a", "d"])    -> 0
+    // array_contains_all(["a", "b", "c"], ["a", "c"])    -> 1
+    {
+        auto array = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(Datum());
+        array->append_datum(DatumArray{"a", "b", Datum()});
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", "c"});
+        array->append_datum(DatumArray{"a", "b", "c"});
+
+        auto target = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(DatumArray{"c"});
+        target->append_datum(Datum());
+        target->append_datum(Datum());
+        target->append_datum(DatumArray{"a", Datum()});
+        target->append_datum(DatumArray{"a", Datum()});
+        target->append_datum(DatumArray{Datum()});
+        target->append_datum(DatumArray{"d"});
+        target->append_datum(DatumArray{"a", "d"});
+        target->append_datum(DatumArray{"a", "c"});
+
+        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
+        EXPECT_EQ(10, result->size());
+        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+        EXPECT_TRUE(result->get(3).is_null());
+        EXPECT_EQ(0, result->get(4).get_int8());
+        EXPECT_TRUE(result->get(5).is_null());
+        EXPECT_EQ(1, result->get(6).get_int8());
+        EXPECT_EQ(0, result->get(7).get_int8());
+        EXPECT_EQ(0, result->get(8).get_int8());
+        EXPECT_EQ(1, result->get(9).get_int8());
+    }
+}
 } // namespace starrocks

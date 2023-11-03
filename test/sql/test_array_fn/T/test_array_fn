@@ -848,3 +848,4 @@ select array_contains_seq(null, [2,3]);
 select array_contains_seq([1, 2, NULL, 3, 4], [null,null]);
 select array_contains_seq([1, 2, NULL], [null,2]);
 select array_contains_seq(null, null);
+select array_contains_seq([1, 1, 2, NULL], [1,2]);

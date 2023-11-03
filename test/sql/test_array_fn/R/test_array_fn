@@ -4483,3 +4483,7 @@ select array_contains_seq(null, null);
 -- result:
 None
 -- !result
+select array_contains_seq([1, 1, 2, NULL], [1,2]);
+-- result:
+1
+-- !result

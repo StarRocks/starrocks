@@ -754,7 +754,7 @@ private:
     }
 
     template <bool NullableElement, bool NullableTarget, typename ElementColumn>
-    static uint8 __process_seq(const ElementColumn& elements, uint32 element_start, uint32 element_end,
+   static uint8 __process_seq(const ElementColumn& elements, uint32 element_start, uint32 element_end,
                                const ElementColumn& targets, uint32 target_start, uint32 target_end,
                                const NullColumn::Container* null_map_elements,
                                const NullColumn::Container* null_map_targets) {
@@ -765,44 +765,58 @@ private:
         [[maybe_unused]] auto is_null = [](const NullColumn::Container* null_map, size_t idx) -> bool {
             return (*null_map)[idx] != 0;
         };
-        if (element_end < target_end) {
+        if (element_end - element_start < target_end - target_start) {
+            return false;
+        }
+        if (target_end == target_start) {
+            return true;
+        }
+        if(element_end == element_start) {
             return false;
         }
         bool found = false;
         size_t i = target_start;
         size_t j = element_start;
-        while (i < target_end && j < element_end) {
-            if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                          std::is_same_v<StructColumn, ElementColumn> || std::is_same_v<JsonColumn, ElementColumn>) {
-                found = (elements.equals(j, targets, i) == 1);
-            } else {
-                auto elements_ptr = (const ValueType*)(elements.raw_data());
-                auto targets_ptr = (const ValueType*)(targets.raw_data());
+        while (j < element_end) {
+            int k = j;
+            int l = 0;
+            while (i < target_end ) {
                 bool null_target = false;
                 if constexpr (NullableTarget) {
                     null_target = is_null(null_map_targets, i);
                 }
                 bool null_element = false;
                 if constexpr (NullableElement) {
-                    null_element = is_null(null_map_elements, j);
+                    null_element = is_null(null_map_elements,k);
                 }
                 if (null_target && null_element) {
                     found = true;
                 } else if (null_target || null_element) {
                     found = false;
                 } else {
-                    found = (elements_ptr[j] == targets_ptr[i]);
+                    if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                                  std::is_same_v<StructColumn, ElementColumn> ||
+                                  std::is_same_v<JsonColumn, ElementColumn>) {
+                        found = (elements.equals(k, targets, i) == 1);
+                    } else {
+                        auto elements_ptr = (const ValueType*)(elements.raw_data());
+                        auto targets_ptr = (const ValueType*)(targets.raw_data());
+                        found = (elements_ptr[k] == targets_ptr[i]);
+                    }
+                }
+                i++;
+                if (found) {
+                    k++;
+                    l++;
                 }
             }
-            if (found) {
-                i++;
-                j++;
-            } else {
-                i = 0;
-                j++;
+            if (l == target_end) {
+                return true;
             }
+            i = 0;
+            j++;
         }
-        return i == target_end;
+        return false;
     }
     template <bool NullableElement, bool NullableTarget, bool ConstTarget, typename ElementColumn>
     static StatusOr<ColumnPtr> _process(const ElementColumn& elements, const UInt32Column& element_offsets,
