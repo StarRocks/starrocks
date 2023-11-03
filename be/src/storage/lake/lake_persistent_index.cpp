@@ -14,12 +14,18 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/persistent_index_memtable.h"
 
 namespace starrocks::lake {
 
 LakePersistentIndex::LakePersistentIndex(std::string path) : PersistentIndex(std::move(path)) {
     _memtable = std::make_unique<PersistentIndexMemtable>();
+}
+
+LakePersistentIndex::LakePersistentIndex(Tablet* tablet) : PersistentIndex("") {
+    _tablet = tablet;
+    _memtable = std::make_unique<PersistentIndexMemtable>(tablet);
 }
 
 LakePersistentIndex::~LakePersistentIndex() {
@@ -36,11 +42,21 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
                                    IOStat* stat) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found);
+    RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found));
+    if (is_memtable_full()) {
+        RETURN_IF_ERROR(minor_compact());
+        flush_to_immutable_memtable();
+    }
+    return Status::OK();
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
-    return _memtable->insert(n, keys, values);
+    RETURN_IF_ERROR(_memtable->insert(n, keys, values));
+    if (is_memtable_full()) {
+        RETURN_IF_ERROR(minor_compact());
+        flush_to_immutable_memtable();
+    }
+    return Status::OK();
 }
 
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
@@ -67,12 +83,38 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
     return Status::OK();
 }
 
+void LakePersistentIndex::flush_to_immutable_memtable() {
+    _immutable_memtable = std::move(_memtable);
+    _memtable = std::make_unique<PersistentIndexMemtable>(_tablet);
+}
+
 Status LakePersistentIndex::minor_compact() {
+    if (_immutable_memtable != nullptr) {
+        SstableInfo sstable;
+        RETURN_IF_ERROR(_immutable_memtable->flush(&sstable, _txn_id));
+        _sstables.emplace_back(sstable);
+        _immutable_memtable = nullptr;
+    }
     return Status::OK();
 }
 
 Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
     return Status::OK();
+}
+
+void LakePersistentIndex::commit(PersistentIndexSStablePB* pindex_sstable) {
+    pindex_sstable->set_version(_version);
+    for (auto& s : _sstables) {
+        auto sstable = pindex_sstable->add_sstables();
+        sstable->set_filename(s.filename);
+        sstable->set_filesz(s.filesz);
+    }
+    _sstables.clear();
+}
+
+bool LakePersistentIndex::is_memtable_full() {
+    const auto memtable_mem_size = _memtable->memory_usage();
+    return memtable_mem_size >= config::l0_max_mem_usage;
 }
 
 } // namespace starrocks::lake

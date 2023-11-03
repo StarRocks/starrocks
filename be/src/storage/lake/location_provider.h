@@ -76,6 +76,10 @@ public:
         return join_path(root_location(tablet_id), schema_filename(schema_id));
     }
 
+    std::string sst_location(int64_t tablet_id, std::string_view sst_name) const {
+        return join_path(root_location(tablet_id), sst_name);
+    }
+
 private:
     static std::string join_path(std::string_view parent, std::string_view child) {
         return fmt::format("{}/{}", parent, child);

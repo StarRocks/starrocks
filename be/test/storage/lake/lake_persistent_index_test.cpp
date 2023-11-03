@@ -17,11 +17,60 @@
 #include <gtest/gtest.h>
 
 #include "storage/lake/key_index.h"
+#include "test_util.h"
 #include "testutil/assert.h"
+#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
-TEST(CloudNativePersistentIndexTest, test_basic_api) {
+class LakePersistentIndexTest : public TestBase {
+public:
+    LakePersistentIndexTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        //
+        //  | column | type | KEY | NULL |
+        //  +--------+------+-----+------+
+        //  |   c0   |  INT | YES |  NO  |
+        //  |   c1   |  INT | NO  |  NO  |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(false);
+        }
+    }
+
+protected:
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    constexpr static const char* const kTestDirectory = "test_lake_persistent_index";
+
+    std::unique_ptr<TabletMetadata> _tablet_metadata;
+};
+
+TEST_F(LakePersistentIndexTest, test_basic_api) {
     using Key = uint64_t;
     const int N = 1000;
     vector<Key> keys;
@@ -102,7 +151,7 @@ TEST(CloudNativePersistentIndexTest, test_basic_api) {
     ASSERT_TRUE(index->upsert(N, upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data()).ok());
 }
 
-TEST(CloudNativePersistentIndexTest, test_replace) {
+TEST_F(LakePersistentIndexTest, test_replace) {
     using Key = uint64_t;
     vector<Key> keys;
     vector<Slice> key_slices;
@@ -134,6 +183,45 @@ TEST(CloudNativePersistentIndexTest, test_replace) {
     for (int i = 0; i < N; i++) {
         ASSERT_EQ(replace_values[i], new_get_values[i]);
     }
+}
+
+TEST_F(LakePersistentIndexTest, test_minor_compaction) {
+    using Key = uint64_t;
+    const int N = 1000;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    vector<size_t> idxes;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+    auto l0_max_mem_size = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 1;
+    int64_t version = 0;
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
+    auto index = std::make_unique<LakePersistentIndex>(&tablet);
+    index->set_txn_id(txn_id);
+    index->update_version(version);
+    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
+    PersistentIndexSStablePB pindex_sstable;
+    index->commit(&pindex_sstable);
+    ASSERT_EQ(version, pindex_sstable.version());
+    ASSERT_TRUE(pindex_sstable.sstables_size() == 0);
+    ++version;
+    txn_id = next_id();
+    index->set_txn_id(txn_id);
+    index->update_version(version);
+    ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
+    index->commit(&pindex_sstable);
+    ASSERT_EQ(version, pindex_sstable.version());
+    ASSERT_TRUE(pindex_sstable.sstables_size() > 0);
+    config::l0_max_mem_usage = l0_max_mem_size;
 }
 
 } // namespace starrocks::lake

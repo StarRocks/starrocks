@@ -47,6 +47,21 @@ message DelvecMetadataPB {
     map<uint32, DelvecPagePB> delvecs = 2;
 }
 
+message SstablePB {
+   optional string filename = 1;
+   // need file's size
+   optional int64 filesz = 2;
+}
+
+message PersistentIndexSStablePB {
+    optional int64 version = 1;
+    repeated SstablePB sstables = 2;
+}
+
+message PersistentIndexSStableMetaPB {
+    repeated PersistentIndexSStablePB sstables = 1;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -88,6 +103,7 @@ message TabletMetadataPB {
     // The commit time on the FE for the transaction that created this tablet metadata.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC).
     optional int64 commit_time = 13;
+    optional PersistentIndexSStableMetaPB pindex_sstable_meta = 14;
 }
 
 message MetadataUpdateInfoPB {
@@ -137,3 +153,4 @@ message TxnLogPB {
 }
 
 message TabletMetadataLockPB {}
+
