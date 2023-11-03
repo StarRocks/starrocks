@@ -47,6 +47,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"false\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
@@ -117,6 +118,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
@@ -184,6 +186,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
@@ -254,6 +257,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
