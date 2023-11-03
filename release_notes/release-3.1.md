@@ -4,7 +4,7 @@
 
 发布日期：2023 年 11 月 2 日
 
-## 新增特性
+### 新增特性
 
 - 存算分离下的主键模型（Primary Key）表支持 Sort Key。
 - 异步物化视图支持通过 str2date 函数指定分区表达式，可用于外表分区类型为 STRING 类型数据的物化视图的增量刷新和查询改写。[#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
@@ -17,13 +17,13 @@
   - `plan_cpu_cost_range`：系统估计的查询 CPU 开销范围。默认为 `NULL`，表示没有该限制。
   - `plan_mem_cost_range`：系统估计的查询内存开销范围。默认为 `NULL`，表示没有该限制。
 
-## 功能优化
+### 功能优化
 
 - 窗口函数 COVAR_SAMP、COVAR_POP、CORR、VARIANCE、VAR_SAMP、STD、STDDEV_SAMP 支持 ORDER BY 子句和 Window 子句。 [#30786](https://github.com/StarRocks/starrocks/pull/30786)
 - DECIMAL 类型数据查询结果越界时，返回报错而不是 NULL。[#30419](https://github.com/StarRocks/starrocks/pull/30419)
 - 查询队列的并发查询数量改由 Leader FE 管理，每个 Follower FE 在发起和结束一个查询时，会通知 Leader FE。如果超过全局粒度或资源组粒度的 `concurrency_limit` 则查询会被拒绝或进入查询队列。
 
-## 问题修复
+### 问题修复
 
 修复了如下问题：
 
@@ -39,7 +39,7 @@
 - 查询在 Hash Join 时失败了，会引起 BE Crash。[#32219](https://github.com/StarRocks/starrocks/pull/32219)
 - BINARY 或 VARBINARY 类型在 `information_schema.``columns` 视图里面的 `DATA_TYPE` 和 `COLUMN_TYPE` 显示为 `unknown`。[#32678](https://github.com/StarRocks/starrocks/pull/32678)
 
-## 行为变更
+### 行为变更
 
 - 从 3.1.4 版本开始，新搭建集群的主键模型持久化索引在表创建时默认打开（如若从低版本升级到 3.1.4 版本则保持不变）。[#33374](https://github.com/StarRocks/starrocks/pull/33374)
 - 新增 FE 参数 `enable_sync_publish` 且默认开启。设置为 `true` 时，主键模型表导入的 Publish 过程会等 Apply 完成后才返回结果，这样，导入作业返回成功后数据立即可见，但可能会导致主键模型表导入比原来有延迟。（之前无此参数，导入时 Publish 过程中 Apply 是异步的）。[#27055](https://github.com/StarRocks/starrocks/pull/27055)
