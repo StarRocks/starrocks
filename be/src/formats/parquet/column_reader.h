@@ -39,6 +39,9 @@ struct ColumnReaderOptions {
     int chunk_size = 0;
     HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
+    uint64_t file_size = 0;
+    int64_t file_mtime = 0;
+    bool use_file_pagecache = false;
     const tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
 };

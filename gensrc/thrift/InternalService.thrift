@@ -227,6 +227,9 @@ struct TQueryOptions {
 
   // Whether use hdfs file metacache
   107: optional bool enable_hdfs_file_metacache;
+
+  108: optional bool enable_file_pagecache;
+  109: optional i32 datacache_populate_probability;
 }
 
 

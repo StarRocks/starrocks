@@ -35,6 +35,8 @@ public:
         return _buf.append_user_data(data, size, deleter);
     }
 
+    size_t pop_back(size_t n) { return _buf.pop_back(n); }
+
     size_t copy_to(void* data, ssize_t size = -1, size_t pos = 0) const;
 
     size_t size() const { return _buf.size(); }
