@@ -84,16 +84,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_PARTKEY) from part group by P_BRAND;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: P_PARTKEY)\n" +
                 "  |  group by: 4: P_BRAND\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 4: P_BRAND, 1: P_PARTKEY\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
+                "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 4: P_BRAND, 1: P_PARTKEY");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1054,12 +1050,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
         ExecPlan plan = getExecPlan(sql);
         Assert.assertTrue(plan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
-        assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:AGGREGATE (update finalize)\n" +
-                "  |  output: count(2: C_NAME)\n" +
-                "  |  group by: 1: C_CUSTKEY\n" +
+        assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:Project\n" +
+                "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  group by: 1: C_CUSTKEY, 2: C_NAME");
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: C_NAME)\n" +
+                "  |  group by: 1: C_CUSTKEY");
 
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
         sql = "select count(distinct C_CUSTKEY) from customer;";
