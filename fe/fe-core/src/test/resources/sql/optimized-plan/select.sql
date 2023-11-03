@@ -24,36 +24,31 @@ select sum(v1) from t0 limit 0
 VALUES
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:4: sum
-PARTITION: UNPARTITIONED
+ OUTPUT EXPRS:4: sum
+  PARTITION: UNPARTITIONED
 
-RESULT SINK
+  RESULT SINK
 
-0:EMPTYSET
+  0:EMPTYSET
 [end]
 
 [sql]
 select sum(a) from (select v1 as a from t0 limit 0) t
 [result]
-AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[]] having [null]
-    AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
-        VALUES
+AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(1: v1)}] group by [[]] having [null]
+    VALUES
 [fragment]
 PLAN FRAGMENT 0
-OUTPUT EXPRS:4: sum
-PARTITION: UNPARTITIONED
+ OUTPUT EXPRS:4: sum
+  PARTITION: UNPARTITIONED
 
-RESULT SINK
+  RESULT SINK
 
-2:AGGREGATE (merge finalize)
-|  output: sum(4: sum)
-|  group by:
-|
-1:AGGREGATE (update serialize)
-|  output: sum(1: v1)
-|  group by:
-|
-0:EMPTYSET
+  1:AGGREGATE (update finalize)
+  |  output: sum(1: v1)
+  |  group by:
+  |
+  0:EMPTYSET
 [end]
 
 [sql]
@@ -66,16 +61,14 @@ SCAN (columns[1: v1, 2: v2] predicate[null])
 select distinct * from t0
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null]
-    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null]
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select distinct *,v1 from t0
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null]
-    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null]
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
@@ -169,7 +162,6 @@ SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 select * from t0_not_null where v1<=v1
 [result]
 SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-
 [end]
 
 [sql]

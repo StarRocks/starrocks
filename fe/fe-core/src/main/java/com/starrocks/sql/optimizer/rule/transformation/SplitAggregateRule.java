@@ -29,13 +29,13 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -58,6 +58,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.FOUR_STAGE;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STAGE;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
@@ -68,16 +71,6 @@ public class SplitAggregateRule extends TransformationRule {
     }
 
     private static final SplitAggregateRule INSTANCE = new SplitAggregateRule();
-
-    private static final int AUTO_MODE = 0;
-
-    private static final int ONE_STAGE = 1;
-
-    private static final int TWO_STAGE = 2;
-
-    private static final int THREE_STAGE = 3;
-
-    private static final int FOUR_STAGE = 4;
 
     public static SplitAggregateRule getInstance() {
         return INSTANCE;
@@ -94,57 +87,6 @@ public class SplitAggregateRule extends TransformationRule {
         }
         // Only apply this rule if the aggregate type is global and not split
         return agg.getType().isGlobal() && !agg.isSplit() && agg.getDistinctColumnDataSkew() == null;
-    }
-
-    private boolean mustGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
-        LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
-        // 1 Must do two stage aggregate if child operator is LogicalRepeatOperator
-        //   If the repeat node is used as the input node of the Exchange node.
-        //   Will cause the node to be unable to confirm whether it is const during serialization
-        //   (BE does this for efficiency reasons).
-        //   Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
-        //   on top of the repeat node.
-        if (input.inputAt(0).getOp() instanceof LogicalRepeatOperator) {
-            return true;
-        }
-        // 2 Must do multi stage aggregate when aggregate distinct function has array type
-        if (aggregationOperator.getAggregations().values().stream().anyMatch(callOperator
-                -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
-                callOperator.isDistinct())) {
-            return true;
-        }
-        // 3. Must generate three, four phase aggregate for distinct aggregate with multi columns
-        boolean hasMultiColumns =
-                distinctAggCallOperator.stream().anyMatch(callOperator -> callOperator.getChildren().size() > 1);
-        if (distinctAggCallOperator.size() > 0 && hasMultiColumns) {
-            return true;
-        }
-        return false;
-    }
-
-    // Note: This method logic must consistent with CostEstimator::needGenerateOneStageAggNode
-    private boolean needGenerateMultiStageAggregate(OptExpression input, List<CallOperator> distinctAggCallOperator) {
-        // 1. Must do one stage aggregate If the child contains limit,
-        //    the aggregation must be a single node to ensure correctness.
-        //    eg. select count(*) from (select * table limit 2) t
-        if (input.inputAt(0).getOp().hasLimit()) {
-            return false;
-        }
-        // 2. check if must generate multi stage aggregate.
-        if (mustGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
-            return true;
-        }
-        // 3. Respect user hint
-        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-        if (aggStage == ONE_STAGE) {
-            return false;
-        }
-        // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
-        if (aggStage == AUTO_MODE && input.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
-            return false;
-        }
-        // Default, we could generate two stage aggregate
-        return true;
     }
 
     // check if multi distinct functions used the same columns.
@@ -182,7 +124,7 @@ public class SplitAggregateRule extends TransformationRule {
 
 
     private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys) {
-        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE) {
+        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE.ordinal()) {
             return false;
         }
 
@@ -217,7 +159,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
 
         // no need to do multiple stage agg
-        if (!needGenerateMultiStageAggregate(input, distinctAggCallOperator)) {
+        if (!Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(), input.inputAt(0).getOp())) {
             return Lists.newArrayList();
         }
 
@@ -284,12 +226,12 @@ public class SplitAggregateRule extends TransformationRule {
             return false;
         }
 
-        if (aggMode == TWO_STAGE) {
+        if (aggMode == TWO_STAGE.ordinal()) {
             return true;
         }
 
         return CollectionUtils.isNotEmpty(operator.getGroupingKeys())
-                && aggMode == AUTO_MODE
+                && aggMode == AUTO.ordinal()
                 && isTwoStageMoreEfficient(input, distinctColumns);
     }
 

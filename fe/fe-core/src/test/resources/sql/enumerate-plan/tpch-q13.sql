@@ -20,7 +20,7 @@ order by
     custdist desc,
     c_count desc ;
 [planCount]
-1
+4
 [plan-1]
 TOP-N (order by [[21: count DESC NULLS LAST, 20: count DESC NULLS LAST]])
     TOP-N (order by [[21: count DESC NULLS LAST, 20: count DESC NULLS LAST]])

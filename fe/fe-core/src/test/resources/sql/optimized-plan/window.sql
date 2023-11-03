@@ -153,8 +153,7 @@ ANALYTIC ({4: sum(2: v2)=sum(2: v2)} [3: v3] [1: v1 ASC NULLS FIRST] RANGE BETWE
     TOP-N (order by [[3: v3 ASC NULLS FIRST, 1: v1 ASC NULLS FIRST]])
         EXCHANGE SHUFFLE[3]
             AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null]
-                AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null]
-                    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+                SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
@@ -322,7 +321,6 @@ ANALYTIC ({5: avg(1: v1)=avg(1: v1)} [2: v2, 3: v3] [2: v2 ASC NULLS FIRST] RANG
                 EXCHANGE SHUFFLE[3]
                     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
-
 
 [sql]
 select avg(v1) over(partition by v2 order by v3), sum(v1) over(partition by v2 order by v2), max(v1) over(partition by v2 order by v3) from t0
