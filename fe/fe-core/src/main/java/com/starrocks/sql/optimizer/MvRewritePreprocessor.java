@@ -196,11 +196,6 @@ public class MvRewritePreprocessor {
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
-            if (!mv.isValidPlan()) {
-                // skip to process unsupported plan tree
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}", mv.getName());
-                continue;
-            }
             try {
                 preprocessMv(mv, queryTables, originQueryColumns);
             } catch (Exception e) {
@@ -234,7 +229,6 @@ public class MvRewritePreprocessor {
             return;
         }
         if (!mvPlanContext.isValidMvPlan()) {
-            mv.setPlanMode(MaterializedView.PlanMode.INVALID);
             if (mvPlanContext.getLogicalPlan() != null) {
                 logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
                         mv.getName(), mvPlanContext.getLogicalPlan().debugString());
