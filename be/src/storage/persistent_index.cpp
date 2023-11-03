@@ -4010,6 +4010,10 @@ Status merge_shard_kvs_fixed_len(std::vector<KVRef>& l0_kvs, std::vector<std::ve
     kvs_set.reserve(estimated_size);
     DCHECK(!l1_kvs.empty());
     for (const auto& kv : l1_kvs[0]) {
+        const auto v = UNALIGNED_LOAD64(kv.kv_pos + KeySize);
+        if (v == NullIndexValue) {
+            continue;
+        }
         const auto [_, inserted] = kvs_set.emplace(kv);
         DCHECK(inserted) << "duplicate key found when in l1 index";
         if (!inserted) {
@@ -4060,6 +4064,10 @@ Status merge_shard_kvs_var_len(std::vector<KVRef>& l0_kvs, std::vector<std::vect
     kvs_set.reserve(estimate_size);
     DCHECK(!l1_kvs.empty());
     for (const auto& kv : l1_kvs[0]) {
+        const auto v = UNALIGNED_LOAD64(kv.kv_pos + kv.size - kIndexValueSize);
+        if (v == NullIndexValue) {
+            continue;
+        }
         const auto [_, inserted] = kvs_set.emplace(kv);
         DCHECK(inserted) << "duplicate key found when in l1 index";
         if (!inserted) {
@@ -4434,15 +4442,6 @@ Status PersistentIndex::_minor_compaction(PersistentIndexMetaPB* index_meta) {
 Status PersistentIndex::_merge_compaction() {
     if (_l1_vec.empty()) {
         return Status::InternalError("cannot do merge_compaction without l1");
-    }
-    // if _l0 is empty() and _l1_vec only has one _l1, we can rename it directly
-    if (_l0->size() == 0) {
-        if (!_has_l1 && _l1_vec.size() == 1) {
-            const std::string idx_file_path =
-                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
-            const std::string idx_file_path_tmp = _l1_vec[0]->_file->filename();
-            return FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path);
-        }
     }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     const std::string idx_file_path =
