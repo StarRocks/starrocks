@@ -17,7 +17,12 @@ package com.starrocks.load;
 public interface LoadJobWithWarehouse {
     String getCurrentWarehouse();
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/load/LoadJobWithWarehouse.java
     boolean isFinal();
+=======
+#include <cstddef>
+#include <vector>
+>>>>>>> 2a51cf89f9 ([BugFix] Fix select ORC MapVector's filter nullptr bug (#34267)):be/src/storage/lake/key_index.h
 
     default boolean isInternalJob() {
         return false;

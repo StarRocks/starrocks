@@ -1196,6 +1196,77 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     scanner->close(_runtime_state);
 }
 
+/**
+ * ORC format: struct<col1:int,col2:map<string,string>>
+ * Data:
+ * {"col1":1,"col2":[{"_key":"hello","_value":"world"}]}
+ * {"col1":1,"col2":[{"_key":"hello","_value":"world"}]}
+ * {"col1":2,"col2":[{"_key":"hello1","_value":"world1"},{"_key":"aef","_value":"efafe"}]}
+ * {"col1":3,"col2":[{"_key":"hello","_value":"world"}]}
+ * {"col1":1,"col2":[{"_key":"hello","_value":"world"}]}
+ * {"col1":1,"col2":[{"_key":"hello","_value":"world"}]}
+ * {"col1":2,"col2":[{"_key":"hello1","_value":"world1"},{"_key":"aef","_value":"efafe"}]}
+ * {"col1":3,"col2":[{"_key":"hello","_value":"world"}]}
+ * We will only select map values here, and then apply filter in this case
+ */
+TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/map_filter_bug.orc";
+
+    SlotDesc c0{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc c1{"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP)};
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+
+    SlotDesc slot_descs[] = {c0, c1, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    // c0 == 3
+    // so return 2 rows.
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 3);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[0], TPrimitiveType::INT, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.ok());
+
+    // two records across two stripes
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[3, {NULL:'world'}]", chunk->debug_row(0));
+
+    chunk->reset();
+    status = scanner->get_next(_runtime_state, &chunk);
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ("[3, {NULL:'world'}]", chunk->debug_row(0));
+    // Should be end of file in next read.
+    chunk->reset();
+    status = scanner->get_next(_runtime_state, &chunk);
+    ASSERT_EQ(0, chunk->num_rows());
+    ASSERT_TRUE(status.is_end_of_file());
+
+    scanner->close();
+}
+
 TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/boolean_slot_ref.orc";
 
