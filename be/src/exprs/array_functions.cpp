@@ -754,7 +754,7 @@ private:
     }
 
     template <bool NullableElement, bool NullableTarget, typename ElementColumn>
-   static uint8 __process_seq(const ElementColumn& elements, uint32 element_start, uint32 element_end,
+    static uint8 __process_seq(const ElementColumn& elements, uint32 element_start, uint32 element_end,
                                const ElementColumn& targets, uint32 target_start, uint32 target_end,
                                const NullColumn::Container* null_map_elements,
                                const NullColumn::Container* null_map_targets) {
@@ -771,7 +771,7 @@ private:
         if (target_end == target_start) {
             return true;
         }
-        if(element_end == element_start) {
+        if (element_end == element_start) {
             return false;
         }
         bool found = false;
@@ -780,21 +780,22 @@ private:
         while (j < element_end) {
             int k = j;
             int l = 0;
-            while (i < target_end ) {
+            while (i < target_end) {
                 bool null_target = false;
                 if constexpr (NullableTarget) {
                     null_target = is_null(null_map_targets, i);
                 }
                 bool null_element = false;
                 if constexpr (NullableElement) {
-                    null_element = is_null(null_map_elements,k);
+                    null_element = is_null(null_map_elements, k);
                 }
                 if (null_target && null_element) {
                     found = true;
                 } else if (null_target || null_element) {
                     found = false;
                 } else {
-                    if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
+                    if constexpr (std::is_same_v<ArrayColumn, ElementColumn> ||
+                                  std::is_same_v<MapColumn, ElementColumn> ||
                                   std::is_same_v<StructColumn, ElementColumn> ||
                                   std::is_same_v<JsonColumn, ElementColumn>) {
                         found = (elements.equals(k, targets, i) == 1);
