@@ -131,7 +131,6 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -2339,9 +2338,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
-            PhysicalPropertySet outputProperty = optExpr.getOutputProperty();
-            if (outputProperty != null && outputProperty.getDistributionProperty().isAny()) {
-                joinNode.setCanShuffleOutput(true);
+            if (node.getCanLocalShuffle()) {
+                joinNode.setCanLocalShuffle(true);
             }
 
             // Build outputColumns
