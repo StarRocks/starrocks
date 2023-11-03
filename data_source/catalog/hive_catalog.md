@@ -18,7 +18,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 
 ## 使用说明
 
-- StarRocks 查询 Hive 数据时，支持 Parquet、ORC 和 CSV 三种文件格式，其中：
+- StarRocks 查询 Hive 数据时，支持 Parquet、ORC 、CSV 、Avro、RCFile、SequenceFile 文件格式，其中：
 
   - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
