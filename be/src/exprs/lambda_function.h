@@ -69,5 +69,6 @@ private:
     std::vector<SlotId> _common_sub_expr_ids;
     std::vector<Expr*> _common_sub_expr;
     int _common_sub_expr_num;
+    bool _is_prepared = false;
 };
 } // namespace starrocks
