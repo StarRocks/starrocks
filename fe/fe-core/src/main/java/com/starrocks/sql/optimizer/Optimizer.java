@@ -64,11 +64,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
-import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
->>>>>>> 68ad162041 ([Feature] match pattern hash node under agg2 to use local shuffle)
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
@@ -663,7 +659,6 @@ public class Optimizer {
         }
 
         OptExpression.Builder builder = OptExpression.buildWithOpAndInputs(groupExpression.getOp(), childPlans);
-
 
         // record inputProperties used to determine join type when building planFragment
         // record logical property used to obtain output colRefSet when building planFragment
