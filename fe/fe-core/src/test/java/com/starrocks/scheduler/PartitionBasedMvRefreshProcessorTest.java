@@ -1449,14 +1449,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         try {
             Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
             MaterializedView materializedView = ((MaterializedView) testDb.getTable("jdbc_parttbl_mv2"));
-            HashMap<String, String> taskRunProperties = new HashMap<>();
-            taskRunProperties.put(PARTITION_START, "20230801");
-            taskRunProperties.put(TaskRun.PARTITION_END, "20230805");
-            taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
-            Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
-            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-            taskRun.executeTaskRun();
+            refreshMVRange(materializedView.getName(), "20230731", "20230805", false);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Text '1234567' could not be parsed"));
         }
