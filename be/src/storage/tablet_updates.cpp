@@ -2045,14 +2045,16 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
+        auto st = output_rowset->verify();
         string msg = strings::Substitute(
                 "actual row size changed after compaction $0 -> $1 inputs:$2 output:$3 max_rowset_id:$4 "
-                "max_src_rssid:$5 $6",
+                "max_src_rssid:$5 $6 $7",
                 row_before, row_after, PrettyPrinter::print_unique_int_list_range(info->inputs), rowset_id,
-                max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id));
+                max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
+                st.ok() ? "" : st.get_error_msg());
         LOG(ERROR) << msg << debug_string();
         _set_error(msg + _debug_version_info(true));
-        CHECK(output_rowset->verify().ok()) << msg;
+        CHECK(st.ok()) << msg;
     }
 }
 
