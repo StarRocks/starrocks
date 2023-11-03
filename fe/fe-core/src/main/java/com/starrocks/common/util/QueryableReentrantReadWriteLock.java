@@ -15,7 +15,12 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/util/QueryableReentrantReadWriteLock.java
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+=======
+#include <cstddef>
+#include <vector>
+>>>>>>> 2a51cf89f9 ([BugFix] Fix select ORC MapVector's filter nullptr bug (#34267)):be/src/storage/lake/key_index.h
 
 /*
  * This Lock is for exposing the getOwner() method,
