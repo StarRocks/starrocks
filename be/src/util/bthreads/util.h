@@ -26,6 +26,8 @@ namespace starrocks::bthreads {
 
 namespace {
 struct FunctorArg {
+    explicit FunctorArg(std::function<void()> f) : func(std::move(f)) {}
+
     std::function<void()> func;
 };
 
