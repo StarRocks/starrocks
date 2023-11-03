@@ -2339,7 +2339,10 @@ public class PlanFragmentBuilder {
 
             PhysicalPropertySet outputProperty = optExpr.getOutputProperty();
             if (outputProperty != null && outputProperty.getDistributionProperty().isAny()) {
-                joinNode.setCanShuffleOutput(true);
+                joinNode.setCanLocalShuffleOutput(true);
+            }
+            if (node.getCanUseLocalShuffle()) {
+                joinNode.setCanLocalShuffleOutput(true);
             }
 
             // Build outputColumns
