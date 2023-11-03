@@ -67,6 +67,7 @@ public class ReplayFromDumpTestBase {
         FeConstants.runningUnitTest = true;
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.showJoinLocalShuffleInExplain = false;
 
         new MockUp<EditLog>() {
             @Mock
