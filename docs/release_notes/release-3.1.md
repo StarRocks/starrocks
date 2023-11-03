@@ -4,7 +4,7 @@
 
 Release date: November 2, 2023
 
-## New Features
+### New Features
 
 - Supports sort keys for Primary Key tables created in shared-data StarRocks clusters.
 - Supports using the str2date function to specify partition expressions for asynchronous materialized views. This helps facilitate incremental updates and query rewrites of asynchronous materialized views created on tables that reside in external catalogs and use the STRING-type data as their partitioning expressions. [#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
@@ -17,13 +17,13 @@ Release date: November 2, 2023
   - `plan_cpu_cost_range`: the CPU consumption range estimated by the system. The default value `NULL` indicates no limit is imposed.
   - `plan_mem_cost_range`: the memory consumption range estimated by the system. The default value `NULL` indicates no limit is imposed.
 
-## Improvements
+### Improvements
 
 - Window functions COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP now support the ORDER BY clause and Window clause. [#30786](https://github.com/StarRocks/starrocks/pull/30786)
 - An error instead of NULL is returned if a decimal overflow occurs during queries on the DECIMAL type data. [#30419](https://github.com/StarRocks/starrocks/pull/30419)
 - The number of concurrent queries allowed in a query queue is now managed by the leader FE. Each follower FE notifies of the leader FE when a query starts and finishes. If the number of concurrent queries reaches the global-level or resource group-level `concurrency_limit`, new queries are rejected or placed in queue.
 
-## Bug Fixes
+### Bug Fixes
 
 Fixed the following issues:
 
@@ -39,7 +39,7 @@ Fixed the following issues:
 - Queries fail during hash joins, causing BEs to crash. [#32219](https://github.com/StarRocks/starrocks/pull/32219)
 - `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)
 
-## Behavior Change
+### Behavior Change
 
 - From v3.1.4 onwards, persistent indexing is enabled by default for Primary Key tables created in new StarRocks clusters (this does not apply to existing StarRocks clusters whose versions are upgraded to v3.1.4 from an earlier version). [#33374](https://github.com/StarRocks/starrocks/pull/33374)
 - A new FE parameter `enable_sync_publish` which is set to `true` by default is added. When this parameter is set to `true`, the Publish phase of a data load into a Primary Key table returns the execution result only after the Apply task finishes. As such, the data loaded can be queried immediately after the load job returns a success message. However, setting this parameter to `true` may cause data loads into Primary Key tables to take a longer time. (Before this parameter is added, the Apply task is asynchronous with the Publish phase.) [#27055](https://github.com/StarRocks/starrocks/pull/27055)
