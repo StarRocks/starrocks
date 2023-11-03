@@ -46,6 +46,7 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
@@ -90,7 +91,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
-    protected boolean canLocalShuffleOutput = false;
+    protected boolean canLocalShuffle = false;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -387,12 +388,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         this.isPushDown = isPushDown;
     }
 
-    public boolean getCanLocalShuffleOutput() {
-        return canLocalShuffleOutput;
+    public boolean getCanLocalShuffle() {
+        return canLocalShuffle;
     }
 
-    public void setCanLocalShuffleOutput(boolean v) {
-        canLocalShuffleOutput = v;
+    public void setCanLocalShuffle(boolean v) {
+        canLocalShuffle = v;
     }
 
     @Override
@@ -445,7 +446,9 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 output.append("\n");
             }
 
-            output.append(detailPrefix).append("can local shuffle output: " + canLocalShuffleOutput + "\n");
+            if (!FeConstants.runningUnitTest || FeConstants.showJoinLocalShuffleInExplain) {
+                output.append(detailPrefix).append("can local shuffle: " + canLocalShuffle + "\n");
+            }
         }
         return output.toString();
     }

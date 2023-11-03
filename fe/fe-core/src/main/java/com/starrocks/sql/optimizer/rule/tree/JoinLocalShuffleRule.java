@@ -47,7 +47,7 @@ public class JoinLocalShuffleRule implements TreeRewriteRule {
                 Operator childOp = opt.getInputs().get(0).getOp();
                 if (childOp instanceof PhysicalJoinOperator) {
                     PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) childOp;
-                    joinOperator.setCanUseLocalShuffle(true);
+                    joinOperator.setCanLocalShuffle(true);
                 }
             }
 
