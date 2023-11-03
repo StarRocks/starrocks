@@ -29,6 +29,10 @@ LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _comm
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
     // common sub expressions include 2 parts in a pair: (slot id, expression)
     const int child_num = get_num_children() - 2 * _common_sub_expr_num;
     // collect the slot ids of lambda arguments
