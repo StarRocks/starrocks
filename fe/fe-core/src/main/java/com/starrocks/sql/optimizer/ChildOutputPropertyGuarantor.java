@@ -225,7 +225,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         double childCosts = child.getCost(childOutputProperty);
         Group childGroup = child.getGroup();
 
-        DistributionProperty newDistributionProperty = new DistributionProperty(distributionSpec);
+        DistributionProperty newDistributionProperty = DistributionProperty.createProperty(distributionSpec);
         PhysicalPropertySet newOutputProperty = childOutputProperty.copy();
         newOutputProperty.setDistributionProperty(newDistributionProperty);
 

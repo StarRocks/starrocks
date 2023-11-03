@@ -629,7 +629,8 @@ public class InsertPlanner {
                                                           List<ColumnRefOperator> outputColumns) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
-            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            DistributionProperty distributionProperty = DistributionProperty
+                    .createProperty(new GatherDistributionSpec());
             return new PhysicalPropertySet(distributionProperty);
         }
 
@@ -652,14 +653,15 @@ public class InsertPlanner {
                     Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
                     orderings.add(ordering);
                 }
-                SortProperty sortProperty = SortProperty.createSortProperty(orderings);
+                SortProperty sortProperty = SortProperty.createProperty(orderings);
                 return new PhysicalPropertySet(sortProperty);
             }
         }
 
 
         if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
-            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            DistributionProperty distributionProperty = DistributionProperty
+                    .createProperty(new GatherDistributionSpec());
             return new PhysicalPropertySet(distributionProperty);
         }
 
@@ -698,7 +700,7 @@ public class InsertPlanner {
         HashDistributionDesc desc =
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
-        DistributionProperty property = new DistributionProperty(spec);
+        DistributionProperty property = DistributionProperty.createProperty(spec);
 
         if (Config.eliminate_shuffle_load_by_replicated_storage) {
             forceReplicatedStorage = true;

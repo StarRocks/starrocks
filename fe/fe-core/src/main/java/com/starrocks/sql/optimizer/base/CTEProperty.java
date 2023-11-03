@@ -30,7 +30,7 @@ public class CTEProperty implements PhysicalProperty {
     // All cteID will be passed from top to bottom, and prune plan when meet CTENoOp node with same CTEid 
     private final Set<Integer> cteIds;
 
-    public static CTEProperty createCTEProperty(Set<Integer> cteIds) {
+    public static CTEProperty createProperty(Set<Integer> cteIds) {
         if (CollectionUtils.isEmpty(cteIds)) {
             return EmptyCTEProperty.INSTANCE;
         } else {

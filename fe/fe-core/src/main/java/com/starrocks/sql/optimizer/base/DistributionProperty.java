@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.base;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -28,19 +27,24 @@ public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
 
+    public static DistributionProperty createProperty(DistributionSpec spec) {
+        return createProperty(spec, false);
+    }
+
+    public static DistributionProperty createProperty(DistributionSpec spec, boolean isCTERequired) {
+        if (spec.type == ANY) {
+            return EmptyDistributionProperty.INSTANCE;
+        } else {
+            return new DistributionProperty(spec, isCTERequired);
+        }
+    }
+
     protected DistributionProperty() {
         spec = AnyDistributionSpec.INSTANCE;
         isCTERequired = false;
     }
 
-    public DistributionProperty(DistributionSpec spec) {
-        Preconditions.checkState(spec.type != ANY, "if spec is ANY type, please use EmptyDistributionProperty");
-        this.spec = spec;
-        this.isCTERequired = false;
-    }
-
-    public DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
-        Preconditions.checkState(spec.type != ANY, "if spec is ANY type, please use EmptyDistributionProperty");
+    protected DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
         this.spec = spec;
         this.isCTERequired = isCTERequired;
     }
@@ -89,7 +93,7 @@ public class DistributionProperty implements PhysicalProperty {
         if (spec.getType() == SHUFFLE) {
             HashDistributionSpec hashDistributionSpec = ((HashDistributionSpec) spec);
             if (!hashDistributionSpec.isAllNullStrict()) {
-                return new DistributionProperty(hashDistributionSpec.getNullStrictSpec(
+                return DistributionProperty.createProperty(hashDistributionSpec.getNullStrictSpec(
                         hashDistributionSpec.getEquivDesc()), isCTERequired);
             }
         }

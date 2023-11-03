@@ -27,30 +27,37 @@ public class EmptyDistributionProperty extends DistributionProperty {
         super();
     }
 
+    @Override
     public boolean isAny() {
         return true;
     }
 
+    @Override
     public boolean isShuffle() {
         return false;
     }
 
+    @Override
     public boolean isGather() {
         return false;
     }
 
+    @Override
     public boolean isBroadcast() {
         return false;
     }
 
+    @Override
     public boolean isCTERequired() {
         return false;
     }
 
+    @Override
     public GroupExpression appendEnforcers(Group child) {
         throw new StarRocksPlannerException("cannot enforce empty distribution property.", ErrorType.INTERNAL_ERROR);
     }
 
+    @Override
     public DistributionProperty getNullStrictProperty() {
         throw new StarRocksPlannerException("cannot obtain null strict property from empty distribution property.",
                 ErrorType.INTERNAL_ERROR);

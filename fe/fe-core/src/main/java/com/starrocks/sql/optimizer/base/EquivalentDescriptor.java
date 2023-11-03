@@ -68,7 +68,7 @@ public final class EquivalentDescriptor {
     }
 
     public boolean isEmptyPartition() {
-        return partitionIds.size() == 0;
+        return partitionIds.isEmpty();
     }
 
     public void initDistributionUnionFind(List<DistributionCol> distributionCols) {

@@ -30,7 +30,7 @@ public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
 
-    public static SortProperty createSortProperty(List<Ordering> orderDescs) {
+    public static SortProperty createProperty(List<Ordering> orderDescs) {
         if (CollectionUtils.isEmpty(orderDescs)) {
             return EmptySortProperty.INSTANCE;
         } else {

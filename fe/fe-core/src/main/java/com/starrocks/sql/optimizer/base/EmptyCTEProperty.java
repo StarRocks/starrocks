@@ -24,6 +24,7 @@ public class EmptyCTEProperty extends CTEProperty {
         super(ImmutableSet.of());
     }
 
+    @Override
     public boolean isEmpty() {
         return true;
     }

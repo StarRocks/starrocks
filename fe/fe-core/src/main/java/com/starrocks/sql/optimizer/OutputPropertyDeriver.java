@@ -109,7 +109,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             cteIds.addAll(childrenOutputProperty.getCteProperty().getCteIds());
         }
         output = output.copy();
-        output.setCteProperty(CTEProperty.createCTEProperty(cteIds));
+        output.setCteProperty(CTEProperty.createProperty(cteIds));
         return output;
     }
 
@@ -163,7 +163,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             return physicalPropertySet;
         }
         HashDistributionSpec newSpec = hashDistributionSpec.getNullRelaxSpec(hashDistributionSpec.getEquivDesc());
-        return new PhysicalPropertySet(new DistributionProperty(newSpec),
+        return new PhysicalPropertySet(DistributionProperty.createProperty(newSpec),
                 physicalPropertySet.getSortProperty(), physicalPropertySet.getCteProperty());
     }
 
@@ -364,7 +364,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             EquivalentDescriptor newEquivDesc = distributionSpec.getEquivDesc().copy();
             newEquivDesc.clearNullStrictUnionFind();
             HashDistributionSpec newDistributionSpec = distributionSpec.getNullRelaxSpec(newEquivDesc);
-            DistributionProperty newDistributionProperty = new DistributionProperty(newDistributionSpec,
+            DistributionProperty newDistributionProperty = DistributionProperty.createProperty(
+                    newDistributionSpec,
                     childPropertySet.getDistributionProperty().isCTERequired());
             return new PhysicalPropertySet(newDistributionProperty, childPropertySet.getSortProperty(),
                     childPropertySet.getCteProperty());
@@ -394,11 +395,11 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         if (topN.getSortPhase().isFinal()) {
             if (topN.isSplit()) {
                 DistributionSpec distributionSpec = DistributionSpec.createGatherDistributionSpec();
-                DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
-                SortProperty sortProperty = SortProperty.createSortProperty(topN.getOrderSpec().getOrderDescs());
+                DistributionProperty distributionProperty = DistributionProperty.createProperty(distributionSpec);
+                SortProperty sortProperty = SortProperty.createProperty(topN.getOrderSpec().getOrderDescs());
                 outputProperty = new PhysicalPropertySet(distributionProperty, sortProperty);
             } else {
-                outputProperty = new PhysicalPropertySet(SortProperty.createSortProperty(topN.getOrderSpec().getOrderDescs()));
+                outputProperty = new PhysicalPropertySet(SortProperty.createProperty(topN.getOrderSpec().getOrderDescs()));
             }
         } else if (topN.getPartitionByColumns() == null) {
             outputProperty = PhysicalPropertySet.EMPTY;
@@ -423,11 +424,11 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         node.getPartitionExpressions().forEach(e -> partitionColumnRefSet.addAll(
                 Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList())));
 
-        SortProperty sortProperty = SortProperty.createSortProperty(node.getEnforceOrderBy());
+        SortProperty sortProperty = SortProperty.createProperty(node.getEnforceOrderBy());
 
         DistributionProperty distributionProperty;
         if (partitionColumnRefSet.isEmpty()) {
-            distributionProperty = new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
+            distributionProperty = DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
             // Use child distribution
             distributionProperty = childrenOutputProperties.get(0).getDistributionProperty();
@@ -457,7 +458,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @Override
     public PhysicalPropertySet visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
-        DistributionProperty distributionProperty = new DistributionProperty(gather);
+        DistributionProperty distributionProperty = DistributionProperty.createProperty(gather);
         return new PhysicalPropertySet(distributionProperty, EmptySortProperty.INSTANCE,
                 childrenOutputProperties.get(0).getCteProperty());
 
@@ -470,7 +471,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         Set<Integer> cteIds = Sets.newHashSet(childrenOutputProperties.get(1).getCteProperty().getCteIds());
         cteIds.remove(node.getCteId());
         cteIds.addAll(childrenOutputProperties.get(0).getCteProperty().getCteIds());
-        output.setCteProperty(CTEProperty.createCTEProperty(cteIds));
+        output.setCteProperty(CTEProperty.createProperty(cteIds));
         return output;
     }
 
