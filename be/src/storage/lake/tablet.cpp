@@ -82,22 +82,6 @@ StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
     return _mgr->get_txn_vlog(_id, version);
 }
 
-Status Tablet::delete_txn_log(int64_t txn_id) {
-    return _mgr->delete_txn_log(_id, txn_id);
-}
-
-Status Tablet::delete_txn_vlog(int64_t version) {
-    return _mgr->delete_txn_vlog(_id, version);
-}
-
-Status Tablet::put_tablet_metadata_lock(int64_t version, int64_t expire_time) {
-    return _mgr->put_tablet_metadata_lock(_id, version, expire_time);
-}
-
-Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time) {
-    return _mgr->delete_tablet_metadata_lock(_id, version, expire_time);
-}
-
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
                                                            uint32_t max_rows_per_segment) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());

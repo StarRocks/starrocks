@@ -80,6 +80,7 @@ public class HiveView extends Table {
         return inlineViewDef;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }

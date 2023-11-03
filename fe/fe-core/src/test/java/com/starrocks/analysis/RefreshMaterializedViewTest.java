@@ -14,7 +14,6 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -48,10 +47,13 @@ import org.junit.Test;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class RefreshMaterializedViewTest {
     private static ConnectContext connectContext;
@@ -665,16 +667,19 @@ public class RefreshMaterializedViewTest {
             .dropTable("tbl_with_partition");
     }
 
-    private void buildTimePartitions(String tableName, OlapTable tbl, int partitionCount) throws Exception {
+    private Set<LocalDate> buildTimePartitions(String tableName, OlapTable tbl, int partitionCount) throws Exception {
         LocalDate currentDate = LocalDate.now();
+        Set<LocalDate> partitionBounds = Sets.newHashSet();
         for (int i = 0; i < partitionCount; i++) {
             LocalDate lowerBound = currentDate.minus(Period.ofMonths(i + 1));
             LocalDate upperBound = currentDate.minus(Period.ofMonths(i));
+            partitionBounds.add(lowerBound);
             String partitionName = String.format("p_%d_%d", lowerBound.getYear(), lowerBound.getMonthValue());
             String addPartition = String.format("alter table %s add partition p%s values [('%s'), ('%s')) ",
                     tableName, partitionName, lowerBound.toString(), upperBound);
             starRocksAssert.getCtx().executeSql(addPartition);
         }
+        return partitionBounds;
     }
 
     @Test
@@ -708,17 +713,27 @@ public class RefreshMaterializedViewTest {
                 .getDynamicPartitionScheduler();
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("mv_ttl_mv1");
-        buildTimePartitions(tableName, tbl, 10);
+        Set<LocalDate> addedPartitions = buildTimePartitions(tableName, tbl, 10);
+
+        // Build expectations
+        Function<LocalDate, String> formatPartitionName = (dt) ->
+                String.format("pp_%d_%d", dt.getYear(), dt.getMonthValue());
+        Comparator<LocalDate> cmp = Comparator.comparing(x -> x, Comparator.reverseOrder());
+        Function<Integer, Set<String>> expect = (n) -> addedPartitions.stream()
+                .sorted(cmp).limit(n)
+                .map(formatPartitionName)
+                .collect(Collectors.toSet());
 
         // initial partitions should consider the ttl
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
-        Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
+
+        Assert.assertEquals(expect.apply(2), tbl.getPartitionNames());
 
         // normal ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='2 month')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
+        Assert.assertEquals(expect.apply(2), tbl.getPartitionNames());
 
         // large ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='10 year')");
@@ -730,7 +745,7 @@ public class RefreshMaterializedViewTest {
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='1 day')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(ImmutableSet.of("pp_2023_9"), tbl.getPartitionNames());
+        Assert.assertEquals(expect.apply(1), tbl.getPartitionNames());
 
         // zero ttl
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='0 day')");
@@ -744,13 +759,13 @@ public class RefreshMaterializedViewTest {
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
         Assert.assertEquals(tbl.getRangePartitionMap().toString(), 1, tbl.getPartitions().size());
-        Assert.assertEquals(ImmutableSet.of("pp_2023_9"), tbl.getPartitionNames());
+        Assert.assertEquals(expect.apply(1), tbl.getPartitionNames());
 
         // the ttl cross two partitions
         cluster.runSql(dbName, "alter materialized view test.mv_ttl_mv1 set ('partition_ttl'='32 day')");
         cluster.runSql(dbName, "refresh materialized view test.mv_ttl_mv1 with sync mode");
         dynamicPartitionScheduler.runOnceForTest();
-        Assert.assertEquals(ImmutableSet.of("pp_2023_8", "pp_2023_9"), tbl.getPartitionNames());
+        Assert.assertEquals(expect.apply(2), tbl.getPartitionNames());
         Assert.assertEquals(tbl.getRangePartitionMap().toString(), 2, tbl.getPartitions().size());
 
         // corner cases

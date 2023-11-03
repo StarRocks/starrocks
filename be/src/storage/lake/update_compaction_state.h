@@ -39,6 +39,8 @@ public:
     Status load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
     void release_segments(uint32_t segment_id);
 
+    std::size_t memory_usage() const { return _memory_usage; }
+
     std::vector<ColumnUniquePtr> pk_cols;
 
 private:

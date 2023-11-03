@@ -61,6 +61,7 @@ public class PaimonTable extends Table {
                 .collect(Collectors.toList());
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }
@@ -92,6 +93,7 @@ public class PaimonTable extends Table {
         return partColumnNames;
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         List<Column> partitionColumns = new ArrayList<>();
         if (!partColumnNames.isEmpty()) {

@@ -563,7 +563,7 @@ public final class MetricRepo {
                 "The count of txns") {
             @Override
             public Long getValue() {
-                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNum();
+                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum();
             }
         };
         txnCnt.addLabel(new MetricLabel("type", "txn_count"));
@@ -573,7 +573,7 @@ public final class MetricRepo {
                 "The bytes of txns") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNum()
+                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum()
                         * SizeEstimator.estimate(new TransactionState());
             }
         };

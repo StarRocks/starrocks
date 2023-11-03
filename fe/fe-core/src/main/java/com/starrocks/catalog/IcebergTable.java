@@ -38,7 +38,6 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
-import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
@@ -100,6 +99,7 @@ public class IcebergTable extends Table {
         this.icebergProperties = icebergProperties;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
@@ -135,6 +135,7 @@ public class IcebergTable extends Table {
         }
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
@@ -148,10 +149,8 @@ public class IcebergTable extends Table {
 
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
-        PartitionSpec currentSpec = getNativeTable().spec();
-        boolean existPartitionEvolution = currentSpec.fields().stream().anyMatch(field -> field.transform().isVoid());
         for (PartitionField field : getNativeTable().spec().fields()) {
-            if (!field.transform().isIdentity() && existPartitionEvolution) {
+            if (!field.transform().isIdentity() && hasPartitionTransformedEvolution()) {
                 continue;
             }
             String baseColumnName = nativeTable.schema().findColumnName(field.sourceId());
@@ -184,6 +183,11 @@ public class IcebergTable extends Table {
         return indexes;
     }
 
+    // day(dt) -> identity dt
+    public boolean hasPartitionTransformedEvolution() {
+        return getNativeTable().spec().fields().stream().anyMatch(field -> field.transform().isVoid());
+    }
+
     public void resetSnapshot() {
         snapshot = Optional.empty();
     }
@@ -192,6 +196,7 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
 
+    @Override
     public boolean isUnPartitioned() {
         return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
     }

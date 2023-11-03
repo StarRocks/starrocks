@@ -103,9 +103,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // shadow index id -> shadow index short key count
     @SerializedName(value = "indexShortKeyMap")
     private Map<Long, Short> indexShortKeyMap = Maps.newHashMap();
-    // partition id -> shadow shard group id
-    @SerializedName(value = "shardGroupIdMap")
-    private Map<Long, Long> shardGroupIdMap = Maps.newHashMap();
 
     // bloom filter info
     @SerializedName(value = "hasBfChange")
@@ -169,9 +166,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         tabletMap.put(shadowTabletId, originTabletId);
     }
 
-    void addPartitionShadowInfo(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx, long shadowShardGroupId) {
+    void addPartitionShadowIndex(long partitionId, long shadowIdxId, MaterializedIndex shadowIdx) {
         partitionIndexMap.put(partitionId, shadowIdxId, shadowIdx);
-        shardGroupIdMap.put(partitionId, shadowShardGroupId);
     }
 
     void addIndexSchema(long shadowIdxId, long originIdxId, @NotNull String shadowIndexName,
@@ -184,14 +180,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     // REQUIRE: has acquired the exclusive lock of database
-    void addShadowIndexToCatalog(@NotNull LakeTable table) {
-        Preconditions.checkState(watershedTxnId != -1);
+    void addShadowIndexToCatalog(@NotNull LakeTable table, long visibleTxnId) {
+        Preconditions.checkState(visibleTxnId != -1);
         for (long partitionId : partitionIndexMap.rowKeySet()) {
             Partition partition = table.getPartition(partitionId);
             Preconditions.checkState(partition != null);
             Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
-                shadowIndex.setVisibleTxnId(watershedTxnId);
+                shadowIndex.setVisibleTxnId(visibleTxnId);
                 Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                         shadowIndex.getState());
                 partition.createRollupIndex(shadowIndex);
@@ -265,6 +261,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+    }
+
+    @VisibleForTesting
+    public static long peekNextTransactionId() {
+        return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
     }
 
     @Override
@@ -381,7 +382,21 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
-            addShadowIndexToCatalog(table);
+            addShadowIndexToCatalog(table, watershedTxnId);
+        }
+
+        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
+        // transaction A begins between these operations. This is safe as long as A gets the tablet
+        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
+        // writes to it. All current import transactions do this (beginTransaction first), so even
+        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
+        // is just a convention not a requirement. If violated, transactions with IDs greater than
+        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
+        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
+        long nextTxnId = peekNextTransactionId();
+        if (nextTxnId != watershedTxnId + 1) {
+            throw new AlterCancelException(
+                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
         }
 
         jobState = JobState.WAITING_TXN;
@@ -716,7 +731,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.indexIdToName = other.indexIdToName;
             this.indexSchemaMap = other.indexSchemaMap;
             this.indexShortKeyMap = other.indexShortKeyMap;
-            this.shardGroupIdMap = other.shardGroupIdMap;
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
@@ -738,7 +752,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 addTabletToTabletInvertedIndex(table);
                 table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
             } else if (jobState == JobState.WAITING_TXN) {
-                addShadowIndexToCatalog(table);
+                addShadowIndexToCatalog(table, watershedTxnId);
             } else if (jobState == JobState.FINISHED_REWRITING) {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
@@ -851,13 +865,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 }
 
                 droppedIndexes.add(droppedIdx);
-            }
-
-            // if upgraded from older version, shardGroupIdMap might be null
-            if (shardGroupIdMap != null) {
-                long shadowShardGroupId = shardGroupIdMap.get(partition.getId());
-                Preconditions.checkNotNull(shadowShardGroupId);
-                partition.setShardGroupId(shadowShardGroupId);
             }
         }
 
@@ -1057,9 +1064,4 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
-
-    public Map<Long, Long> getShardGroupIdMap() {
-        return shardGroupIdMap;
-    }
-
 }

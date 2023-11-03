@@ -610,7 +610,7 @@ public class StmtExecutor {
                         }
                     } finally {
                         boolean isAsync = false;
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
+                        if (!needRetry && context.isProfileEnabled()) {
                             isAsync = tryProcessProfileAsync(execPlan);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
@@ -788,6 +788,7 @@ public class StmtExecutor {
         long startTime = context.getStartTime();
         TUniqueId executionId = context.getExecutionId();
         QueryDetail queryDetail = context.getQueryDetail();
+        boolean needMerge = context.needMergeProfile();
 
         // DO NOT use context int the async task, because the context is shared among consecutive queries.
         // profile of query1 maybe executed when query2 is under execution.
@@ -796,7 +797,7 @@ public class StmtExecutor {
             summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
                     DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
             summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
-            profile.addChild(coord.buildMergedQueryProfile());
+            profile.addChild(coord.buildQueryProfile(needMerge));
 
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
             long now = System.currentTimeMillis();
@@ -937,7 +938,6 @@ public class StmtExecutor {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
-            context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
@@ -1664,7 +1664,7 @@ public class StmtExecutor {
             throw t;
         } finally {
             boolean isAsync = false;
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.isProfileEnabled()) {
                 isAsync = tryProcessProfileAsync(execPlan);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
@@ -1693,7 +1693,6 @@ public class StmtExecutor {
             context.getSessionVariable().setEnableProfile(true);
             context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
-            context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (stmt.isExplain()) {
@@ -1984,7 +1983,7 @@ public class StmtExecutor {
                 String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
-                            targetTable instanceof HiveTable)) {
+                            targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
                         // schema table and iceberg table does not need txn
                         mgr.abortTransaction(database.getId(), transactionId, errorMsg);
                     }

@@ -255,7 +255,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
                 this.rewritePlan = getFragmentPlan(query);
             } catch (Exception e) {
-                LOG.warn("test rewwrite failed:", e);
+                LOG.warn("test rewrite failed:", e);
                 this.exception = e;
             } finally {
                 if (mv != null && !mv.isEmpty()) {
@@ -267,6 +267,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 }
             }
             return this;
+        }
+
+        Exception getException() {
+            return this.exception;
         }
 
         public MVRewriteChecker ok() {
@@ -359,6 +363,15 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(mv, query, null);
         return fixture.rewrite().nonMatch();
+    }
+
+    protected MVRewriteChecker rewrite(String mv, String query, String properties) throws Exception {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw checker.getException();
+        }
+        return checker;
     }
 
     protected static Table getTable(String dbName, String mvName) {

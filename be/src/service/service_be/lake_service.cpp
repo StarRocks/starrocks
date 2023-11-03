@@ -23,8 +23,10 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
+#include "runtime/load_channel_mgr.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
@@ -147,30 +149,21 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
 
-    auto enable_trace = config::lake_enable_publish_version_trace_log;
     auto start_ts = butil::gettimeofday_us();
     auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
-    Trace* trace = nullptr;
-    scoped_refptr<Trace> trace_gurad;
-
-    if (enable_trace) {
-        trace_gurad = scoped_refptr<Trace>(new Trace());
-        trace = trace_gurad.get();
-        TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0),
-                 request->new_version(), request->tablet_ids_size());
-    }
+    scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
+    Trace* trace = trace_gurad.get();
+    TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
+             request->tablet_ids_size());
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
-            Trace* sub_trace = nullptr;
-            if (enable_trace) {
-                scoped_refptr<Trace> child_trace(new Trace);
-                sub_trace = child_trace.get();
-                trace->AddChildTrace("PublishTablet", sub_trace);
-            }
+            scoped_refptr<Trace> child_trace(new Trace);
+            Trace* sub_trace = child_trace.get();
+            trace->AddChildTrace("PublishTablet", sub_trace);
 
             ADOPT_TRACE(sub_trace);
             TRACE("start publish tablet $0 at thread $1", tablet_id, Thread::current_thread()->tid());
@@ -182,6 +175,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto commit_time = request->commit_time();
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
+            TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
             auto res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, commit_time);
             if (res.ok()) {
                 auto metadata = std::move(res).value();
@@ -213,11 +207,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     latch.wait();
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
-    if (enable_trace && is_slow) {
+    if (config::lake_enable_publish_version_trace_log && is_slow) {
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". cost=" << cost << "us\n" << trace->DumpToString();
     } else if (is_slow) {
         LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
-                  << " cost=" << cost << "us";
+                  << " cost=" << cost << "us, trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }
@@ -280,19 +274,29 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
-    auto thread_pool = abort_txn_thread_pool(_env);
-    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
-    for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&] { latch.count_down(); });
-            auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids);
-        };
-        auto st = thread_pool->submit_func(task);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit abort txn  task: " << st;
-            latch.count_down();
+    LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "] tablets=["
+              << JoinInts(request->tablet_ids(), ",") << "]";
+
+    // Cancel active tasks.
+    if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
+        for (auto txn_id : request->txn_ids()) {
+            load_mgr->abort_txn(txn_id);
         }
+    }
+
+    auto thread_pool = abort_txn_thread_pool(_env);
+    auto latch = BThreadCountDownLatch(1);
+    auto task = [&]() {
+        DeferOp defer([&] { latch.count_down(); });
+        auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
+        for (auto tablet_id : request->tablet_ids()) {
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids);
+        }
+    };
+    auto st = thread_pool->submit_func(task);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to submit abort transaction task: " << st;
+        latch.count_down();
     }
 
     latch.wait();
@@ -488,53 +492,7 @@ void LakeServiceImpl::lock_tablet_metadata(::google::protobuf::RpcController* co
                                            ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-
-    if (!request->has_version()) {
-        cntl->SetFailed("missing version");
-        return;
-    }
-    if (!request->has_tablet_id()) {
-        cntl->SetFailed("missing tablet id");
-        return;
-    }
-    if (!request->has_expire_time()) {
-        cntl->SetFailed("missing expire time");
-        return;
-    }
-
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
-    auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto tablet = _tablet_mgr->get_tablet(request->tablet_id());
-        if (!tablet.ok()) {
-            LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
-            cntl->SetFailed("Fail to get tablet");
-            return;
-        }
-        auto st = tablet->put_tablet_metadata_lock(request->version(), request->expire_time());
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to lock tablet metadata, tablet id: " << request->tablet_id()
-                       << ", version: " << request->version();
-            cntl->SetFailed("Fail to lock tablet metadata");
-            return;
-        }
-        auto tablet_meta = tablet->get_metadata(request->version());
-        // If metadata has been deleted, the request should fail.
-        if (!tablet_meta.ok()) {
-            LOG(ERROR) << "Tablet metadata has been deleted, tablet id: " << request->tablet_id()
-                       << ", version: " << request->version();
-            cntl->SetFailed("Tablet metadata has been deleted");
-        }
-    };
-    auto st = thread_pool->submit_func(task);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit lock tablet metadata task: " << st;
-        cntl->SetFailed(st.get_error_msg());
-        latch.count_down();
-    }
-
-    latch.wait();
+    cntl->SetFailed("does not support lock_tablet_metadata anymore");
 }
 
 void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* controller,
@@ -543,43 +501,7 @@ void LakeServiceImpl::unlock_tablet_metadata(::google::protobuf::RpcController* 
                                              ::google::protobuf::Closure* done) {
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
-    if (!request->has_version()) {
-        cntl->SetFailed("missing version");
-        return;
-    }
-    if (!request->has_tablet_id()) {
-        cntl->SetFailed("missing tablet id");
-        return;
-    }
-    if (!request->has_expire_time()) {
-        cntl->SetFailed("missing expire time");
-        return;
-    }
-
-    auto thread_pool = _env->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
-    auto latch = BThreadCountDownLatch(1);
-    auto task = [&]() {
-        DeferOp defer([&] { latch.count_down(); });
-        auto tablet = _tablet_mgr->get_tablet(request->tablet_id());
-        if (!tablet.ok()) {
-            LOG(ERROR) << "Fail to get tablet " << request->tablet_id();
-            cntl->SetFailed("Fail to get tablet");
-            return;
-        }
-        auto st = tablet->delete_tablet_metadata_lock(request->version(), request->expire_time());
-        if (!st.ok()) {
-            LOG(ERROR) << "Fail to unlock tablet metadata, tablet id: " << request->tablet_id()
-                       << ", version: " << request->version();
-            cntl->SetFailed("Fail to unlock tablet metadata");
-        }
-    };
-    auto st = thread_pool->submit_func(task);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit unlock tablet metadata task: " << st;
-        cntl->SetFailed(st.get_error_msg());
-        latch.count_down();
-    }
-    latch.wait();
+    cntl->SetFailed("does not support unlock_tablet_metadata anymore");
 }
 
 void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* controller,

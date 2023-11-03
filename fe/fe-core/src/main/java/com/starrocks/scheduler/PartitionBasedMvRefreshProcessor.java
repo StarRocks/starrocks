@@ -35,14 +35,12 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -64,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
@@ -1255,10 +1254,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
-                } else if (snapshotTable.isHiveTable() || snapshotTable.isHudiTable()) {
-                    HiveMetaStoreTable snapShotHMSTable = (HiveMetaStoreTable) snapshotTable;
-                    if (snapShotHMSTable.isUnPartitioned()) {
-                        if (!((HiveMetaStoreTable) table).isUnPartitioned()) {
+                } else if (ConnectorPartitionTraits.isSupported(snapshotTable.getType())) {
+                    if (snapshotTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
                             return true;
                         }
                     } else {
@@ -1284,96 +1282,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
                             return true;
                         }
-                    }
-                } else if (snapshotTable.isIcebergTable()) {
-                    IcebergTable snapShotIcebergTable = (IcebergTable) snapshotTable;
-                    if (snapShotIcebergTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // TODO: Support list partition later.
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotIcebergTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
-                            return true;
-                        }
-                    }
-                } else if (snapshotTable.isJDBCTable()) {
-                    JDBCTable snapShotJDBCTable = (JDBCTable) snapshotTable;
-                    if (snapShotJDBCTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // TODO: Support list partition later.
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotJDBCTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
-                            return true;
-                        }
-                    }
-                } else if (snapshotTable.isPaimonTable()) {
-                    PaimonTable snapShotPaimonTable = (PaimonTable) snapshotTable;
-                    if (snapShotPaimonTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // TODO: Support list partition later.
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn =
-                                getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotPaimonTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(snapshotTable, partitionColumn, partitionExpr);
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
-                                getPartitionKeyRange(table, partitionColumn, partitionExpr);
-                        return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
                     }
                 }
             } catch (UserException e) {
