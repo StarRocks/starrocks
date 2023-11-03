@@ -115,11 +115,11 @@ public class ResourceMgr implements Writable {
     }
 
     public void createResource(CreateResourceStmt stmt) throws DdlException {
+        Resource resource = Resource.fromStmt(stmt);
+
         this.writeLock();
         try {
-            Resource resource = Resource.fromStmt(stmt);
             String resourceName = stmt.getResourceName();
-
             String typeName = resource.getType().name().toLowerCase(Locale.ROOT);
             if (resource.needMappingCatalog()) {
                 try {
