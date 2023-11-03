@@ -109,7 +109,8 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
         return partitionColumns;
     }
 
-    public List<String> getPartitionColumnsNames() {
+    @Override
+    public List<String> getPartitionColumnNames() {
         return partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
     }
 

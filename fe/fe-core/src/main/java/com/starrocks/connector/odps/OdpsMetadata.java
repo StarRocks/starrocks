@@ -139,7 +139,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         List<PartitionSpec> partitionSpecs = new ArrayList<>();
         if (partitionKeys != null) {
             for (PartitionKey partitionKey : partitionKeys) {
-                String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnsNames(), partitionKey);
+                String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnNames(), partitionKey);
                 partitionSpecs.add(new PartitionSpec(hivePartitionName));
             }
         }
