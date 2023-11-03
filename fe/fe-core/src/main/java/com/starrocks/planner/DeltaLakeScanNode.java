@@ -54,6 +54,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -138,7 +139,8 @@ public class DeltaLakeScanNode extends ScanNode {
         }
         // use current snapshot now
         Snapshot snapshot = deltaLog.snapshot();
-        preProcessConjuncts(snapshot.getMetadata().getSchema());
+        Metadata metadata = snapshot.getMetadata();
+        preProcessConjuncts(metadata.getSchema());
         List<String> partitionColumnNames = snapshot.getMetadata().getPartitionColumns();
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
@@ -151,7 +153,6 @@ public class DeltaLakeScanNode extends ScanNode {
             List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
                     Collectors.toList());
 
-            Metadata metadata = snapshot.getMetadata();
             PartitionKey partitionKey =
                     PartitionUtil.createPartitionKey(partitionValues, deltaLakeTable.getPartitionColumns(),
                             deltaLakeTable.getType());
@@ -167,7 +168,8 @@ public class DeltaLakeScanNode extends ScanNode {
         if (!partitionKeys.containsKey(partitionKey)) {
             partitionId = nextPartitionId();
             String tableLocation = deltaLakeTable.getTableLocation();
-            Path filePath = new Path(tableLocation, file.getPath());
+            Path p = new Path(URI.create(file.getPath()));
+            Path filePath = new Path(tableLocation, p);
 
             DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
                     new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
@@ -186,7 +188,7 @@ public class DeltaLakeScanNode extends ScanNode {
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
 
-        hdfsScanRange.setRelative_path(new Path(file.getPath()).getName());
+        hdfsScanRange.setRelative_path(new Path(URI.create(file.getPath())).getName());
         hdfsScanRange.setOffset(0);
         hdfsScanRange.setLength(file.getSize());
         hdfsScanRange.setPartition_id(partitionId);
