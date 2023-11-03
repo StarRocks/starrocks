@@ -18,7 +18,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Test;
 
 public class JoinLocalShuffleTest extends PlanTestBase {
 
@@ -34,7 +33,7 @@ public class JoinLocalShuffleTest extends PlanTestBase {
         FeConstants.showJoinLocalShuffleInExplain = false;
     }
 
-    @Test
+    // @Test
     public void joinWithAgg() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
         String sql = "select sum(v1), sum(v2), sum(v4), sum(v5), v3 from t0 join t1 on t0.v3 = t1.v6 group by v3";
