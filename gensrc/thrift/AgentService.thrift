@@ -86,6 +86,7 @@ struct TBinlogConfig {
 // don't forget to also add type to PersistentIndexTypePB
 enum TPersistentIndexType {
     LOCAL = 0
+    CLOUD_NATIVE = 1
 }
 
 struct TCreateTabletReq {
