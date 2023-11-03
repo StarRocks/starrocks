@@ -446,7 +446,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 output.append("\n");
             }
 
-            if (!FeConstants.runningUnitTest || FeConstants.showJoinLocalShuffleInExplain) {
+            if (FeConstants.showJoinLocalShuffleInExplain) {
                 output.append(detailPrefix).append("can local shuffle: " + canLocalShuffle + "\n");
             }
         }
