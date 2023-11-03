@@ -161,6 +161,5 @@ VALUES
 select v1 from (select * from (select v1,sum(v2) from t0 group by v1  union all select null as v1,null ) t) temp where v1 = 1
 [result]
 AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1]] having [null]
-    AGGREGATE ([LOCAL] aggregate [{}] group by [[1: v1]] having [null]
-        SCAN (columns[1: v1] predicate[1: v1 = 1])
+    SCAN (columns[1: v1] predicate[1: v1 = 1])
 [end]

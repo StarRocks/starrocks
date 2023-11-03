@@ -1018,7 +1018,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
-    private int newPlannerAggStage = 0;
+    private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
