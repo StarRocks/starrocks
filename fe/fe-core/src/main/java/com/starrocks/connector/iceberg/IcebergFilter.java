@@ -49,7 +49,7 @@ public class IcebergFilter {
         return snapshotId == that.snapshotId &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
-                predicate.equals(that.predicate);
+                predicate.equivalent(that.predicate);
     }
 
     @Override
