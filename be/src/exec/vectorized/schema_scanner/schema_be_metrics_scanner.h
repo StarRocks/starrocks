@@ -36,12 +36,18 @@ public:
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos) override;
 
 private:
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_metrics_scanner.h
     Status fill_chunk(vectorized::ChunkPtr* chunk);
 
     int64_t _be_id{0};
     std::vector<MetricsInfo> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
+=======
+    bool _maybe_duplicated_keys;
+    std::vector<SlotId> _arguments_ids;
+    bool _is_prepared = false;
+>>>>>>> 0d83a4174e ([BugFix] Expr prepare() should do only once (#34060)):be/src/exprs/map_apply_expr.h
 };
 
 } // namespace starrocks
