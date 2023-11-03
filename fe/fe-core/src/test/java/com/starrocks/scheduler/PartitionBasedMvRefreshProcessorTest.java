@@ -2860,7 +2860,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         List<String> partitions =
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
+                "p20230803_99991231"), partitions);
 
         starRocksAssert.dropMaterializedView(mvName);
     }

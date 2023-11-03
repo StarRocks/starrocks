@@ -53,7 +53,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
-                "'replication_num' = '1'" +
+                "'replication_num' = '1'," +
+                "'query_rewrite_consistency' = 'loose'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
                 " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
@@ -67,7 +68,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
         List<String> partitions =
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802",
+                "p20230802_20230803", "p20230803_99991231"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -80,7 +82,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 16: d = '20230801'\n" +
-                    "     partitions=1/3");
+                    "     partitions=1/4");
         }
 
         {
@@ -94,7 +96,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 16: d >= '20230801'\n" +
-                    "     partitions=3/3\n" +
+                    "     partitions=3/4\n" +
                     "     rollup: test_mv1");
         }
 
@@ -108,7 +110,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=1/3\n" +
+                    "     partitions=2/4\n" +
                     "     rollup: test_mv1");
         }
 
@@ -117,7 +119,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
 
     @Test
     public void testStr2DateMVRefreshRewrite_InnerJoin_PartialRefresh() throws Exception {
-        String mvName = "test_mv1";
+        String mvName = "test_mv2";
         starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
                 "partition by str2date(d,'%Y%m%d') " +
                 "distributed by hash(a) " +
@@ -148,7 +150,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d " +
                     " where t1.d='20230801';";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertNotContains(plan, "test_mv2");
         }
 
         starRocksAssert.dropMaterializedView(mvName);
@@ -157,13 +159,14 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
 
     @Test
     public void testStr2DateMVRefreshRewrite_LeftJoin_FullRefresh() throws Exception {
-        String mvName = "test_mv1";
+        String mvName = "test_mv3";
         starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
                 "partition by str2date(d,'%Y%m%d') " +
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
-                "'replication_num' = '1'" +
+                "'replication_num' = '1'," +
+                "'query_rewrite_consistency' = 'loose'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
                 " from  jdbc0.partitioned_db0.part_tbl1 as t1 " +
@@ -177,7 +180,8 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
         List<String> partitions =
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
-        Assert.assertEquals(Arrays.asList("p20230801_20230802", "p20230802_20230803", "p20230803_20230804"), partitions);
+        Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
+                "p20230803_99991231"), partitions);
 
         {
             String query = "select  t1.a, t2.b, t3.c, t1.d " +
@@ -187,10 +191,10 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " where t1.d='20230801';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
-                    "     TABLE: test_mv1\n" +
+                    "     TABLE: test_mv3\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 16: d = '20230801'\n" +
-                    "     partitions=1/3");
+                    "     partitions=1/4");
         }
 
         {
@@ -201,11 +205,11 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " where t1.d>='20230801';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
-                    "     TABLE: test_mv1\n" +
+                    "     TABLE: test_mv3\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 16: d >= '20230801'\n" +
-                    "     partitions=3/3\n" +
-                    "     rollup: test_mv1");
+                    "     partitions=3/4\n" +
+                    "     rollup: test_mv3");
         }
 
         {
@@ -216,10 +220,10 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " where t1.d < '20230802';";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
-                    "     TABLE: test_mv1\n" +
+                    "     TABLE: test_mv3\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     partitions=1/3\n" +
-                    "     rollup: test_mv1");
+                    "     partitions=2/4\n" +
+                    "     rollup: test_mv3");
         }
 
         starRocksAssert.dropMaterializedView(mvName);
@@ -227,7 +231,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
 
     @Test
     public void testStr2DateMVRefreshRewrite_LeftJoin_PartialRefresh() throws Exception {
-        String mvName = "test_mv1";
+        String mvName = "test_mv4";
         starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
                 "partition by str2date(d,'%Y%m%d') " +
                 "distributed by hash(a) " +
@@ -258,7 +262,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                     " inner join jdbc0.partitioned_db0.part_tbl3 t3 on t1.d=t3.d " +
                     " where t1.d='20230801';";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertNotContains(plan, "test_mv4");
         }
 
         starRocksAssert.dropMaterializedView(mvName);

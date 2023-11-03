@@ -164,8 +164,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         try (Connection connection = getConnection()) {
             List<Partition> partitions = schemaResolver.getPartitions(connection, table);
-            String minInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
-            String minDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+            String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
+            String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
 
             ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
             if (!partitions.isEmpty()) {
@@ -176,7 +176,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                     }
                     // Determine boundary value
                     if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
-                        if (partitionNames.contains(minInt) || partitionNames.contains(minDate)) {
+                        if (partitionNames.contains(maxInt) || partitionNames.contains(maxDate)) {
                             list.add(partition);
                         }
                     }
