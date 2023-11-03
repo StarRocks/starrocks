@@ -1767,13 +1767,13 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  <slot 22> : 22\n" +
                 "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, 32: S_NATIONKEY) " +
                 "AS VARCHAR))\n" +
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
-                "  4:Decode\n" +
+                "  5:Decode\n" +
                 "  |  <dict id 40> : <string id 22>");
     }
 
@@ -1808,12 +1808,12 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, 32: S_NATIONKEY) " +
                 "AS VARCHAR))\n" +
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
-                "  4:Decode\n" +
+                "  5:Decode\n" +
                 "  |  <dict id 40> : <string id 22>");
     }
 
