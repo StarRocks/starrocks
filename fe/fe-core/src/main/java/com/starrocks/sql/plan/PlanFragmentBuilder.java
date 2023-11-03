@@ -49,6 +49,7 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
@@ -195,6 +196,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1175,10 +1177,15 @@ public class PlanFragmentBuilder {
                     odpsScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
-                odpsScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
+                ScanOperatorPredicates scanOperatorPredicates = node.getScanOperatorPredicates();
+                Collection<Long> selectedPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
+                List<PartitionKey> partitionKeys =
+                        selectedPartitionIds.stream().map(id -> scanOperatorPredicates.getIdToPartitionKey().get(id))
+                                .collect(Collectors.toList());
+                odpsScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), partitionKeys);
                 HDFSScanNodePredicates scanNodePredicates = odpsScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
-                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, scanOperatorPredicates, context);
+                prepareCommonExpr(scanNodePredicates, scanOperatorPredicates, context);
             } catch (Exception e) {
                 LOG.warn("Odps scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);

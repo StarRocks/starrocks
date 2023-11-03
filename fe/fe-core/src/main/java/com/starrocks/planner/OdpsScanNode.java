@@ -82,13 +82,9 @@ public class OdpsScanNode extends ScanNode {
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
-    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, List<PartitionKey> partitionKeys) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
-        Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
-        List<PartitionKey> partitionKeys =
-                selectedPartitionIds.stream().map(id -> scanNodePredicates.getIdToPartitionKey().get(id))
-                        .collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 table.getCatalogName(), table, partitionKeys, -1, predicate, fieldNames, -1);
         RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);

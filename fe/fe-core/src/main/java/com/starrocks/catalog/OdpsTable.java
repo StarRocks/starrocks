@@ -146,8 +146,8 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
                 fullSchema.size(), 0, getName(), getProjectName());
         THdfsTable hdfsTable = new THdfsTable();
         hdfsTable.setColumns(getColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
-        hdfsTable.setPartition_columns(
-                getPartitionColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
+        // for be, partition column is equals to data column
+        hdfsTable.setPartition_columnsIsSet(false);
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
     }
