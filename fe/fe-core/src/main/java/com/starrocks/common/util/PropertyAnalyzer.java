@@ -927,7 +927,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                    uniqueConstraint -> parentTable.getName().equals(uniqueConstraint.getTableName()))
+                    uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 
