@@ -106,7 +106,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName) {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         for (Partition partition : odps.tables().get(databaseName, tableName).getPartitions()) {
-            builder.add(partition.getPartitionSpec().toString());
+            builder.add(partition.getPartitionSpec().toString(false, true));
         }
         return builder.build();
     }
@@ -137,9 +137,11 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         }
         List<PartitionSpec> partitionSpecs = new ArrayList<>();
-        for (PartitionKey partitionKey : partitionKeys) {
-            String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnsNames(), partitionKey);
-            partitionSpecs.add(new PartitionSpec(hivePartitionName));
+        if (partitionKeys != null) {
+            for (PartitionKey partitionKey : partitionKeys) {
+                String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnsNames(), partitionKey);
+                partitionSpecs.add(new PartitionSpec(hivePartitionName));
+            }
         }
         try {
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
