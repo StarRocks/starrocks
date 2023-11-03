@@ -2367,10 +2367,6 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
-            PhysicalPropertySet outputProperty = optExpr.getOutputProperty();
-            if (outputProperty != null && outputProperty.getDistributionProperty().isAny()) {
-                joinNode.setCanLocalShuffle(true);
-            }
             if (node.getCanLocalShuffle()) {
                 joinNode.setCanLocalShuffle(true);
             }
