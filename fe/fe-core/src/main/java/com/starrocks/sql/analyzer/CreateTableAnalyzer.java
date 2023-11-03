@@ -169,7 +169,7 @@ public class CreateTableAnalyzer {
                 for (String column : statement.getSortKeys()) {
                     int idx = columnNames.indexOf(column);
                     if (idx == -1) {
-                        throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                        throw new SemanticException("Unknown column '%s' does not exist", column);
                     }
                     sortKeyIdxes.add(idx);
                 }
