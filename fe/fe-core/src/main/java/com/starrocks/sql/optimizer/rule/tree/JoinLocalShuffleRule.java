@@ -40,11 +40,12 @@ public class JoinLocalShuffleRule implements TreeRewriteRule {
         }
 
         @Override
-        public Void visitPhysicalHashAggregate(OptExpression opt, TaskContext context) {
-            PhysicalHashAggregateOperator op = (PhysicalHashAggregateOperator) opt.getOp();
-            // local agg + join, then this join can use local shuffle.
-            if (op.getType().isLocal()) {
-                Operator childOp = opt.getInputs().get(0).getOp();
+        public Void visitPhysicalDistribution(OptExpression opt, TaskContext context) {
+            Operator op = opt.getInputs().get(0).getOp();
+            // exchange + local agg + join, then this join can use local shuffle.
+            if ((op instanceof PhysicalHashAggregateOperator) &&
+                    ((PhysicalHashAggregateOperator) op).getType().isLocal()) {
+                Operator childOp = opt.getInputs().get(0).getInputs().get(0).getOp();
                 if (childOp instanceof PhysicalJoinOperator) {
                     PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) childOp;
                     joinOperator.setCanLocalShuffle(true);

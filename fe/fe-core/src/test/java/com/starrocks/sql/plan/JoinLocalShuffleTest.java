@@ -16,25 +16,23 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
-import org.junit.After;
-import org.junit.Before;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class JoinLocalShuffleTest extends PlanTestBase {
-    int aggState = 0;
 
-    @Before
-    public void setup() {
-        SessionVariable sv = connectContext.getSessionVariable();
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+        FeConstants.runningUnitTest = true;
         FeConstants.showJoinLocalShuffleInExplain = true;
-        aggState = sv.getNewPlannerAggStage();
     }
 
-    @After
-    public void teardown() {
-        SessionVariable sv = connectContext.getSessionVariable();
+    @AfterClass
+    public static void afterClass() {
+        PlanTestBase.afterClass();
         FeConstants.showJoinLocalShuffleInExplain = false;
-        sv.setNewPlanerAggStage(aggState);
     }
 
     @Test
@@ -51,5 +49,6 @@ public class JoinLocalShuffleTest extends PlanTestBase {
             String plan = getVerboseExplain(sql);
             assertContains(plan, "  |  can local shuffle: true");
         }
+        sv.setNewPlanerAggStage(0);
     }
 }
