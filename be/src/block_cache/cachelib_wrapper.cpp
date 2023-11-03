@@ -87,6 +87,18 @@ Status CacheLibWrapper::read_buffer(const std::string& key, size_t off, size_t s
     return Status::OK();
 }
 
+Status CacheLibWrapper::read_buffer(const std::string& key, IOBuffer* buffer, ReadCacheOptions* options) {
+    auto handle = _cache->find(key);
+    if (!handle) {
+        return Status::NotFound("not found cachelib item");
+    }
+    size_t size = handle->getSize();
+    void* data = malloc(size);
+    strings::memcpy_inlined(data, (char*)handle->getMemory(), size);
+    buffer->append_user_data(data, size, nullptr);
+    return Status::OK();
+}
+
 Status CacheLibWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();

@@ -91,6 +91,8 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_datacache = config::datacache_enable;
+    _use_file_metacache = config::datacache_enable;
+    _use_file_pagecache = config::datacache_enable;
     if (state->query_options().__isset.enable_scan_datacache) {
         _use_datacache &= state->query_options().enable_scan_datacache;
     }
@@ -98,7 +100,18 @@ Status HiveDataSource::open(RuntimeState* state) {
         _enable_populate_datacache = state->query_options().enable_populate_datacache;
     }
     if (state->query_options().__isset.enable_hdfs_file_metacache) {
-        _use_file_metacache = state->query_options().enable_hdfs_file_metacache;
+        _use_file_metacache &= state->query_options().enable_hdfs_file_metacache;
+    }
+    if (state->query_options().__isset.enable_file_pagecache) {
+        _use_file_pagecache &= state->query_options().enable_file_pagecache;
+    }
+    if (state->query_options().__isset.datacache_populate_probability) {
+        _datacache_populate_probability = state->query_options().datacache_populate_probability;
+    }
+
+    // TODO: it may be delete later
+    if (_use_file_pagecache) {
+        _use_datacache = false;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -535,6 +548,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
     scanner_params.use_file_metacache = _use_file_metacache;
+    scanner_params.use_file_pagecache = _use_file_pagecache;
+    scanner_params.datacache_populate_probability = _datacache_populate_probability;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

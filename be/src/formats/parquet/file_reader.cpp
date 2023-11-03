@@ -72,9 +72,10 @@ void FileReader::_build_metacache_key() {
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
-    if (ctx->use_file_metacache && config::datacache_enable) {
+    if (ctx->use_file_metacache) {
         _build_metacache_key();
         _cache = BlockCache::instance();
+        _write_options.write_probability = ctx->datacache_populate_probability;
     }
     RETURN_IF_ERROR(_get_footer());
 
@@ -170,7 +171,8 @@ Status FileReader::_get_footer() {
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
         auto deleter = [file_metadata]() { delete file_metadata; };
-        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle);
+        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle,
+                                         &_write_options);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
@@ -518,6 +520,9 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = nullptr;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
+    _group_reader_param.file_size = _file_size;
+    _group_reader_param.file_mtime = _file_mtime;
+    _group_reader_param.use_file_pagecache = fd_scanner_ctx.use_file_pagecache;
     _group_reader_param.file_metadata = _file_metadata;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
 

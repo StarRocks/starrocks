@@ -53,6 +53,16 @@ struct HdfsScanStats {
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
+    int64_t page_read_bytes = 0;
+    int64_t page_read_bytes_uncompressed = 0;
+    int64_t page_read_count = 0;
+    int64_t pagecache_read_ns = 0;
+    int64_t pagecache_read_bytes = 0;
+    int64_t pagecache_read_count = 0;
+    int64_t pagecache_write_ns = 0;
+    int64_t pagecache_write_bytes = 0;
+    int64_t pagecache_write_count = 0;
+
     // reader init
     int64_t footer_read_ns = 0;
     int64_t footer_cache_read_ns = 0;
@@ -191,6 +201,8 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
+    bool use_file_pagecache = false;
+    int32_t datacache_populate_probability = 0;
 };
 
 struct HdfsScannerContext {
@@ -240,6 +252,10 @@ struct HdfsScannerContext {
     bool can_use_min_max_count_opt = false;
 
     bool use_file_metacache = false;
+
+    bool use_file_pagecache = false;
+
+    int32_t datacache_populate_probability = 0;
 
     std::string timezone;
 
