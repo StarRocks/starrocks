@@ -234,6 +234,8 @@ struct TQueryOptions {
   107: optional bool enable_hdfs_file_metacache;
 
   110: optional TQueryQueueOptions query_queue_options;
+  111: optional bool enable_file_pagecache;
+  112: optional i32 datacache_populate_probability;
 }
 
 
