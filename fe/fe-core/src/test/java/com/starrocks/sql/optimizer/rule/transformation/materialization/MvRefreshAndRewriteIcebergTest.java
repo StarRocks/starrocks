@@ -19,7 +19,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,10 +34,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
         MvRewriteTestBase.beforeClass();
     }
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-    }
-
     @Test
     public void testStr2DateMVRefreshRewrite_InnerJoin_FullRefresh() throws Exception {
         String mvName = "test_mv1";
@@ -47,7 +42,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
-                "\"force_external_table_query_rewrite\" = \"false\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
