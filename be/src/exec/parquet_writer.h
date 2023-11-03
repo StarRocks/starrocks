@@ -42,7 +42,7 @@ struct TableInfo {
     bool enable_dictionary = true;
     std::string partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> schema;
-    int64_t max_file_size = 1024 * 1024 * 1024; // 1GB
+    int64_t max_file_size = 128 * 1024 * 1024;
     TCloudConfiguration cloud_conf;
 };
 
