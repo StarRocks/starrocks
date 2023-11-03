@@ -793,10 +793,10 @@ public class SubqueryTest extends PlanTestBase {
             String sql = "select * from t0 " +
                     "join t1 on (select v1 from t0,t2 where t0.v2 = t1.v5 and t0.v2 = t2.v7) * 2 = t1.v4";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  15:NESTLOOP JOIN\n" +
+            assertContains(plan, "  16:NESTLOOP JOIN\n" +
                     "  |  join op: CROSS JOIN\n" +
                     "  |  colocate: false, reason: ");
-            assertContains(plan, "10:HASH JOIN\n" +
+            assertContains(plan, "11:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v2");
