@@ -14,24 +14,42 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 public class JoinLocalShuffleTest extends PlanTestBase {
+    int aggState = 0;
+
+    @Before
+    public void setup() {
+        SessionVariable sv = connectContext.getSessionVariable();
+        FeConstants.showJoinLocalShuffleInExplain = true;
+        aggState = sv.getNewPlannerAggStage();
+    }
+
+    @After
+    public void teardown() {
+        SessionVariable sv = connectContext.getSessionVariable();
+        FeConstants.showJoinLocalShuffleInExplain = false;
+        sv.setNewPlanerAggStage(aggState);
+    }
+
     @Test
     public void joinWithAgg() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
-        int agg = sv.getNewPlannerAggStage();
         String sql = "select sum(v1), sum(v2), sum(v4), sum(v5), v3 from t0 join t1 on t0.v3 = t1.v6 group by v3";
         {
             sv.setNewPlanerAggStage(1);
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  |  can local shuffle output: false");
+            assertContains(plan, "  |  can local shuffle: false");
         }
         {
             sv.setNewPlanerAggStage(2);
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  |  can local shuffle output: true");
+            assertContains(plan, "  |  can local shuffle: true");
         }
     }
 }
