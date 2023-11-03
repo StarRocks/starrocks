@@ -16,7 +16,12 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD:be/src/service/service_cn/compute_service.cpp
 ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
+=======
+#include <cstddef>
+#include <vector>
+>>>>>>> 2a51cf89f9 ([BugFix] Fix select ORC MapVector's filter nullptr bug (#34267)):be/src/storage/lake/key_index.h
 
 ComputeService::~ComputeService() = default;
 
