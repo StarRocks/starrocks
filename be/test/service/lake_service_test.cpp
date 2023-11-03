@@ -1266,7 +1266,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
     }
 
     auto tablet_schema = TabletSchema::create(metadata->schema());
-    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+    auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*tablet_schema));
 
     auto generate_data = [=](int64_t chunk_size) -> Chunk {
         std::vector<int> v0(chunk_size);
