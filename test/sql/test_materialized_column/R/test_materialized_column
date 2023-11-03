@@ -345,7 +345,11 @@ E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns.')
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_1.')
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (incr);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 BIGINT AS (sum(id));
 -- result:
@@ -384,7 +388,7 @@ E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS (mc_2);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns.')
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_2.')
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 BIGINT AS (sum(id));
 -- result:
@@ -392,7 +396,7 @@ E: (1064, "Getting analyzing error. Detail message: Generated Column don't suppo
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 BIGINT AS (incr);
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns.')
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 BIGINT KEY AS (id);
 -- result:
