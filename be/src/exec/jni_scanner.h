@@ -37,6 +37,12 @@ public:
     [[nodiscard]] Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     bool is_jni_scanner() override { return true; }
 
+protected:
+    [[nodiscard]] Status fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
+                                          const std::vector<SlotDescriptor*>& slot_desc_list);
+
+    Filter _chunk_filter;
+
 private:
     struct FillColumnArgs {
         long num_rows;
@@ -75,7 +81,9 @@ private:
 
     [[nodiscard]] Status _fill_column(FillColumnArgs* args);
 
-    [[nodiscard]] Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk);
+    // fill chunk according to slot_desc_list(with or without partition columns)
+    [[nodiscard]] Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk,
+                                     const std::vector<SlotDescriptor*>& slot_desc_list);
 
     [[nodiscard]] Status _release_off_heap_table(JNIEnv* _jni_env);
 
@@ -89,7 +97,6 @@ private:
 
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
-    Filter _chunk_filter;
 
 private:
     long* _chunk_meta_ptr;
@@ -101,5 +108,12 @@ private:
     }
     void* next_chunk_meta_as_ptr() { return reinterpret_cast<void*>(_chunk_meta_ptr[_chunk_meta_index++]); }
     long next_chunk_meta_as_long() { return _chunk_meta_ptr[_chunk_meta_index++]; }
+};
+
+class HiveJniScanner : public JniScanner {
+public:
+    HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
+            : JniScanner(std::move(factory_class), std::move(params)) {}
+    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
 } // namespace starrocks
