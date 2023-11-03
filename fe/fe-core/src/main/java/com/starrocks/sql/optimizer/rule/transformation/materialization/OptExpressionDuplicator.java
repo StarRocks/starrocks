@@ -289,16 +289,16 @@ public class OptExpressionDuplicator {
             EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
 
             EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(), equivDesc.getPartitionIds());
-            updateDistributionUnionFind(equivDesc.getNullStrictUnionFind());
-            updateDistributionUnionFind(equivDesc.getNullRelaxUnionFind());
+            updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
+            updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
 
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
         }
 
-        public void updateDistributionUnionFind(UnionFind<DistributionCol> unionFind) {
-            UnionFind<DistributionCol> tmp = unionFind.copy();
-            unionFind.clear();
-            for (Set<DistributionCol> distributionColSet : tmp.getAllGroups()) {
+        private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,
+                                                UnionFind<DistributionCol> oldUnionFind) {
+
+            for (Set<DistributionCol> distributionColSet : oldUnionFind.getAllGroups()) {
                 DistributionCol first = null;
                 for (DistributionCol next : distributionColSet) {
                     if (first == null) {
@@ -309,7 +309,7 @@ public class OptExpressionDuplicator {
 
                     ColumnRefOperator nextCol = columnRefFactory.getColumnRef(next.getColId());
                     ColumnRefOperator newNextCol = columnMapping.get(nextCol).cast();
-                    unionFind.union(first.updateColId(newFirstCol.getId()), next.updateColId(newNextCol.getId()));
+                    newUnionFind.union(first.updateColId(newFirstCol.getId()), next.updateColId(newNextCol.getId()));
                 }
             }
         }
