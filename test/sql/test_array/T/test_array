@@ -58,4 +58,46 @@ select * from array_data_type_1 where c4 = cast(c4 as array<char(10)>);
 select * from array_data_type_1 where c5 = c4 or c6 = [['a']];
 select * from array_data_type_1 where array_map((x) -> concat(x, 'a'), c5) = c4;
 select c6[0] = ['a'] from array_data_type_1;
+<<<<<<< HEAD
 select c6[0] > array_map((x) -> concat(x, 'a'), c5) from array_data_type_1;
+=======
+select c6[0] > array_map((x) -> concat(x, 'a'), c5) from array_data_type_1;
+
+-- name: testArrayTopN
+CREATE TABLE array_top_n
+    (c1 int,
+    c2 array<int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_top_n values
+(1, [1]),
+(2, [5, 6]),
+(3, [2, 3, 4]),
+(4, [12, 13, 14, 15]),
+(5, [7, 8, 9, 10, 11]);
+
+select * from array_top_n order by c2[1];
+select * from array_top_n order by c2[1] limit 1,10;
+select * from array_top_n order by c2[1] limit 2,10;
+select * from array_top_n order by c2[1] limit 3,10;
+select * from array_top_n order by c2[1] limit 4,10;
+select * from array_top_n order by c2[1] limit 5,10;
+
+-- name: testArrayExpr
+CREATE TABLE array_exprr
+    (
+    c1 int not null,
+    c2 int not null
+    )
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_exprr SELECT generate_series, generate_series FROM TABLE(generate_series(1,  13336));
+
+select count([CAST(if(c2 is null, c1 + c2, 0) as DECIMAL128(38,0)) + if(c1 is null, c2 ,0)] is null) from array_exprr;
+>>>>>>> 05cb6aa759 ([BugFix] Fix array expr meet constant-column error (#34204))

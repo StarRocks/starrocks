@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test01
+=======
+-- name: test_array_test01
+>>>>>>> 05cb6aa759 ([BugFix] Fix array expr meet constant-column error (#34204))
 select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
 -- result:
 []	[]	["abc"]	[123.0,null,1.0]	["abc",null]
@@ -90,6 +94,28 @@ CREATE TABLE array_data_type_1
     buckets 1
     PROPERTIES ("replication_num" = "1");
 -- result:
+<<<<<<< HEAD
+=======
+[4,12]	None
+[4,12]	[88,44,132]
+[4,12]	[88,44,132]
+[4,12]	None
+[4,12]	[88,44,132]
+-- !result
+-- name: testArrayVarchar
+CREATE TABLE array_data_type_1
+    (c1 int,
+    c2  array<datetime>,
+    c3  array<float>,
+    c4  array<varchar(10)>,
+    c5  array<varchar(20)>,
+    c6  array<array<varchar(10)>>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+-- result:
+>>>>>>> 05cb6aa759 ([BugFix] Fix array expr meet constant-column error (#34204))
 -- !result
 insert into array_data_type_1 values
 (1, ['2020-11-11', '2021-11-11', '2022-01-01'], [1.23, 1.35, 2.7894], ['a', 'b'], ['sss', 'eee', 'fff'], [['a', 'b']]),
@@ -109,7 +135,10 @@ select * from array_data_type_1 where c4 = ['a'] or c6 != [['a', 'b']];
 select * from array_data_type_1 where c4 = cast(c4 as array<char(10)>);
 -- result:
 1	["2020-11-11 00:00:00","2021-11-11 00:00:00","2022-01-01 00:00:00"]	[1.23,1.35,2.7894]	["a","b"]	["sss","eee","fff"]	[["a","b"]]
+<<<<<<< HEAD
 2	["2020-01-11 00:00:00",null,"2022-11-01 00:00:00"]	[2.23,2.35,3.7894]	["aa",null]	["ssss","eeee",null]	[["a",null],null]
+=======
+>>>>>>> 05cb6aa759 ([BugFix] Fix array expr meet constant-column error (#34204))
 -- !result
 select * from array_data_type_1 where c5 = c4 or c6 = [['a']];
 -- result:
@@ -128,4 +157,77 @@ select c6[0] > array_map((x) -> concat(x, 'a'), c5) from array_data_type_1;
 None
 None
 None
+<<<<<<< HEAD
+=======
+-- !result
+-- name: testArrayTopN
+CREATE TABLE array_top_n
+    (c1 int,
+    c2 array<int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into array_top_n values
+(1, [1]),
+(2, [5, 6]),
+(3, [2, 3, 4]),
+(4, [12, 13, 14, 15]),
+(5, [7, 8, 9, 10, 11]);
+-- result:
+-- !result
+select * from array_top_n order by c2[1];
+-- result:
+1	[1]
+3	[2,3,4]
+2	[5,6]
+5	[7,8,9,10,11]
+4	[12,13,14,15]
+-- !result
+select * from array_top_n order by c2[1] limit 1,10;
+-- result:
+3	[2,3,4]
+2	[5,6]
+5	[7,8,9,10,11]
+4	[12,13,14,15]
+-- !result
+select * from array_top_n order by c2[1] limit 2,10;
+-- result:
+2	[5,6]
+5	[7,8,9,10,11]
+4	[12,13,14,15]
+-- !result
+select * from array_top_n order by c2[1] limit 3,10;
+-- result:
+5	[7,8,9,10,11]
+4	[12,13,14,15]
+-- !result
+select * from array_top_n order by c2[1] limit 4,10;
+-- result:
+4	[12,13,14,15]
+-- !result
+select * from array_top_n order by c2[1] limit 5,10;
+-- result:
+-- !result
+-- name: testArrayExpr
+CREATE TABLE array_exprr
+    (
+    c1 int not null,
+    c2 int not null
+    )
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into array_exprr SELECT generate_series, generate_series FROM TABLE(generate_series(1,  13336));
+-- result:
+-- !result
+select count([CAST(if(c2 is null, c1 + c2, 0) as DECIMAL128(38,0)) + if(c1 is null, c2 ,0)] is null) from array_exprr;
+-- result:
+13336
+>>>>>>> 05cb6aa759 ([BugFix] Fix array expr meet constant-column error (#34204))
 -- !result
