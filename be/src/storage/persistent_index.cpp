@@ -3027,8 +3027,8 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
 }
 
 bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_meta) {
-    if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
-        index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
+    if (index_meta.l0_meta().format_version() != PERSISTENT_INDEX_VERSION_2 &&
+        index_meta.l0_meta().format_version() != PERSISTENT_INDEX_VERSION_3) {
         // If format version is not equal to PERSISTENT_INDEX_VERSION_3, this maybe upgrade from
         // PERSISTENT_INDEX_VERSION_2.
         // We need to rebuild persistent index because the meta structure is changed
