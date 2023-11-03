@@ -1438,8 +1438,9 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
         for (AlterClause alterClause : alterClauses) {
-            Map<String, String> properties = new CaseInsensitiveMap<>(alterClause.getProperties());
+            Map<String, String> properties = alterClause.getProperties();
             if (properties != null) {
+                properties = new CaseInsensitiveMap<>(properties);
                 if (propertyMap.isEmpty()) {
                     propertyMap.putAll(properties);
                 } else {
