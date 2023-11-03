@@ -332,11 +332,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("34:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("33:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
-                "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
-                "127: concat, 9: upc, 108: upc_desc"));
+                "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, 127: concat, 9: upc, 108: upc_desc"));
     }
 
     @Test
@@ -597,11 +597,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testHiveTPCH02UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  11:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [24: n_regionkey, INT, true] = [26: r_regionkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 1, build_expr = (26: r_regionkey), remote = false\n" +
+                "  |  - filter_id = 0, build_expr = (26: r_regionkey), remote = false\n" +
                 "  |  output columns: 22, 23\n" +
                 "  |  cardinality: 23"));
     }
@@ -640,7 +640,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_catalog"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 17: ps_partkey = 1: p_partkey"));
