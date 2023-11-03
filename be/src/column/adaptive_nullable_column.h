@@ -272,6 +272,9 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
+    void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
+                                       uint32_t size) override;
+
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override;
