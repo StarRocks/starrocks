@@ -272,7 +272,15 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (indexMeta.keysType != this.keysType) {
             return false;
         }
-        return indexMeta.whereClause == this.whereClause;
+        if (indexMeta.whereClause != null && this.whereClause == null) {
+            return false;
+        } else if (indexMeta.whereClause == null && this.whereClause != null) {
+            return false;
+        } else if (indexMeta.whereClause != null && this.whereClause != null &&
+                !indexMeta.whereClause.equals(this.whereClause)) {
+            return false;
+        }
+        return true;
     }
 
     @Override

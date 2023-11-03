@@ -324,7 +324,6 @@ public class OlapTableSink extends DataSink {
                     descMap.put(slot.getColumn().getName(), slot);
                 }
 
-
                 Expr whereClause = indexMeta.getWhereClause().clone();
                 List<SlotRef> slots = Lists.newArrayList();
                 whereClause.collect(SlotRef.class, slots);
@@ -368,7 +367,9 @@ public class OlapTableSink extends DataSink {
                 whereClause = Expr.analyzeAndCastFold(whereClause);
 
                 indexSchema.setWhere_clause(whereClause.treeToThrift());
-                LOG.info("OlapTableSink Where clause: {}", whereClause.explain());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("OlapTableSink Where clause: {}", whereClause.explain());
+                }
             }
         }
         return schemaParam;
