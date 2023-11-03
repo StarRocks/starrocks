@@ -37,14 +37,12 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
-public class OdpsTable extends Table {
+public class OdpsTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(OdpsTable.class);
 
     private static final String TABLE = "table";
     private static final String PROJECT = "project";
     public static final String PARTITION_NULL_VALUE = "null";
-
-    public static final String ODPS_TABLENAME = "odps_tablename";
 
     @SerializedName(value = "tn")
     private String tableName;
@@ -53,6 +51,7 @@ public class OdpsTable extends Table {
     private String catalogName;
     @SerializedName(value = "dn")
     private String dbName;
+    private List<Column> dataColumns;
     private List<Column> partitionColumns;
     private com.aliyun.odps.Table odpsTable;
 
@@ -71,10 +70,17 @@ public class OdpsTable extends Table {
         this.partitionColumns =
                 odpsTable.getSchema().getPartitionColumns().stream().map(EntityConvertUtils::convertColumn).collect(
                         Collectors.toList());
+        this.dataColumns = fullSchema;
+        this.fullSchema.addAll(partitionColumns);
     }
 
     public String getProjectName() {
         return dbName;
+    }
+
+    @Override
+    public String getResourceName() {
+        return tableName;
     }
 
     @Override
@@ -86,12 +92,23 @@ public class OdpsTable extends Table {
         return dbName;
     }
 
+    @Override
     public String getTableName() {
         return tableName;
     }
 
+    @Override
+    public List<String> getDataColumnNames() {
+        return dataColumns.stream().map(Column::getName).collect(Collectors.toList());
+    }
+
+    @Override
     public List<Column> getPartitionColumns() {
         return partitionColumns;
+    }
+
+    public List<String> getPartitionColumnsNames() {
+        return partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
     }
 
     @Override
@@ -104,7 +121,7 @@ public class OdpsTable extends Table {
 
     @Override
     public boolean isUnPartitioned() {
-        return true;
+        return partitionColumns.isEmpty();
     }
 
     public String getProperty(String propertyKey) {

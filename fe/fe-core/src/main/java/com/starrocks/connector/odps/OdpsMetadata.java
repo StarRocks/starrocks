@@ -17,6 +17,7 @@ package com.starrocks.connector.odps;
 import com.aliyun.odps.Column;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.Partition;
+import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
@@ -51,6 +52,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public class OdpsMetadata implements ConnectorMetadata {
 
@@ -110,12 +113,10 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+        OdpsTable odpsTable = (OdpsTable) table;
         ImmutableList.Builder<PartitionInfo> builder = ImmutableList.builder();
-        for (String partitionName : partitionNames) {
-            com.starrocks.connector.hive.Partition partition =
-                    com.starrocks.connector.hive.Partition.builder().setFullPath(partitionName).build();
-            builder.add(partition);
-        }
+        odps.tables().get(odpsTable.getProjectName(), odpsTable.getTableName()).getPartitions()
+                .forEach(p -> builder.add(new OdpsPartition(p)));
         return builder.build();
     }
 
@@ -135,6 +136,11 @@ public class OdpsMetadata implements ConnectorMetadata {
                 orderedColumnNames.add(column.getName());
             }
         }
+        List<PartitionSpec> partitionSpecs = new ArrayList<>();
+        for (PartitionKey partitionKey : partitionKeys) {
+            String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnsNames(), partitionKey);
+            partitionSpecs.add(new PartitionSpec(hivePartitionName));
+        }
         try {
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
                     odpsTable.getTableName(), columnNames);
@@ -143,6 +149,7 @@ public class OdpsMetadata implements ConnectorMetadata {
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
+                            .requiredPartitions(partitionSpecs)
                             .withSplitOptions(SplitOptions.createDefault())
                             .buildBatchReadSession();
             InputSplitAssigner assigner = scan.getInputSplitAssigner();
