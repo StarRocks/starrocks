@@ -106,7 +106,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                                       Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            validateParams(params);
+            validateParams(svType, params);
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
@@ -149,10 +149,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
             throws DdlException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            validateParams(params);
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
             StorageVolume copied = new StorageVolume(sv);
+            validateParams(copied.getType(), params);
 
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
@@ -272,7 +272,10 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public void replayDropStorageVolume(DropStorageVolumeLog log) {
     }
 
-    protected void validateParams(Map<String, String> params) throws DdlException {
+    protected void validateParams(String svType, Map<String, String> params) throws DdlException {
+        if (svType.equalsIgnoreCase("hdfs")) {
+            return;
+        }
         for (String key : params.keySet()) {
             if (!PARAM_NAMES.contains(key)) {
                 throw new DdlException("Invalid properties " + key);
