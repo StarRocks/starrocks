@@ -25,7 +25,6 @@ public class JoinLocalShuffleTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        FeConstants.runningUnitTest = true;
         FeConstants.showJoinLocalShuffleInExplain = true;
     }
 

@@ -83,6 +83,8 @@ public class PlanTestNoneDBBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+        FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.showJoinLocalShuffleInExplain = false;
     }
 
     public static void assertContains(String text, String... pattern) {

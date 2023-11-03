@@ -78,7 +78,8 @@ public class FeConstants {
 
     // set false to resolve ut
     public static boolean enablePruneEmptyOutputScan = true;
-    public static boolean showJoinLocalShuffleInExplain = false;
+    public static boolean showJoinLocalShuffleInExplain = true;
+
     // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
