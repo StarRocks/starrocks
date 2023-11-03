@@ -1267,7 +1267,7 @@ TEST_F(HdfsScannerTest, TestOrcMapLazyLoadWithSubfieldSeleted) {
     ASSERT_EQ(0, chunk->num_rows());
     ASSERT_TRUE(status.is_end_of_file());
 
-    scanner->close();
+    scanner->close(_runtime_state);
 }
 
 TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
