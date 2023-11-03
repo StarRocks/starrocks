@@ -172,12 +172,52 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
         auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.hdfsTable, entry.second));
         _partition_id_to_desc_map[entry.first] = partition;
     }
+    _hive_column_names = tdesc.hdfsTable.hive_column_names;
+    _hive_column_types = tdesc.hdfsTable.hive_column_types;
+    _input_format = tdesc.hdfsTable.input_format;
+    _serde_lib = tdesc.hdfsTable.serde_lib;
+}
+
+const std::string& HdfsTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+const std::string& HdfsTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+const std::string& HdfsTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+const std::string& HdfsTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
 }
 
 FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.fileTable.location;
     _columns = tdesc.fileTable.columns;
+    _hive_column_names = tdesc.fileTable.hive_column_names;
+    _hive_column_types = tdesc.fileTable.hive_column_types;
+    _input_format = tdesc.fileTable.input_format;
+    _serde_lib = tdesc.fileTable.serde_lib;
+}
+
+const std::string& FileTableDescriptor::get_hive_column_names() const {
+    return _hive_column_names;
+}
+
+const std::string& FileTableDescriptor::get_hive_column_types() const {
+    return _hive_column_types;
+}
+
+const std::string& FileTableDescriptor::get_input_format() const {
+    return _input_format;
+}
+
+const std::string& FileTableDescriptor::get_serde_lib() const {
+    return _serde_lib;
 }
 
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)

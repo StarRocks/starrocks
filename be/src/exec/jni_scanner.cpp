@@ -393,7 +393,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     return Status::OK();
 }
 
-Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
+Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
     SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
@@ -401,7 +401,7 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
         return Status::EndOfFile("");
     }
     _app_stats.raw_rows_read += num_rows;
-    auto slot_desc_list = _scanner_params.tuple_desc->slots();
+
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];
         const std::string& slot_name = slot_desc->col_name();
@@ -429,18 +429,42 @@ Status JniScanner::_release_off_heap_table(JNIEnv* _jni_env) {
 }
 
 Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    long chunk_meta;
-    RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
-    reset_chunk_meta(chunk_meta);
-    Status status = _fill_chunk(_jni_env, chunk);
-    RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
+    // fill chunk with all wanted column(include partition columns)
+    Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.tuple_desc->slots());
 
     // ====== conjunct evaluation ======
     // important to add columns before evaluation
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
+
+    RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
+    return status;
+}
+
+Status JniScanner::fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
+                                    const std::vector<SlotDescriptor*>& slot_desc_list) {
+    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
+    long chunk_meta;
+    RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
+    reset_chunk_meta(chunk_meta);
+    Status status = _fill_chunk(_jni_env, chunk, slot_desc_list);
+    RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
+
+    return status;
+}
+
+Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    // fill chunk with all wanted column exclude partition columns
+    Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.materialize_slots);
+
+    // ====== conjunct evaluation ======
+    // important to add columns before evaluation
+    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
+    size_t chunk_size = (*chunk)->num_rows();
+    _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
+    // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
     return status;
 }
