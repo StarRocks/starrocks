@@ -16,9 +16,14 @@
 
 #include <cstdint>
 
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_logs_scanner.h
 #include "common/greplog.h"
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
+=======
+#include <cstddef>
+#include <vector>
+>>>>>>> 2a51cf89f9 ([BugFix] Fix select ORC MapVector's filter nullptr bug (#34267)):be/src/storage/lake/key_index.h
 
 namespace starrocks::vectorized {
 
