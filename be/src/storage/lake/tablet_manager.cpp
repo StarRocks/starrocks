@@ -147,6 +147,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
             case TPersistentIndexType::LOCAL:
                 tablet_metadata_pb->set_persistent_index_type(PersistentIndexTypePB::LOCAL);
                 break;
+            case TPersistentIndexType::CLOUD_NATIVE:
+                tablet_metadata_pb->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+                break;
             default:
                 return Status::InternalError(
                         strings::Substitute("Unknown persistent index type, tabletId:$0", req.tablet_id));
