@@ -12,28 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.thrift.THdfsFileFormat;
 
+import static com.starrocks.connector.hive.HiveClassNames.AVRO_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.HUDI_PARQUET_INPUT_FORMAT;
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.ORC_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.RCFILE_INPUT_FORMAT_CLASS;
+import static com.starrocks.connector.hive.HiveClassNames.SEQUENCE_INPUT_FORMAT_CLASS;
 import static com.starrocks.connector.hive.HiveClassNames.TEXT_INPUT_FORMAT_CLASS;
 
 public enum RemoteFileInputFormat {
     PARQUET,
     ORC,
     TEXT,
+    AVRO,
+    RCBINARY,
+    RCTEXT,
+    SEQUENCE,
     UNKNOWN;
-
     private static final ImmutableMap<String, RemoteFileInputFormat> VALID_INPUT_FORMATS =
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, PARQUET)
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
                     .put(TEXT_INPUT_FORMAT_CLASS, TEXT)
+                    .put(AVRO_INPUT_FORMAT_CLASS, AVRO)
+                    .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
+                    .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
                     .build();
     private static final ImmutableMap<String, Boolean> FILE_FORMAT_SPLITTABLE_INFOS =
             new ImmutableMap.Builder<String, Boolean>()
@@ -59,6 +67,14 @@ public enum RemoteFileInputFormat {
                 return THdfsFileFormat.ORC;
             case TEXT:
                 return THdfsFileFormat.TEXT;
+            case AVRO:
+                return THdfsFileFormat.AVRO;
+            case RCBINARY:
+                return THdfsFileFormat.RC_BINARY;
+            case RCTEXT:
+                return THdfsFileFormat.RC_TEXT;
+            case SEQUENCE:
+                return THdfsFileFormat.SEQUENCE_FILE;
             default:
                 return THdfsFileFormat.UNKNOWN;
         }
