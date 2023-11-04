@@ -2408,7 +2408,7 @@ PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
         ASSERT_EQ(0, index.kv_num_in_immutable_index());
-    
+
         ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
         // erase non-exist keys
         // flush advance
