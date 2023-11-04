@@ -20,8 +20,10 @@
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
+#include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 
 namespace starrocks::parquet {
 
@@ -39,7 +41,7 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, Column* column) override {
+    Status prepare_batch(size_t* num_records, ColumnPtr& column) override {
         if (_step > 1) {
             *num_records = 0;
             return Status::EndOfFile("");
@@ -55,17 +57,17 @@ public:
         }
 
         if (_type == tparquet::Type::type::INT32) {
-            _append_int32_column(column, start, num_rows);
+            _append_int32_column(column.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
-            _append_int64_column(column, start, num_rows);
+            _append_int64_column(column.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::INT96) {
-            _append_int96_column(column, start, num_rows);
+            _append_int96_column(column.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::BYTE_ARRAY) {
-            _append_binary_column(column, start, num_rows);
+            _append_binary_column(column.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::FLOAT) {
-            _append_float_column(column, start, num_rows);
+            _append_float_column(column.get(), start, num_rows);
         } else if (_type == tparquet::Type::type::DOUBLE) {
-            _append_double_column(column, start, num_rows);
+            _append_double_column(column.get(), start, num_rows);
         }
 
         _step++;
@@ -75,7 +77,7 @@ public:
 
     Status finish_batch() override { return Status::OK(); }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         size_t rows = static_cast<size_t>(range.span_size());
         return prepare_batch(&rows, dst);
     }
@@ -346,6 +348,17 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
             _create_group_reader_param_of_column(5, tparquet::Type::type::DOUBLE, LogicalType::TYPE_DOUBLE);
 
     auto* param = _pool.add(new GroupReaderParam());
+
+    Utils::SlotDesc slot_descs[] = {{"col1", TypeDescriptor::from_logical_type(TYPE_INT)},
+                                    {"col2", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+                                    {"col3", TypeDescriptor::from_logical_type(TYPE_VARCHAR)},
+                                    {"col4", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+                                    {"col5", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+                                    {"col6", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+                                    {""}};
+    RuntimeState runtimeState{};
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(&runtimeState, &_pool, slot_descs);
+
     param->read_cols.emplace_back(c1);
     param->read_cols.emplace_back(c2);
     param->read_cols.emplace_back(c3);
@@ -353,6 +366,7 @@ GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     param->read_cols.emplace_back(c5);
     param->read_cols.emplace_back(c6);
     param->stats = &g_hdfs_scan_stats;
+    param->tuple_desc = tuple_desc;
     return param;
 }
 
@@ -420,8 +434,6 @@ TEST_F(GroupReaderTest, TestGetNext) {
 
     // replace column readers
     replace_column_readers(group_reader, param);
-    // create chunk
-    group_reader->_read_chunk = _create_chunk(param);
 
     auto chunk = _create_chunk(param);
 

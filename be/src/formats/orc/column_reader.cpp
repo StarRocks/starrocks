@@ -21,9 +21,11 @@
 namespace starrocks {
 
 StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDescriptor& type,
-                                                                   const orc::Type* orc_type, bool nullable,
-                                                                   const OrcMappingPtr& orc_mapping,
-                                                                   OrcChunkReader* reader) {
+                                                                   const OrcMappingContext& orc_mapping_context,
+                                                                   bool nullable, OrcChunkReader* reader) {
+    const orc::Type* orc_type = orc_mapping_context.orc_type;
+    const OrcMappingPtr& orc_mapping = orc_mapping_context.orc_mapping;
+    const ColumnAccessPathPtr* path = orc_mapping_context.path;
     if (type.is_complex_type() && orc_mapping == nullptr) {
         return Status::InternalError("Complex type must having OrcMapping");
     }
@@ -75,49 +77,56 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
             return Status::InternalError("Failed to create column reader about TYPE_DATETIME");
         }
     case TYPE_STRUCT: {
+        std::vector<bool> selected_subfields = ColumnAccessPathUtil::get_selected_subfields_for_struct(type, path);
+
         std::vector<std::unique_ptr<ORCColumnReader>> child_readers;
         for (size_t i = 0; i < type.children.size(); i++) {
-            const TypeDescriptor& child_type = type.children[i];
-            ASSIGN_OR_RETURN(
-                    std::unique_ptr<ORCColumnReader> child_reader,
-                    ORCColumnReader::create(child_type, orc_mapping->get_orc_type_child_mapping(i).orc_type, true,
-                                            orc_mapping->get_orc_type_child_mapping(i).orc_mapping, reader));
-            child_readers.emplace_back(std::move(child_reader));
+            if (selected_subfields[i]) {
+                const TypeDescriptor& child_type = type.children[i];
+                ASSIGN_OR_RETURN(
+                        std::unique_ptr<ORCColumnReader> child_reader,
+                        ORCColumnReader::create(child_type, orc_mapping->get_orc_mapping_context(i), true, reader));
+                child_readers.emplace_back(std::move(child_reader));
+            } else {
+                // put nullptr if we don't need to select this subfield
+                child_readers.emplace_back(nullptr);
+            }
         }
         return std::make_unique<StructColumnReader>(type, orc_type, nullable, reader, std::move(child_readers));
     }
 
     case TYPE_ARRAY: {
+        // TODO(SmithCruise) We need to support to read offset column only in the future
         std::vector<std::unique_ptr<ORCColumnReader>> child_readers{};
         const TypeDescriptor& child_type = type.children[0];
         ASSIGN_OR_RETURN(std::unique_ptr<ORCColumnReader> child_reader,
-                         ORCColumnReader::create(child_type, orc_mapping->get_orc_type_child_mapping(0).orc_type, true,
-                                                 orc_mapping->get_orc_type_child_mapping(0).orc_mapping, reader));
+                         ORCColumnReader::create(child_type, orc_mapping->get_orc_mapping_context(0), true, reader));
         child_readers.emplace_back(std::move(child_reader));
         return std::make_unique<ArrayColumnReader>(type, orc_type, nullable, reader, std::move(child_readers));
     }
     case TYPE_MAP: {
+        // TODO(SmithCruise) We need to support to read offset column only in the future
+        std::vector<bool> selected_subfields = ColumnAccessPathUtil::get_selected_subfields_for_map(type, path);
+
         std::vector<std::unique_ptr<ORCColumnReader>> child_readers{};
         const TypeDescriptor& key_type = type.children[0];
         const TypeDescriptor& value_type = type.children[1];
-        if (key_type.is_unknown_type()) {
-            child_readers.emplace_back(nullptr);
-        } else {
-            ASSIGN_OR_RETURN(
-                    std::unique_ptr<ORCColumnReader> key_reader,
-                    ORCColumnReader::create(key_type, orc_mapping->get_orc_type_child_mapping(0).orc_type, true,
-                                            orc_mapping->get_orc_type_child_mapping(0).orc_mapping, reader));
+
+        if (selected_subfields[0]) {
+            ASSIGN_OR_RETURN(std::unique_ptr<ORCColumnReader> key_reader,
+                             ORCColumnReader::create(key_type, orc_mapping->get_orc_mapping_context(0), true, reader));
             child_readers.emplace_back(std::move(key_reader));
+        } else {
+            child_readers.emplace_back(nullptr);
         }
 
-        if (value_type.is_unknown_type()) {
-            child_readers.emplace_back(nullptr);
-        } else {
+        if (selected_subfields[1]) {
             ASSIGN_OR_RETURN(
                     std::unique_ptr<ORCColumnReader> value_reader,
-                    ORCColumnReader::create(value_type, orc_mapping->get_orc_type_child_mapping(1).orc_type, true,
-                                            orc_mapping->get_orc_type_child_mapping(1).orc_mapping, reader));
+                    ORCColumnReader::create(value_type, orc_mapping->get_orc_mapping_context(1), true, reader));
             child_readers.emplace_back(std::move(value_reader));
+        } else {
+            child_readers.emplace_back(nullptr);
         }
         return std::make_unique<MapColumnReader>(type, orc_type, nullable, reader, std::move(child_readers));
     }
@@ -827,7 +836,12 @@ Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr&
     const int keys_size = implicit_cast<int>(orc_map->offsets[from + size] - keys_from);
 
     if (_child_readers[0] == nullptr) {
-        keys->append_default(keys_size);
+        if (!keys->is_constant()) {
+            keys->append_default(1);
+            keys = ConstColumn::create(keys, keys_size);
+        } else {
+            keys->append_default(keys_size);
+        }
     } else {
         RETURN_IF_ERROR(_child_readers[0]->get_next(orc_map->keys.get(), keys, keys_from, keys_size));
     }
@@ -836,7 +850,12 @@ Status MapColumnReader::_fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr&
     const int values_from = implicit_cast<int>(orc_map->offsets[from]);
     const int values_size = implicit_cast<int>(orc_map->offsets[from + size] - values_from);
     if (_child_readers[1] == nullptr) {
-        values->append_default(values_size);
+        if (!values->is_constant()) {
+            values->append_default(1);
+            values = ConstColumn::create(values, values_size);
+        } else {
+            values->append_default(values_size);
+        }
     } else {
         RETURN_IF_ERROR(_child_readers[1]->get_next(orc_map->elements.get(), values, values_from, values_size));
     }
@@ -892,11 +911,38 @@ Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, Colu
 
     Columns& field_columns = col_struct->fields_column();
 
+    size_t rows_read = 0;
+    bool has_read = false;
     for (size_t i = 0; i < _type.children.size(); i++) {
+        if (_child_readers[i] == nullptr) {
+            continue;
+        }
         size_t column_id = _child_readers[i]->get_orc_type()->getColumnId();
         orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
         RETURN_IF_ERROR(_child_readers[i]->get_next(field_cvb, field_columns[i], from, size));
+        size_t tmp_rows_read = field_columns[i]->size();
+        if (has_read && rows_read != tmp_rows_read) {
+            return Status::InternalError(strings::Substitute(
+                    "Orc StructColumnReader subfield has different size, expected size is $0, actual size is $1",
+                    rows_read, tmp_rows_read));
+        } else {
+            has_read = true;
+            rows_read = tmp_rows_read;
+        }
     }
+
+    for (size_t i = 0; i < _type.children.size(); i++) {
+        if (_child_readers[i] != nullptr) {
+            continue;
+        }
+        if (!field_columns[i]->is_constant()) {
+            field_columns[i]->append_default(1);
+            field_columns[i] = ConstColumn::create(field_columns[i], rows_read);
+        } else {
+            field_columns[i]->append_default(rows_read);
+        }
+    }
+
     return Status::OK();
 }
 

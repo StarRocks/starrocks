@@ -36,6 +36,7 @@ public class IcebergScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalIcebergScanOperator scan = (LogicalIcebergScanOperator) input.getOp();
         PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan);
+        physicalIcebergScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalIcebergScan);
         return Lists.newArrayList(result);
     }

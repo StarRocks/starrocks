@@ -37,7 +37,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -74,9 +73,7 @@ public class StructType extends Type {
                 fieldMap.put(lowerFieldName, field);
             }
         }
-        selectedFields = new Boolean[fields.size()];
         this.isNamed = isNamed;
-        Arrays.fill(selectedFields, false);
     }
 
     // Used to construct an unnamed struct type, for example, to create a struct type
@@ -94,8 +91,6 @@ public class StructType extends Type {
             field.setPosition(i);
             fieldMap.put(field.getName(), field);
         }
-        selectedFields = new Boolean[fields.size()];
-        Arrays.fill(selectedFields, false);
     }
 
     @Override
@@ -178,55 +173,6 @@ public class StructType extends Type {
 
     public StructField getField(int pos) {
         return fields.get(pos);
-    }
-
-    @Override
-    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
-        if (accessPath.getAccessPathType() == ComplexTypeAccessPathType.ALL_SUBFIELDS) {
-            //  ALL_SUBFIELDS access path must be the last access path in access paths,
-            //  so it's must need to set needSetChildren.
-            Preconditions.checkArgument(needSetChildren);
-            selectAllFields();
-            return;
-        }
-
-        Preconditions.checkArgument(accessPath.getAccessPathType() == ComplexTypeAccessPathType.STRUCT_SUBFIELD);
-        Preconditions.checkArgument(accessPath.getStructSubfieldName() != null);
-        int pos = getFieldPos(accessPath.getStructSubfieldName());
-        selectedFields[pos] = true;
-        if (needSetChildren) {
-            StructField structField = fields.get(pos);
-            if (structField.getType().isComplexType()) {
-                structField.getType().selectAllFields();
-            }
-        }
-    }
-
-    public void pruneUnusedSubfields() {
-        for (int pos = selectedFields.length - 1; pos >= 0; pos--) {
-            StructField structField = fields.get(pos);
-            if (!selectedFields[pos]) {
-                fields.remove(pos);
-                fieldMap.remove(StringUtils.lowerCase(structField.getName()));
-            }
-        }
-
-        for (StructField structField : fields) {
-            Type type = structField.getType();
-            if (type.isComplexType()) {
-                type.pruneUnusedSubfields();
-            }
-        }
-    }
-
-    @Override
-    public void selectAllFields() {
-        Arrays.fill(selectedFields, true);
-        for (StructField structField : fields) {
-            if (structField.getType().isComplexType()) {
-                structField.getType().selectAllFields();
-            }
-        }
     }
 
     /**

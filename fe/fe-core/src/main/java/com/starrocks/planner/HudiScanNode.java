@@ -31,6 +31,7 @@ import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 
@@ -122,13 +123,7 @@ public class HudiScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainColumnAccessPath(prefix));
         }
 
         return output.toString();
@@ -149,6 +144,10 @@ public class HudiScanNode extends ScanNode {
         if (hudiTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hudiTable.getDataColumnNames());
             msg.hdfs_scan_node.setTable_name(hudiTable.getName());
+        }
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.hdfs_scan_node.setColumn_access_paths(columnAccessPathToThrift());
         }
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);

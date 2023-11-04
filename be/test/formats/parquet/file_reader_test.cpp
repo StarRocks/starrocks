@@ -74,7 +74,6 @@ protected:
     HdfsScannerContext* _create_file6_base_context();
     HdfsScannerContext* _create_file_map_char_key_context();
     HdfsScannerContext* _create_file_map_base_context();
-    HdfsScannerContext* _create_file_map_partial_materialize_context();
 
     HdfsScannerContext* _create_file_random_read_context(const std::string& file_path);
 
@@ -521,41 +520,6 @@ HdfsScannerContext* FileReaderTest::_create_file_map_base_context() {
     type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
     TypeDescriptor type_map_array(LogicalType::TYPE_MAP);
     type_map_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-    type_map_array.children.emplace_back(type_array);
-
-    // tuple desc
-    Utils::SlotDesc slot_descs[] = {
-            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"c2", type_map},
-            {"c3", type_map_map},
-            {"c4", type_map_array},
-            {""},
-    };
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
-
-    return ctx;
-}
-
-HdfsScannerContext* FileReaderTest::_create_file_map_partial_materialize_context() {
-    auto ctx = _create_scan_context();
-
-    TypeDescriptor type_map(LogicalType::TYPE_MAP);
-    // only key will be materialized
-    type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-    type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
-
-    TypeDescriptor type_map_map(LogicalType::TYPE_MAP);
-    // the first level value will be materialized, and the second level key will be materialized
-    type_map_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
-    type_map_map.children.emplace_back(type_map);
-
-    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
-    type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-    // only value will be materialized
-    TypeDescriptor type_map_array(LogicalType::TYPE_MAP);
-    type_map_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
     type_map_array.children.emplace_back(type_array);
 
     // tuple desc
@@ -1627,11 +1591,11 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1:0,f2:'a',f3:[0,1,2],not_existed:NULL}]", chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1:1,f2:'a',f3:[1,2,3],not_existed:NULL}]", chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1:2,f2:'a',f3:[2,3,4],not_existed:NULL}]", chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1:3,f2:'c',f3:[3,4,5],not_existed:NULL}]", chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1:4,f2:'c',f3:[4,5,6],not_existed:NULL}]", chunk->debug_row(4));
+    EXPECT_EQ("[0, {f1:0,f2:'a',f3:[0,1,2],not_existed:CONST: NULL}]", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1:1,f2:'a',f3:[1,2,3],not_existed:CONST: NULL}]", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1:2,f2:'a',f3:[2,3,4],not_existed:CONST: NULL}]", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1:3,f2:'c',f3:[3,4,5],not_existed:CONST: NULL}]", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1:4,f2:'c',f3:[4,5,6],not_existed:CONST: NULL}]", chunk->debug_row(4));
 }
 
 TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
@@ -1831,10 +1795,61 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
                                                     std::filesystem::file_size(_file_map_path));
 
     //init
-    auto* ctx = _create_file_map_partial_materialize_context();
+    auto ctx = _create_scan_context();
+    {
+        TypeDescriptor type_map(LogicalType::TYPE_MAP);
+        // only key will be materialized
+        type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+        type_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
+
+        TypeDescriptor type_map_map(LogicalType::TYPE_MAP);
+        // the first level value will be materialized, and the second level key will be materialized
+        type_map_map.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
+        type_map_map.children.emplace_back(type_map);
+
+        TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
+        type_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        // only value will be materialized
+        TypeDescriptor type_map_array(LogicalType::TYPE_MAP);
+        type_map_array.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_UNKNOWN));
+        type_map_array.children.emplace_back(type_array);
+
+        // tuple desc
+        Utils::SlotDesc slot_descs[] = {
+                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                {"c2", type_map},
+                {"c3", type_map_map},
+                {"c4", type_map_array},
+                {""},
+        };
+        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
+    }
+
+    ColumnAccessPathPtr c2_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c2").value();
+    c2_path->put_child_path(ColumnAccessPathUtil::create(TAccessPathType::KEY, "P").value());
+
+    ColumnAccessPathPtr c3_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c3").value();
+    ColumnAccessPathPtr c3_map_path = ColumnAccessPathUtil::create(TAccessPathType::VALUE, "P").value();
+    ColumnAccessPathPtr c3_map_index_path = ColumnAccessPathUtil::create(TAccessPathType::INDEX, "P").value();
+    ColumnAccessPathPtr c3_map_index_map_path = ColumnAccessPathUtil::create(TAccessPathType::KEY, "P").value();
+    c3_map_index_path->put_child_path(std::move(c3_map_index_map_path));
+    c3_map_path->put_child_path(std::move(c3_map_index_path));
+    c3_path->put_child_path(std::move(c3_map_path));
+
+    ColumnAccessPathPtr c4_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c4").value();
+    c4_path->put_child_path(ColumnAccessPathUtil::create(TAccessPathType::VALUE, "P").value());
+
+    std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+    path_mapping.emplace("c2", std::move(c2_path));
+    path_mapping.emplace("c3", std::move(c3_path));
+    path_mapping.emplace("c4", std::move(c4_path));
+
+    ctx->column_name_2_column_access_path_mapping = &path_mapping;
 
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
@@ -1872,17 +1887,23 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(chunk->num_rows(), 8);
-    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':NULL,'k2':NULL}, {NULL:{'f1':NULL,'f2':NULL}}, {NULL:[1,2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, {'k1':NULL,'k3':NULL,'k4':NULL}, {NULL:{'f1':NULL,'f2':NULL},NULL:{'f1':NULL,'f2':NULL}}, "
-              "{NULL:[1],NULL:[2]}]");
+              "[2, {'k1':CONST: NULL,'k3':CONST: NULL,'k4':CONST: NULL}, {CONST: NULL:{'f1':CONST: NULL,'f2':CONST: "
+              "NULL},CONST: NULL:{'f1':CONST: NULL,'f2':CONST: NULL}}, "
+              "{CONST: NULL:[1],CONST: NULL:[2]}]");
     EXPECT_EQ(chunk->debug_row(2),
-              "[3, {'k2':NULL,'k3':NULL,'k5':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1,2,3]}]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':NULL,'k2':NULL,'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[NULL]}]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':NULL,'k2':NULL}, {NULL:{'f2':NULL}}, {NULL:[1,2,3]}]");
-    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1],NULL:[2]}]");
+              "[3, {'k2':CONST: NULL,'k3':CONST: NULL,'k5':CONST: NULL}, {CONST: NULL:{'f1':CONST: NULL,'f2':CONST: "
+              "NULL,'f3':CONST: NULL}}, {CONST: NULL:[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(3),
+              "[4, {'k1':CONST: NULL,'k2':CONST: NULL,'k3':CONST: NULL}, {CONST: NULL:{'f2':CONST: NULL}}, {CONST: "
+              "NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':CONST: NULL}, {CONST: NULL:{'f2':CONST: NULL}}, {CONST: NULL:[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':CONST: NULL}, {CONST: NULL:{'f2':CONST: NULL}}, {CONST: NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(6),
+              "[7, {'k1':CONST: NULL,'k2':CONST: NULL}, {CONST: NULL:{'f2':CONST: NULL}}, {CONST: NULL:[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(7),
+              "[8, {'k3':CONST: NULL}, {CONST: NULL:{'f1':CONST: NULL,'f2':CONST: NULL,'f3':CONST: NULL}}, {CONST: "
+              "NULL:[1],CONST: NULL:[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadNotNull) {

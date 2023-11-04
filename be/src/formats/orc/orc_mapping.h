@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <variant>
 
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "formats/utils.h"
 #include "gutil/strings/substitute.h"
@@ -40,11 +41,13 @@ struct OrcMappingOptions {
     bool invalid_as_null;
 };
 
-// For a primitive type, it only contain orc_type
-// For a complex type, it contains orc_mapping and orc_type both
-struct OrcMappingOrcType {
+// For a primitive type, it only contains orc_type
+// For a complex type, it must contain orc_mapping and orc_type both
+struct OrcMappingContext {
     const OrcMappingPtr orc_mapping = nullptr;
     const orc::Type* orc_type = nullptr;
+    // For primitive type, it hasn't ColumnAccessPath. If path is nullptr, means select all subfields
+    const ColumnAccessPathPtr* path = nullptr;
 };
 
 // OrcMapping is used to create a global mapping for orc
@@ -98,9 +101,10 @@ class OrcMapping {
 public:
     // Only Array, Map, Struct contains child mapping, other logical types will return nullptr directly.
     // src_pos is origin column position in table definition.
-    const OrcMappingOrcType& get_orc_type_child_mapping(size_t original_pos_in_table_definition);
+    const OrcMappingContext& get_orc_mapping_context(size_t original_pos_in_table_definition);
 
-    void add_mapping(size_t pos_in_src, const OrcMappingPtr& child_mapping, const orc::Type* orc_type);
+    void add_context(size_t original_pos_in_table_definition, const OrcMappingPtr& child_mapping,
+                     const orc::Type* orc_type, const ColumnAccessPathPtr* path);
 
     void clear();
 
@@ -112,10 +116,9 @@ public:
     Status set_lazy_load_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list);
 
 private:
-    std::unordered_map<size_t, const OrcMappingOrcType> _mapping;
-    std::unordered_map<std::string, orc::Type*> _new_mapping;
+    std::unordered_map<size_t, const OrcMappingContext> _mapping;
 
-    Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
+    Status set_include_column_id_by_type(const OrcMappingContext& context, const TypeDescriptor& desc,
                                          std::list<uint64_t>* column_id_list);
 };
 
@@ -123,30 +126,32 @@ class OrcMappingFactory {
 public:
     // NOTICE: orc_use_column_names will only control first level behavior, but struct subfield will still use
     // column name rather than position in table definition.
-    static StatusOr<std::unique_ptr<OrcMapping>> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
-                                                               const orc::Type& root_orc_type,
-                                                               const bool orc_use_column_names,
-                                                               const std::vector<std::string>* hive_column_names,
-                                                               const OrcMappingOptions& options);
+    static StatusOr<std::unique_ptr<OrcMapping>> build_mapping(
+            const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& root_orc_type,
+            const bool orc_use_column_names, const std::vector<std::string>* hive_column_names,
+            const std::unordered_map<std::string, ColumnAccessPathPtr>* column_name_2_column_access_path_mapping,
+            const OrcMappingOptions& options);
 
 private:
     static Status _check_orc_type_can_convert_2_logical_type(const orc::Type* orc_source_type,
                                                              const TypeDescriptor& slot_target_type,
                                                              const OrcMappingOptions& options);
 
-    static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
-                                                          const std::vector<SlotDescriptor*>& slot_descs,
-                                                          const orc::Type* orc_root_type,
-                                                          const OrcMappingOptions& options);
+    static Status _init_orc_mapping_with_orc_column_names(
+            std::unique_ptr<OrcMapping>& mapping, const std::vector<SlotDescriptor*>& slot_descs,
+            const orc::Type* orc_root_type,
+            const std::unordered_map<std::string, ColumnAccessPathPtr>* column_name_2_column_access_path_mapping,
+            const OrcMappingOptions& options);
 
-    static Status _init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
-                                                           const std::vector<SlotDescriptor*>& slot_descs,
-                                                           const orc::Type* orc_root_type,
-                                                           const std::vector<std::string>* hive_column_names,
-                                                           const OrcMappingOptions& options);
+    static Status _init_orc_mapping_with_hive_column_names(
+            std::unique_ptr<OrcMapping>& mapping, const std::vector<SlotDescriptor*>& slot_descs,
+            const orc::Type* orc_root_type, const std::vector<std::string>* hive_column_names,
+            const std::unordered_map<std::string, ColumnAccessPathPtr>* column_name_2_column_access_path_mapping,
+            const OrcMappingOptions& options);
 
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
-                                     const orc::Type* orc_type, const OrcMappingOptions& options);
+                                     const orc::Type* orc_type, const ColumnAccessPathPtr* column_access_path,
+                                     const OrcMappingOptions& options);
 };
 
 } // namespace starrocks

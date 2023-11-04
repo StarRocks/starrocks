@@ -89,12 +89,12 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
+    Status prepare_batch(size_t* num_records, ColumnPtr& dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         ColumnContentType content_type =
                 _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
-            return _reader->read_records(num_records, content_type, dst);
+            return _reader->read_records(num_records, content_type, dst.get());
         } else {
             auto column = converter->create_src_column();
 
@@ -105,24 +105,24 @@ public:
 
             {
                 SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                RETURN_IF_ERROR(converter->convert(column, dst));
+                RETURN_IF_ERROR(converter->convert(column, dst.get()));
             }
 
             return Status::OK();
         }
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         ColumnContentType content_type =
                 _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
-            return _reader->read_range(range, filter, content_type, dst);
+            return _reader->read_range(range, filter, content_type, dst.get());
         } else {
             SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto column = converter->create_src_column();
             RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
-            return converter->convert(column, dst);
+            return converter->convert(column, dst.get());
         }
     }
 
@@ -186,7 +186,8 @@ public:
 
     Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) override {
         if (_dict_filter_ctx == nullptr) {
-            dst->swap_column(*src);
+            // src column maybe const column, we can't use column::swap() function
+            dst = src;
         } else {
             if (_dict_filter_ctx->is_decode_needed) {
                 ColumnPtr& dict_values = dst;
@@ -209,8 +210,6 @@ public:
             } else {
                 dst->append_default(src->size());
             }
-
-            src->reset_column();
         }
         return Status::OK();
     }
@@ -396,20 +395,19 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
+    Status prepare_batch(size_t* num_records, ColumnPtr& dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst.get());
             DCHECK(nullable_column->mutable_data_column()->is_array());
             array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_array());
             DCHECK(!_field->is_nullable);
-            array_column = down_cast<ArrayColumn*>(dst);
+            array_column = down_cast<ArrayColumn*>(dst.get());
         }
-        auto* child_column = array_column->elements_column().get();
-        auto st = _element_reader->prepare_batch(num_records, child_column);
+        auto st = _element_reader->prepare_batch(num_records, array_column->elements_column());
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
@@ -436,20 +434,19 @@ public:
         return st;
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst.get());
             DCHECK(nullable_column->mutable_data_column()->is_array());
             array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_array());
             DCHECK(!_field->is_nullable);
-            array_column = down_cast<ArrayColumn*>(dst);
+            array_column = down_cast<ArrayColumn*>(dst.get());
         }
-        auto* child_column = array_column->elements_column().get();
-        RETURN_IF_ERROR(_element_reader->read_range(range, filter, child_column));
+        RETURN_IF_ERROR(_element_reader->read_range(range, filter, array_column->elements_column()));
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
@@ -510,20 +507,20 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
+    Status prepare_batch(size_t* num_records, ColumnPtr& dst) override {
         NullableColumn* nullable_column = nullptr;
         MapColumn* map_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst.get());
             DCHECK(nullable_column->mutable_data_column()->is_map());
             map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_map());
             DCHECK(!_field->is_nullable);
-            map_column = down_cast<MapColumn*>(dst);
+            map_column = down_cast<MapColumn*>(dst.get());
         }
-        auto* key_column = map_column->keys_column().get();
-        auto* value_column = map_column->values_column().get();
+        ColumnPtr& key_column = map_column->keys_column();
+        ColumnPtr& value_column = map_column->values_column();
         Status st;
 
         // TODO(SmithCruise) Ugly code, it's a temporary solution,
@@ -577,12 +574,22 @@ public:
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
 
-        // fill with default
+        // fill with const column
         if (_key_reader == nullptr) {
-            key_column->append_default(offsets.back());
+            if (key_column->is_constant()) {
+                key_column->append_default(offsets.back());
+            } else {
+                key_column->append_default(1);
+                key_column = ConstColumn::create(key_column, offsets.back());
+            }
         }
         if (_value_reader == nullptr) {
-            value_column->append_default(offsets.back());
+            if (value_column->is_constant()) {
+                value_column->append_default(offsets.back());
+            } else {
+                value_column->append_default(1);
+                value_column = ConstColumn::create(value_column, offsets.back());
+            }
         }
 
         if (dst->is_nullable()) {
@@ -594,20 +601,20 @@ public:
         return st;
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         NullableColumn* nullable_column = nullptr;
         MapColumn* map_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst.get());
             DCHECK(nullable_column->mutable_data_column()->is_map());
             map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_map());
             DCHECK(!_field->is_nullable);
-            map_column = down_cast<MapColumn*>(dst);
+            map_column = down_cast<MapColumn*>(dst.get());
         }
-        auto* key_column = map_column->keys_column().get();
-        auto* value_column = map_column->values_column().get();
+        ColumnPtr& key_column = map_column->keys_column();
+        ColumnPtr& value_column = map_column->values_column();
         if (_key_reader != nullptr) {
             RETURN_IF_ERROR(_key_reader->read_range(range, filter, key_column));
         }
@@ -644,12 +651,21 @@ public:
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
 
-        // fill with default
         if (_key_reader == nullptr) {
-            key_column->append_default(offsets.back());
+            if (key_column->is_constant()) {
+                key_column->append_default(offsets.back());
+            } else {
+                key_column->append_default(1);
+                key_column = ConstColumn::create(key_column, offsets.back());
+            }
         }
         if (_value_reader == nullptr) {
-            value_column->append_default(offsets.back());
+            if (value_column->is_constant()) {
+                value_column->append_default(offsets.back());
+            } else {
+                value_column->append_default(1);
+                value_column = ConstColumn::create(value_column, offsets.back());
+            }
         }
 
         if (dst->is_nullable()) {
@@ -714,20 +730,21 @@ public:
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
 
-    Status prepare_batch(size_t* num_records, Column* dst) override {
+    Status prepare_batch(size_t* num_records, ColumnPtr& dst) override {
         NullableColumn* nullable_column = nullptr;
         StructColumn* struct_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst.get());
             DCHECK(nullable_column->mutable_data_column()->is_struct());
             struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_struct());
             DCHECK(!_field->is_nullable);
-            struct_column = down_cast<StructColumn*>(dst);
+            struct_column = down_cast<StructColumn*>(dst.get());
         }
 
         const auto& field_names = struct_column->field_names();
+        Columns& field_columns = struct_column->fields_column();
 
         DCHECK_EQ(field_names.size(), _child_readers.size());
 
@@ -743,7 +760,7 @@ public:
             const auto& field_name = field_names[i];
             if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
                 if (_child_readers[field_name] != nullptr) {
-                    Column* child_column = struct_column->field_column(field_name).get();
+                    ColumnPtr& child_column = field_columns[i];
                     _opts.context->next_row = origin_next_row;
                     _opts.context->rows_to_skip = origin_rows_to_skip;
                     RETURN_IF_ERROR(_child_readers[field_name]->prepare_batch(num_records, child_column));
@@ -768,8 +785,13 @@ public:
         for (size_t i = 0; i < field_names.size(); i++) {
             const auto& field_name = field_names[i];
             if (_child_readers[field_name] == nullptr) {
-                Column* child_column = struct_column->field_column(field_name).get();
-                child_column->append_default(real_read);
+                ColumnPtr& child_column = field_columns[i];
+                if (child_column->is_constant()) {
+                    child_column->append_default(real_read);
+                } else {
+                    child_column->append_default(1);
+                    child_column = ConstColumn::create(child_column, real_read);
+                }
             }
         }
 
@@ -787,20 +809,21 @@ public:
         return Status::OK();
     }
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) override {
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
         NullableColumn* nullable_column = nullptr;
         StructColumn* struct_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst.get());
             DCHECK(nullable_column->mutable_data_column()->is_struct());
             struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_struct());
             DCHECK(!_field->is_nullable);
-            struct_column = down_cast<StructColumn*>(dst);
+            struct_column = down_cast<StructColumn*>(dst.get());
         }
 
         const auto& field_names = struct_column->field_names();
+        Columns& field_columns = struct_column->fields_column();
 
         DCHECK_EQ(field_names.size(), _child_readers.size());
 
@@ -811,7 +834,7 @@ public:
             const auto& field_name = field_names[i];
             if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
                 if (_child_readers[field_name] != nullptr) {
-                    Column* child_column = struct_column->field_column(field_name).get();
+                    ColumnPtr& child_column = field_columns[i];
                     RETURN_IF_ERROR(_child_readers[field_name]->read_range(range, filter, child_column));
                     real_read = child_column->size();
                     first_read = false;
@@ -830,8 +853,13 @@ public:
         for (size_t i = 0; i < field_names.size(); i++) {
             const auto& field_name = field_names[i];
             if (_child_readers[field_name] == nullptr) {
-                Column* child_column = struct_column->field_column(field_name).get();
-                child_column->append_default(real_read);
+                ColumnPtr& child_column = field_columns[i];
+                if (child_column->is_constant()) {
+                    child_column->append_default(real_read);
+                } else {
+                    child_column->append_default(1);
+                    child_column = ConstColumn::create(child_column, real_read);
+                }
             }
         }
 
@@ -953,13 +981,15 @@ public:
             struct_column_src = down_cast<StructColumn*>(src.get());
             struct_column_dst = down_cast<StructColumn*>(dst.get());
         }
-        const auto& field_names = struct_column_dst->field_names();
-        for (size_t i = 0; i < field_names.size(); i++) {
-            const auto& field_name = field_names[i];
+        const auto& dst_field_names = struct_column_dst->field_names();
+        Columns& dst_fields_column = struct_column_dst->fields_column();
+        Columns& src_fields_column = struct_column_src->fields_column();
+        for (size_t i = 0; i < dst_field_names.size(); i++) {
+            const auto& field_name = dst_field_names[i];
             if (LIKELY(_child_readers.find(field_name) != _child_readers.end())) {
                 if (_child_readers[field_name] == nullptr) {
-                    struct_column_dst->field_column(field_name)
-                            ->swap_column(*(struct_column_src->field_column(field_name)));
+                    // src column maybe const column, we can't use column::swap() function
+                    dst_fields_column[i] = src_fields_column[i];
                 } else {
                     RETURN_IF_ERROR(_child_readers[field_name]->fill_dst_column(
                             struct_column_dst->field_column(field_name), struct_column_src->field_column(field_name)));
@@ -1029,8 +1059,8 @@ private:
     const ColumnReaderOptions& _opts;
 };
 
-void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                     bool case_sensitive, std::vector<int32_t>& pos) {
+void ColumnReader::get_subfield_pos_mapping(const ParquetField& field, const TypeDescriptor& col_type,
+                                            bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type.type == LogicalType::TYPE_STRUCT);
 
     // build tmp mapping for ParquetField
@@ -1055,11 +1085,10 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
     }
 }
 
-void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                     bool case_sensitive,
-                                                     const TIcebergSchemaField* iceberg_schema_field,
-                                                     std::vector<int32_t>& pos,
-                                                     std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield) {
+void ColumnReader::get_subfield_pos_mapping(const ParquetField& field, const TypeDescriptor& col_type,
+                                            bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
+                                            std::vector<int32_t>& pos,
+                                            std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield) {
     // For Struct type with schema change, we need consider subfield not existed suitition.
     // When Iceberg add a new struct subfield, the original parquet file do not contains newly added subfield,
     std::unordered_map<std::string, const TIcebergSchemaField*> subfield_name_2_field_schema{};
@@ -1104,7 +1133,7 @@ void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, 
 }
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                            std::unique_ptr<ColumnReader>* output) {
+                            const ColumnAccessPathPtr* column_access_path, std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
     if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
         return Status::InternalError(strings::Substitute("ParquetField's type $0 is different from table's type $1",
@@ -1112,7 +1141,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     }
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
-        RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
+
+        const ColumnAccessPathPtr* child_path = ColumnAccessPathUtil::get_array_element_path(column_access_path);
+
+        RETURN_IF_ERROR(
+                ColumnReader::create(opts, &field->children[0], col_type.children[0], child_path, &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
@@ -1120,11 +1153,18 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
-        if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], &key_reader));
+        std::vector<bool> selected_fields =
+                ColumnAccessPathUtil::get_selected_subfields_for_map(col_type, column_access_path);
+
+        const ColumnAccessPathPtr* value_path = ColumnAccessPathUtil::get_map_values_path(column_access_path);
+
+        if (selected_fields[0]) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &(field->children[0]), col_type.children[0], nullptr, &key_reader));
         }
-        if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], &value_reader));
+        if (selected_fields[1]) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &(field->children[1]), col_type.children[1], value_path, &value_reader));
         }
 
         std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
@@ -1132,18 +1172,25 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         *output = std::move(reader);
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
+        get_subfield_pos_mapping(*field, col_type, opts.case_sensitive, subfield_pos);
+
+        std::vector<bool> selected_fields =
+                ColumnAccessPathUtil::get_selected_subfields_for_struct(col_type, column_access_path);
 
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (subfield_pos[i] == -1) {
+            if (subfield_pos[i] == -1 || !selected_fields[i]) {
                 // -1 means subfield not existed, we need to emplace nullptr
                 children_readers.emplace(col_type.field_names[i], nullptr);
                 continue;
             }
+
+            const ColumnAccessPathPtr* child_path =
+                    ColumnAccessPathUtil::get_struct_subfield_path(column_access_path, col_type.field_names[i]);
+
             std::unique_ptr<ColumnReader> child_reader;
-            RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
+            RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
+                                                 child_path, &child_reader));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
@@ -1160,6 +1207,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
 }
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
+                            const ColumnAccessPathPtr* column_access_path,
                             const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output) {
     // We will only set a complex type in ParquetField
     if ((field->type.is_complex_type() || col_type.is_complex_type()) && (field->type.type != col_type.type)) {
@@ -1170,8 +1218,11 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         const TIcebergSchemaField* element_schema = &iceberg_schema_field->children[0];
-        RETURN_IF_ERROR(
-                ColumnReader::create(opts, &field->children[0], col_type.children[0], element_schema, &child_reader));
+
+        const ColumnAccessPathPtr* child_path = ColumnAccessPathUtil::get_array_element_path(column_access_path);
+
+        RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], child_path,
+                                             element_schema, &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
@@ -1182,12 +1233,17 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         const TIcebergSchemaField* key_iceberg_schema = &iceberg_schema_field->children[0];
         const TIcebergSchemaField* value_iceberg_schema = &iceberg_schema_field->children[1];
 
-        if (!col_type.children[0].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], key_iceberg_schema,
-                                                 &key_reader));
+        const ColumnAccessPathPtr* value_path = ColumnAccessPathUtil::get_map_values_path(column_access_path);
+
+        std::vector<bool> selected_fields =
+                ColumnAccessPathUtil::get_selected_subfields_for_map(col_type, column_access_path);
+
+        if (selected_fields[0]) {
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[0]), col_type.children[0], nullptr,
+                                                 key_iceberg_schema, &key_reader));
         }
-        if (!col_type.children[1].is_unknown_type()) {
-            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1],
+        if (selected_fields[1]) {
+            RETURN_IF_ERROR(ColumnReader::create(opts, &(field->children[1]), col_type.children[1], value_path,
                                                  value_iceberg_schema, &value_reader));
         }
 
@@ -1197,20 +1253,25 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> iceberg_schema_subfield(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
-                                          iceberg_schema_subfield);
+        get_subfield_pos_mapping(*field, col_type, opts.case_sensitive, iceberg_schema_field, subfield_pos,
+                                 iceberg_schema_subfield);
+        std::vector<bool> selected_fields =
+                ColumnAccessPathUtil::get_selected_subfields_for_struct(col_type, column_access_path);
 
         std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (subfield_pos[i] == -1) {
+            if (subfield_pos[i] == -1 || !selected_fields[i]) {
                 // -1 means subfield not existed, we need to emplace nullptr
                 children_readers.emplace(col_type.field_names[i], nullptr);
                 continue;
             }
 
+            const ColumnAccessPathPtr* child_path =
+                    ColumnAccessPathUtil::get_struct_subfield_path(column_access_path, col_type.field_names[i]);
+
             std::unique_ptr<ColumnReader> child_reader;
             RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
-                                                 iceberg_schema_subfield[i], &child_reader));
+                                                 child_path, iceberg_schema_subfield[i], &child_reader));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 

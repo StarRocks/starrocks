@@ -17,6 +17,7 @@
 #include <unordered_map>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exprs/expr_context.h"
@@ -28,6 +29,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks {
 class RandomAccessFile;
 
@@ -51,6 +53,7 @@ struct GroupReaderParam {
         TypeDescriptor col_type_in_chunk;
 
         const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
+        const ColumnAccessPathPtr* column_access_path = nullptr;
 
         SlotId slot_id;
         bool decode_needed;
@@ -112,14 +115,14 @@ public:
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
-    ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
+    ChunkPtr _create_read_chunk(ChunkPtr& read_chunk, const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
 
     bool _try_to_use_dict_filter(const GroupReaderParam::Column& column, ExprContext* ctx,
                                  std::vector<std::string>& sub_field_path, bool is_decode_needed);
 
-    void _init_read_chunk();
+    ChunkPtr _create_base_chunk();
 
     Status _do_get_next(ChunkPtr* chunk, size_t* row_count);
     Status _do_get_next_new(ChunkPtr* chunk, size_t* row_count);
@@ -130,10 +133,12 @@ public:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
+    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                 const ColumnAccessPathPtr* column_access_path, bool is_active,
                                  std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
-                                 const TIcebergSchemaField* iceberg_schema_field, bool active,
+                                 const ColumnAccessPathPtr* column_access_path,
+                                 const TIcebergSchemaField* iceberg_schema_field, bool is_active,
                                  std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
@@ -157,8 +162,6 @@ public:
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
-
-    ChunkPtr _read_chunk;
 
     // param for read row group
     const GroupReaderParam& _param;

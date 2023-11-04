@@ -64,9 +64,6 @@ import java.util.stream.Collectors;
  * as abstract methods that subclasses must implement.
  */
 public abstract class Type implements Cloneable {
-    // used for nested type such as map and struct
-    protected Boolean[] selectedFields;
-
     public static final int CHARSET_BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
 
@@ -581,31 +578,6 @@ public abstract class Type implements Cloneable {
      * prettyPrint() with space-indented nested types.
      */
     protected abstract String prettyPrint(int lpad);
-
-    /**
-     * Used for Nest Type
-     */
-    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
-        throw new IllegalStateException("setSelectedField() is not implemented for type " + toSql());
-    }
-
-    /**
-     * Used for Nest Type
-     */
-    public void selectAllFields() {
-        throw new IllegalStateException("selectAllFields() is not implemented for type " + toSql());
-    }
-
-    public void pruneUnusedSubfields() {
-        throw new IllegalStateException("pruneUnusedFields() is not implemented for type " + toSql());
-    }
-
-    /**
-     * used for test
-     */
-    public Boolean[] getSelectedFields() {
-        return selectedFields;
-    }
 
     public boolean isInvalid() {
         return isScalarType(PrimitiveType.INVALID_TYPE);

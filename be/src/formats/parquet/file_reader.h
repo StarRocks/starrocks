@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/meta_helper.h"
@@ -124,6 +125,7 @@ private:
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
     const std::set<int64_t>* _need_skip_rowids;
+    const std::unordered_map<std::string, ColumnAccessPathPtr>* _column_name_2_column_access_path_mapping = nullptr;
 };
 
 } // namespace starrocks::parquet

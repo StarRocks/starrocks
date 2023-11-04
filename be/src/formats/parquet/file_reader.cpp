@@ -56,6 +56,8 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         _meta_helper = std::make_shared<ParquetMetaHelper>(_file_metadata, ctx->case_sensitive);
     }
 
+    _column_name_2_column_access_path_mapping = ctx->column_name_2_column_access_path_mapping;
+
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
     _meta_helper->set_existed_column_names(&names);
@@ -397,7 +399,8 @@ bool FileReader::_has_correct_min_max_stats(const tparquet::ColumnMetaData& colu
 }
 
 void FileReader::_prepare_read_columns() {
-    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _group_reader_param.read_cols);
+    _meta_helper->prepare_read_columns(_scanner_ctx->materialized_columns, _column_name_2_column_access_path_mapping,
+                                       _group_reader_param.read_cols);
     _no_materialized_column_scan = (_group_reader_param.read_cols.size() == 0);
 }
 

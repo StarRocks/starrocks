@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -52,6 +53,12 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
     private ColumnRefFactory factory = null;
 
     private boolean hasRewrite = false;
+
+    private boolean isPruneInUnnest = false;
+
+    public PushDownSubfieldRule(boolean isPruneInUnnest) {
+        this.isPruneInUnnest = isPruneInUnnest;
+    }
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
@@ -142,6 +149,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
         @Override
         public OptExpression visit(OptExpression optExpression, Context context) {
+            // If it cannot be pushed anymore, create a ProjectNode
             optExpression = generatePushDownProject(optExpression, EMPTY_COLUMN_SET, context);
             return visitChildren(optExpression, new Context());
         }
@@ -224,6 +232,40 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                     .build(), optExpression.getInputs());
 
             return visitChildren(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitLogicalTableFunction(OptExpression optExpression, Context context) {
+            if (context.pushDownExprRefs.isEmpty()) {
+                return visit(optExpression, context);
+            }
+
+            LogicalTableFunctionOperator op = optExpression.getOp().cast();
+            // only prune type in unnest()
+            if (!isPruneInUnnest || !op.getFn().functionName().equalsIgnoreCase("unnest")
+                    || (op.getFnParamColumnProject().size() != op.getFnResultColRefs().size())) {
+                return visit(optExpression, context);
+            }
+            // TODO
+
+            //            Context childContext = new Context();
+            //            List<ColumnRefOperator> resultColRefs = op.getFnResultColRefs();
+            //            List<Pair<ColumnRefOperator, ScalarOperator>> paramColumnProject = op.getFnParamColumnProject();
+            //            List<ColumnRefOperator> newResultColRefs = Lists.newArrayList();
+            //
+            //            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
+            //                for(int i = 0; i < resultColRefs.size(); i++) {
+            //                    if (entry.getKey().getUsedColumns().isSame(resultColRefs.get(i).getUsedColumns())) {
+            //                        // match
+            //                        newResultColRefs.add(entry.getKey());
+            //
+            //                    } else {
+            //                        childContext.put(entry.getKey(), entry.getValue());
+            //                    }
+            //                }
+            //            }
+
+            return visit(optExpression, context);
         }
 
         @Override

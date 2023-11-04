@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/column_access_path.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -191,6 +192,8 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    // mapping is nullptr means no subfields pruned happened
+    const std::unordered_map<std::string, ColumnAccessPathPtr>* column_name_2_column_access_path_mapping = nullptr;
 };
 
 struct HdfsScannerContext {
@@ -246,6 +249,8 @@ struct HdfsScannerContext {
     HdfsScanStats* stats = nullptr;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
+
+    const std::unordered_map<std::string, ColumnAccessPathPtr>* column_name_2_column_access_path_mapping = nullptr;
 
     // update materialized column against data file.
     // and to update not_existed slots and conjuncts.

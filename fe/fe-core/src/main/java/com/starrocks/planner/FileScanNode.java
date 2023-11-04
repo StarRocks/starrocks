@@ -762,6 +762,9 @@ public class FileScanNode extends LoadScanNode {
         if (brokerDesc != null) {
             output.append(prefix).append("BROKER: ").append(brokerDesc.getName()).append("\n");
         }
+        if (detailLevel == TExplainLevel.VERBOSE) {
+            output.append(explainColumnAccessPath(prefix));
+        }
         return output.toString();
     }
 

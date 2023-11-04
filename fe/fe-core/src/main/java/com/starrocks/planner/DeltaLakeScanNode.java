@@ -50,6 +50,7 @@ import io.delta.standalone.data.CloseableIterator;
 import io.delta.standalone.expressions.And;
 import io.delta.standalone.expressions.Expression;
 import io.delta.standalone.types.StructType;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -250,13 +251,7 @@ public class DeltaLakeScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainColumnAccessPath(prefix));
         }
 
         return output.toString();
@@ -276,6 +271,10 @@ public class DeltaLakeScanNode extends ScanNode {
 
         if (deltaLakeTable != null) {
             msg.hdfs_scan_node.setTable_name(deltaLakeTable.getName());
+        }
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.hdfs_scan_node.setColumn_access_paths(columnAccessPathToThrift());
         }
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);

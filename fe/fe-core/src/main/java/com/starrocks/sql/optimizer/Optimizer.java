@@ -75,7 +75,6 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
-import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
@@ -508,7 +507,9 @@ public class Optimizer {
             return tree;
         }
 
-        PushDownSubfieldRule pushDownRule = new PushDownSubfieldRule();
+        boolean isPruneInUnnest = context.getSessionVariable().isCboPruneSubfieldInUnnest();
+
+        PushDownSubfieldRule pushDownRule = new PushDownSubfieldRule(isPruneInUnnest);
         tree = pushDownRule.rewrite(tree, rootTaskContext);
 
         if (pushDownRule.hasRewrite()) {
@@ -634,7 +635,6 @@ public class Optimizer {
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
-        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator

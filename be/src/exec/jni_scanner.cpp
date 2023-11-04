@@ -15,6 +15,7 @@
 #include "jni_scanner.h"
 
 #include "column/array_column.h"
+#include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
@@ -244,12 +245,14 @@ Status JniScanner::_append_array_data(const FillColumnArgs& args) {
     int total_length = offset_ptr[args.num_rows];
     Column* elements = array_column->elements_column().get();
     std::string name = args.slot_name + ".$0";
+    const ColumnAccessPathPtr* child_path = ColumnAccessPathUtil::get_array_element_path(args.column_access_path);
     FillColumnArgs sub_args = {.num_rows = total_length,
                                .slot_name = name,
                                .slot_type = args.slot_type.children[0],
                                .nulls = nullptr,
                                .column = elements,
-                               .must_nullable = false};
+                               .must_nullable = false,
+                               .column_access_path = child_path};
     RETURN_IF_ERROR(_fill_column(&sub_args));
     return Status::OK();
 }
@@ -264,36 +267,44 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
     offsets->resize_uninitialized(args.num_rows + 1);
     memcpy(offsets->get_data().data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
 
+    std::vector<bool> selected_subfields =
+            ColumnAccessPathUtil::get_selected_subfields_for_map(args.slot_type, args.column_access_path);
+
     int total_length = offset_ptr[args.num_rows];
     {
-        Column* keys = map_column->keys_column().get();
-        if (!args.slot_type.children[0].is_unknown_type()) {
+        ColumnPtr& keys = map_column->keys_column();
+        if (selected_subfields[0]) {
             std::string name = args.slot_name + ".$0";
             FillColumnArgs sub_args = {.num_rows = total_length,
                                        .slot_name = name,
                                        .slot_type = args.slot_type.children[0],
                                        .nulls = nullptr,
-                                       .column = keys,
-                                       .must_nullable = false};
+                                       .column = keys.get(),
+                                       .must_nullable = false,
+                                       .column_access_path = nullptr};
             RETURN_IF_ERROR(_fill_column(&sub_args));
         } else {
-            keys->append_default(total_length);
+            keys->append_default(1);
+            keys = ConstColumn::create(keys, total_length);
         }
     }
 
     {
-        Column* values = map_column->values_column().get();
-        if (!args.slot_type.children[1].is_unknown_type()) {
+        const ColumnAccessPathPtr* values_path = ColumnAccessPathUtil::get_map_values_path(args.column_access_path);
+        ColumnPtr& values = map_column->values_column();
+        if (selected_subfields[1]) {
             std::string name = args.slot_name + ".$1";
             FillColumnArgs sub_args = {.num_rows = total_length,
                                        .slot_name = name,
                                        .slot_type = args.slot_type.children[1],
                                        .nulls = nullptr,
-                                       .column = values,
-                                       .must_nullable = true};
+                                       .column = values.get(),
+                                       .must_nullable = true,
+                                       .column_access_path = values_path};
             RETURN_IF_ERROR(_fill_column(&sub_args));
         } else {
-            values->append_default(total_length);
+            values->append_default(1);
+            values = ConstColumn::create(values, total_length);
         }
     }
     return Status::OK();
@@ -302,18 +313,29 @@ Status JniScanner::_append_map_data(const FillColumnArgs& args) {
 Status JniScanner::_append_struct_data(const FillColumnArgs& args) {
     DCHECK(args.slot_type.is_struct_type());
 
+    std::vector<bool> selected_subfields =
+            ColumnAccessPathUtil::get_selected_subfields_for_struct(args.slot_type, args.column_access_path);
+
     auto* struct_column = down_cast<StructColumn*>(args.column);
     const TypeDescriptor& type = args.slot_type;
     for (int i = 0; i < type.children.size(); i++) {
-        Column* column = struct_column->fields_column()[i].get();
-        std::string name = args.slot_name + "." + type.field_names[i];
-        FillColumnArgs sub_args = {.num_rows = args.num_rows,
-                                   .slot_name = name,
-                                   .slot_type = type.children[i],
-                                   .nulls = nullptr,
-                                   .column = column,
-                                   .must_nullable = true};
-        RETURN_IF_ERROR(_fill_column(&sub_args));
+        ColumnPtr& column = struct_column->fields_column()[i];
+        if (selected_subfields[i]) {
+            const ColumnAccessPathPtr* subfield_path = ColumnAccessPathUtil::get_struct_subfield_path(
+                    args.column_access_path, struct_column->field_names()[i]);
+            std::string name = args.slot_name + "." + type.field_names[i];
+            FillColumnArgs sub_args = {.num_rows = args.num_rows,
+                                       .slot_name = name,
+                                       .slot_type = type.children[i],
+                                       .nulls = nullptr,
+                                       .column = column.get(),
+                                       .must_nullable = true,
+                                       .column_access_path = subfield_path};
+            RETURN_IF_ERROR(_fill_column(&sub_args));
+        } else {
+            column->append_default(1);
+            column = ConstColumn::create(column, args.num_rows);
+        }
     }
     return Status::OK();
 }
@@ -405,6 +427,8 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk, const std::vec
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];
         const std::string& slot_name = slot_desc->col_name();
+        const ColumnAccessPathPtr* path = ColumnAccessPathUtil::get_column_access_path_from_mapping(
+                _scanner_params.column_name_2_column_access_path_mapping, slot_name);
         const TypeDescriptor& slot_type = slot_desc->type();
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         FillColumnArgs args{.num_rows = num_rows,
@@ -412,7 +436,8 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk, const std::vec
                             .slot_type = slot_type,
                             .nulls = nullptr,
                             .column = column.get(),
-                            .must_nullable = true};
+                            .must_nullable = true,
+                            .column_access_path = path};
         RETURN_IF_ERROR(_fill_column(&args));
         _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
         RETURN_IF_ERROR(_check_jni_exception(

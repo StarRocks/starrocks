@@ -28,8 +28,6 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
-import java.util.Arrays;
-
 /**
  * Describes a MAP type. MAP types have a scalar key and an arbitrarily-typed value.
  */
@@ -42,7 +40,6 @@ public class MapType extends Type {
     public MapType(Type keyType, Type valueType) {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
-        selectedFields = new Boolean[] {false, false};
         this.keyType = keyType;
         this.valueType = valueType;
     }
@@ -53,49 +50,6 @@ public class MapType extends Type {
 
     public Type getValueType() {
         return valueType;
-    }
-
-    @Override
-    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
-        ComplexTypeAccessPathType accessPathType = accessPath.getAccessPathType();
-        switch (accessPathType) {
-            case ALL_SUBFIELDS:
-                Arrays.fill(selectedFields, true);
-                break;
-            case MAP_KEY:
-                selectedFields[0] = true;
-                break;
-            case MAP_VALUE:
-                selectedFields[1] = true;
-                break;
-            default:
-                Preconditions.checkArgument(false, "Unreachable!");
-        }
-
-        if (needSetChildren &&
-                (accessPathType == ComplexTypeAccessPathType.ALL_SUBFIELDS ||
-                        accessPathType == ComplexTypeAccessPathType.MAP_VALUE) && valueType.isComplexType()) {
-            valueType.selectAllFields();
-        }
-    }
-
-    public void pruneUnusedSubfields() {
-        // We set pruned subfield to NULL in map
-        if (!selectedFields[0]) {
-            keyType = ScalarType.UNKNOWN_TYPE;
-        }
-        if (!selectedFields[1]) {
-            valueType = ScalarType.UNKNOWN_TYPE;
-        }
-        Preconditions.checkArgument(!keyType.isUnknown() || !valueType.isUnknown());
-    }
-
-    @Override
-    public void selectAllFields() {
-        Arrays.fill(selectedFields, true);
-        if (valueType.isComplexType()) {
-            valueType.selectAllFields();
-        }
     }
 
     /**
@@ -188,9 +142,6 @@ public class MapType extends Type {
         MapType clone = (MapType) super.clone();
         clone.keyType = this.keyType.clone();
         clone.valueType = this.valueType.clone();
-        if (this.selectedFields != null) {
-            clone.selectedFields = this.selectedFields.clone();
-        }
         return clone;
     }
 

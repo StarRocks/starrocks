@@ -36,6 +36,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -171,6 +172,10 @@ public class FileTableScanNode extends ScanNode {
         if (fileTable != null) {
             // don't set column_name so that the BE will get the column by name not by position
             msg.hdfs_scan_node.setTable_name(fileTable.getName());
+        }
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.hdfs_scan_node.setColumn_access_paths(columnAccessPathToThrift());
         }
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/column_access_path.h"
 #include "formats/parquet/column_converter.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/shared_buffered_input_stream.h"
@@ -69,33 +70,33 @@ public:
     // TODO(zc): review this,
     // create a column reader
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                         std::unique_ptr<ColumnReader>* output);
+                         const ColumnAccessPathPtr* column_access_path, std::unique_ptr<ColumnReader>* output);
 
     // Create with iceberg schema
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
-                         const TIcebergSchemaField* iceberg_schema_field, std::unique_ptr<ColumnReader>* output);
+                         const ColumnAccessPathPtr* column_access_path, const TIcebergSchemaField* iceberg_schema_field,
+                         std::unique_ptr<ColumnReader>* output);
 
     // for struct type without schema change
-    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                  bool case_sensitive, std::vector<int32_t>& pos);
+    static void get_subfield_pos_mapping(const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
+                                         std::vector<int32_t>& pos);
 
     // for schema changed
-    static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                  bool case_sensitive, const TIcebergSchemaField* iceberg_schema_field,
-                                                  std::vector<int32_t>& pos,
-                                                  std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
+    static void get_subfield_pos_mapping(const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
+                                         const TIcebergSchemaField* iceberg_schema_field, std::vector<int32_t>& pos,
+                                         std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
 
     virtual ~ColumnReader() = default;
 
-    virtual Status prepare_batch(size_t* num_records, Column* column) = 0;
+    virtual Status prepare_batch(size_t* num_records, ColumnPtr& column) = 0;
     virtual Status finish_batch() = 0;
 
-    Status next_batch(size_t* num_records, Column* column) {
+    Status next_batch(size_t* num_records, ColumnPtr& column) {
         RETURN_IF_ERROR(prepare_batch(num_records, column));
         return finish_batch();
     }
 
-    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) = 0;
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) = 0;
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
@@ -126,7 +127,8 @@ public:
     }
 
     virtual Status fill_dst_column(ColumnPtr& dst, const ColumnPtr& src) {
-        dst->swap_column(*src);
+        // src column maybe const column, we can't use column::swap() function
+        dst = src;
         return Status::OK();
     }
 

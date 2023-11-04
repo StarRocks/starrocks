@@ -146,14 +146,18 @@ public class SubfieldAccessPathNormalizer {
                 return Optional.empty();
             }
 
-            if (call.getFnName().equals(FunctionSet.MAP_KEYS)) {
-                return childrenAccessPaths.get(0)
-                        .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.KEY));
-            } else if (FunctionSet.MAP_SIZE.equals(call.getFnName())
-                    || FunctionSet.CARDINALITY.equals(call.getFnName())
-                    || FunctionSet.ARRAY_LENGTH.equals(call.getFnName())) {
-                return childrenAccessPaths.get(0)
-                        .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET));
+            switch (call.getFnName()) {
+                case FunctionSet.MAP_KEYS:
+                    return childrenAccessPaths.get(0)
+                            .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.KEY));
+                case FunctionSet.MAP_VALUES:
+                    return childrenAccessPaths.get(0)
+                            .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.VALUE));
+                case FunctionSet.MAP_SIZE:
+                case FunctionSet.CARDINALITY:
+                case FunctionSet.ARRAY_LENGTH:
+                    return childrenAccessPaths.get(0)
+                            .map(p -> p.appendPath(ColumnAccessPath.PATH_PLACEHOLDER, TAccessPathType.OFFSET));
             }
 
             return Optional.empty();

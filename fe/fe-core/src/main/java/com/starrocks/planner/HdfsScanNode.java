@@ -29,11 +29,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 
@@ -147,13 +149,7 @@ public class HdfsScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d [%s] <-> [%s]\n", slotDescriptor.getId().asInt(), slotDescriptor.getColumn().getName(), type));
-                }
-            }
+            output.append(explainColumnAccessPath(prefix));
         }
 
         return output.toString();
@@ -174,6 +170,10 @@ public class HdfsScanNode extends ScanNode {
         if (hiveTable != null) {
             msg.hdfs_scan_node.setHive_column_names(hiveTable.getDataColumnNames());
             msg.hdfs_scan_node.setTable_name(hiveTable.getName());
+        }
+
+        if (CollectionUtils.isNotEmpty(columnAccessPaths)) {
+            msg.hdfs_scan_node.setColumn_access_paths(columnAccessPathToThrift());
         }
 
         setScanOptimizeOptionToThrift(tHdfsScanNode, this);

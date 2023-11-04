@@ -294,6 +294,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
+    public static final String CBO_PRUNE_SUBFIELD_IN_UNNEST = "cbo_prune_subfield_in_unnest";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
@@ -471,9 +472,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
-
-    public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
-    public static final String ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST = "enable_prune_complex_types_in_unnest";
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -805,6 +803,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
+
+    @VarAttr(name = CBO_PRUNE_SUBFIELD_IN_UNNEST)
+    private boolean cboPruneSubfieldInUnnest = true;
 
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
@@ -1337,13 +1338,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // counts all types of join node including outer/semi/anti join.
     @VarAttr(name = CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE)
     private int cboReorderThresholdUseExhaustive = 6;
-
-    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
-    private boolean enablePruneComplexTypes = true;
-
-    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES_IN_UNNEST)
-    private boolean enablePruneComplexTypesInUnnest = true;
-
     @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
     public int rangePrunerPredicateMaxLen = 100;
 
@@ -2615,22 +2609,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToMetaScan;
     }
 
-    public boolean getEnablePruneComplexTypes() {
-        return this.enablePruneComplexTypes;
-    }
-
-    public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
-        this.enablePruneComplexTypes = enablePruneComplexTypes;
-    }
-
-    public boolean getEnablePruneComplexTypesInUnnest() {
-        return this.enablePruneComplexTypesInUnnest;
-    }
-
-    public void setEnablePruneComplexTypesInUnnest(boolean enablePruneComplexTypesInUnnest) {
-        this.enablePruneComplexTypesInUnnest = enablePruneComplexTypesInUnnest;
-    }
-
     public int getRangePrunerPredicateMaxLen() {
         return rangePrunerPredicateMaxLen;
     }
@@ -2673,6 +2651,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboPruneSubfield(boolean cboPruneSubfield) {
         this.cboPruneSubfield = cboPruneSubfield;
+    }
+
+    public boolean isCboPruneSubfieldInUnnest() {
+        return this.cboPruneSubfieldInUnnest;
+    }
+
+    public void setCboPruneSubfieldInUnnest(boolean cboPruneSubfieldInUnnest) {
+        this.cboPruneSubfieldInUnnest = cboPruneSubfieldInUnnest;
     }
 
     public int getScanOrToUnionLimit() {

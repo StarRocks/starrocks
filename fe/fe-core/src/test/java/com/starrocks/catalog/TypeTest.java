@@ -252,9 +252,6 @@ public class TypeTest {
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isMapType());
         Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
-        // Make sure select fields are false when initialized
-        Assert.assertFalse(deType.selectedFields[0]);
-        Assert.assertFalse(deType.selectedFields[1]);
     }
 
     @Test

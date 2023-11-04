@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
+#include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -121,6 +122,10 @@ public:
     void set_runtime_state(RuntimeState* state) { _state = state; }
     RuntimeState* runtime_state() { return _state; }
     void set_current_slot(SlotDescriptor* slot) { _current_slot = slot; }
+    void set_column_name_2_column_access_path_mapping(
+            const std::unordered_map<std::string, ColumnAccessPathPtr>* column_name_2_column_access_path_mapping) {
+        _column_name_2_column_access_path_mapping = column_name_2_column_access_path_mapping;
+    }
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
@@ -171,6 +176,8 @@ private:
     bool _use_orc_column_names = false;
     OrcMappingOptions _orc_mapping_options;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
+    // _column_name_2_column_access_path maybe nullptr, means no subfield prune happened
+    const std::unordered_map<std::string, ColumnAccessPathPtr>* _column_name_2_column_access_path_mapping = nullptr;
     std::vector<TypeDescriptor> _src_types;
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;

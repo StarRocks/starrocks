@@ -1528,31 +1528,29 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
 TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
 
+    SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+    c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    c1.type.field_names.emplace_back("cc0");
+    c1.type.field_names.emplace_back("cc1");
+
+    SlotDesc slot_descs[] = {c0, c1, {""}};
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
     {
         /**
         * Read all orc data
         */
-        SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
-        SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
-        c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-        c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-        c1.type.field_names.emplace_back("cc0");
-        c1.type.field_names.emplace_back("cc1");
-
-        SlotDesc slot_descs[] = {c0, c1, {""}};
-        std::vector<SlotDescriptor*> src_slot_descriptors;
-        ObjectPool pool;
-        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
-
-        // Read all fields
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, true, true};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, true, true};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1576,25 +1574,20 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         /**
          * Load struct partial subfield.
          */
-        SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
-        SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
-        c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
-        c1.type.field_names.emplace_back("cc1");
-
-        SlotDesc slot_descs[] = {c0, c1, {""}};
-
-        std::vector<SlotDescriptor*> src_slot_descriptors;
-        ObjectPool pool;
-        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+        ColumnAccessPathPtr c1_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c1").value();
+        c1_path->put_child_path(ColumnAccessPathUtil::create(TAccessPathType::FIELD, "cc1").value());
+        std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+        path_mapping.emplace("c1", std::move(c1_path));
 
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
+        reader.set_column_name_2_column_access_path_mapping(&path_mapping);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, false, true};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, false, true};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1608,10 +1601,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc1:'Smith'}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc1:'Cruise'}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc1:'hello'}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc1:'World'}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc0:CONST: NULL,cc1:'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0:CONST: NULL,cc1:'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0:CONST: NULL,cc1:'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0:CONST: NULL,cc1:'World'}]", result->debug_row(3));
     }
 }
 
@@ -1650,8 +1643,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, true, true};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, true, true};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1697,8 +1690,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, true, true};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, true, true};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1724,8 +1717,15 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         */
         SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
         SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
+        c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
+        c1.type.field_names.emplace_back("cc1");
         c1.type.field_names.emplace_back("cc0");
+
+        ColumnAccessPathPtr c1_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c1").value();
+        c1_path->put_child_path(ColumnAccessPathUtil::create(TAccessPathType::FIELD, "cc0").value());
+        std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+        path_mapping.emplace("c1", std::move(c1_path));
 
         SlotDesc slot_descs[] = {c0, c1, {""}};
 
@@ -1735,12 +1735,13 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
 
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
+        reader.set_column_name_2_column_access_path_mapping(&path_mapping);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, true, false};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, true, false};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1754,10 +1755,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {cc0:11}]", result->debug_row(0));
-        EXPECT_EQ("[2, {cc0:22}]", result->debug_row(1));
-        EXPECT_EQ("[3, {cc0:33}]", result->debug_row(2));
-        EXPECT_EQ("[4, {cc0:44}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc1:CONST: NULL,cc0:11}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc1:CONST: NULL,cc0:22}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc1:CONST: NULL,cc0:33}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc1:CONST: NULL,cc0:44}]", result->debug_row(3));
     }
 }
 
@@ -1778,8 +1779,15 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         */
         SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
         SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
+        c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
         c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+        c1.type.field_names.emplace_back("cc0");
         c1.type.field_names.emplace_back("Cc1");
+
+        ColumnAccessPathPtr c1_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c1").value();
+        c1_path->put_child_path(ColumnAccessPathUtil::create(TAccessPathType::FIELD, "Cc1").value());
+        std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+        path_mapping.emplace("c1", std::move(c1_path));
 
         SlotDesc slot_descs[] = {c0, c1, {""}};
 
@@ -1790,12 +1798,13 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         reader.set_case_sensitive(true);
+        reader.set_column_name_2_column_access_path_mapping(&path_mapping);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, false, true};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, false, true};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1809,10 +1818,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
 
-        EXPECT_EQ("[1, {Cc1:'Smith'}]", result->debug_row(0));
-        EXPECT_EQ("[2, {Cc1:'Cruise'}]", result->debug_row(1));
-        EXPECT_EQ("[3, {Cc1:'hello'}]", result->debug_row(2));
-        EXPECT_EQ("[4, {Cc1:'World'}]", result->debug_row(3));
+        EXPECT_EQ("[1, {cc0:CONST: NULL,Cc1:'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0:CONST: NULL,Cc1:'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0:CONST: NULL,Cc1:'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0:CONST: NULL,Cc1:'World'}]", result->debug_row(3));
     }
 
     {
@@ -1821,8 +1830,15 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         */
         SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
         SlotDesc c1{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT)};
+        c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
         c1.type.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+        c1.type.field_names.emplace_back("cc0");
         c1.type.field_names.emplace_back("cc1");
+
+        ColumnAccessPathPtr c1_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c1").value();
+        c1_path->put_child_path(ColumnAccessPathUtil::create(TAccessPathType::FIELD, "cc1").value());
+        std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+        path_mapping.emplace("c1", std::move(c1_path));
 
         SlotDesc slot_descs[] = {c0, c1, {""}};
 
@@ -1833,6 +1849,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         reader.set_case_sensitive(true);
+        reader.set_column_name_2_column_access_path_mapping(&path_mapping);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         EXPECT_FALSE(st.ok());
@@ -1880,10 +1897,11 @@ TEST_F(OrcChunkReaderTest, TestUnConvertableType) {
 TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     static const std::string input_orc_file =
             "./be/test/exec/test_data/orc_scanner/orc_test_struct_array_map_basic.orc";
+
+    // prepare select all slot descriptors
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
     {
-        /**
-        * Load all test
-        */
         TypeDescriptor c12_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
         c12_array.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
 
@@ -1914,21 +1932,22 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         SlotDesc c2{"c2", c2_array};
 
         SlotDesc slot_descs[] = {c0, c1, c2, {""}};
-
-        std::vector<SlotDescriptor*> src_slot_descriptors;
-        ObjectPool pool;
         create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+    }
 
-        // Read all fields
+    {
+        /**
+        * Load all test
+        */
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
 
-        std::vector<bool> selectd_column_id = {true, true, true, true, true, true, true,
-                                               true, true, true, true, true, true};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, true, true, true, true, true, true,
+                                                true, true, true, true, true, true};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -1966,41 +1985,21 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         /**
         * Don't load struct subfield c21
         */
-        TypeDescriptor c12_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-        c12_array.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
 
-        TypeDescriptor c1_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        c1_struct.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-        c1_struct.children.push_back(c12_array);
-        c1_struct.field_names.emplace_back("c11");
-        c1_struct.field_names.emplace_back("c12");
-
-        TypeDescriptor c1_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-        c1_array.children.push_back(c1_struct);
-
-        TypeDescriptor c2_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-        c2_struct.children.push_back((TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)));
-        c2_struct.field_names.emplace_back("c22");
-
-        TypeDescriptor c2_map = TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP);
-        c2_map.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-        c2_map.children.push_back(c2_struct);
-
-        TypeDescriptor c2_array = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-        c2_array.children.push_back(c2_map);
-
-        SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
-        SlotDesc c1{"c1", c1_array};
-        SlotDesc c2{"c2", c2_array};
-
-        SlotDesc slot_descs[] = {c0, c1, c2, {""}};
-
-        std::vector<SlotDescriptor*> src_slot_descriptors;
-        ObjectPool pool;
-        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+        ColumnAccessPathPtr c2_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c2").value();
+        ColumnAccessPathPtr c2_path_array = ColumnAccessPathUtil::create(TAccessPathType::INDEX, "P").value();
+        ColumnAccessPathPtr c2_path_array_map = ColumnAccessPathUtil::create(TAccessPathType::INDEX, "P").value();
+        ColumnAccessPathPtr c2_path_array_map_field =
+                ColumnAccessPathUtil::create(TAccessPathType::FIELD, "c22").value();
+        c2_path_array_map->put_child_path(std::move(c2_path_array_map_field));
+        c2_path_array->put_child_path(std::move(c2_path_array_map));
+        c2_path->put_child_path(std::move(c2_path_array));
+        std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+        path_mapping.emplace("c2", std::move(c2_path));
 
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         reader.set_use_orc_column_names(true);
+        reader.set_column_name_2_column_access_path_mapping(&path_mapping);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         DCHECK(st.ok()) << st.get_error_msg();
@@ -2023,23 +2022,23 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
 
         EXPECT_EQ(
                 "[1, [{c11:2,c12:['danny1','Smith2','Cruise']},{c11:4,c12:['poal','alan','blossom']}], "
-                "[{1:{c22:'hi1'}},{5:{c22:'p4'}},{9:{c22:'p5'}}]]",
+                "[{1:{c21:CONST: NULL,c22:'hi1'}},{5:{c21:CONST: NULL,c22:'p4'}},{9:{c21:CONST: NULL,c22:'p5'}}]]",
                 result->debug_row(0));
         EXPECT_EQ(
                 "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
-                "[{2:{c22:'hi2'}},{6:{c22:'p5'}}]]",
+                "[{2:{c21:CONST: NULL,c22:'hi2'}},{6:{c21:CONST: NULL,c22:'p5'}}]]",
                 result->debug_row(1));
         EXPECT_EQ(
                 "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], "
-                "[{3:{c22:'hi3'}},{7:{c22:'p6'}}]]",
+                "[{3:{c21:CONST: NULL,c22:'hi3'}},{7:{c21:CONST: NULL,c22:'p6'}}]]",
                 result->debug_row(2));
         EXPECT_EQ(
                 "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
-                "[{4:{c22:'hi4'}},{8:{c22:'p7'}}]]",
+                "[{4:{c21:CONST: NULL,c22:'hi4'}},{8:{c21:CONST: NULL,c22:'p7'}}]]",
                 result->debug_row(3));
         EXPECT_EQ(
                 "[5, [{c11:6,c12:['danny4']},{c11:7,c12:['poal','alan']}], "
-                "[{5:{c22:'hi4'}},{9:{c22:'p7'}}]]",
+                "[{5:{c21:CONST: NULL,c22:'hi4'}},{9:{c21:CONST: NULL,c22:'p7'}}]]",
                 result->debug_row(4));
     }
 
@@ -2058,13 +2057,20 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
 
         SlotDesc slot_descs[] = {c2, {""}};
 
-        std::vector<SlotDescriptor*> src_slot_descriptors;
-        ObjectPool pool;
-        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+        std::vector<SlotDescriptor*> pruned_src_slot_descriptors;
+        create_slot_descriptors(_runtime_state.get(), &pool, &pruned_src_slot_descriptors, slot_descs);
 
-        // Read all fields
-        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        ColumnAccessPathPtr c2_path = ColumnAccessPathUtil::create(TAccessPathType::ROOT, "c2").value();
+        ColumnAccessPathPtr c2_path_array = ColumnAccessPathUtil::create(TAccessPathType::INDEX, "P").value();
+        ColumnAccessPathPtr c2_path_array_map = ColumnAccessPathUtil::create(TAccessPathType::KEY, "P").value();
+        c2_path_array->put_child_path(std::move(c2_path_array_map));
+        c2_path->put_child_path(std::move(c2_path_array));
+        std::unordered_map<std::string, ColumnAccessPathPtr> path_mapping{};
+        path_mapping.emplace("c2", std::move(c2_path));
+
+        OrcChunkReader reader(_runtime_state->chunk_size(), pruned_src_slot_descriptors);
         reader.set_use_orc_column_names(true);
+        reader.set_column_name_2_column_access_path_mapping(&path_mapping);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
         EXPECT_TRUE(st.ok());
@@ -2072,9 +2078,9 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
             std::cout << st.get_error_msg() << std::endl;
         }
 
-        std::vector<bool> selectd_column_id = {true, false, false, false, false, false, false,
-                                               true, true,  true,  false, false, false};
-        EXPECT_EQ(selectd_column_id, reader.TEST_get_selected_column_id_list());
+        std::vector<bool> selected_column_id = {true, false, false, false, false, false, false,
+                                                true, true,  true,  false, false, false};
+        EXPECT_EQ(selected_column_id, reader.TEST_get_selected_column_id_list());
 
         st = reader.read_next();
         DCHECK(st.ok()) << st.get_error_msg();
@@ -2088,11 +2094,11 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         EXPECT_EQ(result->num_rows(), 5);
         EXPECT_EQ(result->num_columns(), 1);
 
-        EXPECT_EQ("[[{1:NULL},{5:NULL},{9:NULL}]]", result->debug_row(0));
-        EXPECT_EQ("[[{2:NULL},{6:NULL}]]", result->debug_row(1));
-        EXPECT_EQ("[[{3:NULL},{7:NULL}]]", result->debug_row(2));
-        EXPECT_EQ("[[{4:NULL},{8:NULL}]]", result->debug_row(3));
-        EXPECT_EQ("[[{5:NULL},{9:NULL}]]", result->debug_row(4));
+        EXPECT_EQ("[[{1:CONST: NULL},{5:CONST: NULL},{9:CONST: NULL}]]", result->debug_row(0));
+        EXPECT_EQ("[[{2:CONST: NULL},{6:CONST: NULL}]]", result->debug_row(1));
+        EXPECT_EQ("[[{3:CONST: NULL},{7:CONST: NULL}]]", result->debug_row(2));
+        EXPECT_EQ("[[{4:CONST: NULL},{8:CONST: NULL}]]", result->debug_row(3));
+        EXPECT_EQ("[[{5:CONST: NULL},{9:CONST: NULL}]]", result->debug_row(4));
     }
 }
 

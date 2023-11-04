@@ -963,6 +963,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
+            // set column access path
+            hudiScanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
             hudiScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
@@ -1004,6 +1006,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
+            // set column access path
+            hdfsScanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
             hdfsScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
@@ -1043,6 +1047,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
+            // set column access path
+            fileTableScanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
             fileTableScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
@@ -1094,6 +1100,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
+            // set column access path
+            deltaLakeScanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
             deltaLakeScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
@@ -1137,6 +1145,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
+            // set column access path
+            paimonScanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
             paimonScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();
@@ -1186,6 +1196,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
+            // set column access path
+            icebergScanNode.setColumnAccessPaths(computeAllColumnAccessPath(node, context));
             icebergScanNode.setLimit(node.getLimit());
 
             tupleDescriptor.computeMemLayout();

@@ -35,8 +35,10 @@ public:
                                                  const tparquet::RowGroup& row_group,
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
-    virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
-                                      std::vector<GroupReaderParam::Column>& read_cols) const = 0;
+    virtual void prepare_read_columns(
+            const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+            const std::unordered_map<std::string, ColumnAccessPathPtr>* column_access_path_mapping,
+            std::vector<GroupReaderParam::Column>& read_cols) const = 0;
 
     virtual const ParquetField* get_parquet_field(const std::string& col_name) const = 0;
 
@@ -63,7 +65,7 @@ protected:
     GroupReaderParam::Column _build_column(int32_t field_idx_in_parquet, int32_t col_idx_in_chunk,
                                            const tparquet::Type::type& col_type_in_parquet,
                                            const TypeDescriptor& col_type_in_chunk, const SlotId& slot_id,
-                                           bool decode_needed,
+                                           bool decode_needed, const ColumnAccessPathPtr* column_access_path,
                                            const TIcebergSchemaField* t_iceberg_schema_field = nullptr) const {
         GroupReaderParam::Column column{};
         column.field_idx_in_parquet = field_idx_in_parquet;
@@ -71,6 +73,7 @@ protected:
         column.col_type_in_parquet = col_type_in_parquet;
         column.col_type_in_chunk = col_type_in_chunk;
         column.slot_id = slot_id;
+        column.column_access_path = column_access_path;
         column.t_iceberg_schema_field = t_iceberg_schema_field;
         column.decode_needed = decode_needed;
         return column;
@@ -93,6 +96,7 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                              const std::unordered_map<std::string, ColumnAccessPathPtr>* column_access_path_mapping,
                               std::vector<GroupReaderParam::Column>& read_cols) const override;
 
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
@@ -116,6 +120,7 @@ public:
                                          const tparquet::RowGroup& row_group,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                              const std::unordered_map<std::string, ColumnAccessPathPtr>* column_access_path_mapping,
                               std::vector<GroupReaderParam::Column>& read_cols) const override;
     const ParquetField* get_parquet_field(const std::string& col_name) const override;
 

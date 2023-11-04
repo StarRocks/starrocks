@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
@@ -81,6 +82,7 @@ private:
     void _init_counter(RuntimeState* state);
     void _init_rf_counters();
 
+    Status _init_column_access_path_mapping(RuntimeState* state);
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
     HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
@@ -141,6 +143,7 @@ private:
     bool _can_use_any_column = false;
     bool _can_use_min_max_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
+    std::unordered_map<std::string, ColumnAccessPathPtr> _column_name_2_column_access_path_mapping;
 
     bool _has_scan_range_indicate_const_column = false;
     bool _use_partition_column_value_only = false;

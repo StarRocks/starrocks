@@ -30,6 +30,6 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
         String sql = "with stream as (select array_agg(col_struct.c0) as t1 from hive0.subfield_db.subfield group by " +
                 "col_int) select t1 from stream";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "Pruned type: 6 [col_struct] <-> [struct<c0 int(11)>]");
+        assertContains(plan, "[/col_struct/c0]");
     }
 }

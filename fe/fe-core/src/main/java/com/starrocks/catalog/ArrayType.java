@@ -123,19 +123,6 @@ public class ArrayType extends Type {
         return clone;
     }
 
-    @Override
-    public void selectAllFields() {
-        if (itemType.isComplexType()) {
-            itemType.selectAllFields();
-        }
-    }
-
-    public void pruneUnusedSubfields() {
-        if (itemType.isComplexType()) {
-            itemType.pruneUnusedSubfields();
-        }
-    }
-
     /**
      * @return 33 (utf8_general_ci) if type is array
      * https://dev.mysql.com/doc/internals/en/com-query-response.html#column-definition

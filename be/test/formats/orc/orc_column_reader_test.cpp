@@ -66,14 +66,14 @@ TEST(OrcColumnReaderTest, TestDateColumn) {
         ORC_UNIQUE_PTR<orc::RowReader> rr = reader->createRowReader(options);
 
         // Set for OrcMapping and OrcChunkReader, just used it to pass arguments in function, actually it's not used
-        const OrcMappingPtr orcMapping = nullptr;
+        OrcMappingContext orc_mapping_context{nullptr, orcType, nullptr};
         OrcChunkReader orcChunkReader(batchSize, {});
         orcChunkReader.disable_broker_load_mode();
 
         TypeDescriptor c0Type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
 
         std::unique_ptr<ORCColumnReader> orcColumnReader =
-                ORCColumnReader::create(c0Type, orcType, true, orcMapping, &orcChunkReader).value();
+                ORCColumnReader::create(c0Type, orc_mapping_context, true, &orcChunkReader).value();
 
         ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = rr->createRowBatch(batchSize);
         auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());

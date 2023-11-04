@@ -19,6 +19,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 
@@ -49,7 +50,12 @@ public:
 
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
+    // for test
+    void put_child_path(std::unique_ptr<ColumnAccessPath> child_path);
+
     bool is_key() const { return _type == TAccessPathType::type::KEY; }
+
+    bool is_value() const { return _type == TAccessPathType::type::VALUE; }
 
     bool is_offset() const { return _type == TAccessPathType::type::OFFSET; }
 
@@ -60,6 +66,8 @@ public:
     bool is_index() const { return _type == TAccessPathType::type::INDEX; }
 
     bool is_from_predicate() const { return _from_predicate; }
+
+    const std::unique_ptr<ColumnAccessPath>* get_child_by_path(const std::string& path) const;
 
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
@@ -75,12 +83,13 @@ private:
     // column index in storage
     // the root index is the offset of table schema
     // the FIELD index is the offset of struct schema
-    // it's unused for MAP/JSON/ARRAY now
+    // it's unused for MAP/JSON/ARRAY and Catalog table now
     uint32_t _column_index;
 
     bool _from_predicate;
 
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;
+    std::unordered_map<std::string, size_t> _path_2_child_index;
 };
 
 using ColumnAccessPathPtr = std::unique_ptr<ColumnAccessPath>;
@@ -89,5 +98,29 @@ inline std::ostream& operator<<(std::ostream& out, const ColumnAccessPath& val) 
     out << val.to_string();
     return out;
 }
+
+class ColumnAccessPathUtil {
+public:
+    static StatusOr<ColumnAccessPathPtr> create(const TAccessPathType::type& type, const std::string& path,
+                                                uint32_t index = 0);
+
+    static std::vector<bool> get_selected_subfields_for_struct(const TypeDescriptor& type,
+                                                               const ColumnAccessPathPtr* path);
+
+    static std::vector<bool> get_selected_subfields_for_map(const TypeDescriptor& type,
+                                                            const ColumnAccessPathPtr* path);
+
+    static bool is_select_all_subfields(const ColumnAccessPathPtr* path);
+
+    static const ColumnAccessPathPtr* get_struct_subfield_path(const ColumnAccessPathPtr* parent_path,
+                                                               const std::string& subfield_name);
+
+    static const ColumnAccessPathPtr* get_array_element_path(const ColumnAccessPathPtr* parent_path);
+
+    static const ColumnAccessPathPtr* get_map_values_path(const ColumnAccessPathPtr* parent_path);
+
+    static const ColumnAccessPathPtr* get_column_access_path_from_mapping(
+            const std::unordered_map<std::string, ColumnAccessPathPtr>* mapping, const std::string& slot_name);
+};
 
 } // namespace starrocks

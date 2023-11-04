@@ -72,9 +72,9 @@ public:
     virtual ~ORCColumnReader() = default;
     virtual Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) = 0;
 
-    static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type, const orc::Type* orc_type,
-                                                             bool nullable, const OrcMappingPtr& orc_mapping,
-                                                             OrcChunkReader* reader);
+    static StatusOr<std::unique_ptr<ORCColumnReader>> create(const TypeDescriptor& type,
+                                                             const OrcMappingContext& orc_mapping_context,
+                                                             bool nullable, OrcChunkReader* reader);
     const orc::Type* get_orc_type() { return _orc_type; }
 
 protected:

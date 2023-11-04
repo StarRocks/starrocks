@@ -169,7 +169,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[1, {a:2,b:3,c:4,d:NULL}]", chunk->debug_row(0));
+    EXPECT_EQ("[1, {a:2,b:3,c:4,d:CONST: NULL}]", chunk->debug_row(0));
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
@@ -387,7 +387,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1, chunk->num_rows());
 
-    EXPECT_EQ("[1, {a_rename:2,b_rename:3,c_rename:4,d_rename:NULL}]", chunk->debug_row(0));
+    EXPECT_EQ("[1, {a_rename:2,b_rename:3,c_rename:4,d_rename:CONST: NULL}]", chunk->debug_row(0));
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {

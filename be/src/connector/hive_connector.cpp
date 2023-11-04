@@ -107,6 +107,7 @@ Status HiveDataSource::open(RuntimeState* state) {
         _use_datacache = false;
     }
 
+    RETURN_IF_ERROR(_init_column_access_path_mapping(state));
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
@@ -125,6 +126,29 @@ void HiveDataSource::_update_has_any_predicate() {
         return false;
     };
     _has_any_predicate = f();
+}
+
+Status HiveDataSource::_init_column_access_path_mapping(RuntimeState* state) {
+    // Init complex type ColumnAccessPaths
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    if (_provider->_hdfs_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < _provider->_hdfs_scan_node.column_access_paths.size(); ++i) {
+            auto path = std::make_unique<ColumnAccessPath>();
+            RETURN_IF_ERROR(path->init(_provider->_hdfs_scan_node.column_access_paths[i], state, &_pool));
+            column_access_paths.emplace_back(std::move(path));
+        }
+    }
+
+    for (auto& column_access_path : column_access_paths) {
+        if (column_access_path->is_from_predicate()) {
+            // TODO(SmithCruise) We don't support complex type late materialize in catalog now,
+            // so ignore ColumnAccessPath from predicates
+            continue;
+        }
+        _column_name_2_column_access_path_mapping.emplace(column_access_path->path(), std::move(column_access_path));
+    }
+
+    return Status::OK();
 }
 
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
@@ -442,17 +466,43 @@ void HiveDataSource::_init_rf_counters() {
     }
 }
 
-static void build_nested_fields(const TypeDescriptor& type, const std::string& parent, std::string* sb) {
-    for (int i = 0; i < type.children.size(); i++) {
-        const auto& t = type.children[i];
-        if (t.is_unknown_type()) continue;
-        std::string p = parent + "." + (type.is_struct_type() ? type.field_names[i] : fmt::format("${}", i));
-        if (t.is_complex_type()) {
-            build_nested_fields(t, p, sb);
-        } else {
-            sb->append(p);
-            sb->append(",");
+static void build_nested_fields(const TypeDescriptor& type, const ColumnAccessPathPtr* column_access_path,
+                                const std::string& parent, std::string* sb) {
+    if (type.is_struct_type()) {
+        std::vector<bool> selected_fields =
+                ColumnAccessPathUtil::get_selected_subfields_for_struct(type, column_access_path);
+        for (int i = 0; i < type.children.size(); i++) {
+            if (!selected_fields[i]) {
+                continue;
+            }
+
+            const auto& t = type.children[i];
+            std::string p = parent + "." + type.field_names[i];
+            const ColumnAccessPathPtr* child =
+                    ColumnAccessPathUtil::get_struct_subfield_path(column_access_path, type.field_names[i]);
+            build_nested_fields(t, child, p, sb);
         }
+    } else if (type.is_map_type()) {
+        std::vector<bool> selected_fields =
+                ColumnAccessPathUtil::get_selected_subfields_for_map(type, column_access_path);
+        if (selected_fields[0]) {
+            std::string p = parent + "." + "$0";
+            build_nested_fields(type.children[0], nullptr, p, sb);
+        }
+
+        if (selected_fields[1]) {
+            std::string p = parent + "." + "$1";
+            const ColumnAccessPathPtr* child = ColumnAccessPathUtil::get_map_values_path(column_access_path);
+            build_nested_fields(type.children[1], child, p, sb);
+        }
+    } else if (type.is_array_type()) {
+        std::string p = parent + "." + "$0";
+        const ColumnAccessPathPtr* child = ColumnAccessPathUtil::get_array_element_path(column_access_path);
+        build_nested_fields(type.children[0], child, p, sb);
+    } else {
+        // add for a primitive type
+        sb->append(parent);
+        sb->append(",");
     }
 }
 
@@ -503,7 +553,9 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) 
     for (auto slot : _tuple_desc->slots()) {
         const TypeDescriptor& type = slot->type();
         if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
+            const ColumnAccessPathPtr* path = ColumnAccessPathUtil::get_column_access_path_from_mapping(
+                    &_column_name_2_column_access_path_mapping, slot->col_name());
+            build_nested_fields(type, path, slot->col_name(), &nested_fields);
         }
     }
     if (!nested_fields.empty()) {
@@ -558,7 +610,9 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
     for (auto slot : _tuple_desc->slots()) {
         const TypeDescriptor& type = slot->type();
         if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
+            const ColumnAccessPathPtr* path = ColumnAccessPathUtil::get_column_access_path_from_mapping(
+                    &_column_name_2_column_access_path_mapping, slot->col_name());
+            build_nested_fields(type, path, slot->col_name(), &nested_fields);
         }
     }
     if (!nested_fields.empty()) {
@@ -722,6 +776,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
+    scanner_params.column_name_2_column_access_path_mapping = &_column_name_2_column_access_path_mapping;
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }

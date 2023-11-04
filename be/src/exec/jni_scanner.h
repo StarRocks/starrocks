@@ -52,6 +52,8 @@ private:
         uint8_t* nulls;
         Column* column;
         bool must_nullable;
+
+        const ColumnAccessPathPtr* column_access_path;
     };
 
     [[nodiscard]] static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
