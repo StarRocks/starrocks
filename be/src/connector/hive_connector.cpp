@@ -670,7 +670,9 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     for (auto slot : _materialize_slots) {
         const TypeDescriptor& type = slot->type();
         if (type.is_complex_type()) {
-            build_nested_fields(type, slot->col_name(), &nested_fields);
+            const ColumnAccessPathPtr* path = ColumnAccessPathUtil::get_column_access_path_from_mapping(
+                    &_column_name_2_column_access_path_mapping, slot->col_name());
+            build_nested_fields(type, path, slot->col_name(), &nested_fields);
         }
     }
     if (!nested_fields.empty()) {
