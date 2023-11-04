@@ -41,6 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -949,4 +950,30 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(json);
     }
 
+    /**
+     * Inspect db locks that hold by threads
+     */
+    @ConstantFunction(name = "inspect_lock_owners", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectLockOwners() {
+        Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        JsonArray dbLocks = new JsonArray();
+        for (Database db : dbs.values()) {
+            JsonObject ownerInfo = new JsonObject();
+            String name = db.getFullName();
+            ownerInfo.addProperty("lockDbName", name);
+
+            QueryableReentrantReadWriteLock lock = db.getLock();
+            if (lock.isWriteLocked() && lock.getOwner() != null) {
+                String ownerName = lock.getOwner().getName();
+                long id = lock.getOwner().getId();
+                ownerInfo.addProperty("threadName", ownerName);
+                ownerInfo.addProperty("threadId", id);
+                ownerInfo.addProperty("lockState", "writeLocked");
+
+                dbLocks.add(ownerInfo);
+            }
+        }
+        String json = dbLocks.toString();
+        return ConstantOperator.createVarchar(json);
+    }
 }
