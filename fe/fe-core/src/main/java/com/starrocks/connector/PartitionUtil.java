@@ -479,7 +479,6 @@ public class PartitionUtil {
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
-        int index = 0;
         PartitionKey lastPartitionKey = null;
         String partitionName = null;
 
@@ -487,7 +486,7 @@ public class PartitionUtil {
         for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
             // Adapt to the range partitioning method of JDBC Table, the partitionName adopts the name of upperBound
             partitionName = entry.getKey();
-            if (index == 0) {
+            if (lastPartitionKey == null) {
                 lastPartitionKey = entry.getValue();
                 if (!lastPartitionKey.getKeys().get(0).isMinValue()) {
                     // If partition key is not min value, rewrite it to min value.
@@ -503,10 +502,8 @@ public class PartitionUtil {
                     } else {
                         lastPartitionKey = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
                     }
-                    ++index;
                     continue;
                 }
-                ++index;
             }
             PartitionKey upperBound = isConvertToDate ? convertToDate(entry.getValue()) : entry.getValue();
             putRangeToMvPartitionRangeMapForJDBCTable(mvPartitionRangeMap, partitionName, lastPartitionKey, upperBound);
