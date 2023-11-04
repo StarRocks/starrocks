@@ -562,13 +562,10 @@ public:
     size_t file_size() { return _total_kv_bytes + _total_bf_bytes; }
 
     bool bf_flushed() { return _bf_flushed; }
-    /*
-    void swap_bf_vec(std::vector<std::unique_ptr<BloomFilter>>* bf_vec) {
-        if (!_bf_flushed) {
-            bf_vec->swap(_bf_vec);
-        }
-    }
-    */
+
+    size_t total_kv_num() { return _total; }
+
+    std::string index_file() { return _idx_file_path; }
 
 private:
     EditVersion _version;

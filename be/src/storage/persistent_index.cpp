@@ -4455,6 +4455,13 @@ Status PersistentIndex::_merge_compaction() {
     if (_usage != writer->total_kv_size()) {
         _usage = writer->total_kv_size();
     }
+    if (_size != writer->total_kv_num()) {
+        std::string msg =
+                strings::Substitute("inconsistent kv num after merge compaction, actual:$0, expect:$1, index_file:$2",
+                                    writer->total_kv_num(), _size, writer->index_file());
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
+    }
     return writer->finish();
 }
 
