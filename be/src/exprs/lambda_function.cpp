@@ -29,6 +29,10 @@ LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _comm
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
     // common sub expressions include 2 parts in a pair: (slot id, expression)
     const int child_num = get_num_children() - 2 * _common_sub_expr_num;
     // collect the slot ids of lambda arguments
@@ -99,22 +103,6 @@ StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk
         chunk->append_column(sub_col, _common_sub_expr_ids[i]);
     }
     return get_child(0)->evaluate_checked(context, chunk);
-}
-
-void LambdaFunction::close() {
-    _captured_slot_ids.clear();
-    _arguments_ids.clear();
-    _common_sub_expr_ids.clear();
-    _common_sub_expr.clear();
-    Expr::close();
-}
-
-void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    _captured_slot_ids.clear();
-    _arguments_ids.clear();
-    _common_sub_expr_ids.clear();
-    _common_sub_expr.clear();
-    Expr::close(state, context, scope);
 }
 
 } // namespace starrocks

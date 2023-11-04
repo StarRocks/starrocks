@@ -59,15 +59,12 @@ public:
 
     Expr* get_lambda_expr() const { return _children[0]; }
 
-    void close() override;
-
-    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
-
 private:
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;
     std::vector<SlotId> _common_sub_expr_ids;
     std::vector<Expr*> _common_sub_expr;
     int _common_sub_expr_num;
+    bool _is_prepared = false;
 };
 } // namespace starrocks
