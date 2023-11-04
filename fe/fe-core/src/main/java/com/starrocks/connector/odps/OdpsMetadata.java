@@ -14,11 +14,9 @@
 
 package com.starrocks.connector.odps;
 
-import com.aliyun.odps.Column;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.Partition;
 import com.aliyun.odps.PartitionSpec;
-import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
@@ -28,6 +26,7 @@ import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplitAssigner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
@@ -48,10 +47,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
@@ -127,11 +126,9 @@ public class OdpsMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
-
-        TableSchema schema = odps.tables().get(odpsTable.getProjectName(), odpsTable.getTableName()).getSchema();
-        Set<String> set = columnNames.stream().collect(Collectors.toSet());
+        Set<String> set = new HashSet<>(columnNames);
         List<String> orderedColumnNames = new ArrayList<>();
-        for (Column column : schema.getColumns()) {
+        for (Column column : odpsTable.getFullSchema()) {
             if (set.contains(column.getName())) {
                 orderedColumnNames.add(column.getName());
             }
@@ -140,7 +137,9 @@ public class OdpsMetadata implements ConnectorMetadata {
         if (partitionKeys != null) {
             for (PartitionKey partitionKey : partitionKeys) {
                 String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnNames(), partitionKey);
-                partitionSpecs.add(new PartitionSpec(hivePartitionName));
+                if (!hivePartitionName.isEmpty()) {
+                    partitionSpecs.add(new PartitionSpec(hivePartitionName));
+                }
             }
         }
         try {
