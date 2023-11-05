@@ -25,13 +25,11 @@
 namespace starrocks::bthreads {
 
 namespace {
-struct FunctorArg {
-    std::function<void()> func;
-};
+typedef std::function<void()> FunctorArg;
 
 static void* bthread_func(void* arg) {
     auto func_arg = static_cast<FunctorArg*>(arg);
-    func_arg->func();
+    func_arg->operator()();
     delete func_arg;
     return nullptr;
 }
