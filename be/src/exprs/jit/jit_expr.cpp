@@ -50,6 +50,10 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     if (_is_prepared) {
         return Status::OK();
     }
+
+    if (_is_prepared) {
+        return Status::OK();
+    }
     if (prepared_times.fetch_add(1) > 0) {
         LOG(ERROR) << "prepared more times";
         return Status::RuntimeError("Prepared more times");
