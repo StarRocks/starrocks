@@ -414,7 +414,7 @@ ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots,
     auto chunk = std::make_unique<Chunk>();
     for (const auto slot : slots) {
         auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
-        column->reserve(n);
+        // column->reserve(n);
         chunk->append_column(column, slot->id());
     }
     return chunk;
