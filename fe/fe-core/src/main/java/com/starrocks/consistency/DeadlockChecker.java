@@ -27,7 +27,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 
 public class DeadlockChecker extends LeaderDaemon {
@@ -42,6 +44,7 @@ public class DeadlockChecker extends LeaderDaemon {
     protected void runAfterCatalogReady() {
         checkDbLocks();
         checkDeadlocks();
+        checkSlowLock();
 
         setInterval(Config.deadlock_checker_interval_second * 1000);
     }
@@ -106,6 +109,35 @@ public class DeadlockChecker extends LeaderDaemon {
         long[] ids = tmx.findDeadlockedThreads();
         if (ids != null) {
             LOG.info("deadlock threads: {}", ids);
+        }
+    }
+
+    private void checkSlowLock() {
+        Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        Map<QueryableReentrantReadWriteLock, Thread> lockOwnerMap = new HashMap<>();
+
+        for (Database db : dbs.values()) {
+            QueryableReentrantReadWriteLock lock = db.getLock();
+            lockOwnerMap.put(lock, lock.getOwner());
+        }
+
+        // sleep 5s and check whether the lock is still held
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            LOG.warn("check slow lock failed", e);
+            return;
+        }
+
+        for (Map.Entry<QueryableReentrantReadWriteLock, Thread> entry : lockOwnerMap.entrySet()) {
+            Thread currentOwner = entry.getKey().getOwner();
+            if (currentOwner != null && currentOwner.getId() == entry.getValue().getId()) {
+                String stack = Arrays.toString(currentOwner.getStackTrace()).replace(',', '\n');
+                LOG.warn("thread {}-{} hold the lock {} too long, with waiters: [{}], stack: {}",
+                        currentOwner.getId(), currentOwner.getName(),
+                        entry.getKey(), entry.getKey().getQueuedThreads(),
+                        stack);
+            }
         }
     }
 
