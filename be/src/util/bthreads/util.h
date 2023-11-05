@@ -25,15 +25,19 @@
 namespace starrocks::bthreads {
 
 namespace {
+<<<<<<< HEAD
 struct FunctorArg {
     explicit FunctorArg(std::function<void()> f) : func(std::move(f)) {}
 
     std::function<void()> func;
 };
+=======
+typedef std::function<void()> FunctorArg;
+>>>>>>> 0c16c9bb9a ([BugFix] fix clang build error (#34357))
 
 static void* bthread_func(void* arg) {
     auto func_arg = static_cast<FunctorArg*>(arg);
-    func_arg->func();
+    func_arg->operator()();
     delete func_arg;
     return nullptr;
 }
