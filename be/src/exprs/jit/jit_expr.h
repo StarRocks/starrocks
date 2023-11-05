@@ -39,16 +39,11 @@ public:
 
 protected:
     /**
-     * @brief Prepare the expression.
-     */
-    Status prepare(RuntimeState* state, ExprContext* context) override;
-
-    /**
-     * @brief Open the expression, including:
+     * @brief Prepare the expression, including:
      * 1. Compile the expression into native code and retrieve the function pointer.
      * 2. Create a function context and set the function pointer.
      */
-    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
 
     /**
      * @brief Evaluate the expression using the function context, which contains the compiled function pointer.
@@ -64,6 +59,8 @@ private:
     ObjectPool* _pool;
     // The original expression.
     Expr* _expr;
+
+    bool _is_prepared = false;
 };
 
 } // namespace starrocks

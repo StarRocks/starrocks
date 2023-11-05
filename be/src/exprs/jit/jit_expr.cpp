@@ -47,6 +47,10 @@ JITExpr::JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr) : Expr(nod
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
+    if (_is_prepared) {
+        return Status::OK();
+    }
+
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> args_types;
 
@@ -55,16 +59,10 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     _fn_context_index = context->register_func(state, return_type, args_types);
 
-    return Status::OK();
-}
-
-Status JITExpr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    RETURN_IF_ERROR(Expr::open(state, context, scope));
-
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     // TODO(Yueyang): remove this time cost.
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = MonotonicNanos();
 
     // Compile the expression into native code and retrieve the function pointer.
     auto* jit_wapper = JITWapper::get_instance();
@@ -74,19 +72,20 @@ Status JITExpr::open(RuntimeState* state, ExprContext* context, FunctionContext:
 
     auto function = jit_wapper->compile_scalar_function(context, _expr);
 
-    auto end = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = end - start;
+    auto elapsed = MonotonicNanos() - start;
     if (!function.ok()) {
-        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed.count() << " s"
+        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000 << " ms"
                   << " Reason: " << function.status();
     } else {
-        LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed.count() << " s";
+        LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000 << " ms";
     }
 
     auto function_state = _pool->add(new JITFunctionState{function.value_or(nullptr)});
 
     // TODO(Yueyang): check THREAD_LOCAL or FRAGMENT_LOCAL.
     fn_ctx->set_function_state(FunctionContext::FunctionStateScope::THREAD_LOCAL, function_state);
+
+    _is_prepared = true;
 
     return Status::OK();
 }
