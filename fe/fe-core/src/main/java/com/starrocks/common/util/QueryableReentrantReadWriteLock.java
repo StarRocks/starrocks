@@ -2,6 +2,7 @@
 
 package com.starrocks.common.util;
 
+import java.util.Collection;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /*
@@ -17,5 +18,10 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     @Override
     public Thread getOwner() {
         return super.getOwner();
+    }
+
+    @Override
+    public Collection<Thread> getQueuedThreads() {
+        return super.getQueuedThreads();
     }
 }
