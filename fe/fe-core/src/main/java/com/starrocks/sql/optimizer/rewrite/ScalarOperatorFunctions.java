@@ -964,6 +964,7 @@ public class ScalarOperatorFunctions {
         Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb();
         JsonArray dbLocks = new JsonArray();
         for (Database db : dbs.values()) {
+            boolean useful = false;
             JsonObject ownerInfo = new JsonObject();
             String name = db.getFullName();
             ownerInfo.addProperty("lockDbName", name);
@@ -972,6 +973,7 @@ public class ScalarOperatorFunctions {
 
             // holder information
             if (lock.getOwner() != null) {
+                useful = true;
                 String ownerName = lock.getOwner().getName();
                 long id = lock.getOwner().getId();
                 ownerInfo.addProperty("ownerThreadName", ownerName);
@@ -980,6 +982,7 @@ public class ScalarOperatorFunctions {
                     ownerInfo.addProperty("lockState", "writeLocked");
                 }
             } else if (lock.getReadLockCount() > 0) {
+                useful = true;
                 ownerInfo.addProperty("lockState", "readLocked");
                 ownerInfo.addProperty("readLockCount", lock.getReadLockCount());
             }
@@ -993,10 +996,13 @@ public class ScalarOperatorFunctions {
                 }
             }
             if (!waiterIds.isEmpty()) {
+                useful = true;
                 ownerInfo.add("lockWaiters", waiterIds);
             }
 
-            dbLocks.add(ownerInfo);
+            if (useful) {
+                dbLocks.add(ownerInfo);
+            }
         }
 
         JsonObject result = new JsonObject();
