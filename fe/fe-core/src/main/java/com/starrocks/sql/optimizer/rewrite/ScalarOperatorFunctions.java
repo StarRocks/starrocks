@@ -1005,11 +1005,15 @@ public class ScalarOperatorFunctions {
         // deadlocks by JMX
         ThreadMXBean tmx = ManagementFactory.getThreadMXBean();
         long[] ids = tmx.findDeadlockedThreads();
-        JsonArray deadLockIds = new JsonArray();
-        for (long id : ids) {
-            deadLockIds.add(id);
+        if (ids != null) {
+            JsonArray deadLockIds = new JsonArray();
+            for (long id : ids) {
+                deadLockIds.add(id);
+            }
+            result.add("deadlockThreads", deadLockIds);
+        } else {
+            result.add("deadLockThreads", JsonNull.INSTANCE);
         }
-        result.add("deadlocks", deadLockIds);
 
         String json = result.toString();
         return ConstantOperator.createVarchar(json);
