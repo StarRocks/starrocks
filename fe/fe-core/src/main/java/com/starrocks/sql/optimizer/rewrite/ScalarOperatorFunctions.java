@@ -41,7 +41,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
@@ -52,14 +51,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DayOfWeek;
@@ -76,7 +72,6 @@ import java.time.format.DateTimeParseException;
 import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
-import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
@@ -953,75 +948,6 @@ public class ScalarOperatorFunctions {
             }
         }
         String json = obj.toString();
-        return ConstantOperator.createVarchar(json);
-    }
-
-    /**
-     * Inspect db locks that hold by threads
-     */
-    @ConstantFunction(name = "inspect_lock_owners", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspectLockOwners() {
-        Map<String, Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb();
-        JsonArray dbLocks = new JsonArray();
-        for (Database db : dbs.values()) {
-            boolean useful = false;
-            JsonObject ownerInfo = new JsonObject();
-            String name = db.getFullName();
-            ownerInfo.addProperty("lockDbName", name);
-
-            QueryableReentrantReadWriteLock lock = db.getLock();
-
-            // holder information
-            if (lock.getOwner() != null) {
-                useful = true;
-                String ownerName = lock.getOwner().getName();
-                long id = lock.getOwner().getId();
-                ownerInfo.addProperty("ownerThreadName", ownerName);
-                ownerInfo.addProperty("ownerThreadId", id);
-                if (lock.isWriteLocked()) {
-                    ownerInfo.addProperty("lockState", "writeLocked");
-                }
-            } else if (lock.getReadLockCount() > 0) {
-                useful = true;
-                ownerInfo.addProperty("lockState", "readLocked");
-                ownerInfo.addProperty("readLockCount", lock.getReadLockCount());
-            }
-
-            // waiters
-            Collection<Thread> waiters = lock.getQueuedThreads();
-            JsonArray waiterIds = new JsonArray();
-            for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
-                if (th != null) {
-                    waiterIds.add(th.getId());
-                }
-            }
-            if (!waiterIds.isEmpty()) {
-                useful = true;
-                ownerInfo.add("lockWaiters", waiterIds);
-            }
-
-            if (useful) {
-                dbLocks.add(ownerInfo);
-            }
-        }
-
-        JsonObject result = new JsonObject();
-        result.add("dbLocks", dbLocks);
-
-        // deadlocks by JMX
-        ThreadMXBean tmx = ManagementFactory.getThreadMXBean();
-        long[] ids = tmx.findDeadlockedThreads();
-        if (ids != null) {
-            JsonArray deadLockIds = new JsonArray();
-            for (long id : ids) {
-                deadLockIds.add(id);
-            }
-            result.add("deadlockThreads", deadLockIds);
-        } else {
-            result.add("deadLockThreads", JsonNull.INSTANCE);
-        }
-
-        String json = result.toString();
         return ConstantOperator.createVarchar(json);
     }
 }
