@@ -24,7 +24,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
+import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.DataStreamSink;
+import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.SchemaTableSink;
@@ -36,6 +39,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -121,12 +125,30 @@ public class UpdatePlanner {
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SystemTable) {
+                // insert new fragment on top of current root fragment using broadcast mode
+                PlanFragment childFragment = execPlan.getFragments().get(0);
+                ExchangeNode exchangeNode = new ExchangeNode(execPlan.getNextNodeId(), childFragment.getPlanRoot(),
+                        DistributionSpec.DistributionType.GATHER);
+
+                PlanFragment parent =
+                        new PlanFragment(execPlan.getNextFragmentId(), exchangeNode, DataPartition.UNPARTITIONED);
+                // copy output expr for schema sink
+                parent.setOutputExprs(childFragment.getOutputExpr());
+
+                // add new fragment as top fragment
+                execPlan.getFragments().add(0, parent);
                 DataSink dataSink = new SchemaTableSink((SystemTable) table);
-                execPlan.getFragments().get(0).setSink(dataSink);
+                parent.setSink(dataSink);
+
+                childFragment.setDestination(exchangeNode);
+                DataStreamSink childSink = new DataStreamSink(exchangeNode.getId());
+                // set exchange sink as broadcast
+                childSink.setPartition(DataPartition.UNPARTITIONED);
+                childFragment.setSink(childSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + table.getClass().getName());
             }
-            if (canUsePipeline) {
+            if (canUsePipeline && (!(table instanceof SystemTable))) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
                     sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
@@ -141,6 +163,7 @@ public class UpdatePlanner {
                 sinkFragment.setForceAssignScanRangesPerDriverSeq();
                 sinkFragment.disableRuntimeAdaptiveDop();
             } else {
+                // schema table sink always set dop = 1
                 execPlan.getFragments().get(0).setPipelineDop(1);
             }
             return execPlan;

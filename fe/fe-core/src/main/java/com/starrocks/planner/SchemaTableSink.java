@@ -61,6 +61,6 @@ public class SchemaTableSink extends DataSink {
     @Override
     public boolean canUsePipeLine() {
         // @TODO(silverbullet233): need to be adapted on pipeline engine
-        return false;
+        return true;
     }
 }

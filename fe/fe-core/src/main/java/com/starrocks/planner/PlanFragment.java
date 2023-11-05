@@ -359,6 +359,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.outputExprs = Expr.cloneList(outputExprs, null);
     }
 
+    public List<Expr> getOutputExpr() {
+        return outputExprs;
+    }
+
     /**
      * Finalize plan tree and create stream sink, if needed.
      */

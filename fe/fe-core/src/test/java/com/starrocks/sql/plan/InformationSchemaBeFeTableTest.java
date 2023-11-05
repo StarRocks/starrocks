@@ -20,6 +20,9 @@ import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.BeTxnsSystemTable;
 import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -27,11 +30,15 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.Map;
 
 public class InformationSchemaBeFeTableTest {
+    private static ConnectContext connectContext;
+
     @BeforeClass
     public static void setUp() throws Exception {
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
+        connectContext = UtFrameUtils.createDefaultCtx();
     }
 
     @AfterClass
@@ -109,9 +116,49 @@ public class InformationSchemaBeFeTableTest {
     public void testUpdateBeConfig() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
+        String sql = "update information_schema.be_configs set value=\"1000\" where name=\"txn_info_history_size\"";
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: BE_ID | 2: NAME | 7: expr | 4: TYPE | 5: DEFAULT | 6: MUTABLE\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "   SCHEMA TABLE(be_configs) SINK\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:1: BE_ID | 2: NAME | 7: expr | 4: TYPE | 5: DEFAULT | 6: MUTABLE\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: BE_ID\n" +
+                "  |  <slot 2> : 2: NAME\n" +
+                "  |  <slot 4> : 4: TYPE\n" +
+                "  |  <slot 5> : 5: DEFAULT\n" +
+                "  |  <slot 6> : 6: MUTABLE\n" +
+                "  |  <slot 7> : '1000'\n" +
+                "  |  \n" +
+                "  0:SCAN SCHEMA\n";
         try {
             Assert.assertFalse(
-                    stmt.execute("update information_schema.be_configs set value=\"1000\" where name=\"txn_info_history_size\""));
+                    stmt.execute(
+                            "update information_schema.be_configs set value=\"1000\" where name=\"txn_info_history_size\""));
+
+            // check whether STREAM DATA SINK use broadcast
+            String explain = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+                    getExplainString(TExplainLevel.NORMAL);
+            Assert.assertEquals(explain, expected);
+
+            String plan = UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
+            // check whether paln has two plan fragment and each fragment has three different instance for each BE
+            Map<Integer, Integer> result = PlanTestNoneDBBase.extractFragmentAndInstanceFromSchedulerPlan(plan);
+            Assert.assertEquals(result.keySet().size(), 2);
+            Assert.assertEquals(result.get(0).intValue(), 3);
+            Assert.assertEquals(result.get(1).intValue(), 3);
         } finally {
             stmt.close();
             connection.close();
