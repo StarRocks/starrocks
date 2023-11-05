@@ -219,6 +219,7 @@ public:
     METRIC_DEFINE_UINT_GAUGE(stream_load_pipe_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(brpc_endpoint_stub_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(debug_running_scan_threads, MetricUnit::NOUNIT);
 
     static StarRocksMetrics* instance() {
         static StarRocksMetrics instance;

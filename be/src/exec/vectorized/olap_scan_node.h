@@ -120,6 +120,8 @@ private:
     // scanner concurrency
     size_t _scanner_concurrency();
 
+    static std::atomic<int32_t> _s_running_scan_thread;
+
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
@@ -191,6 +193,8 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _debug_submit_scanner_timer = nullptr;
+    RuntimeProfile::Counter* _debug_runtime_filter_timer = nullptr;
 };
 
 } // namespace starrocks::vectorized

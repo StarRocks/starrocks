@@ -30,8 +30,15 @@
 #include "util/runtime_profile.h"
 namespace starrocks::vectorized {
 
+std::atomic<int32_t> OlapScanNode::_s_running_scan_thread = 0;
+
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {}
+        : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {
+    static std::once_flag once_flag;
+    std::call_once(once_flag, [] {
+      REGISTER_GAUGE_STARROCKS_METRIC(debug_running_scan_threads, [&]() { return _s_running_scan_thread.load(); });
+    });
+}
 
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -57,6 +64,8 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     _tablet_counter = ADD_COUNTER(runtime_profile(), "TabletCount ", TUnit::UNIT);
     _io_task_counter = ADD_COUNTER(runtime_profile(), "IOTaskCount ", TUnit::UNIT);
     _task_concurrency = ADD_COUNTER(runtime_profile(), "ScanConcurrency ", TUnit::UNIT);
+    _debug_submit_scanner_timer = ADD_TIMER(runtime_profile(), "debug_submit_scanner_timer");
+    _debug_runtime_filter_timer = ADD_TIMER(runtime_profile(), "debug_runtime_filter_timer");
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
     _init_counter(state);
     if (_tuple_desc == nullptr) {
@@ -120,6 +129,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     {
+        SCOPED_TIMER(_debug_submit_scanner_timer);
         std::unique_lock<std::mutex> l(_mtx);
         const int32_t num_closed = _closed_scanners.load(std::memory_order_acquire);
         const int32_t num_pending = _pending_scanners.size();
@@ -136,6 +146,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_result_chunks.blocking_get(chunk)) {
+        SCOPED_TIMER(_debug_runtime_filter_timer);
         // If the second argument of `_fill_chunk_pool` is false *AND* the column pool is empty,
         // the column object in the chunk will be destroyed and its memory will be deallocated
         // when the last remaining shared_ptr owning it is destroyed, otherwise the column object
@@ -222,8 +233,10 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
+    _s_running_scan_thread++;
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
     DeferOp op([&] {
+        _s_running_scan_thread--;
         tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
     });
@@ -426,32 +439,36 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
 // The more tasks you submit, the less priority you get.
 int OlapScanNode::_compute_priority(int32_t num_submitted_tasks) {
-    // int nice = 20;
-    // while (nice > 0 && num_submitted_tasks > (22 - nice) * (20 - nice) * 6) {
-    //     --nice;
-    // }
-    // return nice;
-    if (num_submitted_tasks < 5) return 20;
-    if (num_submitted_tasks < 19) return 19;
-    if (num_submitted_tasks < 49) return 18;
-    if (num_submitted_tasks < 91) return 17;
-    if (num_submitted_tasks < 145) return 16;
-    if (num_submitted_tasks < 211) return 15;
-    if (num_submitted_tasks < 289) return 14;
-    if (num_submitted_tasks < 379) return 13;
-    if (num_submitted_tasks < 481) return 12;
-    if (num_submitted_tasks < 595) return 11;
-    if (num_submitted_tasks < 721) return 10;
-    if (num_submitted_tasks < 859) return 9;
-    if (num_submitted_tasks < 1009) return 8;
-    if (num_submitted_tasks < 1171) return 7;
-    if (num_submitted_tasks < 1345) return 6;
-    if (num_submitted_tasks < 1531) return 5;
-    if (num_submitted_tasks < 1729) return 4;
-    if (num_submitted_tasks < 1939) return 3;
-    if (num_submitted_tasks < 2161) return 2;
-    if (num_submitted_tasks < 2395) return 1;
-    return 0;
+    if (config::enable_scanner_debug_priority) {
+        return 20;
+    } else {
+        // int nice = 20;
+        // while (nice > 0 && num_submitted_tasks > (22 - nice) * (20 - nice) * 6) {
+        //     --nice;
+        // }
+        // return nice;
+        if (num_submitted_tasks < 5) return 20;
+        if (num_submitted_tasks < 19) return 19;
+        if (num_submitted_tasks < 49) return 18;
+        if (num_submitted_tasks < 91) return 17;
+        if (num_submitted_tasks < 145) return 16;
+        if (num_submitted_tasks < 211) return 15;
+        if (num_submitted_tasks < 289) return 14;
+        if (num_submitted_tasks < 379) return 13;
+        if (num_submitted_tasks < 481) return 12;
+        if (num_submitted_tasks < 595) return 11;
+        if (num_submitted_tasks < 721) return 10;
+        if (num_submitted_tasks < 859) return 9;
+        if (num_submitted_tasks < 1009) return 8;
+        if (num_submitted_tasks < 1171) return 7;
+        if (num_submitted_tasks < 1345) return 6;
+        if (num_submitted_tasks < 1531) return 5;
+        if (num_submitted_tasks < 1729) return 4;
+        if (num_submitted_tasks < 1939) return 3;
+        if (num_submitted_tasks < 2161) return 2;
+        if (num_submitted_tasks < 2395) return 1;
+        return 0;
+    }
 }
 
 bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
