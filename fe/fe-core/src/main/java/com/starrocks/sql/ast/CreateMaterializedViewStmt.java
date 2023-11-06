@@ -131,6 +131,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
      * This order of mvColumnItemList is meaningful.
      */
     private List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
+
+    private Expr whereClause;
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
@@ -138,6 +140,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid throwing error during replay process, only in Rollup or MaterializedIndexMeta is true.
     private boolean isReplay = false;
+
+    public static String WHERE_PREDICATE_COLUMN_NAME = "__WHERE_PREDICATION";
 
     public CreateMaterializedViewStmt(TableName mvTableName, QueryStatement queryStatement, Map<String, String> properties) {
         super(NodePosition.ZERO);
@@ -198,6 +202,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         this.mvKeysType = mvKeysType;
     }
 
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
     // NOTE: This method is used to replay persistent MaterializedViewMeta,
     // so need keep the same with `genColumnAndSetIntoStmt` and keep compatible with old version policy.
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
@@ -205,7 +213,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         SelectList selectList = null;
         QueryRelation queryRelation = queryStatement.getQueryRelation();
         if (queryRelation instanceof SelectRelation) {
-            selectList = ((SelectRelation) queryRelation).getSelectList();
+            SelectRelation selectRelation = (SelectRelation) queryRelation;
+            selectList = selectRelation.getSelectList();
+            if (selectRelation.hasWhereClause()) {
+                result.put(WHERE_PREDICATE_COLUMN_NAME, selectRelation.getWhereClause());
+            }
         }
         if (selectList == null) {
             LOG.warn("parse defineExpr may not correctly for sql [{}] ", originalSql);
@@ -317,8 +329,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             setMvKeysType(KeysType.AGG_KEYS);
         }
         if (selectRelation.hasWhereClause()) {
-            throw new UnsupportedMVException("The where clause is not supported in add materialized view clause, expr:"
-                    + selectRelation.getWhereClause().toSql());
+            whereClause = selectRelation.getWhereClause();
         }
         if (selectRelation.hasHavingClause()) {
             throw new UnsupportedMVException("The having clause is not supported in add materialized view clause, expr:"
@@ -329,8 +340,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             throw new UnsupportedMVException("The limit clause is not supported in add materialized view clause, expr:"
                     + " limit " + selectRelation.getLimit());
         }
-        final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
-                .append(FunctionSet.COUNT).append("_").toString();
+        final String countPrefix = MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.COUNT + "_";
         for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
             if (!isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
                 throw new UnsupportedMVException(
@@ -371,12 +381,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (slots.size() == 0) {
                     throw new UnsupportedMVException(String.format("The materialized view currently does not support " +
                             "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
-                }
-                // TODO: support multi slot-refs later.
-                if (slots.size() > 1) {
-                    throw new UnsupportedMVException(
-                            String.format("The materialized view currently does not support multi-slot-refs expr: {}",
-                                    selectListItemExpr.toSql()));
                 }
             }
             MVColumnItem mvColumnItem;

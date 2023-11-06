@@ -42,9 +42,11 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -77,7 +79,10 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.*;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -105,9 +110,13 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -307,6 +316,61 @@ public class OlapTableSink extends DataSink {
                     indexMeta.getSchemaHash());
             indexSchema.setColumn_param(columnParam);
             schemaParam.addToIndexes(indexSchema);
+            if (indexMeta.getWhereClause() != null) {
+                String dbName = MetaUtils.getDatabase(dbId).getFullName();
+
+                Map<String, SlotDescriptor> descMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+                for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
+                    descMap.put(slot.getColumn().getName(), slot);
+                }
+
+                Expr whereClause = indexMeta.getWhereClause().clone();
+                List<SlotRef> slots = Lists.newArrayList();
+                whereClause.collect(SlotRef.class, slots);
+
+                ExprSubstitutionMap smap = new ExprSubstitutionMap();
+                for (SlotRef slot : slots) {
+                    SlotDescriptor slotDesc = descMap.get(slot.getColumnName());
+                    Preconditions.checkNotNull(slotDesc);
+                    smap.getLhs().add(slot);
+                    SlotRef slotRef = new SlotRef(slotDesc);
+                    slotRef.setColumnName(slot.getColumnName());
+                    smap.getRhs().add(slotRef);
+                }
+                whereClause = whereClause.clone(smap);
+
+                // sourceScope must be set null tableName for its Field in RelationFields
+                // because we hope slotRef can not be resolved in sourceScope but can be
+                // resolved in outputScope to force to replace the node using outputExprs.
+                List<Expr> outputExprs = Lists.newArrayList();
+                for (Column col : table.getBaseSchema()) {
+                    SlotDescriptor slotDesc = descMap.get(col.getName());
+                    Preconditions.checkState(slotDesc != null);
+                    SlotRef slotRef = new SlotRef(slotDesc);
+                    slotRef.setColumnName(col.getName());
+                    outputExprs.add(slotRef);
+                }
+                ConnectContext connectContext = new ConnectContext();
+                Scope sourceScope = new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream().map(col ->
+                                        new Field(col.getName(), col.getType(), null, null))
+                                .collect(Collectors.toList())));
+                Scope outputScope = new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream().map(col ->
+                                        new Field(col.getName(), col.getType(), new TableName(dbName, table.getName()), null))
+                                .collect(Collectors.toList())));
+                SelectAnalyzer.RewriteAliasVisitor visitor =
+                        new SelectAnalyzer.RewriteAliasVisitor(sourceScope, outputScope,
+                                outputExprs, connectContext);
+
+                whereClause = whereClause.accept(visitor, null);
+                whereClause = Expr.analyzeAndCastFold(whereClause);
+
+                indexSchema.setWhere_clause(whereClause.treeToThrift());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("OlapTableSink Where clause: {}", whereClause.explain());
+                }
+            }
         }
         return schemaParam;
     }
