@@ -692,4 +692,16 @@ public class StarOSAgent {
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
     }
+
+    // dump all starmgr meta, for DEBUG purpose
+    public String dump() {
+        prepare();
+
+        try {
+            return client.dump();
+        } catch (StarClientException e) {
+            String str = "Fail to dump starmgr meta, " + e.getMessage();
+            return str;
+        }
+    }
 }
