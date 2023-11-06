@@ -153,7 +153,7 @@ public class TFragmentInstanceFactory {
                 }
                 if (jobSpec.isEnableQueue()) {
                     TQueryQueueOptions queryQueueOptions = new TQueryQueueOptions();
-                    queryQueueOptions.setEnable_query_queue(jobSpec.isEnableQueue());
+                    queryQueueOptions.setEnable_global_query_queue(jobSpec.isEnableQueue());
                     queryQueueOptions.setEnable_group_level_query_queue(jobSpec.isEnableGroupLevelQueue());
 
                     TQueryOptions queryOptions = result.getQuery_options();

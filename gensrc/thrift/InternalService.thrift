@@ -124,7 +124,7 @@ enum TOverflowMode {
 }
 
 struct TQueryQueueOptions {
-  1: optional bool enable_query_queue;
+  1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
 }
 
