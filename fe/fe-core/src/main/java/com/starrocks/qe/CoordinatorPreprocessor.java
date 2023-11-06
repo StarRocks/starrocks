@@ -173,6 +173,10 @@ public class CoordinatorPreprocessor {
     // Resource group
     private final TWorkGroup resourceGroup;
 
+    private boolean enableQueue = false;
+    private boolean needCheckQueued = false;
+    private boolean enableGroupLevelQueue = false;
+
     public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
                                    List<ScanNode> scanNodes, TDescriptorTable descriptorTable,
                                    TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
@@ -375,6 +379,30 @@ public class CoordinatorPreprocessor {
 
     public TWorkGroup getResourceGroup() {
         return resourceGroup;
+    }
+
+    public boolean isEnableQueue() {
+        return enableQueue;
+    }
+
+    public void setEnableQueue(boolean enableQueue) {
+        this.enableQueue = enableQueue;
+    }
+
+    public boolean isNeedCheckQueued() {
+        return needCheckQueued;
+    }
+
+    public void setNeedCheckQueued(boolean needCheckQueued) {
+        this.needCheckQueued = needCheckQueued;
+    }
+
+    public boolean isEnableGroupLevelQueue() {
+        return enableGroupLevelQueue;
+    }
+
+    public void setEnableGroupLevelQueue(boolean enableGroupLevelQueue) {
+        this.enableGroupLevelQueue = enableGroupLevelQueue;
     }
 
     public Map<TNetworkAddress, Integer> getHostToNumbers() {
@@ -1692,6 +1720,14 @@ public class CoordinatorPreprocessor {
                                 sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
                         commonParams.adaptive_dop_param.setMax_output_amplification_factor(
                                 sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
+                    }
+                    if (isEnableQueue()) {
+                        TQueryQueueOptions queryQueueOptions = new TQueryQueueOptions();
+                        queryQueueOptions.setEnable_global_query_queue(isEnableQueue());
+                        queryQueueOptions.setEnable_group_level_query_queue(isEnableGroupLevelQueue());
+
+                        TQueryOptions queryOptions = commonParams.getQuery_options();
+                        queryOptions.setQuery_queue_options(queryQueueOptions);
                     }
                 }
 

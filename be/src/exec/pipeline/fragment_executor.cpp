@@ -188,7 +188,16 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
         wg = WorkGroupManager::instance()->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
-    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
+
+    const auto& query_options = request.common().query_options;
+    bool enable_group_level_query_queue = false;
+    if (query_options.__isset.query_queue_options) {
+        const auto& queue_options = query_options.query_queue_options;
+        enable_group_level_query_queue =
+                queue_options.__isset.enable_group_level_query_queue && queue_options.enable_group_level_query_queue;
+    }
+    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get(), enable_group_level_query_queue));
+
     _fragment_ctx->set_workgroup(wg);
     _wg = wg;
 
