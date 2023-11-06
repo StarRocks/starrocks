@@ -39,7 +39,7 @@ INSERT INTO jit_basic (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9) VALUES
 (-123456, 123456, 78901, -78901, 234567, -234567, 0, 54321, -54321, 67890, -67890),
 (7, -14, 21, -28, 35, -42, 49, -56, 63, -70, 77),
 (9876543, -9876543, 13579246, -13579246, 2468642, -2468642, 86420964, -86420964, 11111, -11111, 99999),
-(1234, -645, 9223372036854775807, -9223372036854775808, 1, 2, 3, 0, -1, -2, -3)
+(1234, -645, 9223372036854775807, -9223372036854775808, 1, 2, 3, 0, -1, -2, -3),
 (754, -14, 9223372036854775807, -9223372036854775808, 0, 0, 0, 0, 0, 0, 0);
 
 -- +
@@ -47,15 +47,15 @@ SELECT k1 + k2 + v1 as result FROM jit_basic ORDER BY result;
 SELECT k1 + v2 + 12 as result FROM jit_basic ORDER BY result;
 SELECT k1 + 11 + k2 + v1 + v2 + 12 + 13 as result FROM jit_basic ORDER BY result;
 SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 as result FROM jit_basic ORDER BY result;
-SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 as result FROM jit_basic + 18 ORDER BY result;
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + 18 as result FROM jit_basic ORDER BY result;
 SELECT v1 + v3 + v5 + v7 + v9 as result FROM jit_basic ORDER BY result;
 SELECT v1 + v2 + v3 + v4 + v5 + v6 as result FROM jit_basic ORDER BY result;
 SELECT k1 + k2 + v7 + v9 as result FROM jit_basic ORDER BY result;
 SELECT v2 + v6 + v7 as result FROM jit_basic ORDER BY result;
 -- -
-SELECT k1 - k2 + v1 as result FROM jit_basic ORDER BY result1;
-SELECT k1 + v2 - 12 as result FROM jit_basic ORDER BY result ORDER BY result;
-SELECT k1 + v3 + v4 - 12 as result FROM jit_basic ORDER BY result ORDER BY result;
+SELECT k1 - k2 + v1 as result FROM jit_basic ORDER BY result;
+SELECT k1 + v2 - 12 as result FROM jit_basic ORDER BY result;
+SELECT k1 + v3 + v4 - 12 as result FROM jit_basic ORDER BY result;
 SELECT k1 + k2 - v1 + v2 - v3 + v4 + v5 - v6 + v7 + v8 - v9 as result FROM jit_basic ORDER BY result;
 SELECT k1 + k2 - v1 + v2 - v3 - 632 + v4 + v5 - v6 + v7 + v8 - v9 as result FROM jit_basic ORDER BY result;
 SELECT v1 - v3 + v5 + v7 - v9 as result FROM jit_basic ORDER BY result;
