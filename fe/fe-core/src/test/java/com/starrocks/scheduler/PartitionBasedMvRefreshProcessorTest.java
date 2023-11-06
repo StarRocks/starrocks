@@ -1646,12 +1646,19 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-                System.out.println("register query id: " + DebugUtil.printId(connectContext.getExecutionId()));
+                TUniqueId queryId = UUIDUtil.toTUniqueId(execPlan.getConnectContext().getQueryId());
+                System.out.println("register query id: " + DebugUtil.printId(queryId));
                 LoadPlanner loadPlanner = new LoadPlanner(1, loadId, 1, 1, materializedView,
                         false, "UTC", 10, System.currentTimeMillis(),
                         false, connectContext, null, 10,
                         10, null, null, null, 1);
+<<<<<<< HEAD
                 DefaultCoordinator coordinator = new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
+=======
+                DefaultCoordinator coordinator =
+                        new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
+                QeProcessorImpl.INSTANCE.registerQuery(queryId, coordinator);
+>>>>>>> ced1d46500 ([UT] fix flaky test PartitionBasedMvRefreshProcessorTest.testClearQueryInfo (#34439))
             }
         };
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
