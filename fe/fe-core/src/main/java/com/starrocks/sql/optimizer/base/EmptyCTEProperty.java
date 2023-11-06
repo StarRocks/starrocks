@@ -12,33 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.base;
 
-import java.util.Objects;
+import com.google.common.collect.ImmutableSet;
 
-public class AnyDistributionSpec extends DistributionSpec {
+public class EmptyCTEProperty extends CTEProperty {
 
-    public static final AnyDistributionSpec INSTANCE = new AnyDistributionSpec();
-    private AnyDistributionSpec() {
-        super(DistributionType.ANY);
+    public static final EmptyCTEProperty INSTANCE = new EmptyCTEProperty();
+
+    private EmptyCTEProperty() {
+        super(ImmutableSet.of());
     }
 
-    public boolean isSatisfy(DistributionSpec spec) {
-        return spec.type.equals(DistributionType.ANY);
+    @Override
+    public boolean isEmpty() {
+        return true;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(type);
+        return System.identityHashCode(this);
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (obj == this) {
-            return true;
-        }
+    public boolean equals(Object o) {
+        return this == o;
+    }
 
-        return obj instanceof AnyDistributionSpec;
+    @Override
+    public String toString() {
+        return "EMPTY CTE";
     }
 }
