@@ -47,7 +47,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             } else if (o2 == null) {
                 return 1;
             } else {
-                return o1.toString().compareTo(o2.toString());
+                return o1.toString().toLowerCase().compareTo(o2.toString().toLowerCase());
             }
         }
     };
@@ -66,17 +66,21 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     if (o1.isColumnRef() && o2.isColumnRef()) {
                         ColumnRefOperator c1 = (ColumnRefOperator) o1;
                         ColumnRefOperator c2 = (ColumnRefOperator) o2;
-                        int ret = c1.getName().compareTo(c2.getName());
+                        int ret = c1.getName().toLowerCase().compareTo(c2.getName().toLowerCase());
                         if (ret != 0) {
                             return ret;
                         }
                         return Integer.compare(c1.getId(), c2.getId());
                     } else {
-                        String s1 = o1.toString();
-                        String s2 = o2.toString();
+                        String s1 = o1.toString().toLowerCase();
+                        String s2 = o2.toString().toLowerCase();
                         String n1 = s1.replaceAll("\\d+: ", "");
                         String n2 = s2.replaceAll("\\d+: ", "");
-                        int ret = n1.compareTo(n2);
+                        int ret = Integer.compare(n1.length(), n2.length());
+                        if (ret != 0) {
+                            return ret;
+                        }
+                        ret = n1.compareTo(n2);
                         return (ret == 0) ? s1.compareTo(s2) : ret;
                     }
                 }
