@@ -63,8 +63,9 @@ Status JITEngine::init() {
     if (!jit) {
         std::string error_message;
         llvm::handleAllErrors(jit.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
-        LOG(ERROR) << "JIT: Failed to create LLJIT instance" << error_message;
-        return Status::JitCompileError("Failed to create LLJIT instance");
+        error_message = "JIT: Failed to create LLJIT instance" + error_message;
+        LOG(ERROR) << error_message;
+        return Status::JitCompileError(error_message);
     }
     _jit = std::move(jit.get());
 
@@ -189,13 +190,12 @@ Status JITEngine::remove_module(const std::string& expr_name) {
     }
 
     auto error = it->second->remove();
+    _resource_tracker_map.erase(it);
     if (UNLIKELY(error)) {
         std::string error_message;
         llvm::handleAllErrors(std::move(error), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
         LOG(ERROR) << "JIT: Failed to remove IR module from JIT: " << error_message;
         return Status::JitCompileError("Failed to remove IR module from JIT");
-    } else {
-        _resource_tracker_map.erase(it);
     }
 
     return Status::OK();
