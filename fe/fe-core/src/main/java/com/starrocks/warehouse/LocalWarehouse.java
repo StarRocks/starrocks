@@ -46,6 +46,9 @@ public class LocalWarehouse extends Warehouse {
             .add("Running")
             .build();
 
+    public LocalWarehouse() {
+    }
+
     public LocalWarehouse(long id, String name, long clusterId, String comment) {
         super(id, name, comment);
         cluster = new Cluster(clusterId);

@@ -60,6 +60,9 @@ public abstract class Warehouse implements Writable {
 
     protected final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
+    public Warehouse() {
+    }
+
     public Warehouse(long id, String name, String comment) {
         this.id = id;
         this.name = name;
