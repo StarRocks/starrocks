@@ -152,15 +152,6 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"big_query\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"BigQueryFile\"/>\n" +
             "    </Logger>\n" +
-            "    <Logger name=\"org.apache.thrift\" level=\"DEBUG\"> \n" +
-            "      <AppenderRef ref=\"Sys\"/>\n" +
-            "    </Logger>\n" +
-            "    <Logger name=\"org.apache.thrift.transport\" level=\"DEBUG\"> \n" +
-            "      <AppenderRef ref=\"Sys\"/>\n" +
-            "    </Logger>\n" +
-            "    <Logger name=\"com.starrocks.thrift\" level=\"DEBUG\"> \n" +
-            "      <AppenderRef ref=\"Sys\"/>\n" +
-            "    </Logger>\n" +
             "    <Logger name=\"org.apache.kafka\" level=\"WARN\"> \n" +
             "      <AppenderRef ref=\"SysWF\"/>\n" +
             "    </Logger>\n" +
