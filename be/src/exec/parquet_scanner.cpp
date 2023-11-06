@@ -180,6 +180,7 @@ Status ParquetScanner::build_dest(const arrow::DataType* arrow_type, const TypeD
     auto at = arrow_type->id();
     auto lt = type_desc->type;
     conv_func->func = get_arrow_converter(at, lt, is_nullable, strict_mode);
+    conv_func->children.clear();
 
     switch (lt) {
     case TYPE_ARRAY: {
