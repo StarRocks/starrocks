@@ -231,6 +231,8 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
         LOG(ERROR) << "Could replace compilable exprs.\n"
                    << status.get_error_msg() << "\n"
                    << apache::thrift::ThriftDebugString(texpr);
+        // Fall back to the non-JIT path.
+        return Status::OK();
     }
 
     if (e != prev_e) {
@@ -730,12 +732,16 @@ void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
 }
 
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
+    std::vector<Expr*> next_exprs;
     if ((*expr)->should_compile()) {
         *expr = JITExpr::create(pool, *expr);
+        (*expr)->get_uncompilable_exprs(next_exprs);
     } else {
-        for (auto& child : _children) {
-            RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
-        }
+        next_exprs = _children;
+    }
+
+    for (auto& child : next_exprs) {
+        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
     }
     return Status::OK();
 }

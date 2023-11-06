@@ -61,7 +61,7 @@ public:
     /**
      * @brief Evaluate the compiled function.
      */
-    static Status llvm_function(FunctionContext* context, const Columns& columns);
+    static Status llvm_function(JITScalarFunction jit_function, const Columns& columns);
 
     /**
      * @brief Generate the LLVM IR for a scalar function.

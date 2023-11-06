@@ -61,6 +61,8 @@ private:
     Expr* _expr;
 
     bool _is_prepared = false;
+
+    JITScalarFunction _jit_function = nullptr;
 };
 
 } // namespace starrocks

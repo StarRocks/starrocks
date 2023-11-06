@@ -59,8 +59,6 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     _fn_context_index = context->register_func(state, return_type, args_types);
 
-    FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-
     // TODO(Yueyang): remove this time cost.
     auto start = MonotonicNanos();
 
@@ -74,29 +72,23 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     auto elapsed = MonotonicNanos() - start;
     if (!function.ok()) {
-        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000 << " ms"
+        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
                   << " Reason: " << function.status();
     } else {
-        LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000 << " ms";
+        LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
     }
 
-    auto function_state = _pool->add(new JITFunctionState{function.value_or(nullptr)});
-
-    // TODO(Yueyang): check THREAD_LOCAL or FRAGMENT_LOCAL.
-    fn_ctx->set_function_state(FunctionContext::FunctionStateScope::THREAD_LOCAL, function_state);
-
+    _jit_function = function.value_or(nullptr);
     _is_prepared = true;
 
     return Status::OK();
 }
 
 StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
-    FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
-    auto state = reinterpret_cast<JITFunctionState*>(fn_ctx->get_function_state(FunctionContext::THREAD_LOCAL));
     // If the expr fails to compile, evaluate using the original expr.
-    if (UNLIKELY(state->_function == nullptr)) {
+    if (UNLIKELY(_jit_function == nullptr)) {
         LOG(ERROR) << "JIT: JIT compile failed, fallback to original expr";
-        // TODO(Yueyang): fallback to original expr.
+        // TODO(Yueyang): fallback to original expr perfectly.
         return _expr->evaluate_checked(context, ptr);
     }
 
@@ -107,7 +99,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         args.emplace_back(column);
     }
 
-#ifndef NDEBUG
+#ifdef DEBUG
     if (ptr != nullptr) {
         size_t size = ptr->num_rows();
         // Ensure all columns have the same size
@@ -118,6 +110,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
 #endif
 
     for (const auto& column : args) {
+        // TODO(Yueyang): remove this when support ifnull expr.
         if (column->only_null()) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -126,7 +119,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     auto result_column = ColumnHelper::create_column(type(), is_nullable(), is_constant(), ptr->num_rows(), false);
     args.emplace_back(result_column);
 
-    RETURN_IF_ERROR(JITFunction::llvm_function(fn_ctx, args));
+    RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
 
     if (result_column->is_constant() && ptr != nullptr) {
         result_column->resize(ptr->num_rows());

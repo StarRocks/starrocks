@@ -71,14 +71,7 @@ public:
                 return false;
             }
 
-            bool support_jit = init().ok();
-            _retry_times++;
-
-            if (!support_jit && _retry_times >= _max_retry_times) {
-                _support_jit = false;
-            }
-
-            return support_jit;
+            _support_jit = init().ok();
         }
 
         return _support_jit;
@@ -136,9 +129,6 @@ private:
 
     bool _initialized = false;
     bool _support_jit = true;
-
-    static const int _max_retry_times = 3;
-    int _retry_times = 0;
 
     std::unique_ptr<llvm::TargetMachine> _target_machine;
     std::unique_ptr<const llvm::DataLayout> _data_layout;

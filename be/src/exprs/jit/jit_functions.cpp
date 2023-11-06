@@ -51,6 +51,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
 
     /// Create function in module.
+    // Pseudo code: void "expr->debug_string()"(int64_t rows_count, JITColumn* columns);
     auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr->debug_string(), module);
     auto* func_args = func->args().begin();
     llvm::Value* rows_count_arg = func_args++;
@@ -63,8 +64,30 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
 
     // Extract data and null data from function input parameters.
     std::vector<LLVMColumn> columns(args_size + 1);
-    // i == args_size is the result column.
+
+    // Pseudo code:
+    // Extract column 0:
+    // auto* column_0 = columns[0];
+    // bool is_constant_0 = column_0->is_constant;
+    // int8_t* values_0 = column_0->values;
+    // int8_t* null_flags_0 = column_0->null_flags;
+    // bool nullable_0 = null_flags_0 != nullptr;
+    //
+    // Extract column 1:
+    // auto* column_1 = columns[1];
+    // bool is_constant_1 = column_1->is_constant;
+    // int8_t* values_1 = column_1->values;
+    // int8_t* null_flags_1 = column_1->null_flags;
+    // bool nullable_1 = null_flags_1 != nullptr;
+    // ...
+    // Extract column n:
+    // auto* column_n = columns[n];
+    // bool is_constant_n = column_n->is_constant;
+    // int8_t* values_n = column_n->values;
+    // int8_t* null_flags_n = column_n->null_flags;
+    // bool nullable_n = null_flags_n != nullptr;
     for (size_t i = 0; i < args_size + 1; ++i) {
+        // i == args_size is the result column.
         auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
 
         const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
@@ -84,12 +107,13 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     auto* end = llvm::BasicBlock::Create(b.getContext(), "end", func);
     auto* loop = llvm::BasicBlock::Create(b.getContext(), "loop", func);
     // If rows_count == 0, jump to end.
+    // Pseudo code: if (rows_count == 0) goto end;
     b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0)), end, loop);
 
     b.SetInsertPoint(loop);
 
     /// Loop.
-
+    // Pseudo code: for (int64_t counter = 0; counter < rows_count; counter++)
     auto* counter_phi = b.CreatePHI(rows_count_arg->getType(), 2);
     counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
 
@@ -101,6 +125,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     for (size_t i = 0; i < args_size; ++i) {
         auto& column = columns[i];
 
+        // Pseudo code: auto* datum_n = is_constant_n ? values_n[0] : values_n[counter];
         LLVMDatum datum(b);
         auto* constant_bb = llvm::BasicBlock::Create(b.getContext(), "constant", func);
         auto* non_constant_bb = llvm::BasicBlock::Create(b.getContext(), "non_constant", func);
@@ -125,15 +150,14 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
 
         datum.value = phi;
 
-        // datum.value =
-        //         b.CreateLoad(column.value_type, b.CreateInBoundsGEP(column.value_type, column.values, counter_phi));
-
         if (!expr->is_nullable()) {
             datums.emplace_back(datum);
             continue;
         }
         if (input_exprs[i]->is_nullable()) {
             // TODO(Yueyang): check if need to trans null to Int1Ty.
+
+            // Pseudo code: auto* is_null_n = nullable_n ? null_flags_n[counter] : false;
             auto* null_bb = llvm::BasicBlock::Create(b.getContext(), "null", func);
             auto* non_null_bb = llvm::BasicBlock::Create(b.getContext(), "non_null", func);
             auto* end_bb = llvm::BasicBlock::Create(b.getContext(), "end_bb", func);
@@ -159,10 +183,16 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
         datums.emplace_back(datum);
     }
 
-    // Evaluate expr.
+    // Generate evaluate expr.
+    // Take a + b + c as an example:
+    // Pseudo code:
+    // result_value = datum_a + datum_b + datum_c;
+    // result_null_flag = is_null_a | is_null_b | is_null_c;
     ASSIGN_OR_RETURN(auto result, generate_exprs_ir(context, module, b, expr, datums));
 
-    // assert(result.datum->getType() == columns.back().datum_type);
+    // Pseudo code:
+    // values_last[counter] = result_value;
+    // null_flags_last[counter] = result_null_flag;
     b.CreateStore(result.value, b.CreateInBoundsGEP(columns.back().value_type, columns.back().values, counter_phi));
     if (expr->is_nullable()) {
         b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
@@ -170,12 +200,15 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
 
     /// End of loop.
     auto* current_block = b.GetInsertBlock();
+    // Pseudo code: counter++;
     auto* incremeted_counter = b.CreateAdd(counter_phi, llvm::ConstantInt::get(size_type, 1));
     counter_phi->addIncoming(incremeted_counter, current_block);
 
+    // Pseudo code: if (counter == rows_count) goto end;
     b.CreateCondBr(b.CreateICmpEQ(incremeted_counter, rows_count_arg), end, loop);
 
     b.SetInsertPoint(end);
+    // Pseudo code: return;
     b.CreateRetVoid();
 
     return Status::OK();
@@ -221,7 +254,7 @@ StatusOr<LLVMDatum> JITFunction::generate_exprs_ir(ExprContext* context, const l
 }
 
 // This is the evaluate procss.
-Status JITFunction::llvm_function(FunctionContext* context, const Columns& columns) {
+Status JITFunction::llvm_function(JITScalarFunction jit_function, const Columns& columns) {
     // Prepare input columns of jit function.
     std::vector<JITColumn> jit_columns;
     jit_columns.reserve(columns.size());
@@ -239,10 +272,8 @@ Status JITFunction::llvm_function(FunctionContext* context, const Columns& colum
         jit_columns.emplace_back(JITColumn{data_column->is_constant(), datums, null_flags});
     }
 
-    // Get compiled function.
-    auto state = reinterpret_cast<JITFunctionState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     // Evaluate.
-    state->_function(columns.back()->size(), jit_columns.data());
+    jit_function(columns.back()->size(), jit_columns.data());
     return Status::OK();
 }
 
