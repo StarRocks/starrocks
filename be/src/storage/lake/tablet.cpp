@@ -139,7 +139,12 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
         segment = std::make_shared<Segment>(std::move(fs), segment_path, seg_id, std::move(tablet_schema), _mgr);
         if (fill_metadata_cache) {
-            _mgr->metacache()->cache_segment(segment_path, segment);
+            // NOTE: the returned segment may be not the same as the parameter passed in
+            // Use the one in cache if the same key already exists
+            if (auto cached_segment = _mgr->metacache()->cache_segment_if_absent(segment_path, segment);
+                cached_segment != nullptr) {
+                segment = cached_segment;
+            }
         }
     }
     // segment->open will read the footer, and it is time-consuming.
