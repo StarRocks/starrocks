@@ -20,6 +20,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
@@ -256,6 +257,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
+    _remove_unused_buffer_cnt = ADD_COUNTER(_runtime_profile, "RemoveUnusedBufferCnt", TUnit::UNIT);
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
@@ -361,7 +363,7 @@ void Analytor::close(RuntimeState* state) {
 }
 
 Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
-    _remove_unused_buffer_values(state);
+    _remove_unused_buffers(state);
 
     RETURN_IF_ERROR(_add_chunk(chunk));
     RETURN_IF_ERROR((this->*_process_impl)(state));
@@ -381,11 +383,11 @@ std::string Analytor::debug_string() const {
     ss << std::boolalpha;
 
     FrameRange frame = _get_frame_range();
-    ss << "current_row_position=" << _get_total_position(_current_row_position) << ", partition=("
-       << _get_total_position(_partition_start) << ", " << _get_total_position(_partition_end) << ", "
-       << _get_total_position(_found_partition_end.second) << "/" << _found_partition_end.first << "), peer_group=("
-       << _get_total_position(_peer_group_start) << ", " << _get_total_position(_peer_group_end) << ", "
-       << _get_total_position(_found_peer_group_end.second) << "/" << _found_peer_group_end.first << ")"
+    ss << "current_row_position=" << _get_global_position(_current_row_position) << ", partition=("
+       << _get_global_position(_partition_start) << ", " << _get_global_position(_partition_end) << ", "
+       << _get_global_position(_found_partition_end.second) << "/" << _found_partition_end.first << "), peer_group=("
+       << _get_global_position(_peer_group_start) << ", " << _get_global_position(_peer_group_end) << ", "
+       << _get_global_position(_found_peer_group_end.second) << "/" << _found_peer_group_end.first << ")"
        << ", frame=[" << frame.start << ", " << frame.end << ")"
        << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
        << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
@@ -479,63 +481,72 @@ Status Analytor::_check_has_error() {
     return Status::OK();
 }
 
-void Analytor::_remove_unused_buffer_values(RuntimeState* state) {
-    if (_input_chunks.size() <= _output_chunk_index ||
-        _input_chunk_first_row_positions[_output_chunk_index] - _removed_from_buffer_rows <
-                state->chunk_size() * BUFFER_CHUNK_NUMBER) {
+void Analytor::_remove_unused_buffers(RuntimeState* state) {
+    const size_t chunk_num = config::pipeline_analytic_removable_chunk_num;
+    // Keep at least one chunk, because the process of _find_partition_end() may access the end position of
+    // the last chunk.
+    if (_removed_chunk_index + chunk_num + 1 >= _input_chunk_first_row_positions.size()) {
         return;
     }
 
-    int64_t remove_end_position = _input_chunk_first_row_positions[_removed_chunk_index + BUFFER_CHUNK_NUMBER];
-    if (_partition_start <= remove_end_position) {
-        return;
+    const int64_t remove_end_position = _input_chunk_first_row_positions[_removed_chunk_index + chunk_num];
+    if (_need_partition_materializing) {
+        if (_get_global_position(_partition_start) <= remove_end_position) {
+            return;
+        }
+    } else {
+        const auto frame = _get_frame_range();
+        if (_get_global_position(std::min(_current_row_position, frame.end)) <= remove_end_position) {
+            return;
+        }
     }
 
-    int64_t remove_count = remove_end_position - _removed_from_buffer_rows;
+    const int64_t remove_rows = remove_end_position - _removed_from_buffer_rows;
+    COUNTER_UPDATE(_remove_unused_buffer_cnt, 1);
 
     {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-                _agg_intput_columns[i][j]->remove_first_n_values(remove_count);
+                _agg_intput_columns[i][j]->remove_first_n_values(remove_rows);
             }
         }
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
-            _partition_columns[i]->remove_first_n_values(remove_count);
+            _partition_columns[i]->remove_first_n_values(remove_rows);
         }
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
-            _order_columns[i]->remove_first_n_values(remove_count);
+            _order_columns[i]->remove_first_n_values(remove_rows);
         }
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             _agg_functions[i]->reset_state_for_contraction(
-                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_count);
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_rows);
         }
     }
 
-    _removed_from_buffer_rows += remove_count;
-    _partition_start -= remove_count;
-    _partition_end -= remove_count;
-    _found_partition_end.second -= remove_count;
-    _current_row_position -= remove_count;
-    _peer_group_start -= remove_count;
-    _peer_group_end -= remove_count;
-    _found_peer_group_end.second -= remove_count;
+    _current_row_position -= remove_rows;
+    _partition_start -= remove_rows;
+    _partition_end -= remove_rows;
+    _found_partition_end.second -= remove_rows;
+    _peer_group_start -= remove_rows;
+    _peer_group_end -= remove_rows;
+    _found_peer_group_end.second -= remove_rows;
     int32_t candidate_partition_end_size = _candidate_partition_ends.size();
     while (--candidate_partition_end_size >= 0) {
         auto peek = _candidate_partition_ends.front();
         _candidate_partition_ends.pop();
-        _candidate_partition_ends.push(peek - remove_count);
+        _candidate_partition_ends.push(peek - remove_rows);
     }
     int32_t candidate_peer_group_end_size = _candidate_peer_group_ends.size();
     while (--candidate_peer_group_end_size >= 0) {
         auto peek = _candidate_peer_group_ends.front();
         _candidate_peer_group_ends.pop();
-        _candidate_peer_group_ends.push(peek - remove_count);
+        _candidate_peer_group_ends.push(peek - remove_rows);
     }
-
-    _removed_chunk_index += BUFFER_CHUNK_NUMBER;
+    _removed_chunk_index += chunk_num;
+    _removed_from_buffer_rows += remove_rows;
 
     DCHECK_GE(_current_row_position, 0);
+    DCHECK_GE(_found_partition_end.second, 0);
 }
 
 Status Analytor::_add_chunk(const ChunkPtr& chunk) {
@@ -576,7 +587,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     }
 
     _input_chunk_first_row_positions.emplace_back(_input_rows);
-    _update_input_rows(chunk_size);
+    _input_rows += chunk_size;
     _input_chunks.emplace_back(chunk);
 
     return Status::OK();
@@ -636,7 +647,7 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
     }
 
     // Reset state for the first partition.
-    if (_current_row_position == 0) {
+    if (_get_global_position(_current_row_position) == 0) {
         _reset_window_state();
     }
 
@@ -692,7 +703,7 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
 
 Status Analytor::_streaming_process_for_half_bounded_range_frame(RuntimeState* state) {
     // Reset state for the first partition.
-    if (_current_row_position == 0) {
+    if (_get_global_position(_current_row_position) == 0) {
         _reset_window_state();
     }
 
@@ -722,11 +733,11 @@ Status Analytor::_streaming_process_for_half_bounded_range_frame(RuntimeState* s
 
             _init_window_result_columns();
 
-            int64_t base = _first_total_position_of_current_chunk();
+            int64_t base = _first_global_position_of_current_chunk();
             // Why use current_row_position to evaluate start here?
             // Because the peer group may cross multiply chunks, we only need to update from the start of remaining part.
-            int64_t start = _get_total_position(_current_row_position) - base;
-            int64_t end = _get_total_position(_peer_group_end) - base;
+            int64_t start = _get_global_position(_current_row_position) - base;
+            int64_t end = _get_global_position(_peer_group_end) - base;
             if (end > chunk_size) {
                 end = chunk_size;
             }
@@ -764,7 +775,7 @@ Status Analytor::_streaming_process_for_sliding_frame(RuntimeState* state) {
     }
 
     // Reset state for the first partition.
-    if (_current_row_position == 0) {
+    if (_get_global_position(_current_row_position) == 0) {
         _reset_window_state();
     }
 
@@ -823,10 +834,10 @@ void Analytor::_materializing_process_for_unbounded_frame(RuntimeState* state, b
         _update_window_batch(_partition_start, _partition_end, _partition_start, _partition_end);
     }
     const auto chunk_size = _current_chunk_size();
-    int64_t base = _first_total_position_of_current_chunk();
-    int64_t start = _get_total_position(_current_row_position) - base;
+    int64_t base = _first_global_position_of_current_chunk();
+    int64_t start = _get_global_position(_current_row_position) - base;
     int64_t end = std::min<int64_t>(_current_row_position + chunk_size, _partition_end);
-    end = std::min<int64_t>((_get_total_position(end) - base), chunk_size);
+    end = std::min<int64_t>((_get_global_position(end) - base), chunk_size);
 
     _get_window_function_result(start, end);
     _update_current_row_position(end - start);
@@ -863,11 +874,11 @@ void Analytor::_materializing_process_for_half_unbounded_range_frame(RuntimeStat
         // acumulative manner, so the frame for current evaluation is [_peer_group_start, _peer_group_end).
         _update_window_batch(_peer_group_start, _peer_group_end, _peer_group_start, _peer_group_end);
 
-        int64_t base = _first_total_position_of_current_chunk();
+        int64_t base = _first_global_position_of_current_chunk();
         // Why use current_row_position to evaluate start here?
         // Because the peer group may cross multiply chunks, we only need to update from the start of remaining part.
-        int64_t start = _get_total_position(_current_row_position) - base;
-        int64_t end = _get_total_position(_peer_group_end) - base;
+        int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group_end) - base;
         if (end > chunk_size) {
             end = chunk_size;
         }
@@ -1017,13 +1028,12 @@ void Analytor::_init_window_result_columns() {
 
 void Analytor::_find_partition_end() {
     // Current partition data don't consume finished.
-    if (_current_row_position < _partition_end) {
-        DCHECK_EQ(_found_partition_end.second, _partition_end);
+    if (_found_partition_end.first && _current_row_position < _found_partition_end.second) {
         return;
     }
 
     if (_partition_columns.empty() || _input_rows == 0) {
-        _found_partition_end.second = _input_rows;
+        _found_partition_end.second = (_input_rows - _removed_from_buffer_rows);
         _found_partition_end.first = _input_eos;
         return;
     }
@@ -1038,17 +1048,20 @@ void Analytor::_find_partition_end() {
         }
     }
 
-    int64_t start = _found_partition_end.second;
+    const int64_t start = _found_partition_end.second;
+    const int64_t target = (_found_partition_end.first || _found_partition_end.second == 0)
+                                   ? _found_partition_end.second
+                                   : _found_partition_end.second - 1;
     _found_partition_end.second = static_cast<int64_t>(_partition_columns[0]->size());
     {
         SCOPED_TIMER(_partition_search_timer);
         if (_use_hash_based_partition) {
             _found_partition_end.second =
-                    _find_first_not_equal_for_hash_based_partition(_partition_end, start, _found_partition_end.second);
+                    _find_first_not_equal_for_hash_based_partition(target, start, _found_partition_end.second);
         } else {
             for (auto& column : _partition_columns) {
                 _found_partition_end.second =
-                        _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
+                        _find_first_not_equal(column.get(), target, start, _found_partition_end.second);
             }
         }
     }

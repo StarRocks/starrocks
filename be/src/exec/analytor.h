@@ -128,7 +128,7 @@ private:
     Status _evaluate_const_columns(int i);
 
     Status _check_has_error();
-    void _remove_unused_buffer_values(RuntimeState* state);
+    void _remove_unused_buffers(RuntimeState* state);
     Status _add_chunk(const ChunkPtr& chunk);
     // if src_column is const, but dst is not, unpack src_column then append. Otherwise just append
     void _append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column);
@@ -202,14 +202,14 @@ private:
     }
 
     bool _has_output() const { return _output_chunk_index < _input_chunks.size(); }
-    int64_t _first_total_position_of_current_chunk() const {
+    int64_t _first_global_position_of_current_chunk() const {
         return _input_chunk_first_row_positions[_output_chunk_index];
     }
     bool _is_current_chunk_finished_eval() const { return _window_result_position() >= _current_chunk_size(); }
     size_t _current_chunk_size() const { return _input_chunks[_output_chunk_index]->num_rows(); }
-    int64_t _get_total_position(int64_t local_position) const { return _removed_from_buffer_rows + local_position; }
+    int64_t _get_global_position(int64_t local_position) const { return _removed_from_buffer_rows + local_position; }
     int64_t _window_result_position() const {
-        return _get_total_position(_current_row_position) - _first_total_position_of_current_chunk();
+        return _get_global_position(_current_row_position) - _first_global_position_of_current_chunk();
     }
     FrameRange _get_frame_range() const {
         if (_is_unbounded_preceding) {
@@ -219,7 +219,6 @@ private:
         }
     }
 
-    void _update_input_rows(int64_t increment) { _input_rows += increment; }
     // This method will be used frequently, so it is better to get chunk_size through "current_chunk_size"
     // outside the method, because "current_chunk_size" contains a virtual function call which cannot be optimized out
     void _update_current_row_position(int64_t increment) { _current_row_position += increment; }
@@ -232,12 +231,6 @@ private:
     bool _require_partition_size(const std::string& function_name) {
         return function_name == "cume_dist" || function_name == "percent_rank";
     }
-
-#ifdef NDEBUG
-    static constexpr int32_t BUFFER_CHUNK_NUMBER = 128;
-#else
-    static constexpr int32_t BUFFER_CHUNK_NUMBER = 1;
-#endif
 
     RuntimeState* _state = nullptr;
     bool _is_closed = false;
@@ -297,6 +290,7 @@ private:
 
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter = nullptr;
+    RuntimeProfile::Counter* _remove_unused_buffer_cnt = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;

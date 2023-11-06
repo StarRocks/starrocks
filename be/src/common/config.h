@@ -717,6 +717,7 @@ CONF_Int64(pipeline_scan_queue_level_time_slice_base_ns, "100000000");
 CONF_Double(pipeline_scan_queue_ratio_of_adjacent_queue, "1.5");
 
 CONF_Int32(pipeline_analytic_max_buffer_size, "128");
+CONF_Int32(pipeline_analytic_removable_chunk_num, "128");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
