@@ -77,7 +77,11 @@ Status FileReader::init(HdfsScannerContext* ctx) {
         _cache = BlockCache::instance();
         _write_options.write_probability = ctx->datacache_populate_probability;
     }
-    RETURN_IF_ERROR(_get_footer());
+    {
+        // InitFooterGetTimer
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_get_ns);
+        RETURN_IF_ERROR(_get_footer());
+    }
 
     if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
         // If we want read this parquet file with iceberg schema,
@@ -90,15 +94,27 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
-    _meta_helper->set_existed_column_names(&names);
+    {
+        // InitColumnNamesSetTimer
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->column_names_set_ns);
+        _meta_helper->set_existed_column_names(&names);
+    }
     _scanner_ctx->update_materialized_columns(names);
 
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
         return Status::OK();
     }
-    _prepare_read_columns();
-    RETURN_IF_ERROR(_init_group_readers());
+    {
+        // InitReadColumnsPrepareTimer
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->read_columns_prepare_ns);
+        _prepare_read_columns();
+    }
+    {
+        // InitGroupReaderInitTimer
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->group_reader_init_ns);
+        RETURN_IF_ERROR(_init_group_readers());
+    }
     return Status::OK();
 }
 
@@ -171,6 +187,7 @@ Status FileReader::_get_footer() {
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
         auto deleter = [file_metadata]() { delete file_metadata; };
+        SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_write_ns);
         Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle,
                                          &_write_options);
         if (st.ok()) {

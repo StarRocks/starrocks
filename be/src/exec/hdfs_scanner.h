@@ -65,8 +65,14 @@ struct HdfsScanStats {
 
     // reader init
     int64_t footer_read_ns = 0;
+    int64_t footer_get_ns = 0;
+    int64_t column_names_set_ns = 0;
+    int64_t read_columns_prepare_ns = 0;
+    int64_t group_reader_init_ns = 0;
+
     int64_t footer_cache_read_ns = 0;
     int64_t footer_cache_read_count = 0;
+    int64_t footer_cache_write_ns = 0;
     int64_t footer_cache_write_count = 0;
     int64_t footer_cache_write_bytes = 0;
     int64_t column_reader_init_ns = 0;
