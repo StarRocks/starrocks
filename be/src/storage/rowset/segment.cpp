@@ -208,13 +208,14 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
         return Status::OK();
     }
 
-    auto res = success_once(_open_once, [&] {
-        Status st = _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache);
-        if (st.ok()) {
-            update_cache_size();
-        }
-        return st;
-    });
+    auto res = success_once(_open_once,
+                            [&] { return _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache); });
+
+    // move the cache size update out of the `success_once`,
+    // so that the onceflag `_open_once` can be set before the cache_size is updated.
+    if (res.ok() && *res) {
+        update_cache_size();
+    }
     return res.status();
 }
 
@@ -444,8 +445,15 @@ size_t Segment::_column_index_mem_usage() const {
 
 void Segment::update_cache_size() {
     if (_tablet_manager != nullptr) {
-        _tablet_manager->update_segment_cache_size(file_name());
+        _tablet_manager->update_segment_cache_size(file_name(), reinterpret_cast<intptr_t>(this));
     }
 }
 
+size_t Segment::mem_usage() const {
+    if (!invoked(_open_once)) {
+        // just report the basic info memory usage if not opened yet
+        return _basic_info_mem_usage();
+    }
+    return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
+}
 } // namespace starrocks

@@ -169,9 +169,7 @@ public:
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
-    size_t mem_usage() const {
-        return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
-    }
+    size_t mem_usage() const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
