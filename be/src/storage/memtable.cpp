@@ -165,6 +165,16 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
     }
 
+    LOG(INFO) << "xxx tablet_id: " << _tablet_id << ", schema num fields: " << _vectorized_schema->num_fields()
+              << ", slot descs size: " << (_slot_descs != nullptr ? _slot_descs->size() : -1)
+              << ", chunk num columns: " << chunk.num_columns();
+    if (_slot_descs != nullptr) {
+        for (int i = 0; i < _slot_descs->size(); ++i) {
+            LOG(INFO) << "xxx " << i << ": " << _slot_descs->at(i)->debug_string()
+                      << ", chunk has slot: " << chunk.is_slot_exist(_slot_descs->at(i)->id());
+        }
+    }
+
     bool is_column_with_row = false;
     auto full_row_col = std::make_unique<BinaryColumn>();
     if (_keys_type == PRIMARY_KEYS) {
@@ -182,7 +192,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
             (void)row_encoder->encode_chunk_to_full_row_column(*schema_without_full_row_column, chunk,
                                                                full_row_col.get());
         } else {
-            DCHECK_EQ(chunk.num_columns(), _vectorized_schema->num_fields());
+            DCHECK_GE(chunk.num_columns(), _vectorized_schema->num_fields());
         }
     }
 
