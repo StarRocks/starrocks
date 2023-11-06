@@ -66,7 +66,7 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
                     if (o1.isColumnRef() && o2.isColumnRef()) {
                         ColumnRefOperator c1 = (ColumnRefOperator) o1;
                         ColumnRefOperator c2 = (ColumnRefOperator) o2;
-                        int ret = c1.getName().compareTo(c2.getName());
+                        int ret = c1.getName().toLowerCase().compareTo(c2.getName().toLowerCase());
                         if (ret != 0) {
                             return ret;
                         }
