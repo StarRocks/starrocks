@@ -3555,7 +3555,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Map<String, String> properties = new HashMap<>();
         List<Property> propertyList = visit(context.propertyList().property(), Property.class);
         for (Property property : propertyList) {
-            properties.put(property.getKey().toLowerCase(), property.getValue());
+            properties.put(property.getKey(), property.getValue());
         }
         return new ModifyTablePropertiesClause(properties, createPos(context));
     }
