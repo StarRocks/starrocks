@@ -17,7 +17,6 @@ package com.starrocks.http;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.DiskInfo;
-import com.starrocks.common.DdlException;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,8 +32,10 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import okio.BufferedSink;
-import org.junit.After;
+import org.jetbrains.annotations.NotNull;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -72,10 +73,14 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
         };
     }
-    
-    @After
-    public void tearDown() {
+
+    /**
+     * we need close be server after junit test
+     */
+    @AfterClass
+    public static void close() {
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
+        beServer.shutDown();
     }
 
     @BeforeClass
@@ -84,7 +89,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         BaseAction ac = new BaseAction(beServer.getController()) {
 
             @Override
-            public void execute(BaseRequest request, BaseResponse response) throws DdlException {
+            public void execute(BaseRequest request, BaseResponse response) {
                 TransactionResult resp = new TransactionResult();
                 response.appendContent(resp.toJson());
                 writeResponse(request, response, HttpResponseStatus.OK);
@@ -121,13 +126,17 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         }
 
                         @Override
-                        public void writeTo(BufferedSink arg0) throws IOException {
+                        public void writeTo(@NotNull BufferedSink arg0) {
                         }
 
                     })
                     .build();
-            Response response = networkClient.newCall(request).execute();
-            Assert.assertEquals(true, response.body().string().contains("OK"));
+            try (Response response = networkClient.newCall(request).execute()) {
+                ResponseBody responseBody = response.body();
+                Assert.assertNotNull(responseBody);
+                String res = responseBody.string();
+                Assert.assertTrue(res.contains("OK"));
+            }
 
             Assert.assertTrue(TransactionLoadAction.getAction().txnNodeMapSize() <= 2048);
         }
@@ -148,15 +157,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -171,15 +183,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -195,15 +210,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(true, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertTrue(res.contains("OK"));
+        }
     }
 
     @Test
@@ -221,15 +239,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -244,15 +265,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
 
     }
 
@@ -271,15 +295,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -294,15 +321,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-
-        Assert.assertEquals(false, response.body().string().contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
 
         request = new Request.Builder()
                 .get()
@@ -317,16 +347,18 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        response = networkClient.newCall(request).execute();
-        String res = response.body().string();
-
-        Assert.assertEquals(false, res.contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
     }
 
     @Test
@@ -344,16 +376,17 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     }
 
                     @Override
-                    public void writeTo(BufferedSink arg0) throws IOException {
+                    public void writeTo(@NotNull BufferedSink arg0) {
                     }
-                    
+
                 })
                 .build();
 
-        Response response = networkClient.newCall(request).execute();
-        String res = response.body().string();
-        System.out.println(res);
-
-        Assert.assertEquals(false, res.contains("OK"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            ResponseBody responseBody = response.body();
+            Assert.assertNotNull(responseBody);
+            String res = responseBody.string();
+            Assert.assertFalse(res.contains("OK"));
+        }
     }
 }
