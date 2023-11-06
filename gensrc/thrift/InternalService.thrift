@@ -122,6 +122,11 @@ enum TOverflowMode {
   REPORT_ERROR = 1;
 }
 
+struct TQueryQueueOptions {
+  1: optional bool enable_global_query_queue;
+  2: optional bool enable_group_level_query_queue;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0
@@ -227,6 +232,8 @@ struct TQueryOptions {
 
   // Whether use hdfs file metacache
   107: optional bool enable_hdfs_file_metacache;
+
+  110: optional TQueryQueueOptions query_queue_options;
 }
 
 

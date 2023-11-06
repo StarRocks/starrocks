@@ -51,7 +51,12 @@ public class QueryQueueManager {
     }
 
     public void maybeWait(ConnectContext context, Coordinator coord) throws UserException, InterruptedException {
-        if (!needCheckQueue(coord) || !isEnableQueue(coord)) {
+        CoordinatorPreprocessor coordPrepare = coord.getPrepareInfo();
+        coordPrepare.setNeedCheckQueued(needCheckQueue(coord));
+        coordPrepare.setEnableQueue(isEnableQueue(coord));
+        coordPrepare.setEnableGroupLevelQueue(coordPrepare.isEnableQueue() && GlobalVariable.isEnableGroupLevelQueryQueue());
+
+        if (!coordPrepare.isNeedCheckQueued() || !coordPrepare.isEnableQueue()) {
             return;
         }
 
