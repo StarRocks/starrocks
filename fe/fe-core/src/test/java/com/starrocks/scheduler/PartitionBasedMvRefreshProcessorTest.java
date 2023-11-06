@@ -1615,13 +1615,15 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-                System.out.println("register query id: " + DebugUtil.printId(connectContext.getExecutionId()));
+                TUniqueId queryId = UUIDUtil.toTUniqueId(execPlan.getConnectContext().getQueryId());
+                System.out.println("register query id: " + DebugUtil.printId(queryId));
                 LoadPlanner loadPlanner = new LoadPlanner(1, loadId, 1, 1, materializedView,
                         false, "UTC", 10, System.currentTimeMillis(),
                         false, connectContext, null, 10,
                         10, null, null, null, 1);
                 DefaultCoordinator coordinator =
                         new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
+                QeProcessorImpl.INSTANCE.registerQuery(queryId, coordinator);
             }
         };
         String insertSql = "insert into tbl3 values('2021-12-01', 2, 10);";
