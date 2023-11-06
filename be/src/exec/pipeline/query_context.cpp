@@ -310,7 +310,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     }
 }
 
-QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
+QueryContextPtr QueryContextManager::get(const TUniqueId& query_id, bool need_prepared) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -318,13 +318,24 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
     std::shared_lock<std::shared_mutex> read_lock(mutex);
     // lookup query context in context_map for the first chance
     auto it = context_map.find(query_id);
+    auto check_if_prepared = [need_prepared](auto it) -> QueryContextPtr {
+        if (need_prepared) {
+            if (it->second->is_prepared()) {
+                return it->second;
+            } else {
+                return nullptr;
+            }
+        } else {
+            return it->second;
+        }
+    };
     if (it != context_map.end()) {
-        return it->second;
+        return check_if_prepared(it);
     } else {
         // lookup query context in context_map for the second chance
         auto sc_it = sc_map.find(query_id);
         if (sc_it != sc_map.end()) {
-            return sc_it->second;
+            return check_if_prepared(sc_it);
         } else {
             return nullptr;
         }
@@ -443,6 +454,34 @@ void QueryContextManager::report_fragments_with_same_host(
     }
 }
 
+<<<<<<< HEAD
+=======
+void QueryContextManager::collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                                   PCollectQueryStatisticsResult* response) {
+    for (int i = 0; i < request->query_ids_size(); i++) {
+        const PUniqueId& p_query_id = request->query_ids(i);
+        TUniqueId id;
+        id.__set_hi(p_query_id.hi());
+        id.__set_lo(p_query_id.lo());
+        if (auto query_ctx = get(id, true); query_ctx != nullptr) {
+            int64_t cpu_cost = query_ctx->cpu_cost();
+            int64_t scan_rows = query_ctx->cur_scan_rows_num();
+            int64_t scan_bytes = query_ctx->get_scan_bytes();
+            int64_t mem_usage_bytes = query_ctx->current_mem_usage_bytes();
+            auto query_statistics = response->add_query_statistics();
+            auto query_id = query_statistics->mutable_query_id();
+            query_id->set_hi(p_query_id.hi());
+            query_id->set_lo(p_query_id.lo());
+            query_statistics->set_cpu_cost_ns(cpu_cost);
+            query_statistics->set_scan_rows(scan_rows);
+            query_statistics->set_scan_bytes(scan_bytes);
+            query_statistics->set_mem_usage_bytes(mem_usage_bytes);
+            query_statistics->set_spill_bytes(query_ctx->get_spill_bytes());
+        }
+    }
+}
+
+>>>>>>> c4a8c125a2 ([BugFix] Fix be crash when execute show proc '/current_queries' (#34316))
 void QueryContextManager::report_fragments(
         const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
     std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
