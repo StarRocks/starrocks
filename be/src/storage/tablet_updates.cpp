@@ -3549,8 +3549,7 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                     return Status::InternalError(ss.str());
                 }
             }
-            if (!chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), _tablet.tablet_meta(),
-                                             mem_pool.get())) {
+            if (!chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
                 LOG(WARNING) << "failed to change data in chunk";
                 return Status::InternalError("failed to change data in chunk");
             }

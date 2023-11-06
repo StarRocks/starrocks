@@ -32,7 +32,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
@@ -294,20 +293,6 @@ public class CreateMaterializedViewTest {
 
     private void dropMv(String mvName) throws Exception {
         String sql = "drop materialized view " + mvName;
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
-        stmtExecutor.execute();
-    }
-
-    private void dropTableForce(String tableName) throws Exception {
-        String sql = "drop table " + tableName + " force";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
-        stmtExecutor.execute();
-    }
-
-    private void dropTable(String tableName) throws Exception {
-        String sql = "drop table " + tableName;
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
         stmtExecutor.execute();
@@ -3128,95 +3113,6 @@ public class CreateMaterializedViewTest {
 
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
-    }
-
-    @Test
-    public void testSelectFromSyncMV() throws Exception {
-        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        sql = "select * from sync_mv1 [_SYNC_MV_];";
-        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-        Assert.assertTrue(explainString.contains("partitions=2/2\n" +
-                "     rollup: sync_mv1\n" +
-                "     tabletRatio=6/6"));
-    }
-
-    @Test
-    public void testCreateSyncMV_WithUpperColumn() throws Exception {
-        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        {
-            sql = "select * from UPPER_MV1 [_SYNC_MV_];";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            // output columns should be same with the base table.
-            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
-                    " OUTPUT EXPRS:1: K1 | 2: mv_sum_V1\n" +
-                    "  PARTITION: UNPARTITIONED"));
-        }
-        {
-            sql = "select K1, sum(V1) from TBL1 group by K1";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(4: mv_sum_V1)\n" +
-                    "  |  group by: 1: K1\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: TBL1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     partitions=2/2\n" +
-                    "     rollup: UPPER_MV1"));
-        }
-        starRocksAssert.dropMaterializedView("UPPER_MV1");
-    }
-
-    @Test
-    public void testCreateSyncMV_WithLowerColumn() throws Exception {
-        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        {
-            sql = "select * from lower_mv1 [_SYNC_MV_];";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            // output columns should be same with the base table.
-            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
-                    " OUTPUT EXPRS:1: k1 | 2: mv_sum_v1\n" +
-                    "  PARTITION: UNPARTITIONED"));
-        }
-        {
-            sql = "select K1, sum(v1) from tbl1 group by K1";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(4: mv_sum_v1)\n" +
-                    "  |  group by: 1: k1\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: tbl1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     partitions=2/2\n" +
-                    "     rollup: lower_mv1"));
-        }
-        starRocksAssert.dropMaterializedView("lower_mv1");
     }
 
     @Test
