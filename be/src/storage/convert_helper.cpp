@@ -670,13 +670,12 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
-        std::string source;
         if (src.is_null()) {
             dst->set_null();
             return Status::OK();
         }
         auto value = src.template get<CppType>();
-        source = src_typeinfo->to_string(&value);
+        std::string source = src_typeinfo->to_string(&value);
         Slice slice;
         slice.size = source.size();
         if (mem_pool == nullptr) {
