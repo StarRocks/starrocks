@@ -68,6 +68,7 @@
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
 #include "exprs/jit/jit_functions.h"
+#include "exprs/jit/jit_engine.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -220,8 +221,8 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
 
     // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
+    auto* jit_wrapper = JITEngine::get_instance();
+    if (!jit_wrapper->support_jit()) {
         return status;
     }
 
