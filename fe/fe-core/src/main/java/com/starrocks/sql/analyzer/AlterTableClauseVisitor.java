@@ -361,12 +361,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
             }
         }
-        if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
-            Column afterColumn = table.getColumn(colPos.getLastCol());
-            if (afterColumn.isGeneratedColumn()) {
-                throw new SemanticException("Can not add column after Generated Column");
-            }
-        }
 
         if (!columnDef.isAllowNull() && columnDef.defaultValueIsNull()) {
             throw new SemanticException(PARSER_ERROR_MSG.withOutDefaultVal(columnDef.getName()), columnDef.getPos());
