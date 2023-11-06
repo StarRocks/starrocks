@@ -114,11 +114,15 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
 }
 
 // current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key) {
+void TabletManager::update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint) {
     // use write lock to protect parallel segment size update
     std::unique_lock wrlock(_meta_lock);
     auto segment = _metacache->lookup_segment(key);
     if (segment == nullptr) {
+        return;
+    }
+    if (segment_addr_hint != 0 && segment_addr_hint != reinterpret_cast<intptr_t>(segment.get())) {
+        // the segment in cache is not the one as expected, skip the cache update
         return;
     }
     _metacache->cache_segment(key, std::move(segment));
