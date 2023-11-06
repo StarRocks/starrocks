@@ -151,7 +151,7 @@ public class TFragmentInstanceFactory {
                     result.adaptive_dop_param.setMax_output_amplification_factor(
                             sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                 }
-                if (jobSpec.isEnableQueue() && jobSpec.isNeedQueued()) {
+                if (jobSpec.isEnableQueue()) {
                     TQueryQueueOptions queryQueueOptions = new TQueryQueueOptions();
                     queryQueueOptions.setEnable_query_queue(jobSpec.isEnableQueue());
                     queryQueueOptions.setEnable_group_level_query_queue(jobSpec.isEnableGroupLevelQueue());
