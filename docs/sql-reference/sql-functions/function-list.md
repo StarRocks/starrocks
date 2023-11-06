@@ -38,7 +38,7 @@ You can find a function based on the following categories:
 - [covar_pop](../sql-functions/aggregate-functions/covar_pop.md)
 - [covar_samp](../sql-functions/aggregate-functions/covar_samp.md)
 - [count](../sql-functions/aggregate-functions/count.md)
-- [group_concat](../sql-functions/string-functions/group_concat.md)
+- [group_concat](../sql-functions/aggregate-functions/group_concat.md)
 - [grouping](../sql-functions/aggregate-functions/grouping.md)
 - [grouping_id](../sql-functions/aggregate-functions/grouping_id.md)
 - [group_concat](./string-functions/group_concat.md)
