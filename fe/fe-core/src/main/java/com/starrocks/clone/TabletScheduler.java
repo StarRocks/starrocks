@@ -45,11 +45,8 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
-<<<<<<< HEAD
 import com.starrocks.catalog.TabletInvertedIndex;
-=======
 import com.starrocks.catalog.TabletMeta;
->>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
