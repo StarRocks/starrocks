@@ -686,6 +686,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
+    _query_ctx->mark_prepared();
     prepare_success = true;
 
     return Status::OK();

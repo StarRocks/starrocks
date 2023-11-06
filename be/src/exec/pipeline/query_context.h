@@ -194,6 +194,9 @@ public:
 
     spill::QuerySpillManager* spill_manager() { return _spill_manager.get(); }
 
+    void mark_prepared() { _is_prepared = true; }
+    bool is_prepared() { return _is_prepared; }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -221,6 +224,7 @@ private:
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
+    std::atomic_bool _is_prepared = false;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -264,7 +268,7 @@ public:
     ~QueryContextManager();
     Status init();
     QueryContext* get_or_register(const TUniqueId& query_id);
-    QueryContextPtr get(const TUniqueId& query_id);
+    QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);
     // used for graceful exit
