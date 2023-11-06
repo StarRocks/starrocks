@@ -31,7 +31,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs'
 | '/load_error_hub'            | 查看当前集群的 Error Hub 的配置信息。Error Hub 用于管理导入作业产生的错误信息。 |
 | '/transactions'              | 查看当前集群的事务信息。                                     |
 | '/monitor'                   | 查看当前集群的监控信息。                                     |
-| '/current_queries'           | 查看当前集群正在执行的查询信息。                             |
+| '/current_queries'           | 查看当前连接的FE节点正在执行的查询信息。                       |
 | '/current_backend_instances' | 查看当前集群正在执行作业的 BE 节点。                         |
 | '/cluster_balance'           | 查看当前集群的负载信息。                                     |
 | '/routine_loads'             | 查看当前集群的 Routine Load 导入信息。                       |
