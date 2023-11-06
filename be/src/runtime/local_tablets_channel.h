@@ -100,7 +100,7 @@ private:
             if (status.ok() || _response == nullptr) {
                 return;
             }
-            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message().to_string());
             std::lock_guard l(_response_lock);
             if (_response->status().status_code() == TStatusCode::OK) {
                 _response->mutable_status()->set_status_code(status.code());
