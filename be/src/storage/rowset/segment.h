@@ -148,7 +148,9 @@ public:
         return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
     }
 
-    const ColumnReader* column_with_uid(size_t uid) const { return _column_readers.at(uid).get(); }
+    const ColumnReader* column_with_uid(size_t uid) const { 
+        return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
+    }
 
     FileSystem* file_system() const { return _fs.get(); }
 
@@ -170,8 +172,6 @@ public:
     size_t mem_usage() const {
         return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
     }
-
-    bool is_valid_column(uint32_t column_unique_id) const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
