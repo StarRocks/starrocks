@@ -197,19 +197,20 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define STARROCKS_CFREE(ptr) je_free(ptr)
 #define STARROCKS_VALLOC(size) je_valloc(size)
 
+// @TODO should change it
 #ifndef BE_TEST
 #define MEMORY_CONSUME_SIZE(size)                                      \
     do {                                                               \
-        if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
-            starrocks::tls_thread_status.mem_consume(size);            \
+        if (LIKELY(starrocks::CurrentThread::current().is_init())) {            \
+            starrocks::CurrentThread::current().mem_consume(size); \
         } else {                                                       \
             starrocks::CurrentThread::mem_consume_without_cache(size); \
         }                                                              \
     } while (0)
 #define MEMORY_RELEASE_SIZE(size)                                      \
     do {                                                               \
-        if (LIKELY(starrocks::tls_is_thread_status_init)) {            \
-            starrocks::tls_thread_status.mem_release(size);            \
+        if (LIKELY(starrocks::CurrentThread::current().is_init())) {            \
+            starrocks::CurrentThread::current().mem_release(size); \
         } else {                                                       \
             starrocks::CurrentThread::mem_release_without_cache(size); \
         }                                                              \
@@ -218,15 +219,15 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 #define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(STARROCKS_MALLOC_SIZE(ptr))
 #define TRY_MEM_CONSUME(size, err_ret)                                                                   \
     do {                                                                                                 \
-        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
-            RETURN_IF_UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size), err_ret);            \
+        if (LIKELY(starrocks::CurrentThread::current().is_init())) {                                              \
+            RETURN_IF_UNLIKELY(!starrocks::CurrentThread::current().try_mem_consume(size), err_ret); \
         } else {                                                                                         \
             RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
         }                                                                                                \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
-#define IS_BAD_ALLOC_CATCHED() starrocks::tls_thread_status.is_catched()
+    starrocks::CurrentThread::current().set_exceed_mem_tracker(starrocks::GlobalEnv::GetInstance()->process_mem_tracker())
+#define IS_BAD_ALLOC_CATCHED() starrocks::CurrentThread::current().is_catched()
 #else
 std::atomic<int64_t> g_mem_usage(0);
 #define MEMORY_CONSUME_SIZE(size) g_mem_usage.fetch_add(size)

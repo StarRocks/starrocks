@@ -316,7 +316,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     delete storage_engine;
 
     // Unbind with MemTracker
-    tls_mem_tracker = nullptr;
+    // tls_mem_tracker = nullptr;
+    CurrentThread::current().set_mem_tracker(nullptr);
 
     global_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": global env stop successfully";
