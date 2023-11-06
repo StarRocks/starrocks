@@ -31,7 +31,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs'
 | '/load_error_hub'            | Shows the configuration of the cluster's Load Error Hub, which is used to manage error messages of loading jobs. |
 | '/transactions'              | Shows the information of transactions in the cluster.        |
 | '/monitor'                   | Shows the monitoring information in the cluster.             |
-| '/current_queries'           | Shows the information of currently running queries in the cluster. |
+| '/current_queries'           | Shows the information of running queries on the current FE node. |
 | '/current_backend_instances' | Shows the BE nodes that are processing requests in the cluster. |
 | '/cluster_balance'           | Shows the load balance information in the cluster.           |
 | '/routine_loads'             | Shows the information of Routine Load in the cluster.        |
