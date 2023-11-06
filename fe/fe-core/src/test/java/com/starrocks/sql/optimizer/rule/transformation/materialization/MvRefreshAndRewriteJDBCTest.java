@@ -123,6 +123,7 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                 "distributed by hash(a) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"query_rewrite_consistency\" = \"disable\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.a, t2.b, t3.c, t1.d " +
