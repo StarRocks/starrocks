@@ -2,12 +2,12 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -32,7 +32,6 @@ import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.commons.lang3.tuple.Triple;
-import org.assertj.core.util.Lists;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -353,7 +352,8 @@ public class TabletSchedulerTest {
         tablet.addReplica(replica);
         ctx.setTablet(tablet);
 
-        TabletScheduler tabletScheduler = new TabletScheduler(new TabletSchedulerStat());
+        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService,
+                tabletInvertedIndex, new TabletSchedulerStat());
 
         TFinishTaskRequest request = new TFinishTaskRequest();
         TStatus status = new TStatus();
