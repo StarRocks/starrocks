@@ -20,8 +20,8 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
 #include "exprs/function_call_expr.h"
-#include "exprs/jit/jit_functions.h"
 #include "exprs/jit/jit_engine.h"
+#include "exprs/jit/jit_functions.h"
 #include "gen_cpp/Exprs_types.h"
 #include "llvm/IR/IRBuilder.h"
 
