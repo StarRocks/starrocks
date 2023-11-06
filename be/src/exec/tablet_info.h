@@ -46,6 +46,7 @@ struct OlapTableIndexSchema {
     std::vector<SlotDescriptor*> slots;
     int32_t schema_hash;
     OlapTableColumnParam* column_param;
+    ExprContext* where_clause = nullptr;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -55,7 +56,7 @@ public:
     OlapTableSchemaParam() = default;
     ~OlapTableSchemaParam() noexcept = default;
 
-    Status init(const TOlapTableSchemaParam& tschema);
+    Status init(const TOlapTableSchemaParam& tschema, RuntimeState* state = nullptr);
     Status init(const POlapTableSchemaParam& pschema);
 
     int64_t db_id() const { return _db_id; }

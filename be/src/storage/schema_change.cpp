@@ -426,12 +426,16 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
-    do {
+    bool bg_worker_stopped = false;
+    bool is_eos = false;
+    while (!bg_worker_stopped && !is_eos) {
         Status st;
-        bool bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
+
+        bg_worker_stopped = StorageEngine::instance()->bg_worker_stopped();
         if (bg_worker_stopped) {
             return Status::InternalError(alter_msg_header() + "bg_worker_stopped");
         }
+
 #ifndef BE_TEST
         st = CurrentThread::mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
@@ -439,17 +443,18 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             return st;
         }
 #endif
-        st = reader->do_get_next(base_chunk.get());
-
-        if (!st.ok()) {
-            if (st.is_end_of_file()) {
-                break;
-            } else {
+        if (st = reader->do_get_next(base_chunk.get()); !st.ok()) {
+            if (is_eos = st.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header()
                              << "tablet reader failed to get next chunk, status: " << st.get_error_msg();
                 return st;
             }
         }
+
+        if (base_chunk->num_rows() == 0) {
+            break;
+        }
+
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
             std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
                                                       base_tablet->tablet_id(), new_tablet->tablet_id());
@@ -475,23 +480,6 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         base_chunk->reset();
         new_chunk->reset();
         mem_pool->clear();
-    } while (base_chunk->num_rows() == 0);
-
-    if (base_chunk->num_rows() != 0) {
-        if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
-            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
-            LOG(WARNING) << alter_msg_header() << err_msg;
-            return Status::InternalError(alter_msg_header() + err_msg);
-        }
-        if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
-            return st;
-        }
-        if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "rowset writer add chunk failed: " << st;
-            return st;
-        }
     }
 
     if (auto st = new_rowset_writer->flush(); !st.ok()) {
@@ -531,8 +519,14 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     StorageEngine* storage_engine = StorageEngine::instance();
-    bool bg_worker_stopped = storage_engine->bg_worker_stopped();
-    while (!bg_worker_stopped) {
+    bool bg_worker_stopped = false;
+    bool is_eos = false;
+    while (!bg_worker_stopped && !is_eos) {
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+        if (bg_worker_stopped) {
+            return Status::InternalError(alter_msg_header() + "bg_worker_stopped");
+        }
+
 #ifndef BE_TEST
         auto cur_usage = CurrentThread::mem_tracker()->consumption();
         // we check memory usage exceeds 90% since tablet reader use some memory
@@ -547,14 +541,15 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
         }
 #endif
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-        Status status = reader->do_get_next(base_chunk.get());
-        if (!status.ok()) {
-            if (!status.is_end_of_file()) {
+        if (auto status = reader->do_get_next(base_chunk.get()); !status.ok()) {
+            if (is_eos = status.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header() << "failed to get next chunk, status is:" << status.to_string();
                 return status;
-            } else if (base_chunk->num_rows() <= 0) {
-                break;
             }
+        }
+
+        if (base_chunk->num_rows() <= 0) {
+            break;
         }
 
         ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, base_chunk->num_rows());
@@ -577,15 +572,10 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
         }
 
         mem_pool->clear();
-        bg_worker_stopped = storage_engine->bg_worker_stopped();
     }
 
     RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
     RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
-
-    if (bg_worker_stopped) {
-        return Status::InternalError(alter_msg_header() + "bg_worker_stopped");
-    }
 
     if (auto st = new_rowset_writer->flush(); !st.ok()) {
         LOG(WARNING) << alter_msg_header() << "failed to flush rowset writer: " << st;
@@ -706,18 +696,30 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 
+    auto tablet_schema_ptr = new_tablet->tablet_schema();
+
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
-    sc_params.chunk_changer = std::make_unique<ChunkChanger>(new_tablet_schema);
     sc_params.base_tablet_schema = base_tablet_schema;
+    sc_params.base_table_column_names = request.base_table_column_names;
+    sc_params.alter_job_type = request.alter_job_type;
+    sc_params.chunk_changer =
+            std::make_unique<ChunkChanger>(sc_params.base_tablet_schema, tablet_schema_ptr,
+                                           sc_params.base_table_column_names, sc_params.alter_job_type);
 
-    if (request.__isset.materialized_view_params && request.materialized_view_params.size() > 0) {
+    auto* chunk_changer = sc_params.chunk_changer.get();
+    if (sc_params.alter_job_type == TAlterJobType::ROLLUP) {
         if (!request.__isset.query_options || !request.__isset.query_globals) {
             return Status::InternalError(_alter_msg_header +
                                          "change materialized view but query_options/query_globals is not set");
         }
-        sc_params.chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+        chunk_changer->init_runtime_state(request.query_options, request.query_globals);
+
+        RuntimeState* runtime_state = chunk_changer->get_runtime_state();
+        RETURN_IF_ERROR(DescriptorTbl::create(runtime_state, chunk_changer->get_object_pool(), request.desc_tbl,
+                                              &sc_params.desc_tbl, runtime_state->chunk_size()));
+        chunk_changer->set_query_slots(sc_params.desc_tbl);
     }
 
     // generated column index in new schema
@@ -730,9 +732,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
 
     // primary key do not support materialized view, initialize materialized_params_map here,
     // just for later column_mapping of _parse_request.
-    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    Status status = SchemaChangeUtils::parse_request(base_tablet_schema, new_tablet_schema,
-                                                     sc_params.chunk_changer.get(), sc_params.materialized_params_map,
+    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map, sc_params.where_expr);
+    Status status = SchemaChangeUtils::parse_request(base_tablet_schema, new_tablet_schema, chunk_changer,
+                                                     sc_params.materialized_params_map, sc_params.where_expr,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
                                                      &sc_params.sc_directly, &generated_column_idxs);
 
@@ -747,17 +749,17 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         // that sc_sorting == true, for generated column can not be a KEY.
         DCHECK_EQ(sc_params.sc_sorting, false);
 
-        sc_params.chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
-                                                    request.materialized_column_req.query_globals);
+        chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
+                                          request.materialized_column_req.query_globals);
 
         for (const auto& it : request.materialized_column_req.mc_exprs) {
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_expr_tree(sc_params.chunk_changer->get_object_pool(), it.second, &ctx,
-                                                   sc_params.chunk_changer->get_runtime_state()));
-            RETURN_IF_ERROR(ctx->prepare(sc_params.chunk_changer->get_runtime_state()));
-            RETURN_IF_ERROR(ctx->open(sc_params.chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(Expr::create_expr_tree(chunk_changer->get_object_pool(), it.second, &ctx,
+                                                   chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->prepare(chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->open(chunk_changer->get_runtime_state()));
 
-            sc_params.chunk_changer->get_gc_exprs()->insert({it.first, ctx});
+            chunk_changer->get_gc_exprs()->insert({it.first, ctx});
         }
     }
 
@@ -773,13 +775,13 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
             request_version = base_max_version;
         }
         if (sc_params.sc_directly) {
-            status = new_tablet->updates()->convert_from(base_tablet, request_version, sc_params.chunk_changer.get(),
+            status = new_tablet->updates()->convert_from(base_tablet, request_version, chunk_changer,
                                                          base_tablet_schema, _alter_msg_header);
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request_version, sc_params.chunk_changer.get(),
+            status = new_tablet->updates()->reorder_from(base_tablet, request_version, chunk_changer,
                                                          base_tablet_schema, _alter_msg_header);
         } else {
-            status = new_tablet->updates()->link_from(base_tablet.get(), request_version, sc_params.chunk_changer.get(),
+            status = new_tablet->updates()->link_from(base_tablet.get(), request_version, chunk_changer,
                                                       base_tablet_schema, _alter_msg_header);
         }
         if (!status.ok()) {
