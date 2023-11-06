@@ -139,7 +139,11 @@ public:
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    void update_segment_cache_size(std::string_view key);
+    // update cache size of the segment with the given key, optionally provide the segment address hint.
+    // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
+    // instance address matches the address provided by the segment_addr_hint. This is used to prevent
+    // updating the cache size where the cached object is not the one as expected.
+    void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

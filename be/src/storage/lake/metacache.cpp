@@ -148,6 +148,11 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_
 }
 
 std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _lookup_segment_no_lock(key);
+}
+
+std::shared_ptr<Segment> Metacache::_lookup_segment_no_lock(std::string_view key) {
     auto handle = _cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_segment_cache_miss << 1;
@@ -184,9 +189,26 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
 }
 
 void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _cache_segment_no_lock(key, std::move(segment));
+}
+
+void Metacache::_cache_segment_no_lock(std::string_view key, std::shared_ptr<Segment> segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
     insert(key, value.release(), mem_cost);
+}
+
+std::shared_ptr<Segment> Metacache::cache_segment_if_absent(std::string_view key, std::shared_ptr<Segment> segment) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto seg = _lookup_segment_no_lock(key);
+    if (seg != nullptr) {
+        // already exists, return the one in cache
+        return seg;
+    }
+    _cache_segment_no_lock(key, std::move(segment));
+    // it is possible that the `cache_segment` fails
+    return _lookup_segment_no_lock(key);
 }
 
 void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec) {
