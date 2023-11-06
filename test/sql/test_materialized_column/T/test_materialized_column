@@ -353,4 +353,35 @@ DROP DATABASE test_schema_change_for_add_optimization;
  SELECT * FROM t ORDER BY id;
  DROP TABLE t;
 
+<<<<<<< HEAD
  DROP DATABASE test_schema_change_for_constant_expression;
+=======
+DROP DATABASE test_schema_change_for_constant_expression;
+
+-- name: test_schema_change_for_after
+CREATE DATABASE test_schema_change_for_after;
+USE test_schema_change_for_after;
+
+CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1");
+
+alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after testcol1;
+alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;
+alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after xxx;
+alter table t0 add column testcol1 BIGINT as v1 + 10 after xxx, add column testcol2 BIGINT after xxx;
+alter table t0 add column testcol1 BIGINT as v1 + 10 after v1, add column testcol2 BIGINT after v1;
+alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
+
+alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after testcol1;
+function: wait_alter_table_finish()
+SHOW CREATE TABLE t0;
+
+alter table t0 add column testcol3 BIGINT after v1, add column testcol4 BIGINT after v1;
+function: wait_alter_table_finish()
+SHOW CREATE TABLE t0;
+
+alter table t0 add column testcol5 BIGINT, add column testcol6 BIGINT as v1 * 10;
+function: wait_alter_table_finish()
+SHOW CREATE TABLE t0;
+
+DROP DATABASE test_schema_change_for_after;
+>>>>>>> bc5c9e4d46 ([BugFix] Alter table add column error cause by generated column(#34095) (#34099))
