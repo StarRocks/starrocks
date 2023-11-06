@@ -139,7 +139,7 @@
 <NavBoxPartItem>
 
 - [SSB 基准测试](../benchmarking/SSB_Benchmarking)
-- [TPC-H 基准测试](../benchmarking/TPC-H_Benchmark)
+- [TPC-H 基准测试](../benchmarking/TPC-H_Benchmarking)
 
 </NavBoxPartItem>
 </NavBoxPart>
