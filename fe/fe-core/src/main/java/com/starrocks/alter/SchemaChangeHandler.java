@@ -969,6 +969,13 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Column[" + columnPos.getLastCol() + "] does not found");
         }
 
+        if (hasPos && modIndexSchema.get(posIndex) != null) {
+            Column posColumn = modIndexSchema.get(posIndex);
+            if (posColumn.isGeneratedColumn()) {
+                throw new DdlException("Can not add column after Generated Column");
+            }
+        }
+
         // check if add to first
         if (columnPos != null && columnPos.isFirst()) {
             posIndex = -1;
