@@ -24,7 +24,7 @@
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_functions.h"
-#include "exprs/jit/jit_wrapper.h"
+#include "exprs/jit/jit_engine.h"
 #include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {
@@ -65,7 +65,7 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     auto start = MonotonicNanos();
 
     // Compile the expression into native code and retrieve the function pointer.
-    auto* jit_wapper = JITWapper::get_instance();
+    auto* jit_wapper = JITEngine::get_instance();
     if (!jit_wapper->initialized()) {
         return Status::JitCompileError("JIT is not supported");
     }
@@ -136,7 +136,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
 }
 
 void JITExpr::close() {
-    auto* jit_wapper = JITWapper::get_instance();
+    auto* jit_wapper = JITEngine::get_instance();
     if (jit_wapper->initialized()) {
         auto status = jit_wapper->remove_function(_expr->debug_string());
         if (!status.ok()) {

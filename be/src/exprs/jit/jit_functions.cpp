@@ -30,7 +30,7 @@
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/jit/ir_helper.h"
-#include "exprs/jit/jit_wrapper.h"
+#include "exprs/jit/jit_engine.h"
 #include "llvm/IR/Type.h"
 #include "types/logical_type.h"
 

@@ -33,7 +33,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
   jit/ir_helper.cpp
-  jit/jit_wrapper.cpp
+  jit/jit_engine.cpp
   jit/jit_expr.cpp
   jit/jit_functions.cpp
   anyval_util.cpp

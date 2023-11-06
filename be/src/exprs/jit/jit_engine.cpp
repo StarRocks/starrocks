@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/jit/jit_wrapper.h"
+#include "exprs/jit/jit_engine.h"
 
 #include <glog/logging.h>
 
@@ -43,7 +43,7 @@
 
 namespace starrocks {
 
-Status JITWapper::init() {
+Status JITEngine::init() {
     if (_initialized) {
         return Status::OK();
     }
@@ -82,8 +82,8 @@ Status JITWapper::init() {
     return Status::OK();
 }
 
-StatusOr<JITScalarFunction> JITWapper::compile_scalar_function(ExprContext* context, Expr* expr) {
-    auto* instance = JITWapper::get_instance();
+StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr) {
+    auto* instance = JITEngine::get_instance();
     if (!instance->initialized()) {
         return Status::JitCompileError("JIT engine is not initialized");
     }
@@ -122,8 +122,8 @@ StatusOr<JITScalarFunction> JITWapper::compile_scalar_function(ExprContext* cont
     return compiled_function;
 }
 
-Status JITWapper::remove_function(const std::string& expr_name) {
-    auto* instance = JITWapper::get_instance();
+Status JITEngine::remove_function(const std::string& expr_name) {
+    auto* instance = JITEngine::get_instance();
     if (!instance->initialized()) {
         return Status::JitCompileError("JIT engine is not initialized");
     }
@@ -131,14 +131,14 @@ Status JITWapper::remove_function(const std::string& expr_name) {
     return instance->remove_module(expr_name);
 }
 
-void JITWapper::setup_module(llvm::Module* module) const {
+void JITEngine::setup_module(llvm::Module* module) const {
     // Set the data layout of the LLVM module, telling the compiler how to arrange data.
     module->setDataLayout(*_data_layout);
     // Set the target triple of the LLVM module to specify the architecture for which the code should be generated.
     module->setTargetTriple(_target_machine->getTargetTriple().getTriple());
 }
 
-void JITWapper::optimize_module(llvm::Module* module) {
+void JITEngine::optimize_module(llvm::Module* module) {
     // Create a function pass manager.
     llvm::legacy::FunctionPassManager fpm(module);
 
@@ -155,7 +155,7 @@ void JITWapper::optimize_module(llvm::Module* module) {
     fpm.doFinalization();
 }
 
-void* JITWapper::compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
+void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
                                 const std::string& expr_name) {
     // print_module(*module);
 
@@ -182,7 +182,7 @@ void* JITWapper::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
     return lookup_function(expr_name);
 }
 
-Status JITWapper::remove_module(const std::string& expr_name) {
+Status JITEngine::remove_module(const std::string& expr_name) {
     auto it = _resource_tracker_map.find(expr_name);
     if (it == _resource_tracker_map.end()) {
         return Status::OK();
@@ -201,7 +201,7 @@ Status JITWapper::remove_module(const std::string& expr_name) {
     return Status::OK();
 }
 
-void JITWapper::print_module(const llvm::Module& module) {
+void JITEngine::print_module(const llvm::Module& module) {
     std::string str;
     llvm::raw_string_ostream os(str);
 
@@ -210,7 +210,7 @@ void JITWapper::print_module(const llvm::Module& module) {
     LOG(INFO) << "JIT: Generated IR:\n" << str;
 }
 
-void* JITWapper::lookup_function(const std::string& expr_name) {
+void* JITEngine::lookup_function(const std::string& expr_name) {
     auto addr = _jit->lookup(expr_name);
     if (UNLIKELY(!addr || UNLIKELY(addr->isNull()))) {
         std::string error_message = "address is null";
