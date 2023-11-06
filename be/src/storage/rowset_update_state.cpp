@@ -666,8 +666,9 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& vs) {
     return os;
 }
 
-static void append_full_row_column(const Schema& tschema, const std::vector<uint32_t>& partial_update_value_column_ids,
-                                   const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
+static Status append_full_row_column(const Schema& tschema,
+                                     const std::vector<uint32_t>& partial_update_value_column_ids,
+                                     const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
     CHECK(state.write_columns.size() == read_column_ids.size());
     size_t input_column_size = tschema.num_fields() - tschema.num_key_fields() - 1;
     LOG(INFO) << "partial_update_value_column_ids:" << partial_update_value_column_ids
@@ -679,12 +680,13 @@ static void append_full_row_column(const Schema& tschema, const std::vector<uint
                 state.partial_update_value_columns->columns()[i];
     }
     for (size_t i = 0; i < read_column_ids.size(); ++i) {
-        columns[read_column_ids[i] - tschema.num_key_fields()] = std::move(state.write_columns[i]);
+        columns[read_column_ids[i] - tschema.num_key_fields()] = state.write_columns[i]->clone_shared();
     }
     auto full_row_column = std::make_unique<BinaryColumn>();
     auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
-    row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column);
+    RETURN_IF_ERROR(row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column));
     state.write_columns.emplace_back(std::move(full_row_column));
+    return Status::OK();
 }
 
 Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_schema, Rowset* rowset,
@@ -732,8 +734,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                                         read_column_ids_without_full_row, index, _tablet_schema));
         }
         if (tablet->is_column_with_row_store()) {
-            append_full_row_column(*_tablet_schema->schema(), _partial_update_value_column_ids,
-                                   read_column_ids_without_full_row, _partial_update_states[segment_id]);
+            RETURN_IF_ERROR(append_full_row_column(*_tablet_schema->schema(), _partial_update_value_column_ids,
+                                                   read_column_ids_without_full_row,
+                                                   _partial_update_states[segment_id]));
         }
     }
 
