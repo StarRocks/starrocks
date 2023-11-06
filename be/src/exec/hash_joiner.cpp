@@ -109,8 +109,8 @@ Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_
     _hash_join_builder->create(hash_table_param());
     auto& ht = _hash_join_builder->hash_table();
 
-    _probe_column_count = ht.get_probe_column_count();
-    _build_column_count = ht.get_build_column_count();
+    _probe_column_count = ht.get_first_probe_column_count();
+    _build_column_count = ht.get_first_build_column_count();
 
     return Status::OK();
 }
@@ -146,6 +146,43 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
     param->output_slots = _output_slots;
+
+    std::set<SlotId> predicate_slots;
+    std::vector<SlotId> probe_slots;
+    for (ExprContext* expr_context : _probe_expr_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+        for (size_t i = 0; i < expr_slots.size(); i++) {
+            probe_slots.emplace_back(expr_slots[i]);
+        }
+    }
+    int tmp_i = 0;
+    for (ExprContext* expr_context : _build_expr_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+        for (size_t i = 0; i < expr_slots.size(); i++) {
+            param->id_map[expr_slots[i]] = probe_slots[tmp_i];
+            tmp_i++;
+        }
+    }
+    for (ExprContext* expr_context : _conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    for (ExprContext* expr_context : _other_join_conjunct_ctxs) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    for (ExprContext* expr_context : _runtime_in_filters) {
+        std::vector<SlotId> expr_slots;
+        expr_context->root()->get_slot_ids(&expr_slots);
+        predicate_slots.insert(expr_slots.begin(), expr_slots.end());
+    }
+    param->predicate_slots = predicate_slots;
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();

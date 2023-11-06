@@ -118,6 +118,12 @@ void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
     }
 }
 
+void ArrayColumn::append_selective_fixed_size(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
+    for (uint32_t i = 0; i < size; i++) {
+        append(src, indexes[from + i], 1);
+    }
+}
+
 void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, indexes[from + i], 1);

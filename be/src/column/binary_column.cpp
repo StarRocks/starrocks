@@ -24,6 +24,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
+#include "simd/simd.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/raw_container.h"
@@ -56,6 +57,52 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
     for (size_t i = offset; i < offset + count; i++) {
         size_t l = b._offsets[i + 1] - b._offsets[i];
         _offsets.emplace_back(_offsets.back() + l);
+    }
+    _slices_cache = false;
+}
+
+bool check_zero(const uint32_t* indexes, uint32_t from, uint32_t size) {
+    for (size_t i = 0; i < size; i++) {
+        if (indexes[from + i] == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append_selective_fixed_size(const Column& src, const uint32_t* indexes, uint32_t from,
+                                                      uint32_t size) {
+    const auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
+    const auto& src_offsets = src_column.get_offset();
+    const auto& src_bytes = src_column.get_bytes();
+
+    size_t cur_row_count = _offsets.size() - 1;
+    size_t cur_byte_size = _bytes.size();
+    if (size != 0) {
+        uint32_t row_idx = indexes[from];
+        size_t item_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+
+        _offsets.resize(cur_row_count + size + 1);
+        _bytes.resize(cur_byte_size + item_size * size);
+
+        auto* dest_bytes = _bytes.data();
+        uint32_t cur_offset = _offsets[cur_row_count];
+        auto* src_bytes_data = src_bytes.data();
+
+        size_t prefetch_index = 16;
+
+        for (uint32_t i = 0; i < size; i++) {
+            if (prefetch_index < size) {
+                uint32_t idx = indexes[from + prefetch_index];
+                __builtin_prefetch(static_cast<const void*>(src_bytes_data + (idx - 1) * item_size));
+            }
+            prefetch_index++;
+
+            _offsets[cur_row_count + i + 1] = cur_offset + (i + 1) * item_size;
+            uint32_t idx = indexes[from + i];
+            strings::memcpy_inlined(dest_bytes + i * item_size, src_bytes_data + (idx - 1) * item_size, item_size);
+        }
     }
     _slices_cache = false;
 }
@@ -732,6 +779,20 @@ bool BinaryColumnBase<T>::has_large_column() const {
     } else {
         return false;
     }
+}
+
+template <typename T>
+bool BinaryColumnBase<T>::check_fixed_size(uint32_t from, uint32_t size) {
+    if (size != 0) {
+        uint32_t item_size = _offsets[from + 1] - _offsets[from];
+        for (size_t i = 0; i < size; i++) {
+            uint32_t tmp_size = _offsets[from + i + 1] - _offsets[from + i];
+            if (item_size != tmp_size) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 template <typename T>

@@ -184,6 +184,8 @@ public:
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 
+    virtual bool check_fixed_size(uint32_t from, uint32_t size) { return false; }
+
     // This function will update data from src according to the input indexes. 'indexes' contains
     // the row index will be update
     // For example:
@@ -204,6 +206,9 @@ public:
     //      size: 2
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
+
+    virtual void append_selective_fixed_size(const Column& src, const uint32_t* indexes, uint32_t from,
+                                             uint32_t size) = 0;
 
     virtual void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
                                                uint32_t size) {
