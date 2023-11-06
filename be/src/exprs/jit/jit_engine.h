@@ -35,20 +35,20 @@
 namespace starrocks {
 
 /**
- * JITWapper is a wrapper of LLVM JIT engine, based on ORCv2.
+ * JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
  */
-class JITWapper {
+class JITEngine {
 public:
-    JITWapper() = default;
+    JITEngine() = default;
 
-    ~JITWapper() = default;
+    ~JITEngine() = default;
 
-    JITWapper(const JITWapper&) = delete;
+    JITEngine(const JITEngine&) = delete;
 
-    JITWapper& operator=(const JITWapper&) = delete;
+    JITEngine& operator=(const JITEngine&) = delete;
 
-    static JITWapper* get_instance() {
-        static JITWapper* instance = new JITWapper();
+    static JITEngine* get_instance() {
+        static JITEngine* instance = new JITEngine();
         return instance;
     }
 
