@@ -2908,8 +2908,11 @@ public class OlapTable extends Table {
     }
 
     public boolean supportColumnWithRow() {
+        // must have noKey column
         List<Column> noKeys = getColumns().stream().filter(column -> !column.isKey()).collect(Collectors.toList());
-        return noKeys.size() > 0;
+        // not support complex type
+        boolean hasComplexType = getColumns().stream().anyMatch(col -> col.getType().isComplexType());
+        return noKeys.size() > 0 && !hasComplexType;
     }
 
     public boolean hasRowStorageType() {
