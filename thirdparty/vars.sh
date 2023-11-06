@@ -410,7 +410,7 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/dujijun007/clucene/archive/refs/tags/2.4.4/libclucene-2.4.4.zip"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.06.tar.gz"
 CLUCENE_NAME="libclucene-v2.4.4.zip"
 CLUCENE_SOURCE="libclucene-v2.4.4"
 CLUCENE_MD5SUM="390b8df03f08ba0a20453d55c21aa9e5"
