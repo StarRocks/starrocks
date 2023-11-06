@@ -28,7 +28,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
-#include "exprs/jit/jit_wrapper.h"
+#include "exprs/jit/jit_engine.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -421,7 +421,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
 
             if (state->query_options().__isset.enable_jit && state->query_options().enable_jit) {
-                auto* jit_wrapper = JITWapper::get_instance();
+                auto* jit_wrapper = JITEngine::get_instance();
                 if (jit_wrapper->support_jit()) {
                     const auto* prev_e = expr;
                     auto status = expr->replace_compilable_exprs(&expr, _pool);

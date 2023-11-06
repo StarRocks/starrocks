@@ -174,7 +174,7 @@ public:
         // Verify the original result.
         test_func(ptr);
 
-        auto jit_wrapper = JITWapper::get_instance();
+        auto jit_wrapper = JITEngine::get_instance();
         if (!jit_wrapper->init().ok()) {
             return;
         }
