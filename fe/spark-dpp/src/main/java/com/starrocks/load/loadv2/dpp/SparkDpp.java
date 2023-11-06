@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.common.PartitionType;
 import com.starrocks.common.SparkDppException;
+import com.starrocks.common.StarrocksUtils;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -120,6 +121,9 @@ public final class SparkDpp implements java.io.Serializable {
     private SerializableConfiguration serializableHadoopConf;
     private DppResult dppResult = new DppResult();
     private Map<Long, Set<String>> tableToBitmapDictColumns = new HashMap<>();
+    private FileMergeJob fileMergeJob;
+    private boolean isResetbucketKeyMap;
+    private Map<String, Integer> bucketDivideMap = new HashMap<>();
 
     // just for ut
     public SparkDpp() {
@@ -268,15 +272,28 @@ public final class SparkDpp implements java.io.Serializable {
                                 }
                                 // flush current writer and create a new writer
                                 String[] bucketKey = curBucketKey.split("_");
-                                if (bucketKey.length != 2) {
-                                    LOG.warn("invalid bucket key:" + curBucketKey);
-                                    continue;
+                                if (isResetbucketKeyMap) {
+                                    if (bucketKey.length != 3) {
+                                        LOG.warn("invalid bucket key:" + curBucketKey);
+                                        continue;
+                                    }
+                                } else {
+                                    if (bucketKey.length != 2) {
+                                        LOG.warn("invalid bucket key:" + curBucketKey);
+                                        continue;
+                                    }
                                 }
                                 int partitionId = Integer.parseInt(bucketKey[0]);
                                 int bucketId = Integer.parseInt(bucketKey[1]);
                                 dstPath = String.format(pathPattern, tableId, partitionId, indexMeta.indexId,
                                         bucketId, indexMeta.schemaHash);
-                                tmpPath = dstPath + "." + taskAttemptId;
+                                if (isResetbucketKeyMap && bucketDivideMap.containsKey(partitionId + "_" + bucketId)) {
+                                    int j = Integer.parseInt(bucketKey[2]);
+                                    tmpPath = dstPath + "." + taskAttemptId + "." + j;
+                                    dstPath += "." + j;
+                                } else {
+                                    tmpPath = dstPath + "." + taskAttemptId;
+                                }
                                 conf.setBoolean("spark.sql.parquet.writeLegacyFormat", false);
                                 conf.setBoolean("spark.sql.parquet.int64AsTimestampMillis", false);
                                 conf.setBoolean("spark.sql.parquet.int96AsTimestamp", true);
@@ -365,6 +382,16 @@ public final class SparkDpp implements java.io.Serializable {
             }
             // repartition and write to hdfs
             writeRepartitionAndSortedRDDToParquet(curRDD, pathPattern, tableId, curNode.indexMeta, sparkRDDAggregators);
+            // merge file
+            if (isResetbucketKeyMap) {
+                try {
+                    fileMergeJob = new FileMergeJob(spark);
+                    fileMergeJob.mergeParquetFile(bucketDivideMap, pathPattern, tableId, curNode.indexMeta,
+                            serializableHadoopConf, etlJobConfig.outputPath);
+                } catch (Exception ex) {
+                    LOG.error("FileMergeJob error", ex);
+                }
+            }
         }
     }
 
@@ -496,12 +523,12 @@ public final class SparkDpp implements java.io.Serializable {
         for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
             parsers.add(ColumnParser.create(column));
         }
-
         // use PairFlatMapFunction instead of PairMapFunction because the there will be
         // 0 or 1 output row for 1 input row
         Partitioner finalPartitioner = partitioner;
         JavaPairRDD<List<Object>, Object[]> resultPairRDD =
                 dataframe.toJavaRDD().flatMapToPair(new PairFlatMapFunction<Row, List<Object>, Object[]>() {
+
                     @Override
                     public Iterator<Tuple2<List<Object>, Object[]>> call(Row row) throws Exception {
                         List<Tuple2<List<Object>, Object[]>> result = new ArrayList<>();
@@ -1207,6 +1234,9 @@ public final class SparkDpp implements java.io.Serializable {
                 }
                 LOG.info("bucket key map:" + bucketKeyMap.toString());
 
+                // if it is a DUPLICATE, split the skewed bucketKey to avoid data skew;
+                isResetbucketKeyMap = StarrocksUtils.isResetbucketKeyMap(baseIndex.indexType);
+
                 JavaPairRDD<List<Object>, Object[]> tablePairRDD = null;
                 for (EtlJobConfig.EtlFileGroup fileGroup : etlTable.fileGroups) {
                     List<String> filePaths = fileGroup.filePaths;
@@ -1261,6 +1291,29 @@ public final class SparkDpp implements java.io.Serializable {
                         tablePairRDD = tablePairRDD.union(ret);
                     }
                 }
+
+                if (isResetbucketKeyMap) {
+                    // reset the bucketKeyMap
+                    LOG.info("reset the bucketKeyMap");
+                    GetBucketPartitionSizeJobHandler getSizeJobHandler = new GetBucketPartitionSizeJobHandler(spark);
+                    getSizeJobHandler.resetBucketKeyMap(tablePairRDD, bucketKeyMap);
+                    LOG.info("new bucket key map:" + bucketKeyMap.toString());
+                    bucketDivideMap = getSizeJobHandler.getBucketDivideMap();
+                    LOG.info("bucket divide map:" + bucketDivideMap.toString());
+                    Map<String, Map<Integer, Integer>> idxSampleMap = getSizeJobHandler.getIdxSampleMap();
+                    LOG.info("idx sample map:" + idxSampleMap.toString());
+                    if (idxSampleMap != null && idxSampleMap.size() > 0) {
+                        // sample
+                        SampleJobHandler mySampleJobHandler = new SampleJobHandler(spark, tablePairRDD,
+                                bucketDivideMap, idxSampleMap);
+                        Map<String, List<List<Object>>> boundsMap = mySampleJobHandler.getBoundsMap();
+                        LOG.info("started repartition");
+                        RePartitionJob rePartitionJob = new RePartitionJob(spark);
+                        tablePairRDD = rePartitionJob.repartitionBySample(boundsMap, tablePairRDD);
+                        LOG.info("finished repartition");
+                    }
+                }
+
                 processRollupTree(rootNode, tablePairRDD, tableId, baseIndex);
                 // calculate table-level metrics
                 // loaded rows
