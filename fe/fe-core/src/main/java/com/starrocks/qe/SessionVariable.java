@@ -1536,7 +1536,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableShortCircuit = false;
 
     @VarAttr(name = ENABLE_JIT)
-    private boolean enableJit = false;
+    private boolean enableJit = true;
 
     private int exprChildrenLimit = -1;
 
