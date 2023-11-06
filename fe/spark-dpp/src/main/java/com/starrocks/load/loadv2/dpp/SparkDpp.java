@@ -120,16 +120,21 @@ public final class SparkDpp implements java.io.Serializable {
     private SerializableConfiguration serializableHadoopConf;
     private DppResult dppResult = new DppResult();
     private Map<Long, Set<String>> tableToBitmapDictColumns = new HashMap<>();
+    private Map<Long, Set<String>> tableToBitmapBinaryColumns = new HashMap<>();
 
     // just for ut
     public SparkDpp() {
     }
 
-    public SparkDpp(SparkSession spark, EtlJobConfig etlJobConfig, Map<Long, Set<String>> tableToBitmapDictColumns) {
+    public SparkDpp(SparkSession spark, EtlJobConfig etlJobConfig, Map<Long, Set<String>> tableToBitmapDictColumns,
+                    Map<Long, Set<String>> tableToBinaryBitmapColumns) {
         this.spark = spark;
         this.etlJobConfig = etlJobConfig;
         if (tableToBitmapDictColumns != null) {
             this.tableToBitmapDictColumns = tableToBitmapDictColumns;
+        }
+        if (tableToBinaryBitmapColumns != null) {
+            this.tableToBitmapBinaryColumns = tableToBinaryBitmapColumns;
         }
     }
 
@@ -1154,6 +1159,7 @@ public final class SparkDpp implements java.io.Serializable {
                 Long tableId = entry.getKey();
                 EtlJobConfig.EtlTable etlTable = entry.getValue();
                 Set<String> dictBitmapColumnSet = tableToBitmapDictColumns.getOrDefault(tableId, new HashSet<>());
+                Set<String> bitmapBinaryColumnSet = tableToBitmapBinaryColumns.getOrDefault(tableId, new HashSet<>());
 
                 // get the base index meta
                 EtlJobConfig.EtlIndex baseIndex = null;
@@ -1192,7 +1198,8 @@ public final class SparkDpp implements java.io.Serializable {
                         createPartitionRangeKeys(partitionInfo, partitionKeySchema);
                 List<StarRocksListPartitioner.PartitionListKey> partitionListKeys =
                         createPartitionListKeys(partitionInfo, partitionKeySchema);
-                StructType dstTableSchema = DppUtils.createDstTableSchema(baseIndex.columns, false, false);
+                StructType dstTableSchema = DppUtils.createDstTableSchema(baseIndex.columns, false, true);
+                dstTableSchema = DppUtils.replaceBinaryColumnsInSchema(bitmapBinaryColumnSet, dstTableSchema);
                 RollupTreeBuilder rollupTreeParser = new MinimumCoverageRollupTreeBuilder();
                 RollupTreeNode rootNode = rollupTreeParser.build(etlTable);
                 LOG.info("Start to process rollup tree:" + rootNode);
