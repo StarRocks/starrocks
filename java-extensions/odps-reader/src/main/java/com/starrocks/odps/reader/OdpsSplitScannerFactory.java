@@ -42,8 +42,7 @@ public class OdpsSplitScannerFactory implements ScannerFactory {
     }
 
     /**
-     * Hudi scanner uses own independent classloader to find all classes
-     * due to hadoop version (hadoop-2.x) conflicts with JNI launcher of libhdfs (hadoop-3.x).
+     * Copy from Hudi-reader, not test if this is essential
      */
     @Override
     public Class getScannerClass() throws ClassNotFoundException {

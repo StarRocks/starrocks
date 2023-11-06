@@ -16,6 +16,9 @@ package com.starrocks.odps.reader;
 
 import com.aliyun.odps.Column;
 import com.aliyun.odps.data.Binary;
+import com.aliyun.odps.data.SimpleStruct;
+import com.aliyun.odps.data.Struct;
+import com.aliyun.odps.table.arrow.accessor.ArrowArrayAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowBigIntAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowBitAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowDateDayAccessor;
@@ -23,14 +26,19 @@ import com.aliyun.odps.table.arrow.accessor.ArrowDecimalAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowFloat4Accessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowFloat8Accessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowIntAccessor;
+import com.aliyun.odps.table.arrow.accessor.ArrowMapAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowSmallIntAccessor;
+import com.aliyun.odps.table.arrow.accessor.ArrowStructAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowTimestampAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowTinyIntAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVarBinaryAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVarCharAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
 import com.aliyun.odps.table.utils.ConfigConstants;
+import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.DecimalTypeInfo;
+import com.aliyun.odps.type.MapTypeInfo;
+import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.starrocks.jni.connector.ColumnType;
 import org.apache.arrow.vector.BigIntVector;
@@ -46,15 +54,21 @@ import org.apache.arrow.vector.TinyIntVector;
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.complex.ListVector;
+import org.apache.arrow.vector.complex.MapVector;
+import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
@@ -79,7 +93,6 @@ public class OdpsTypeUtils {
             case DECIMAL:
                 return parseDecimal((DecimalTypeInfo) column.getTypeInfo(), column.getName());
             case STRING:
-            case VARCHAR:
             case CHAR:
             case JSON:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.STRING);
@@ -88,9 +101,14 @@ public class OdpsTypeUtils {
             case DATE:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.DATE);
             case DATETIME:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.DATETIME);
             case TIMESTAMP:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.DATETIME_MILLIS);
+                return new ColumnType(column.getName(), ColumnType.TypeValue.DATETIME);
+            case MAP:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.MAP);
+            case STRUCT:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.STRUCT);
+            case ARRAY:
+                return new ColumnType(column.getName(), ColumnType.TypeValue.ARRAY);
             default:
                 throw new UnsupportedOperationException("Datatype not supported");
         }
@@ -145,9 +163,14 @@ public class OdpsTypeUtils {
             case DATE:
                 return new ArrowDateDayAccessor((DateDayVector) vector);
             case DATETIME:
-                return new ArrowTimestampAccessor((TimeStampVector) vector);
             case TIMESTAMP:
                 return new ArrowTimestampAccessor((TimeStampVector) vector);
+            case ARRAY:
+                return new ArrowArrayAccessorForRecord((ListVector) vector, typeInfo);
+            case MAP:
+                return new ArrowMapAccessorForRecord((MapVector) vector, typeInfo);
+            case STRUCT:
+                return new ArrowStructAccessorForRecord((StructVector) vector, typeInfo);
             default:
                 throw new UnsupportedOperationException(
                         "Datatype not supported: " + typeInfo.getTypeName());
@@ -187,12 +210,15 @@ public class OdpsTypeUtils {
             case DATE:
                 return LocalDate.ofEpochDay(((ArrowDateDayAccessor) dataAccessor).getEpochDay(rowId));
             case DATETIME:
-                return convertToTimeStamp(((ArrowTimestampAccessor) dataAccessor).getType(),
-                        ((ArrowTimestampAccessor) dataAccessor).getEpochTime(
-                                rowId)).atZone(ZoneId.systemDefault());
             case TIMESTAMP:
                 return convertToTimeStamp(((ArrowTimestampAccessor) dataAccessor).getType(),
                         ((ArrowTimestampAccessor) dataAccessor).getEpochTime(rowId));
+            case ARRAY:
+                return ((ArrowArrayAccessorForRecord) dataAccessor).getArray(rowId);
+            case MAP:
+                return ((ArrowMapAccessorForRecord) dataAccessor).getMap(rowId);
+            case STRUCT:
+                return ((ArrowStructAccessorForRecord) dataAccessor).getStruct(rowId);
             default:
                 throw new UnsupportedOperationException(
                         "Datatype not supported: " + typeInfo.getTypeName());
@@ -249,5 +275,95 @@ public class OdpsTypeUtils {
 
     public static String formatDate(LocalDate date) {
         return date.format(DATE_FORMATTER);
+    }
+
+    public static class ArrowArrayAccessorForRecord extends ArrowArrayAccessor<List<Object>> {
+
+        private final TypeInfo elementTypeInfo;
+        private final ArrowVectorAccessor dataAccessor;
+
+        public ArrowArrayAccessorForRecord(ListVector vector, TypeInfo typeInfo) {
+            super(vector);
+            this.elementTypeInfo = ((ArrayTypeInfo) typeInfo).getElementTypeInfo();
+            this.dataAccessor = OdpsTypeUtils.
+                    createColumnVectorAccessor(vector.getDataVector(), elementTypeInfo);
+        }
+
+        @Override
+        protected List<Object> getArrayData(int offset, int length) {
+            List<Object> list = new ArrayList<>();
+            try {
+                for (int i = 0; i < length; i++) {
+                    list.add(OdpsTypeUtils.getData(dataAccessor, elementTypeInfo, offset + i));
+                }
+                return list;
+            } catch (Exception e) {
+                throw new RuntimeException("Could not get the array", e);
+            }
+        }
+    }
+
+    public static class ArrowMapAccessorForRecord extends ArrowMapAccessor<Map<Object, Object>> {
+        private final TypeInfo keyTypeInfo;
+        private final TypeInfo valueTypeInfo;
+        private final ArrowVectorAccessor keyAccessor;
+        private final ArrowVectorAccessor valueAccessor;
+
+        public ArrowMapAccessorForRecord(MapVector mapVector, TypeInfo typeInfo) {
+            super(mapVector);
+            this.keyTypeInfo = ((MapTypeInfo) typeInfo).getKeyTypeInfo();
+            this.valueTypeInfo = ((MapTypeInfo) typeInfo).getValueTypeInfo();
+            StructVector entries = (StructVector) mapVector.getDataVector();
+            this.keyAccessor = OdpsTypeUtils.createColumnVectorAccessor(
+                    entries.getChild(MapVector.KEY_NAME), keyTypeInfo);
+            this.valueAccessor = OdpsTypeUtils.createColumnVectorAccessor(
+                    entries.getChild(MapVector.VALUE_NAME), valueTypeInfo);
+        }
+
+        @Override
+        protected Map<Object, Object> getMapData(int offset, int numElements) {
+            Map<Object, Object> map = new HashMap<>();
+            try {
+                for (int i = 0; i < numElements; i++) {
+                    map.put(OdpsTypeUtils.getData(keyAccessor, keyTypeInfo, offset + i),
+                            OdpsTypeUtils.getData(valueAccessor, valueTypeInfo, offset + i));
+                }
+                return map;
+            } catch (Exception e) {
+                throw new RuntimeException("Could not get the map", e);
+            }
+        }
+    }
+
+    public static class ArrowStructAccessorForRecord extends ArrowStructAccessor<Struct> {
+
+        private final ArrowVectorAccessor[] childAccessors;
+        private final TypeInfo structTypeInfo;
+        private final List<TypeInfo> childTypeInfos;
+
+        public ArrowStructAccessorForRecord(StructVector structVector,
+                                            TypeInfo typeInfo) {
+            super(structVector);
+            this.structTypeInfo = typeInfo;
+            this.childTypeInfos = ((StructTypeInfo) typeInfo).getFieldTypeInfos();
+            this.childAccessors = new ArrowVectorAccessor[structVector.size()];
+            for (int i = 0; i < childAccessors.length; i++) {
+                this.childAccessors[i] = OdpsTypeUtils.createColumnVectorAccessor(
+                        structVector.getVectorById(i), childTypeInfos.get(i));
+            }
+        }
+
+        @Override
+        public Struct getStruct(int rowId) {
+            List<Object> values = new ArrayList<>();
+            try {
+                for (int i = 0; i < childAccessors.length; i++) {
+                    values.add(OdpsTypeUtils.getData(childAccessors[i], childTypeInfos.get(i), rowId));
+                }
+                return new SimpleStruct((StructTypeInfo) structTypeInfo, values);
+            } catch (Exception e) {
+                throw new RuntimeException("Could not get the struct", e);
+            }
+        }
     }
 }

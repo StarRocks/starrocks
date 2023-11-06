@@ -14,6 +14,10 @@
 
 package com.starrocks.odps.reader;
 
+import com.aliyun.odps.data.Struct;
+import com.aliyun.odps.type.ArrayTypeInfo;
+import com.aliyun.odps.type.MapTypeInfo;
+import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
@@ -24,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 public class OdpsColumnValue implements ColumnValue {
     private final Object fieldData;
@@ -76,13 +81,9 @@ public class OdpsColumnValue implements ColumnValue {
 
     @Override
     public String getTimestamp(ColumnType.TypeValue type) {
-        if (type == ColumnType.TypeValue.DATETIME_MILLIS) {
-            Instant ts = (Instant) fieldData;
-            LocalDateTime dateTime = LocalDateTime.ofInstant(ts, ZoneId.systemDefault());
-            return OdpsTypeUtils.formatDateTime(dateTime);
-        } else {
-            return fieldData.toString();
-        }
+        Instant ts = (Instant) fieldData;
+        LocalDateTime dateTime = LocalDateTime.ofInstant(ts, ZoneId.systemDefault());
+        return OdpsTypeUtils.formatDateTime(dateTime);
     }
 
     @Override
@@ -92,17 +93,32 @@ public class OdpsColumnValue implements ColumnValue {
 
     @Override
     public void unpackArray(List<ColumnValue> values) {
-        throw new UnsupportedOperationException("Unsupported type: " + dataType);
+        List data = (List) fieldData;
+        ArrayTypeInfo arrayTypeInfo = (ArrayTypeInfo) dataType;
+        for (int i = 0; i < data.size(); i++) {
+            values.add(new OdpsColumnValue(data.get(i), arrayTypeInfo.getElementTypeInfo()));
+        }
     }
 
     @Override
     public void unpackMap(List<ColumnValue> keys, List<ColumnValue> values) {
-        throw new UnsupportedOperationException("Unsupported type: " + dataType);
+        MapTypeInfo mapTypeInfo = (MapTypeInfo) dataType;
+        Map data = (Map) fieldData;
+        data.forEach((key, value) -> {
+            keys.add(new OdpsColumnValue(key, mapTypeInfo.getKeyTypeInfo()));
+            values.add(new OdpsColumnValue(value, mapTypeInfo.getValueTypeInfo()));
+        });
     }
 
     @Override
     public void unpackStruct(List<Integer> structFieldIndex, List<ColumnValue> values) {
-        throw new UnsupportedOperationException("Unsupported type: " + dataType);
+        StructTypeInfo structTypeInfo = (StructTypeInfo) dataType;
+        List<TypeInfo> fieldTypeInfos = structTypeInfo.getFieldTypeInfos();
+        Struct data = (Struct) fieldData;
+        for (int i = 0; i < data.getFieldCount(); i++) {
+            structFieldIndex.add(i);
+            values.add(new OdpsColumnValue(data.getFieldValue(i), fieldTypeInfos.get(i)));
+        }
     }
 
     @Override

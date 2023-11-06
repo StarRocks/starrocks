@@ -14,12 +14,23 @@
 
 package com.starrocks.connector.odps;
 
+import com.aliyun.odps.type.ArrayTypeInfo;
+import com.aliyun.odps.type.CharTypeInfo;
 import com.aliyun.odps.type.DecimalTypeInfo;
+import com.aliyun.odps.type.MapTypeInfo;
+import com.aliyun.odps.type.StructTypeInfo;
 import com.aliyun.odps.type.TypeInfo;
+import com.aliyun.odps.type.VarcharTypeInfo;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
@@ -56,9 +67,14 @@ public class EntityConvertUtils {
             case DOUBLE:
                 return Type.DOUBLE;
             case CHAR:
+                CharTypeInfo charTypeInfo = (CharTypeInfo) typeInfo;
+                return ScalarType.createCharType(charTypeInfo.getLength());
             case VARCHAR:
+                VarcharTypeInfo varcharTypeInfo = (VarcharTypeInfo) typeInfo;
+                return ScalarType.createVarcharType(varcharTypeInfo.getLength());
             case STRING:
-                return ScalarType.createVarcharType(65533);
+            case JSON:
+                return ScalarType.createDefaultExternalTableString();
             case BINARY:
                 return Type.VARBINARY;
             case BOOLEAN:
@@ -66,9 +82,21 @@ public class EntityConvertUtils {
             case DATE:
                 return Type.DATE;
             case TIMESTAMP:
-                return Type.TIME;
             case DATETIME:
                 return Type.DATETIME;
+            case MAP:
+                MapTypeInfo mapTypeInfo = (MapTypeInfo) typeInfo;
+                return new MapType(convertType(mapTypeInfo.getKeyTypeInfo()),
+                        convertType(mapTypeInfo.getValueTypeInfo()));
+            case ARRAY:
+                ArrayTypeInfo arrayTypeInfo = (ArrayTypeInfo) typeInfo;
+                return new ArrayType(convertType(arrayTypeInfo.getElementTypeInfo()));
+            case STRUCT:
+                StructTypeInfo structTypeInfo = (StructTypeInfo) typeInfo;
+                List<Type> fieldTypeList =
+                        structTypeInfo.getFieldTypeInfos().stream().map(EntityConvertUtils::convertType)
+                                .collect(Collectors.toList());
+                return new StructType(fieldTypeList);
             default:
                 return Type.VARCHAR;
         }

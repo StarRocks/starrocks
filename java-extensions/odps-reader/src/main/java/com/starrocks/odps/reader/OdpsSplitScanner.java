@@ -20,6 +20,7 @@ import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
 import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
+import com.aliyun.odps.table.configuration.CompressionCodec;
 import com.aliyun.odps.table.configuration.ReaderOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
@@ -102,7 +103,8 @@ public class OdpsSplitScanner extends ConnectorScanner {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             reader = scan.createArrowReader(
                     new IndexedInputSplit(sessionId, splitIndex),
-                    ReaderOptions.newBuilder().withMaxBatchRowCount(fetchSize).withSettings(settings).build());
+                    ReaderOptions.newBuilder().withMaxBatchRowCount(fetchSize).withCompressionCodec(CompressionCodec.ZSTD)
+                            .withSettings(settings).build());
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
         } catch (Exception e) {
             close();
@@ -125,8 +127,8 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
     }
 
-    // because of fe must reorder the column name, so the vectorschemaroot 's order are different from requiredFields
-    // we make vectorschemaroot is right order
+    // because of fe must reorder the column name, so the data's order are different from requiredFields
+    // we make data is right order
     // right order: fieldVectors, columnAccessors
     // wrong order: requireColumns, requireFields
 
