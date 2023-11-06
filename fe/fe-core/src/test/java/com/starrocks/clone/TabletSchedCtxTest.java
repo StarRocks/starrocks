@@ -153,21 +153,9 @@ public class TabletSchedCtxTest {
 
     @Test
     public void testSingleReplicaRecover() throws SchedException {
-<<<<<<< HEAD
         // mock be1 down and TABLET_ID_1 missing
         be1.setAlive(false);
         LocalTablet missedTablet = new LocalTablet(TABLET_ID_1, invertedIndex.getReplicasByTabletId(TABLET_ID_1));
-=======
-        // drop be1 and TABLET_ID_1 missing
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(be1);
-        clusterLoadStatistic = new ClusterLoadStatistic(GlobalStateMgr.getCurrentSystemInfo(),
-                GlobalStateMgr.getCurrentInvertedIndex());
-        clusterLoadStatistic.init();
-        tabletScheduler.setLoadStatistic(clusterLoadStatistic);
-
-        LocalTablet missedTablet = new LocalTablet(TABLET_ID_1,
-                GlobalStateMgr.getCurrentInvertedIndex().getReplicasByTabletId(TABLET_ID_1));
->>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
         TabletSchedCtx ctx =
                 new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
                         TABLET_ID_1, System.currentTimeMillis(), systemInfoService);

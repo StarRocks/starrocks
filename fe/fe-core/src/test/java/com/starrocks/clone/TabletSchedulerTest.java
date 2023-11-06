@@ -54,22 +54,9 @@ public class TabletSchedulerTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
-<<<<<<< HEAD
     @Before
     public void setup() throws Exception {
-=======
-    SystemInfoService systemInfoService;
-    TabletInvertedIndex tabletInvertedIndex;
-    TabletSchedulerStat tabletSchedulerStat;
-    FakeEditLog fakeEditLog;
-    @Before
-    public void setup() throws Exception {
-        systemInfoService = new SystemInfoService();
-        tabletInvertedIndex = new TabletInvertedIndex();
-        tabletSchedulerStat = new TabletSchedulerStat();
-        fakeEditLog = new FakeEditLog();
 
->>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
         new Expectations() {
             {
                 globalStateMgr.getColocateTableIndex();
@@ -332,9 +319,6 @@ public class TabletSchedulerTest {
 
         Config.recover_with_empty_tablet = false;
     }
-<<<<<<< HEAD
-}
-=======
 
     @Test
     public void testFinishCreateReplicaTask() {
@@ -355,7 +339,6 @@ public class TabletSchedulerTest {
                 null,
                 false,
                 false,
-                1,
                 TTabletType.TABLET_TYPE_DISK,
                 TCompressionType.LZ4_FRAME);
 
@@ -395,4 +378,3 @@ public class TabletSchedulerTest {
         Assert.assertEquals(Replica.ReplicaState.NORMAL, replica.getState());
     }
 }
->>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))

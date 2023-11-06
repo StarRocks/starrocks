@@ -894,14 +894,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     olapTable.isInMemory(),
                     olapTable.enablePersistentIndex(),
                     olapTable.getPartitionInfo().getTabletType(partitionId),
-<<<<<<< HEAD
                     olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
-            createReplicaTask.setIsRecoverTask(true);
-=======
-                    olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
-                    indexMeta.getSortKeyUniqueIds());
+
             createReplicaTask.setRecoverySource(RecoverySource.SCHEDULER);
->>>>>>> d556a2d2bd ([BugFix] Fix FE crash bug where recover_with_empty_tablet is configured to true and there are single replica tables (#33071))
             taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
             Replica emptyReplica =
