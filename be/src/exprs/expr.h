@@ -251,6 +251,8 @@ public:
     void get_jit_exprs(std::vector<Expr*>& exprs);
 
     // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
+    // This method searches from top to bottom for compilable expressions.
+    // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
     // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
     Status replace_compilable_exprs(Expr** expr, ObjectPool* pool);
 
