@@ -68,6 +68,7 @@
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
 #include "exprs/jit/jit_functions.h"
+#include "exprs/jit/jit_engine.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"

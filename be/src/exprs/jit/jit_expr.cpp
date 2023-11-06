@@ -25,6 +25,7 @@
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_functions.h"
+#include "exprs/jit/jit_engine.h"
 #include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {
