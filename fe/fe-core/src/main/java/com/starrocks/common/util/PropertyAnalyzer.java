@@ -539,7 +539,8 @@ public class PropertyAnalyzer {
             } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
                 if (!olapTable.supportColumnWithRow()) {
-                    throw new AnalysisException("Olap Table must have more value columns exclude key columns");
+                    throw new AnalysisException("Column With Row Table must have more value columns exclude key columns "
+                            + "or column's type not supported");
                 }
             } else {
                 throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
