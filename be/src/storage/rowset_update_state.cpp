@@ -606,6 +606,40 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+template <class T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& vs) {
+    for (auto& v : vs) {
+        os << v << ",";
+    }
+    return os;
+}
+
+static Status append_full_row_column(const Schema& tschema,
+                                     const std::vector<uint32_t>& partial_update_value_column_ids,
+                                     const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
+    CHECK(state.write_columns.size() == read_column_ids.size());
+    size_t input_column_size = tschema.num_fields() - tschema.num_key_fields() - 1;
+    LOG(INFO) << "partial_update_value_column_ids:" << partial_update_value_column_ids
+              << " read_column_ids:" << read_column_ids << " input_column_size:" << input_column_size;
+    CHECK(partial_update_value_column_ids.size() + read_column_ids.size() == input_column_size);
+    Columns columns(input_column_size); // all values columns
+    for (size_t i = 0; i < partial_update_value_column_ids.size(); ++i) {
+        columns[partial_update_value_column_ids[i] - tschema.num_key_fields()] =
+                state.partial_update_value_columns->columns()[i];
+    }
+    for (size_t i = 0; i < read_column_ids.size(); ++i) {
+        columns[read_column_ids[i] - tschema.num_key_fields()] = state.write_columns[i]->clone_shared();
+    }
+    auto full_row_column = std::make_unique<BinaryColumn>();
+    auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
+    RETURN_IF_ERROR(row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column));
+    state.write_columns.emplace_back(std::move(full_row_column));
+    return Status::OK();
+}
+
+>>>>>>> c29b51a334 ([BugFix] fix some bugs on column with row (#33922))
 Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_schema, Rowset* rowset,
                                 uint32_t rowset_id, uint32_t segment_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks,
@@ -644,7 +678,16 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
         } else {
             // reslove conflict of segment
             RETURN_IF_ERROR(_check_and_resolve_conflict(tablet, rowset, rowset_id, segment_id, latest_applied_version,
+<<<<<<< HEAD
                                                         read_column_ids, index, _tablet_schema));
+=======
+                                                        read_column_ids_without_full_row, index, _tablet_schema));
+        }
+        if (tablet->is_column_with_row_store()) {
+            RETURN_IF_ERROR(append_full_row_column(*_tablet_schema->schema(), _partial_update_value_column_ids,
+                                                   read_column_ids_without_full_row,
+                                                   _partial_update_states[segment_id]));
+>>>>>>> c29b51a334 ([BugFix] fix some bugs on column with row (#33922))
         }
     }
 

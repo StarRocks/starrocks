@@ -528,6 +528,17 @@ public class PropertyAnalyzer {
             String storageType = properties.get(PROPERTIES_STORAGE_TYPE);
             if (storageType.equalsIgnoreCase(TStorageType.COLUMN.name())) {
                 tStorageType = TStorageType.COLUMN;
+<<<<<<< HEAD
+=======
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.ROW.name())) {
+                tStorageType = TStorageType.ROW;
+            } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
+                tStorageType = TStorageType.COLUMN_WITH_ROW;
+                if (!olapTable.supportColumnWithRow()) {
+                    throw new AnalysisException("Column With Row Table must have more value columns exclude key columns "
+                            + "or column's type not supported");
+                }
+>>>>>>> c29b51a334 ([BugFix] fix some bugs on column with row (#33922))
             } else {
                 throw new AnalysisException("Invalid storage type: " + storageType);
             }
