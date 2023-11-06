@@ -60,10 +60,10 @@ public class ColumnType {
     List<Integer> fieldIndex;
     String rawTypeValue;
 
+    int precision = -1;
     int scale = -1;
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
-
     private static final Map<TypeValue, String> PRIMITIVE_TYPE_VALUE_STRING_MAPPING = new HashMap<>();
 
     private static final int MAX_DECIMAL32_PRECISION = 9;
@@ -73,11 +73,14 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("smallint", TypeValue.SHORT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("double", TypeValue.DOUBLE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
@@ -184,14 +187,15 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p;
-        if (scanner.s.startsWith("decimal")) {
-            p = scanner.s.length();
-        } else {
-            p = scanner.indexOf('<', ',', '>');
-        }
+        int p = scanner.indexOf('<', ',', '>', '(', ')');
+        int end = scanner.indexOf(')') + 1;
         String t = scanner.substr(p);
-        scanner.moveTo(p);
+        if (t.startsWith("decimal")) {
+            t = scanner.substr(end);
+            scanner.moveTo(end);
+        } else {
+            scanner.moveTo(p);
+        }
         // assume there is no blank char in `type`.
         typeValue = null;
         switch (t) {
