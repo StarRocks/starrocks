@@ -197,7 +197,7 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
     bool enable_group_level_query_queue = false;
     if (query_options.__isset.query_queue_options) {
         const auto& queue_options = query_options.query_queue_options;
-        enable_group_level_query_queue = query_options.__isset.enable_query_queue && query_options.enable_query_queue &&
+        enable_group_level_query_queue = queue_options.__isset.enable_query_queue && queue_options.enable_query_queue &&
                                          queue_options.__isset.enable_group_level_query_queue &&
                                          queue_options.enable_group_level_query_queue;
     }
