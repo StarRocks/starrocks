@@ -1822,6 +1822,13 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
 }
 
 Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
+    auto format_version = meta.format_version();
+    if (format_version != PERSISTENT_INDEX_VERSION_2 && format_version != PERSISTENT_INDEX_VERSION_3) {
+        std::string msg = strings::Substitute("different l0 format, should rebuid index. actual:$0, expect:$1",
+                                              format_version, PERSISTENT_INDEX_VERSION_3);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     const IndexSnapshotMetaPB& snapshot_meta = meta.snapshot();
     const EditVersion& start_version = snapshot_meta.version();
     const PagePointerPB& page_pb = snapshot_meta.data();
@@ -2302,6 +2309,16 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         return Status::Corruption(
                 strings::Substitute("load immutable index failed $0 parse meta pb failed", file->filename()));
     }
+
+    auto format_version = meta.format_version();
+    if (format_version != PERSISTENT_INDEX_VERSION_2 && format_version != PERSISTENT_INDEX_VERSION_3) {
+        std::string msg =
+                strings::Substitute("different immutable index format, should rebuid index. actual:$0, expect:$1",
+                                    format_version, PERSISTENT_INDEX_VERSION_3);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
     std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
     idx->_version = EditVersion(meta.version());
     idx->_size = meta.size();
@@ -2637,13 +2654,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
 }
 
 bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_meta) {
-    if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
-        index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
-        // If format version is not equal to PERSISTENT_INDEX_VERSION_3, this maybe upgrade from
-        // PERSISTENT_INDEX_VERSION_2.
-        // We need to rebuild persistent index because the meta structure is changed
-        return true;
-    } else if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
+    if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
     }
