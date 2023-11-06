@@ -148,9 +148,7 @@ public:
         return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
     }
 
-    const ColumnReader* column_with_uid(size_t uid) const {
-        return _column_readers.at(uid).get();
-    }
+    const ColumnReader* column_with_uid(size_t uid) const { return _column_readers.at(uid).get(); }
 
     FileSystem* file_system() const { return _fs.get(); }
 
