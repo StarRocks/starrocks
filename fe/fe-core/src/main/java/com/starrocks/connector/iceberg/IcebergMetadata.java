@@ -35,6 +35,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -296,7 +297,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
         DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
-        DeleteFile[] deleteFiles = new DeleteFile[fileScanTask.deletes().size()];
+        DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
+                .map(DeleteFile::copyWithoutStats)
+                .toArray(DeleteFile[]::new);
         fileScanTask.deletes().toArray(deleteFiles);
         String schemaString = SchemaParser.toJson(fileScanTask.spec().schema());
         String partitionString = PartitionSpecParser.toJson(fileScanTask.spec());
@@ -340,7 +343,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         if (!tasks.containsKey(key)) {
             org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
-            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId).includeColumnStats();
+            TableScan scan = nativeTable.newScan().useSnapshot(snapshotId);
+
+            if (enableCollectColumnStatistics()) {
+                scan = scan.includeColumnStats();
+            }
+
             if (icebergPredicate.op() != Expression.Operation.TRUE) {
                 scan = scan.filter(icebergPredicate);
             }
@@ -371,7 +379,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                 statisticProvider.updateIcebergFileStats(
                         icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
 
-                IcebergSplitScanTask icebergSplitScanTask = makeIcebergSplitScanTask(scanTask, icebergPredicate);
+                FileScanTask icebergSplitScanTask = scanTask;
+                if (enableCollectColumnStatistics()) {
+                    icebergSplitScanTask = makeIcebergSplitScanTask(scanTask, icebergPredicate);
+                }
                 tasks.get(key).add(icebergSplitScanTask);
             }
 
@@ -470,6 +481,19 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException(e.getMessage());
         }
     }
+
+    private boolean enableCollectColumnStatistics() {
+        if (ConnectContext.get() == null) {
+            return false;
+        }
+
+        if (ConnectContext.get().getSessionVariable() == null) {
+            return false;
+        }
+
+        return ConnectContext.get().getSessionVariable().enableIcebergColumnStatistics();
+    }
+
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite) {
         return isOverwrite ? new DynamicOverwrite(transaction) : new Append(transaction);
