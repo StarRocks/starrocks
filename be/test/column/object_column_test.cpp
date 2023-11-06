@@ -165,9 +165,9 @@ TEST(ObjectColumnTest, test_append_value_multiple_times) {
     copy_col->append_value_multiple_times(*src_col, 0, 4);
     src_col->get_object(0)->add(64);
 
+    ASSERT_EQ(src_col->get_object(0)->cardinality(), 65);
     for (size_t i = 0; i < 4; i++) {
         ASSERT_EQ(copy_col->get_object(0)->cardinality(), 64);
-        ASSERT_EQ(src_col->get_object(0)->cardinality(), 65);
     }
 }
 
