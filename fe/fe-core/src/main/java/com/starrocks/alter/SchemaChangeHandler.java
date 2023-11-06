@@ -1574,8 +1574,9 @@ public class SchemaChangeHandler extends AlterHandler {
 
         if (lightSchemaChange) {
             long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             //for schema change add/drop value column optimize, direct modify table meta.
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, newIndexes, jobId, false);
+            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, newIndexes, jobId, txnId, false);
             return null;
         } else {
             return createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
@@ -2249,7 +2250,7 @@ public class SchemaChangeHandler extends AlterHandler {
     // the invoker should keep write lock
     public void modifyTableAddOrDropColumns(Database db, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexSchemaMap,
-                                            List<Index> indexes, long jobId, boolean isReplay)
+                                            List<Index> indexes, long jobId, long txnId, boolean isReplay)
             throws DdlException, NotImplementedException {
         db.writeLock();
         try {
@@ -2408,11 +2409,12 @@ public class SchemaChangeHandler extends AlterHandler {
 
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),
-                        indexSchemaMap, indexes, jobId);
+                        indexSchemaMap, indexes, jobId, txnId);
                 LOG.debug("logModifyTableAddOrDropColumns info:{}", info);
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDropColumns(info);
             }
 
+            schemaChangeJob.setWatershedTxnId(txnId);
             schemaChangeJob.setJobState(AlterJobV2.JobState.FINISHED);
             schemaChangeJob.setFinishedTimeMs(System.currentTimeMillis());
             this.addAlterJobV2(schemaChangeJob);
@@ -2453,6 +2455,7 @@ public class SchemaChangeHandler extends AlterHandler {
         Map<Long, LinkedList<Column>> indexSchemaMap = info.getIndexSchemaMap();
         List<Index> indexes = info.getIndexes();
         long jobId = info.getJobId();
+        long txnId = info.getTxnId();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
@@ -2461,7 +2464,7 @@ public class SchemaChangeHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) table;
         try {
             db.writeLock();
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, true);
+            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, txnId, true);
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);
