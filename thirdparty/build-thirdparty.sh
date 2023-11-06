@@ -1248,7 +1248,6 @@ build_clucene() {
     if [[ ! -d "$TP_INSTALL_DIR"/share ]]; then
         mkdir -p "$TP_INSTALL_DIR"/share
     fi
-    cp -rf src/contribs-lib/CLucene/analysis/jieba/dict "$TP_INSTALL_DIR"/share/
 }
 
 # restore cxxflags/cppflags/cflags to default one
