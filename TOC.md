@@ -459,7 +459,7 @@
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
-      + [substring](/sql-reference/sql-functions/string-functions/substr.md)
+      + [substring](/sql-reference/sql-functions/string-functions/substring.md)
       + [trim](/sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](/sql-reference/sql-functions/string-functions/ucase.md)
       + [unhex](/sql-reference/sql-functions/string-functions/unhex.md)
@@ -610,8 +610,8 @@
     + 模糊/正则匹配函数
       + [like](/sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)
-      + [regexp_extract](/sql-reference/sql-functions/string-functions/regexp_extract.md)
-      + [regexp_replace](/sql-reference/sql-functions/string-functions/regexp_replace.md)
+      + [regexp_extract](/sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
+      + [regexp_replace](/sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
     + 条件函数
       + [case](/sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](/sql-reference/sql-functions/condition-functions/coalesce.md)
@@ -723,7 +723,7 @@
   + [其他](/faq/Others.md)
 + 性能测试
   + [SSB Flat Table 性能测试](/benchmarking/SSB_Benchmarking.md)
-  + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
+  + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmarking.md)
   + [TPC-DS 基准测试](/benchmarking/TPC_DS_Benchmark.md)
 + 开发指南
   + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)

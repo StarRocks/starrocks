@@ -136,8 +136,8 @@
 <NavBoxPart title="性能测试​">
 <NavBoxPartItem>
 
-- [SSB 基准测试](../benchmarking/SSB_Benchmarking.md)
-- [TPC-H 基准测试](../benchmarking/TPC-H_Benchmark.md)
+- [SSB 基准测试](../benchmarking/SSB_Benchmarking)
+- [TPC-H 基准测试](../benchmarking/TPC-H_Benchmarking)
 
 </NavBoxPartItem>
 </NavBoxPart>
