@@ -46,6 +46,9 @@ INSERT INTO jit_basic (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9) VALUES
 (754, -14, 9223372036854775807, -9223372036854775808, 0, 0, 0, 0, 0, 0, 0);
 -- result:
 -- !result
+set enable_jit = true;
+-- result:
+-- !result
 SELECT k1 + k2 + v1 as result FROM jit_basic ORDER BY result;
 -- result:
 -9223372036854775220
