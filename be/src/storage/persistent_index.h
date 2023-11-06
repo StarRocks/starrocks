@@ -493,6 +493,10 @@ public:
 
     size_t file_size() { return _total_bytes; }
 
+    size_t total_kv_num() { return _total; }
+
+    std::string index_file() { return _idx_file_path; }
+
 private:
     EditVersion _version;
     string _idx_file_path_tmp;
@@ -641,6 +645,18 @@ public:
     double get_write_amp_score() const;
 
     static double major_compaction_score(size_t l1_count, size_t l2_count);
+
+    // not thread safe, just for unit test
+    size_t kv_num_in_immutable_index() {
+        size_t res = 0;
+        for (int i = 0; i < _l1_vec.size(); i++) {
+            res += _l1_vec[i]->total_size();
+        }
+        for (int i = 0; i < _l2_vec.size(); i++) {
+            res += _l2_vec[i]->total_size();
+        }
+        return res;
+    }
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
