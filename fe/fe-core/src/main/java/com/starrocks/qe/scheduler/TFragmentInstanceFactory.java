@@ -34,6 +34,7 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TQueryQueueOptions;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -149,6 +150,14 @@ public class TFragmentInstanceFactory {
                             sessionVariable.getAdaptiveDopMaxBlockRowsPerDriverSeq());
                     result.adaptive_dop_param.setMax_output_amplification_factor(
                             sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
+                }
+                if (jobSpec.isEnableQueue() && jobSpec.isNeedQueued()) {
+                    TQueryQueueOptions queryQueueOptions = new TQueryQueueOptions();
+                    queryQueueOptions.setEnable_query_queue(jobSpec.isEnableQueue());
+                    queryQueueOptions.setEnable_group_level_query_queue(jobSpec.isEnableGroupLevelQueue());
+
+                    TQueryOptions queryOptions = result.getQuery_options();
+                    queryOptions.setQuery_queue_options(queryQueueOptions);
                 }
             }
         }
