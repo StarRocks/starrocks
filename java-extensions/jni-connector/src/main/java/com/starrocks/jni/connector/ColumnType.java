@@ -79,8 +79,6 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("double", TypeValue.DOUBLE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("string", TypeValue.STRING);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
@@ -98,6 +96,11 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.STRUCT, "struct");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
+
+        // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
+        // so it won't trouble hudi reader to map hudi type to hive type
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
@@ -283,7 +286,8 @@ public class ColumnType {
     }
 
     public boolean isDecimal() {
-        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 || typeValue == TypeValue.DECIMAL64 ||
+        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 ||
+                typeValue == TypeValue.DECIMAL64 ||
                 typeValue == TypeValue.DECIMAL128;
     }
 
