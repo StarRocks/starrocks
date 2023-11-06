@@ -117,7 +117,6 @@ import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
-import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1440,7 +1439,6 @@ public class SchemaChangeHandler extends AlterHandler {
         for (AlterClause alterClause : alterClauses) {
             Map<String, String> properties = alterClause.getProperties();
             if (properties != null) {
-                properties = new CaseInsensitiveMap<>(properties);
                 if (propertyMap.isEmpty()) {
                     propertyMap.putAll(properties);
                 } else {
