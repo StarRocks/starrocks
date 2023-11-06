@@ -165,6 +165,7 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     // if it's compressed, we have to uncompress page
     // otherwise we just assign slice.
     if (is_compressed) {
+        SCOPED_RAW_TIMER(&_opts.stats->page_decompress_ns);
         _uncompressed_buf.reserve(uncompressed_size);
         _data = Slice(_uncompressed_buf.data(), uncompressed_size);
         RETURN_IF_ERROR(_compress_codec->decompress(read_data, &_data));

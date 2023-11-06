@@ -33,6 +33,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_disk_checksum = options.enable_checksum;
     opt.max_concurrent_writes = options.max_concurrent_inserts;
     opt.enable_os_page_cache = !options.enable_direct_io;
+    opt.evict_touch_disk_probalility = 0;
     if (options.enable_cache_adaptor) {
         _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
         opt.cache_adaptor = _cache_adaptor.get();

@@ -207,7 +207,10 @@ Status PageReader::set_page_buffer(Slice* slice) {
     }
     if (res.ok()) {
         _opts.stats->pagecache_write_bytes += buffer.size();
-        _opts.stats->pagecache_write_count++;;
+        _opts.stats->pagecache_write_count++;
+    } else {
+        _opts.stats->pagecache_write_fail_count++;
+        LOG(WARNING) << "write page buffer failed, reason: " << res.message();
     }
 
     return Status::OK();
