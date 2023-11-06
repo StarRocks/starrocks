@@ -401,16 +401,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        database.readLock();
-        try {
-            Table table = database.getTable(tableId);
-            if (table == null) {
-                throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
-            }
-            return table.getName();
-        } finally {
-            database.readUnlock();
+        Table table = database.getTable(tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("Failed to find table " + tableId + " in db " + dbId);
         }
+        return table.getName();
     }
 
     public JobState getState() {
