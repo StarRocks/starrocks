@@ -91,10 +91,16 @@ BitmapValue::BitmapValue(const Slice& src) {
     deserialize(src.data);
 }
 
-BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy)
-        : _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
-          _sv(other._sv),
-          _type(other._type) {
+BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy) : _sv(other._sv), _type(other._type) {
+    if (other._set == nullptr) {
+        _set = nullptr;
+    } else {
+        if (other._set->empty()) {
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+        } else {
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
+        }
+    }
     // TODO: _set is usually relatively small, and it needs system performance testing to decide
     //  whether to change std::unique_ptr to std::shared_ptr and support shallow copy
     if (deep_copy) {

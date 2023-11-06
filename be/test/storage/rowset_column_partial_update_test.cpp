@@ -675,7 +675,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_schema_change) {
         // create table with add column, test link_from
         auto new_tablet = create_tablet(rand(), rand(), true);
         new_tablet->set_tablet_state(TABLET_NOTREADY);
-        auto chunk_changer = std::make_unique<ChunkChanger>(new_tablet->tablet_schema());
+        auto chunk_changer = std::make_unique<ChunkChanger>(tablet->tablet_schema(), new_tablet->tablet_schema());
         ASSERT_TRUE(new_tablet->updates()->link_from(tablet.get(), version, chunk_changer.get()).ok());
         // check data
         ASSERT_TRUE(check_tablet(new_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
