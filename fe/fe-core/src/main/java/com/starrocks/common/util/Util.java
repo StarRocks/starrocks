@@ -36,6 +36,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.management.ThreadInfo;
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
@@ -297,6 +298,21 @@ public class Util {
         StringBuilder sb = new StringBuilder();
         StackTraceElement[] elements = t.getStackTrace();
         sb.append("dump thread: ").append(t.getName()).append(", id: ").append(t.getId()).append("\n");
+        int count = lineNum;
+        for (StackTraceElement element : elements) {
+            if (count == 0) {
+                break;
+            }
+            sb.append("    ").append(element.toString()).append("\n");
+            --count;
+        }
+        return sb.toString();
+    }
+
+    public static String dumpThread(ThreadInfo t, int lineNum) {
+        StringBuilder sb = new StringBuilder();
+        StackTraceElement[] elements = t.getStackTrace();
+        sb.append("dump thread: ").append(t.getThreadName()).append(", id: ").append(t.getThreadId()).append("\n");
         int count = lineNum;
         for (StackTraceElement element : elements) {
             if (count == 0) {

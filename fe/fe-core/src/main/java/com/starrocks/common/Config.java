@@ -693,6 +693,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int load_checker_interval_second = 5;
 
+    @ConfField(mutable = true)
+    public static long deadlock_checker_interval_second = 30;
+
+    @ConfField(mutable = true)
+    public static boolean deadlock_checker_print_detail_info = false;
+
     /**
      * Default broker load timeout
      */

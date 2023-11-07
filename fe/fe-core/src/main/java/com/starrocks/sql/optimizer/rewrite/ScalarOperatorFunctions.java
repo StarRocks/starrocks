@@ -338,7 +338,7 @@ public class ScalarOperatorFunctions {
         return dateFormat(dl, fmtLiteral);
     }
 
-    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)    
+    @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
@@ -757,7 +757,8 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
     public static ConstantOperator bitShiftRightLogicalLargeInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createLargeInt(bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
+        return ConstantOperator.createLargeInt(
+                bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
     }
 
     @ConstantFunction(name = "concat", argTypes = {VARCHAR}, returnType = VARCHAR)
@@ -831,7 +832,8 @@ public class ScalarOperatorFunctions {
 
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
-    private static final BigInteger []INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
+    private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
@@ -948,5 +950,4 @@ public class ScalarOperatorFunctions {
         String json = obj.toString();
         return ConstantOperator.createVarchar(json);
     }
-
 }
