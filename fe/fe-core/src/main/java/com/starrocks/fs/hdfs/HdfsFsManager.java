@@ -1180,6 +1180,25 @@ public class HdfsFsManager {
         getFileSystem(path, loadProperties, tProperties);
     }
 
+<<<<<<< HEAD
+=======
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+        HdfsFs fileSystem = getFileSystem(path, properties, null);
+        Path pathPattern = new Path(pathUri.getPath());
+        try {
+            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
+            return Lists.newArrayList(files);
+        } catch (FileNotFoundException e) {
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
+        } catch (Exception e) {
+            LOG.error("errors while get file status ", e);
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
+        }
+    }
+
+>>>>>>> c1259dee3a ([Enhancement] Refine error prompt (#34322))
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
             throws UserException {
         List<TBrokerFileStatus> resultFileStatus = null;
@@ -1222,7 +1241,7 @@ public class HdfsFsManager {
                     "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
-            throw new UserException("listPath failed", e);
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
         }
         return resultFileStatus;
     }
