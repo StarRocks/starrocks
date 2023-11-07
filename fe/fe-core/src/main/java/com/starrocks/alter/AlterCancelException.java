@@ -22,6 +22,7 @@ import com.starrocks.common.DdlException;
 /*
  * This exception will be thrown when the alter job(v2) being cancelled due to
  * internal error
+ * test
  */
 public class AlterCancelException extends DdlException {
 
