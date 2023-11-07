@@ -1470,7 +1470,14 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
-                        DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        try {
+                            DynamicPartitionUtil
+                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        } catch (DdlException e) {
+                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
+                            throw new DdlException("Table " + db.getOriginName() + "." +
+                                    olapTable.getName() + " is not a dynamic partition table.");
+                        }
                     }
                     if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
                         String colocateGroup = olapTable.getColocateGroup();
