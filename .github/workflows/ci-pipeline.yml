@@ -337,7 +337,7 @@ jobs:
           level: error
 
   sonarcloud-fe-checker:
-    runs-on: [self-hosted, normal, sonarcloud]
+    runs-on: [self-hosted, sonarcloud]
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true' && github.repository == 'StarRocks/starrocks'
     name: FE Sonarcloud Check
