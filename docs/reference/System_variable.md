@@ -190,6 +190,12 @@ Default value: false, which means this feature is disabled. You must use this va
 
 You can also enable bucketization for the COUNT DISTINCT column by adding the `skew` hint to your query, for example, `select a,count(distinct [skew] b) from t group by a;`.
 
+### enable_group_level_query_queue (3.1.4 and later)
+
+Whether to enable resource group-level query queue.
+
+Default value: false, which means this feature is disabled.
+
 ### enable_insert_strict
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
