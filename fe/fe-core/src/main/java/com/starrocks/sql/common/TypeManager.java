@@ -160,8 +160,8 @@ public class TypeManager {
         //    with number order, like: '12' > '2' is false, but 12 > 2 is true
         if (type.isNotRangeComparison()) {
             Type baseType = Type.STRING;
-            if (ConnectContext.get() != null &&
-                    SessionVariableConstants.DECIMAL.equals(ConnectContext.get().getSessionVariable().getCboEqBaseType())) {
+            if (ConnectContext.get() != null && SessionVariableConstants.DECIMAL.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
                 baseType = Type.DEFAULT_DECIMAL128;
                 if (type1.isDecimalOfAnyVersion() || type2.isDecimalOfAnyVersion()) {
                     baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
