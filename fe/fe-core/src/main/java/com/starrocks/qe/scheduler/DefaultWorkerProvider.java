@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.MapUtils;
@@ -264,7 +265,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
     @VisibleForTesting
     static int getNextComputeNodeIndex() {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-            long currentWh = ConnectContext.get().getCurrentWarehouseId();
+            long currentWh = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            if (ConnectContext.get() != null) {
+                currentWh = ConnectContext.get().getCurrentWarehouseId();
+            }
             return GlobalStateMgr.getCurrentWarehouseMgr().
                     getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
         }
