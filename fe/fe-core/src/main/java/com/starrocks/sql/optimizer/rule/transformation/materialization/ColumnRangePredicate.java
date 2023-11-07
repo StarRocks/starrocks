@@ -15,35 +15,58 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
+import static com.starrocks.common.util.DateUtils.DATEKEY_FORMATTER_UNIX;
+import static com.starrocks.common.util.DateUtils.DATE_FORMATTER_UNIX;
 
 // all ranges about one column ref
 // eg: a > 10 and a < 100 => a -> (10, 100)
 // (a > 10 and a < 100) or (a > 1000 and a <= 10000) => a -> (10, 100) or (1000, 10000]
 public class ColumnRangePredicate extends RangePredicate {
+    private static List<DateTimeFormatter> SUPPORTED_DATE_FORMATS = ImmutableList.<DateTimeFormatter>builder()
+            .add(DATE_FORMATTER_UNIX)
+            .add(DATEKEY_FORMATTER_UNIX).build();
+
+    private static List<String> SUPPORTED_DATE_PATTERNS = ImmutableList.<String>builder()
+            .add("%Y-%m-%d")
+            .add("%Y%m%d").build();
+
+    private ScalarOperator expression;
     private ColumnRefOperator columnRef;
     // the relation between each Range in RangeSet is 'or'
     private TreeRangeSet<ConstantOperator> columnRanges;
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
-    public ColumnRangePredicate(ColumnRefOperator columnRef, TreeRangeSet<ConstantOperator> columnRanges) {
-        this.columnRef = columnRef;
+    public ColumnRangePredicate(ScalarOperator expression, TreeRangeSet<ConstantOperator> columnRanges) {
+        this.expression = expression;
+        List<ColumnRefOperator> columns = Utils.collect(expression, ColumnRefOperator.class);
+        Preconditions.checkState(columns.size() == 1);
+        this.columnRef = columns.get(0);
         this.columnRanges = columnRanges;
         List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
-        if (ConstantOperatorDiscreteDomain.isSupportedType(columnRef.getType())) {
+        if (ConstantOperatorDiscreteDomain.isSupportedType(this.expression.getType())) {
             for (Range range : this.columnRanges.asRanges()) {
                 Range canonicalRange = range.canonical(new ConstantOperatorDiscreteDomain());
                 canonicalRanges.add(canonicalRange);
@@ -52,6 +75,10 @@ public class ColumnRangePredicate extends RangePredicate {
         } else {
             this.canonicalColumnRanges = columnRanges;
         }
+    }
+
+    public ScalarOperator getExpression() {
+        return expression;
     }
 
     public ColumnRefOperator getColumnRef() {
@@ -73,7 +100,7 @@ public class ColumnRangePredicate extends RangePredicate {
                 }
             }
         }
-        return new ColumnRangePredicate(rangePredicate.columnRef, TreeRangeSet.create(ranges));
+        return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));
     }
 
     public static ColumnRangePredicate orRange(
@@ -81,11 +108,79 @@ public class ColumnRangePredicate extends RangePredicate {
         TreeRangeSet<ConstantOperator> result = TreeRangeSet.create();
         result.addAll(rangePredicate.columnRanges);
         result.addAll(otherRangePredicate.columnRanges);
-        return new ColumnRangePredicate(rangePredicate.getColumnRef(), result);
+        return new ColumnRangePredicate(rangePredicate.getExpression(), result);
     }
 
     public boolean isUnbounded() {
         return columnRanges.asRanges().stream().allMatch(range -> !range.hasUpperBound() && !range.hasLowerBound());
+    }
+
+    public List<ColumnRangePredicate> getEquivalentRangePredicates() {
+        if (isCastDate() || isStr2Date()) {
+            return getEquivalentRangePredicateForDate();
+        }
+        return Lists.newArrayList();
+    }
+
+    private boolean isCastDate() {
+        if (!(expression instanceof CastOperator)) {
+            return false;
+        }
+        CastOperator castOperator = expression.cast();
+        return castOperator.getChild(0).isColumnRef()
+                && castOperator.getChild(0).getType().isStringType()
+                && castOperator.getType().isDate();
+    }
+
+    private boolean isStr2Date() {
+        if (!(expression instanceof CallOperator)) {
+            return false;
+        }
+        CallOperator callOperator = expression.cast();
+        // check whether is str2date(columnref, '%Y-%m-%d')
+        return callOperator.getFnName().equalsIgnoreCase(FunctionSet.STR2DATE)
+                && callOperator.getChild(0).isColumnRef() &&
+                SUPPORTED_DATE_PATTERNS.contains(((ConstantOperator) callOperator.getChild(1)).getChar());
+    }
+
+    // may return date with different format, so this function returns List<ColumnRangePredicate>
+    public List<ColumnRangePredicate> getEquivalentRangePredicateForDate() {
+        List<ColumnRangePredicate> results = Lists.newArrayList();
+        for (DateTimeFormatter format : SUPPORTED_DATE_FORMATS) {
+            TreeRangeSet<ConstantOperator> stringRangeSet = TreeRangeSet.create();
+            // convert constant date to constant string
+            for (Range<ConstantOperator> range : columnRanges.asRanges()) {
+                Range<ConstantOperator> stringRange = convertRange(range, format);
+                stringRangeSet.add(stringRange);
+            }
+            ColumnRangePredicate rangePredicate = new ColumnRangePredicate(columnRef, stringRangeSet);
+            results.add(rangePredicate);
+        }
+        return results;
+    }
+
+    @VisibleForTesting
+    public TreeRangeSet<ConstantOperator> getColumnRanges() {
+        return columnRanges;
+    }
+
+    private Range<ConstantOperator> convertRange(Range<ConstantOperator> from, DateTimeFormatter format) {
+        if (from.hasLowerBound() && from.hasUpperBound()) {
+            return Range.range(
+                    ConstantOperator.createChar(from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.lowerBoundType(),
+                    ConstantOperator.createChar(from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.upperBoundType());
+        } else if (from.hasUpperBound()) {
+            return Range.upTo(ConstantOperator.createChar(
+                    from.upperEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.upperBoundType());
+        } else if (from.hasLowerBound()) {
+            return Range.downTo(ConstantOperator.createChar(
+                    from.lowerEndpoint().getDate().toLocalDate().format(format), Type.VARCHAR),
+                    from.lowerBoundType());
+        }
+        return Range.all();
     }
 
     @Override
@@ -94,6 +189,9 @@ public class ColumnRangePredicate extends RangePredicate {
             return false;
         }
         ColumnRangePredicate columnRangePredicate = other.cast();
+        if (!expression.equals(columnRangePredicate.getExpression())) {
+            return false;
+        }
         return canonicalColumnRanges.enclosesAll(columnRangePredicate.canonicalColumnRanges);
     }
 
@@ -106,29 +204,29 @@ public class ColumnRangePredicate extends RangePredicate {
                 if (range.lowerBoundType() == BoundType.CLOSED
                         && range.upperBoundType() == BoundType.CLOSED
                         && range.upperEndpoint().equals(range.lowerEndpoint())) {
-                    orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
+                    orOperators.add(BinaryPredicateOperator.eq(expression, range.lowerEndpoint()));
                     continue;
                 } else if (range.lowerBoundType() == BoundType.CLOSED
                         && range.upperBoundType() == BoundType.OPEN
                         && range.lowerEndpoint().successor().isPresent()
                         && range.upperEndpoint().equals(range.lowerEndpoint().successor().get())) {
-                    orOperators.add(BinaryPredicateOperator.eq(columnRef, range.lowerEndpoint()));
+                    orOperators.add(BinaryPredicateOperator.eq(expression, range.lowerEndpoint()));
                     continue;
                 }
             }
             if (range.hasLowerBound()) {
                 if (range.lowerBoundType() == BoundType.CLOSED) {
-                    andOperators.add(BinaryPredicateOperator.ge(columnRef, range.lowerEndpoint()));
+                    andOperators.add(BinaryPredicateOperator.ge(expression, range.lowerEndpoint()));
                 } else {
-                    andOperators.add(BinaryPredicateOperator.gt(columnRef, range.lowerEndpoint()));
+                    andOperators.add(BinaryPredicateOperator.gt(expression, range.lowerEndpoint()));
                 }
             }
 
             if (range.hasUpperBound()) {
                 if (range.upperBoundType() == BoundType.CLOSED) {
-                    andOperators.add(BinaryPredicateOperator.le(columnRef, range.upperEndpoint()));
+                    andOperators.add(BinaryPredicateOperator.le(expression, range.upperEndpoint()));
                 } else {
-                    andOperators.add(BinaryPredicateOperator.lt(columnRef, range.upperEndpoint()));
+                    andOperators.add(BinaryPredicateOperator.lt(expression, range.upperEndpoint()));
                 }
             }
             orOperators.add(Utils.compoundAnd(andOperators));
@@ -143,14 +241,34 @@ public class ColumnRangePredicate extends RangePredicate {
         }
         if (other instanceof ColumnRangePredicate) {
             ColumnRangePredicate otherColumnRangePredicate = (ColumnRangePredicate) other;
+
             if (!columnRef.equals(otherColumnRangePredicate.getColumnRef())) {
                 return null;
             }
-            if (columnRanges.equals(otherColumnRangePredicate.columnRanges)) {
+
+            if (expression.equals(otherColumnRangePredicate.expression) &&
+                    (columnRanges.equals(otherColumnRangePredicate.columnRanges)
+                    || canonicalColumnRanges.equals(otherColumnRangePredicate.canonicalColumnRanges))) {
                 return ConstantOperator.TRUE;
             } else {
                 if (other.enclose(this)) {
                     return toScalarOperator();
+                } else {
+                    // is equivalences enclosed
+                    List<ColumnRangePredicate> equivalences = getEquivalentRangePredicates();
+                    for (ColumnRangePredicate equi : equivalences) {
+                        ScalarOperator candidate = equi.simplify(other);
+                        if (candidate != null) {
+                            return candidate;
+                        }
+                    }
+                    List<ColumnRangePredicate> otherEquivalences = otherColumnRangePredicate.getEquivalentRangePredicates();
+                    for (ColumnRangePredicate equi : otherEquivalences) {
+                        ScalarOperator candidate = this.simplify(equi);
+                        if (candidate != null) {
+                            return candidate;
+                        }
+                    }
                 }
                 return null;
             }
