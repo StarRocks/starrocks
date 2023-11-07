@@ -720,6 +720,11 @@ Status JsonReader::_read_file_broker() {
         return Status::EndOfFile("EOF of reading file");
     }
 
+    if (sz >= config::json_file_size_limit) {
+        return Status::MemoryLimitExceeded(
+                fmt::format("File size {} beyond limit {}", sz, config::json_file_size_limit));
+    }
+
     if (sz > _payload_buffer_capacity) {
         // reallocate if needed.
         auto allocated = sz + simdjson::SIMDJSON_PADDING;

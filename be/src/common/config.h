@@ -1110,4 +1110,7 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
+// This limit limits the maximum size of json file to load.
+CONF_mInt32(json_file_size_limit, "4294967296");
+
 } // namespace starrocks::config
