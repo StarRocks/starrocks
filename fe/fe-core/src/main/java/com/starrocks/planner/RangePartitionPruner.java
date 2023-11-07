@@ -48,7 +48,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -121,17 +120,16 @@ public class RangePartitionPruner implements PartitionPruner {
                     && lowerBound != null && upperBound != null
                     && 0 == lowerBound.compareLiteral(upperBound)) {
 
-                LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
-                LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
-
                 // eg: [10, 10], [null, null]
-                if (lowerBoundExpr instanceof NullLiteral && upperBoundExpr instanceof NullLiteral) {
+                if (lowerBound instanceof NullLiteral && upperBound instanceof NullLiteral) {
                     // replace Null with min value
                     LiteralExpr minKeyValue = LiteralExpr.createInfinity(
                             Type.fromPrimitiveType(keyColumn.getPrimitiveType()), false);
                     minKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                 } else {
+                    LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
+                    LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
                     minKey.pushColumn(lowerBoundExpr, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(upperBoundExpr, keyColumn.getPrimitiveType());
                 }
