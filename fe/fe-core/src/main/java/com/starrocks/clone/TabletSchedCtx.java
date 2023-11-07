@@ -707,22 +707,12 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (cloneTask != null) {
             AgentTaskQueue.removeTask(cloneTask.getBackendId(), TTaskType.CLONE, cloneTask.getSignature());
 
-            // clear all CLONE replicas
-            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
-            if (db != null) {
-                db.writeLock();
-                try {
-                    List<Replica> cloneReplicas = Lists.newArrayList();
-                    tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
-                            cloneReplicas::add);
+            List<Replica> cloneReplicas = Lists.newArrayList();
+            tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
+                    cloneReplicas::add);
 
-                    for (Replica cloneReplica : cloneReplicas) {
-                        tablet.deleteReplica(cloneReplica);
-                    }
-
-                } finally {
-                    db.writeUnlock();
-                }
+            for (Replica cloneReplica : cloneReplicas) {
+                tablet.deleteReplica(cloneReplica);
             }
         }
 
