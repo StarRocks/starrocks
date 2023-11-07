@@ -62,7 +62,7 @@ public:
     // Construct an empty bitmap.
     BitmapValue();
 
-    BitmapValue(const BitmapValue& other, bool deep_copy = true);
+    BitmapValue(const BitmapValue& other);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept;
@@ -106,7 +106,7 @@ public:
     BitmapValue& operator^=(const BitmapValue& rhs);
 
     // check if value x is present
-    bool contains(uint64_t x);
+    bool contains(uint64_t x) const;
 
     // TODO should the return type be uint64_t?
     int64_t cardinality() const;
@@ -146,18 +146,21 @@ public:
     void clear();
     void reset();
 
-    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
+    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const;
 
     BitmapDataType type() const { return _type; }
+    bool is_shared() const { return _shared; }
 
 private:
     void _from_bitmap_to_smaller_type();
     void _from_set_to_bitmap();
+    void _copy_on_write();
 
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
+    mutable bool _shared = false;
 };
 } // namespace starrocks

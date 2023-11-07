@@ -77,8 +77,7 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
 }
 
 template <typename T>
-void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size,
-                                                      bool deep_copy) {
+void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     auto& src_column = down_cast<const BinaryColumnBase<T>&>(src);
     auto& src_offsets = src_column.get_offset();
     auto& src_bytes = src_column.get_bytes();
