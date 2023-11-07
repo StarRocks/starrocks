@@ -86,7 +86,37 @@ public:
     // Construct a bitmap from given elements.
     explicit BitmapValue(const std::vector<uint64_t>& bits);
 
-    void add(uint64_t value);
+    // It is recommended to use batch writing to improve performance, such as add_many.
+    void add(uint64_t value) {
+        switch (_type) {
+        case EMPTY:
+            _sv = value;
+            _type = SINGLE;
+            break;
+        case SINGLE:
+            //there is no need to convert the type if two variables are equal
+            if (_sv == value) {
+                break;
+            }
+
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            _set->insert(_sv);
+            _set->insert(value);
+            _type = SET;
+            break;
+        case BITMAP:
+            _copy_on_write();
+            _bitmap->add(value);
+            break;
+        case SET:
+            if (_set->size() < 32) {
+                _set->insert(value);
+            } else {
+                _from_set_to_bitmap();
+                _bitmap->add(value);
+            }
+        }
+    }
 
     void add_many(size_t n_args, const uint32_t* vals);
 
@@ -156,11 +186,19 @@ public:
     int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit, BitmapValue* ret_bitmap);
 
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+<<<<<<< HEAD
                                             BitmapValue* ret_bitmap);
+=======
+                                            BitmapValue* ret_bitmap) const;
+
+    BitmapDataType type() const { return _type; }
+    bool is_shared() const { return _bitmap.use_count() > 1; }
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
 
 private:
     void _convert_to_smaller_type();
     void _from_set_to_bitmap();
+<<<<<<< HEAD
 
     enum BitmapDataType {
         EMPTY = 0,
@@ -168,6 +206,18 @@ private:
         BITMAP = 2, // more than one elements
         SET = 3
     };
+=======
+    inline void _copy_on_write() {
+        if (UNLIKELY(_bitmap == nullptr)) {
+            _bitmap = std::make_shared<detail::Roaring64Map>();
+            return;
+        }
+
+        if (UNLIKELY(_bitmap.use_count() > 1)) {
+            _bitmap = std::make_shared<detail::Roaring64Map>(*_bitmap);
+        }
+    }
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
 
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;

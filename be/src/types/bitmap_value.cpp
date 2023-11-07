@@ -91,22 +91,35 @@ BitmapValue::BitmapValue(const Slice& src) {
     deserialize(src.data);
 }
 
+<<<<<<< HEAD
 BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy)
         : _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
+=======
+BitmapValue::BitmapValue(const BitmapValue& other)
+        : _bitmap(other._bitmap),
+          _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
           _sv(other._sv),
           _type(other._type) {
     // TODO: _set is usually relatively small, and it needs system performance testing to decide
     //  whether to change std::unique_ptr to std::shared_ptr and support shallow copy
+<<<<<<< HEAD
     if (deep_copy) {
         _bitmap = (other._bitmap == nullptr) ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
     } else {
         _bitmap = (other._bitmap == nullptr) ? nullptr : other._bitmap;
     }
+=======
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
 }
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
+<<<<<<< HEAD
         this->_bitmap = (other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap));
+=======
+        this->_bitmap = other._bitmap;
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
         this->_set = other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
         this->_sv = other._sv;
         this->_type = other._type;
@@ -116,6 +129,10 @@ BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
 
 // Construct a bitmap from given elements.
 BitmapValue::BitmapValue(const std::vector<uint64_t>& bits) {
+<<<<<<< HEAD
+=======
+    // TODO: why not use SET ?
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
     switch (bits.size()) {
     case 0:
         _type = EMPTY;
@@ -156,8 +173,12 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
     case BITMAP:
         switch (_type) {
         case EMPTY:
+<<<<<<< HEAD
             // TODO: Reduce memory copy.
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+=======
+            _bitmap = rhs._bitmap;
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
             _type = BITMAP;
             break;
         case SINGLE:
@@ -237,7 +258,11 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
                 _type = SINGLE;
                 _sv = rhs._sv;
             }
+<<<<<<< HEAD
             _bitmap->clear();
+=======
+            _bitmap.reset();
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
             break;
         case SET:
             if (!_set->contains(rhs._sv)) {
@@ -451,7 +476,11 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
     case BITMAP:
         switch (_type) {
         case EMPTY:
+<<<<<<< HEAD
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+=======
+            _bitmap = rhs._bitmap;
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
             _type = BITMAP;
             break;
         case SINGLE:
@@ -898,12 +927,34 @@ void BitmapValue::compress() const {
 }
 
 void BitmapValue::clear() {
+<<<<<<< HEAD
     _type = EMPTY;
     if (_bitmap != nullptr) {
         _bitmap->clear();
     }
     _set.reset();
     _sv = 0;
+=======
+    if (_bitmap != nullptr) {
+        if (_bitmap.use_count() <= 1) {
+            _bitmap->clear();
+        } else {
+            _bitmap.reset();
+        }
+    }
+    if (_set != nullptr) {
+        _set->clear();
+    }
+    _sv = 0;
+    _type = EMPTY;
+}
+
+void BitmapValue::reset() {
+    _bitmap.reset();
+    _set.reset();
+    _sv = 0;
+    _type = EMPTY;
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
 }
 
 void BitmapValue::_convert_to_smaller_type() {
@@ -920,6 +971,10 @@ void BitmapValue::_convert_to_smaller_type() {
         }
         _bitmap->clear();
     }
+<<<<<<< HEAD
+=======
+    _bitmap.reset();
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
 }
 
 int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
@@ -1093,6 +1148,7 @@ void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
     }
 }
 
+<<<<<<< HEAD
 void BitmapValue::add(uint64_t value) {
     switch (_type) {
     case EMPTY:
@@ -1122,4 +1178,6 @@ void BitmapValue::add(uint64_t value) {
         }
     }
 }
+=======
+>>>>>>> 6c74527af1 ([Enhancement] Optimize the performance of BitmapValue::add() (#34482))
 } // namespace starrocks
