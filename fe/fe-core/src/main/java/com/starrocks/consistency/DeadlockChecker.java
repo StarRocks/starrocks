@@ -22,6 +22,7 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -118,7 +119,13 @@ public class DeadlockChecker extends LeaderDaemon {
 
         for (Database db : dbs.values()) {
             QueryableReentrantReadWriteLock lock = db.getLock();
-            lockOwnerMap.put(lock, lock.getOwner());
+            Thread owner = lock.getOwner();
+            if (owner != null) {
+                lockOwnerMap.put(lock, owner);
+            }
+        }
+        if (MapUtils.isEmpty(lockOwnerMap)) {
+            return;
         }
 
         // sleep 5s and check whether the lock is still held
