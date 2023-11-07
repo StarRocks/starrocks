@@ -420,6 +420,7 @@ You can find a function based on the following categories:
 - [host_name](../sql-functions/utility-functions/host_name.md)
 - [isnull](../sql-functions/utility-functions/isnull.md)
 - [isnotnull](../sql-functions/utility-functions/isnotnull.md)
+- [is_role_in_session](../sql-functions/utility-functions/is_role_in_session.md)
 - [last_query_id](../sql-functions/utility-functions/last_query_id.md)
 - [sleep](../sql-functions/utility-functions/sleep.md)
 - [uuid](../sql-functions/utility-functions/uuid.md)
