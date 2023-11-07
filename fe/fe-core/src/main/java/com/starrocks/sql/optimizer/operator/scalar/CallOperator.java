@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -183,6 +184,31 @@ public class CallOperator extends ScalarOperator {
                 Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments) &&
                 Objects.equals(fn, other.fn);
+    }
+
+
+    // Only used for meaning equivalence comparison in iceberg table scan predicate
+    @Override
+    public boolean equivalent(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+
+        CallOperator other = (CallOperator) obj;
+        if (this.arguments.size() != other.arguments.size()) {
+            return false;
+        }
+
+        return isDistinct == other.isDistinct &&
+                Objects.equals(fnName, other.fnName) &&
+                Objects.equals(type, other.type) &&
+                Objects.equals(fn, other.fn) &&
+                IntStream.range(0, this.arguments.size())
+                        .allMatch(i -> this.arguments.get(i).equivalent(other.arguments.get(i)));
+
     }
 
     @Override
