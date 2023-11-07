@@ -1003,8 +1003,29 @@ public class HdfsFsManager {
         return;
     }
 
+<<<<<<< HEAD
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties) 
         throws UserException {
+=======
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+        HdfsFs fileSystem = getFileSystem(path, properties, null);
+        Path pathPattern = new Path(pathUri.getPath());
+        try {
+            FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
+            return Lists.newArrayList(files);
+        } catch (FileNotFoundException e) {
+            LOG.info("file not found: " + path, e);
+            throw new UserException("file not found: " + path, e);
+        } catch (Exception e) {
+            LOG.error("errors while get file status ", e);
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
+        }
+    }
+
+    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
+            throws UserException {
+>>>>>>> c1259dee3a ([Enhancement] Refine error prompt (#34322))
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1040,7 +1061,11 @@ public class HdfsFsManager {
             throw new UserException("file not found: " + e.getMessage());
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
+<<<<<<< HEAD
             throw new UserException("unknown error when get file status: " + e.getMessage());
+=======
+            throw new UserException("Fail to get file status: " + e.getMessage(), e);
+>>>>>>> c1259dee3a ([Enhancement] Refine error prompt (#34322))
         }
         return resultFileStatus;
     }
