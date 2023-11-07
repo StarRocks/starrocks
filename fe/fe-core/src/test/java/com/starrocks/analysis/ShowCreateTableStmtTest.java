@@ -21,7 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -130,7 +129,7 @@ public class ShowCreateTableStmtTest {
 
         HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx",
                 0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
-                props, HiveStorageFormat.ORC);
+                props);
         List<String> result = new ArrayList<>();
         GlobalStateMgr.getDdlStmt(table, result, null, null, false, true);
         Assert.assertEquals(result.size(), 1);
