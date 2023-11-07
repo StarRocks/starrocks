@@ -479,8 +479,8 @@
     + 模糊/正则匹配函数
       + [like](/sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](/sql-reference/sql-functions/like_predicate-functions/regexp.md)
-      + [regexp_extract](/sql-reference/sql-functions/string-functions/regexp_extract.md)
-      + [regexp_replace](/sql-reference/sql-functions/string-functions/regexp_replace.md)
+      + [regexp_extract](/sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
+      + [regexp_replace](/sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
     + 工具函数
       + [catalog](/sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
@@ -503,7 +503,7 @@
       + [corr](/sql-reference/sql-functions/aggregate-functions/corr.md)
       + [covar_pop](/sql-reference/sql-functions/aggregate-functions/covar_pop.md)
       + [covar_samp](/sql-reference/sql-functions/aggregate-functions/covar_samp.md)
-      + [group_concat](/sql-reference/sql-functions/string-functions/group_concat.md)
+      + [group_concat](/sql-reference/sql-functions/aggregate-functions/group_concat.md)
       + [grouping](/sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](/sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](/sql-reference/sql-functions/aggregate-functions/hll_empty.md)
@@ -670,7 +670,7 @@
   + [其他](/faq/Others.md)
 + 性能测试
   + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
-  + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
+  + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmarking.md)
 + 开发指南
   + [编译 StarRocks](/developers/build-starrocks/Build_in_docker.md)
   + [使用 debuginfo 文件进行调试](/developers/debuginfo.md)
@@ -679,7 +679,6 @@
   + [Spark connector](/ecosystem_release/spark_connector.md)
   + [Flink connector](/ecosystem_release/flink_connector.md)
 + Release Notes
-  + [v2.5-stable](/release_notes/release-2.5.md)
   + [v2.4](/release_notes/release-2.4.md)
   + [v2.3](/release_notes/release-2.3.md)
   + [v2.2](/release_notes/release-2.2.md)
