@@ -14,8 +14,8 @@ A storage volume consists of the properties and credential information of the re
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = S3
-LOCATIONS = ('<s3_path>')
+TYPE = { S3 | AZBLOB }
+LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
 ("key" = "value",...)
