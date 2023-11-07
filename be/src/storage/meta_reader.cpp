@@ -26,6 +26,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
+
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min", "count"};
