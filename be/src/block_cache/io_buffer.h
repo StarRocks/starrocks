@@ -16,6 +16,8 @@
 
 #include <butil/iobuf.h>
 
+#include "starcache/obj_handle.h"
+
 namespace starrocks {
 
 class IOBuffer {
@@ -46,5 +48,11 @@ public:
 private:
     butil::IOBuf _buf;
 };
+
+// We use the `starcache::ObjectHandle` directly because implementing a new one seems unnecessary.
+// Importing the starcache headers here is not graceful, but the `cachelib` doesn't support
+// object cache and we'll deprecate it for some performance reasons. Now there is no need to
+// pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
+using CacheHandle = starcache::ObjectHandle;
 
 } // namespace starrocks

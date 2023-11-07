@@ -106,6 +106,9 @@ Status HiveDataSource::open(RuntimeState* state) {
         _scan_range.datacache_options.priority == -1) {
         _use_datacache = false;
     }
+    if (state->query_options().__isset.enable_file_metacache) {
+        _use_file_metacache = state->query_options().enable_file_metacache;
+    }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
@@ -733,6 +736,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.enable_populate_datacache = _enable_populate_datacache;
     scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.can_use_min_max_count_opt = _can_use_min_max_count_opt;
+    scanner_params.use_file_metacache = _use_file_metacache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
