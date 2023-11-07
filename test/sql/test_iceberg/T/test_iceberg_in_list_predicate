@@ -29,6 +29,6 @@ select col_str from ice_tbl_${uuid0} where col_int=2000 and col_str in (md5('1d8
 select col_str from ice_tbl_${uuid0} where col_int=2000 and col_str in ('1d8cf2a2c0e14fa89d8117792be6eb6f', md5('abc'));
 select col_str from ice_tbl_${uuid0} where col_int=2000 and (col_str not in (md5('1d8cf2a2c0e14fa89d8117792be6eb6f'), 'abc') or col_str is null);
 select col_str from ice_tbl_${uuid0} where col_int=2000 and (col_str in ('1d8cf2a2c0e14fa89d8117792be6eb6f', md5('abc')) or col_str is null);
-drop table ice_tbl_${uuid0};
+drop table ice_tbl_${uuid0} force;
 drop database ice_db_${uuid0};
 drop catalog ice_cat_${uuid0};
