@@ -16,7 +16,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * which is a protected method of ReentrantReadWriteLock
  */
 public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
-    Map<Long, Boolean> sharedLockThreadIds = new ConcurrentHashMap<>();
+    // threadId -> lockTime
+    Map<Long, Long> sharedLockThreads = new ConcurrentHashMap<>();
 
     public QueryableReentrantReadWriteLock(boolean fair) {
         super(fair);
@@ -24,18 +25,18 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     public void sharedLock() {
         this.readLock().lock();
-        sharedLockThreadIds.put(Thread.currentThread().getId(), true);
+        sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
     }
 
     public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
         boolean succ = this.readLock().tryLock(timeout, unit);
-        sharedLockThreadIds.put(Thread.currentThread().getId(), true);
+        sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
         return succ;
     }
 
     public void sharedUnlock() {
         this.readLock().unlock();
-        sharedLockThreadIds.remove(Thread.currentThread().getId());
+        sharedLockThreads.remove(Thread.currentThread().getId());
     }
 
     @Override
@@ -43,8 +44,12 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
         return super.getOwner();
     }
 
-    public List<Long> getSharedLockThreads() {
-        return Lists.newArrayList(sharedLockThreadIds.keySet());
+    public List<Long> getSharedLockThreadIds() {
+        return Lists.newArrayList(sharedLockThreads.keySet());
+    }
+
+    public long getSharedLockHoldTime(long threadId) {
+        return sharedLockThreads.getOrDefault(threadId, -1L);
     }
 
     @Override

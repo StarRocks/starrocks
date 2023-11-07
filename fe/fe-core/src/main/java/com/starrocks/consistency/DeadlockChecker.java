@@ -66,14 +66,11 @@ public class DeadlockChecker extends LeaderDaemon {
 
             // holder information
             Thread owner = lock.getOwner();
-            List<Long> sharedLockThreads = lock.getSharedLockThreads();
+            List<Long> sharedLockThreads = lock.getSharedLockThreadIds();
             if (owner != null) {
                 useful = true;
                 ownerInfo.addProperty("ownerThreadName", owner.getName());
                 ownerInfo.addProperty("ownerThreadId", owner.getId());
-                if (Config.deadlock_checker_print_detail_info) {
-                    ownerInfo.addProperty("threadInfo", Util.dumpThread(owner, 50));
-                }
                 if (lock.isWriteLocked()) {
                     ownerInfo.addProperty("lockState", "writeLocked");
                 }
@@ -83,21 +80,18 @@ public class DeadlockChecker extends LeaderDaemon {
                 ownerInfo.addProperty("readLockCount", sharedLockThreads.size());
 
                 StringBuilder infos = new StringBuilder();
-                if (Config.deadlock_checker_print_detail_info) {
-                    // print 5 thread stacks at most.
-                    for (int i = 0; i < 5 && i < sharedLockThreads.size(); i++) {
-                        ThreadInfo threadInfo = ManagementFactory.getThreadMXBean()
-                                .getThreadInfo(sharedLockThreads.get(i), 50);
-                        if (threadInfo != null) {
-                            infos.append(Util.dumpThread(threadInfo, 50)).append(";");
-                        }
+                for (long threadId : sharedLockThreads) {
+                    long lockHoldTime = lock.getSharedLockHoldTime(threadId);
+                    ThreadInfo threadInfo;
+                    if (lockHoldTime > 0 &&
+                            (System.currentTimeMillis() - lockHoldTime
+                                    > Config.deadlock_checker_print_detail_threshold_ms)) {
+                        threadInfo = ManagementFactory.getThreadMXBean().getThreadInfo(threadId, 50);
+                    } else {
+                        threadInfo = ManagementFactory.getThreadMXBean().getThreadInfo(threadId, 0);
                     }
-                } else {
-                    for (long threadId : sharedLockThreads) {
-                        ThreadInfo threadInfo = ManagementFactory.getThreadMXBean().getThreadInfo(threadId);
-                        if (threadInfo != null) {
-                            infos.append(Util.dumpThread(threadInfo, 0)).append(";");
-                        }
+                    if (threadInfo != null) {
+                        infos.append(Util.dumpThread(threadInfo, 50)).append(";");
                     }
                 }
                 ownerInfo.addProperty("threadInfo", infos.toString());

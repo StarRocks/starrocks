@@ -697,7 +697,7 @@ public class Config extends ConfigBase {
     public static long deadlock_checker_interval_second = 30;
 
     @ConfField(mutable = true)
-    public static boolean deadlock_checker_print_detail_info = false;
+    public static long deadlock_checker_print_detail_threshold_ms = 5000L;
 
     /**
      * Default broker load timeout
