@@ -313,6 +313,7 @@ public class RuleSet {
 
                 PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
                 PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
+                PushDownPredicateToExternalTableScanRule.ODPS_SCAN,
                 new MergeTwoFiltersRule(),
                 new PushDownPredicateCTEConsumeRule()
         ));
