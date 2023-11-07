@@ -20,17 +20,16 @@
 
 namespace starrocks::parquet {
 
-Status FileMetaData::init(const tparquet::FileMetaData& t_metadata, bool case_sensitive) {
+Status FileMetaData::init(tparquet::FileMetaData& t_metadata, bool case_sensitive) {
     // construct schema from thrift
     RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema, case_sensitive));
     _num_rows = t_metadata.num_rows;
-    _t_metadata = t_metadata;
+    _t_metadata = std::move(t_metadata);
     if (_t_metadata.__isset.created_by) {
         _writer_version = ApplicationVersion(_t_metadata.created_by);
     } else {
         _writer_version = ApplicationVersion("unknown 0.0.0");
     }
-
     return Status::OK();
 }
 

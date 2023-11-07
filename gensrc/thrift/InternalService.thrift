@@ -239,6 +239,8 @@ struct TQueryOptions {
   109: optional i64 big_query_profile_second_threshold;
 
   110: optional TQueryQueueOptions query_queue_options;
+
+  111: optional bool enable_file_metacache;
 }
 
 
