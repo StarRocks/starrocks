@@ -380,13 +380,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .collect(Collectors.toList());
 
         // Skip first N partitions, which will be refreshed in this round
-        List<String> residualPartitions = sortedPartition.subList(partitionRefreshNumber, sortedPartition.size());
-
-        if (residualPartitions.isEmpty()) {
+        if (partitionRefreshNumber >= sortedPartition.size()) {
             mvContext.setNextPartitionStart(null);
             mvContext.setNextPartitionEnd(null);
             return;
         }
+        List<String> residualPartitions = sortedPartition.subList(partitionRefreshNumber, sortedPartition.size());
         String startPartitionName = residualPartitions.get(0);
         String endPartitionName = residualPartitions.get(residualPartitions.size() - 1);
 
