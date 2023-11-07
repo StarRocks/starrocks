@@ -1652,13 +1652,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         false, "UTC", 10, System.currentTimeMillis(),
                         false, connectContext, null, 10,
                         10, null, null, null, 1);
-<<<<<<< HEAD
                 DefaultCoordinator coordinator = new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
-=======
-                DefaultCoordinator coordinator =
-                        new DefaultCoordinator.Factory().createBrokerLoadScheduler(loadPlanner);
                 QeProcessorImpl.INSTANCE.registerQuery(queryId, coordinator);
->>>>>>> ced1d46500 ([UT] fix flaky test PartitionBasedMvRefreshProcessorTest.testClearQueryInfo (#34439))
             }
         };
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
