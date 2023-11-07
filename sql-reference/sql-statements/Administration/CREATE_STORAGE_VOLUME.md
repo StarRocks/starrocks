@@ -14,8 +14,8 @@
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = { S3 | HDFS }
-LOCATIONS = ('{ <s3_path> | <hdfs_path> }')
+TYPE = { S3 | HDFS | AZBLOB }
+LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
 ("key" = "value",...)
@@ -314,19 +314,30 @@ PROPERTIES
 示例一：为 AWS S3 存储空间 `defaultbucket` 创建存储卷 `my_s3_volume`，使用 IAM user-based 认证，并启用该存储卷。
 
 ```SQL
-MySQL > CREATE STORAGE VOLUME my_s3_volume
-    -> TYPE = S3
-    -> LOCATIONS = ("s3://defaultbucket/test/")
-    -> PROPERTIES
-    -> (
-    ->     "aws.s3.region" = "us-west-2",
-    ->     "aws.s3.endpoint" = "https://s3.us-west-2.amazonaws.com",
-    ->     "aws.s3.use_aws_sdk_default_behavior" = "false",
-    ->     "aws.s3.use_instance_profile" = "false",
-    ->     "aws.s3.access_key" = "xxxxxxxxxx",
-    ->     "aws.s3.secret_key" = "yyyyyyyyyy"
-    -> );
-Query OK, 0 rows affected (0.05 sec)
+CREATE STORAGE VOLUME my_s3_volume
+TYPE = S3
+LOCATIONS = ("s3://defaultbucket/test/")
+PROPERTIES
+(
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.endpoint" = "https://s3.us-west-2.amazonaws.com",
+    "aws.s3.use_aws_sdk_default_behavior" = "false",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy"
+);
+```
+
+示例二：为 HDFS 创建存储卷 `my_hdfs_volume`，并启用该存储卷。
+
+```SQL
+CREATE STORAGE VOLUME my_hdfs_volume
+TYPE = HDFS
+LOCATIONS = ("hdfs://127.0.0.1:9000/sr/test/")
+PROPERTIES
+(
+    "enabled" = "true"
+);
 ```
 
 ## 相关 SQL
