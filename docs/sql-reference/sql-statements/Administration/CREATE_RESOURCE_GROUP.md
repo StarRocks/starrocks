@@ -29,8 +29,8 @@ WITH resource_limit
     | query_type    | No           | The type of query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.   |
     | source_ip     | No           | The CIDR block from which the query is initiated.            |
     | db            | No           | The database which the query accesses. It can be specified by strings separated by commas (,). |
-    | plan_cpu_cost_range | No     | The estimated CPU cost range of the query.                   |
-    | plan_mem_cost_range | No     | The estimated memory cost range of the query.                |
+    | plan_cpu_cost_range | No     | The estimated CPU cost range of the query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. This parameter is supported from v3.1.4 onwards.                  |
+    | plan_mem_cost_range | No     | The estimated memory cost range of the query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. This parameter is supported from v3.1.4 onwards.               |
 
 - `resource_limit`: Resource limits to be imposed on the resource group. You must specify resource limits using `"key"="value"` pairs. You can set multiple resource limits for a resource group.
 
@@ -41,6 +41,7 @@ WITH resource_limit
     | cpu_core_limit             | No           | The soft limit for the number of CPU cores that can be allocated to the resource group on the BE. In actual business scenarios, CPU cores that are allocated to the resource group proportionally scale based on the availability of CPU cores on the BE. Valid values: any non-zero positive integer. |
     | mem_limit                  | No           | The percentage of memory that can be used for queries in the total memory that is provided by the BE. Unit: %. Valid values: (0, 1). |
     | concurrency_limit          | No           | The upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries. |
+    | max_cpu_cores              | No           | The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0. |
     | big_query_cpu_second_limit | No           | The upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second. |
     | big_query_scan_rows_limit  | No           | The upper limit of row counts that can be scanned by a big query. |
     | big_query_mem_limit        | No           | The upper limit of memory usage of a big query. The unit is byte. |
