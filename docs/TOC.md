@@ -739,6 +739,7 @@
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
+      + [is_role_in_session](./sql-reference/sql-functions/utility-functions/is_role_in_session.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)

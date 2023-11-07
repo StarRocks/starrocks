@@ -2,7 +2,9 @@
 
 ## Description
 
-Activates roles, along with all of its associated privileges, for the current session. After the role is activated, users can use this role to perform operations.
+Activates roles, along with all of its associated privileges and nested roles, for the current session. After the role is activated, users can use this role to perform operations.
+
+ After running this command, you can run `select is_role_in_session("<role_name>");` to verify whether this role is active in the current session.
 
 This command is supported from v3.0.
 
@@ -66,4 +68,5 @@ SELECT CURRENT_ROLE();
 - [ALTER USER](ALTER_USER.md): modifies roles.
 - [SHOW ROLES](SHOW_ROLES.md): show all roles in the system.
 - [current_role](../../sql-functions/utility-functions/current_role.md): show roles of the current user.
+- [is_role_in_session](../../sql-functions/utility-functions/is_role_in_session.md): verifies whether a role (or a nested role) is active in the current session.
 - [DROP ROLE](DROP_ROLE.md): drops a role.

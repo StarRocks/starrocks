@@ -18,7 +18,7 @@ ISNOTNULL(v)
 
 Returns 1 if it is not `NULL`, and returns 0 if it is `NULL`.
 
-## Example
+## Examples
 
 ```plain text
 MYSQL > SELECT c1, isnotnull(c1) FROM t1;
