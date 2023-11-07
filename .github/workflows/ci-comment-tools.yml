@@ -41,8 +41,7 @@ jobs:
       - name: PR INFO
         id: pr-info
         run: |
-          cd /var/lib/elastic-service && git pull
-          ./lib/get_pr_info.sh
+          cd /var/lib/elastic-service && ./lib/get_pr_info.sh
 
   rebase:
     name: Rebase
@@ -83,6 +82,7 @@ jobs:
       ASSIGNEES: ${{ needs.info.outputs.assignees }}
       MERGE_COMMIT: ${{ needs.info.outputs.merge_commit }}
       GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+      ACTION_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
       - name: Check Status
@@ -98,14 +98,22 @@ jobs:
           token: ${{ secrets.PAT }}
           fetch-depth: 0
 
+      - name: checkout tools
+        uses: actions/checkout@v4
+        with:
+          repository: StarRocks/elastic-service
+          path: './elastic-service'
+          token: ${{ secrets.PAT }}
+          fetch-depth: 1
+
       - name: BACKPORT
         id: backport
         run: |
-          cd /var/lib/elastic-service && git pull
+          cd elastic-service
           ./bin/backport.sh "${{ needs.info.outputs.title }}" "${{ github.event.comment.body }}"
 
       - name: Report
         if: always() && steps.backport.outcome == 'failure'
         run: |
-          gh pr comment ${PR_NUMBER} -R ${{ github.repository }} -b "❌ BACKPORT ERROR!"
+          gh pr comment ${PR_NUMBER} -R ${{ github.repository }} -b "❌ BACKPORT ERROR! <details></br></br>[Workflow details](${ACTION_URL})</details>"
           exit 1

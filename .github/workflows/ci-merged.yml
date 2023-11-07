@@ -16,8 +16,10 @@ jobs:
     runs-on: [ self-hosted, quick ]
     if: >
       github.event.pull_request.merged == true &&
-      github.base_ref == 'main' && 
-      github.repository == 'StarRocks/starrocks' &&
+      github.base_ref == 'main' && (
+      !contains(github.event.pull_request.title, '(sync #') &&
+      !contains(github.event.pull_request.labels.*.name, 'sync') &&
+      !contains(github.head_ref, '-sync-')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
       contains(github.event.pull_request.labels.*.name, '3.2') ||
