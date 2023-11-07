@@ -1,31 +1,74 @@
-# Load data from S3
+# Load data from \<SOURCE\> TEMPLATE
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+## Template instructions
+
+### A note about style
+
+Technical documentation typically has links to other documents all over the place. When you look at this document you may notice that there are few links out from the page, and that almost all of the links are at the bottom of the doc in the **more information** section. Not every keyword needs to be linked out to another page, please assume that the reader knows what `CREATE TABLE` means and that is they do not know they can click in the search bar and find out. It is fine to pop a note in the docs to tell the reader that there are other options and the details are described in the **more information** section; this allows the people who need the information know that they can read it ***later***, after they accomplish the task at hand.
+
+### The template
+
+This template is based on the process to load data from Amazon S3, some
+parts of it will not be applicable to loading from other sources. Please concentrate on the flow of this template and do not worry about including every section; the flow is meant to be:
+
+#### Introduction
+
+Introductory text that lets the reader know what the end result will be if they follow this guide. In the case of the S3 doc, the end result is "Getting data loaded from S3 in either an asynchronous manner, or a synchronous manner."
+
+#### Why?
+
+- A description of the business problem solved with the technique
+- Advantages and the disadvantages (if any) of the method(s) described
+
+#### Data flow or other diagram
+
+Diagrams or images can be helpful. If you are describing a technique that is complex and an image helps, then use one. If you are describing a technique that produces something visual (for example, the use of Superset to analyze data), then definitely include an image of the end product.
+
+Use a data flow diagram if the flow is non-obvious. When a command causes StarRocks to run several processes and combine the output of those processes and then manipulate the data it is probably time for a description of the data flow. In this template there are two methods for loading data described. One of them is simple, and has no data flow section; the other is more complicated (StarRocks is handling the complex work, not the user!), and the complex option includes a data flow section.
+
+#### Examples with verification section
+
+Note that examples should come before syntax details and other deep technical details. Many readers will be coming to the docs to find a particular technique that they can copy, paste, and modify.
+
+If possible give an example that will work and includes a dataset to use. The example in this template uses a dataset stored in S3 that anyone who has an AWS account and can authenticate with a key and secret can use. By providing a dataset the examples are more valuable to the reader because they can fully experience the described technique.
+
+Make sure that the example works as written. This implies two things:
+
+1. you have run the commands in the order presented
+2. you have included the necessary prerequisites. For example, if your example refers to database `foo`, then probably you need to preface it with `CREATE DATABASE foo;`, `USE foo;`.
+
+Verification is so important. If the process that you are describing includes several steps, then include a verification step whenever something should have been accomplished; this helps avoid having the reader get to the end and realizing that they had a typo in step 10. In this example **Check progress** and `DESCRIBE user_behavior_inferred;` steps are for verification.
+
+#### More information
+
+At the end of the template there is a spot to put links to related information including the ones to optional information that you mentioned in the main body.
+
+### Notes embedded in the template
+
+The template notes are intentionally formatted differently than the way we format documentation notes to bring them to your attention when you are working through the template. Please remove the bold italic notes as you go along:
+
+```markdown
+***Note: descriptive text***
+```
+
+## Finally, the start of the template
+
+***Note: If there are multiple recommended choices, tell the
+reader this in the intro. For example, when loading from S3,
+there is an option for synchronous loading, and asynchronous loading:***
 
 StarRocks provides two options for loading data from S3:
 
 1. Asynchronous loading using Broker Load
 2. Synchronous loading using the `FILES()` table function
 
+***Note: Tell the reader WHY they would choose one choice over the other:***
+
 Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using Broker Load. The two methods have different advantages and are described below.
-
-<InsertPrivNote />
-
-## Gather connection details
 
 > **NOTE**
 >
-> The examples use IAM user-based authentication. Other authentication methods are available and linked at the bottom of this page.
->
-> This guide uses a dataset hosted by StarRocks. The dataset is readable by any authenticated AWS user, so
-you can use your IAM credentials to read the Parquet file used below.
-
-Loading data from S3 requires having the:
-
-- S3 bucket
-- S3 object keys (object names) if accessing a specific object in the bucket. Note that the object key can include a prefix if your S3 objects are stored in sub-folders. The full syntax is linked in **more information**.
-- S3 region
-- Access key and secret
+> You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Using Broker Load
 
@@ -39,6 +82,8 @@ An asynchronous Broker Load process handles making the connection to S3, pulling
 - In addition to Parquet and ORC file format, Broker Load supports CSV files.
 
 ### Data flow
+
+***Note: Processes that involve multiple components or steps may be easier to understand with a diagram. This example includes a diagram that helps describe the steps that happen when a user chooses the Broker Load option.***
 
 ![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
 
@@ -81,6 +126,19 @@ PROPERTIES (
     "replication_num" = "1"
 );
 ```
+
+#### Gather connection details
+
+> **NOTE**
+>
+> The examples use IAM user-based authentication. Other authentication methods are available and linked at the bottom of this page.
+
+Loading data from S3 requires having the:
+
+- S3 bucket
+- S3 object keys (object names) if accessing a specific object in the bucket. Note that the object key can include a prefix if your S3 objects are stored in sub-folders. The full syntax is linked in **more information**.
+- S3 region
+- Access key and secret
 
 #### Start a Broker Load
 
