@@ -18,9 +18,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
-import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.scheduler.RecoverableException;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
@@ -28,7 +27,6 @@ import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -50,8 +48,14 @@ public class QueryQueueManager {
         return QueryQueueManager.SingletonHolder.INSTANCE;
     }
 
+<<<<<<< HEAD
     public void maybeWait(ConnectContext context, Coordinator coord) throws UserException, InterruptedException {
         if (!needCheckQueue(coord) || !isEnableQueue(coord)) {
+=======
+    public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws UserException, InterruptedException {
+        JobSpec jobSpec = coord.getJobSpec();
+        if (!jobSpec.isNeedQueued() || !jobSpec.isEnableQueue()) {
+>>>>>>> 5d153986a7 ([Enhancement] Avoid checking group concurrency_limit when enabling group level queue (#34398))
             return;
         }
 
@@ -109,6 +113,7 @@ public class QueryQueueManager {
         }
     }
 
+<<<<<<< HEAD
     public boolean isEnableQueue(Coordinator coord) {
         if (coord.isStatisticsJob()) {
             return GlobalVariable.isEnableQueryQueueStatistic();
@@ -134,6 +139,9 @@ public class QueryQueueManager {
     }
 
     private LogicalSlot createSlot(Coordinator coord) throws UserException {
+=======
+    private LogicalSlot createSlot(DefaultCoordinator coord) throws UserException {
+>>>>>>> 5d153986a7 ([Enhancement] Avoid checking group concurrency_limit when enabling group level queue (#34398))
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
         Frontend frontend = GlobalStateMgr.getCurrentState().getFeByHost(selfIpAndPort.first);
         if (frontend == null) {
