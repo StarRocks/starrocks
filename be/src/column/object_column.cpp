@@ -81,6 +81,7 @@ void ObjectColumn<T>::append(const Column& src, size_t offset, size_t count) {
 }
 
 template <typename T>
+<<<<<<< HEAD
 void ObjectColumn<T>::append_shallow_copy(const Column& src, size_t offset, size_t count) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     if constexpr (std::is_same_v<T, BitmapValue>) {
@@ -96,6 +97,9 @@ void ObjectColumn<T>::append_shallow_copy(const Column& src, size_t offset, size
 
 template <typename T>
 void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src, const uint32_t* indexes, uint32_t from,
+=======
+void ObjectColumn<T>::append_selective(const starrocks::Column& src, const uint32_t* indexes, uint32_t from,
+>>>>>>> 44ae317858 ([Enhancement] BitmapValue support copy on write (#34047))
                                        uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     for (uint32_t j = 0; j < size; ++j) {
@@ -104,6 +108,7 @@ void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src,
 }
 
 template <typename T>
+<<<<<<< HEAD
 void ObjectColumn<T>::append_selective_shallow_copy(const starrocks::vectorized::Column& src, const uint32_t* indexes,
                                                     uint32_t from, uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
@@ -130,6 +135,12 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::C
         for (uint32_t i = 0; i < size; i++) {
             append(obj_col.get_object(index));
         }
+=======
+void ObjectColumn<T>::append_value_multiple_times(const starrocks::Column& src, uint32_t index, uint32_t size) {
+    const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
+    for (uint32_t i = 0; i < size; i++) {
+        append(obj_col.get_object(index));
+>>>>>>> 44ae317858 ([Enhancement] BitmapValue support copy on write (#34047))
     }
 }
 

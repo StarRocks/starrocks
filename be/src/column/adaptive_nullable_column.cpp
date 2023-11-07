@@ -96,27 +96,15 @@ void AdaptiveNullableColumn::append(const Column& src, size_t offset, size_t cou
     NullableColumn::append(src, offset, count);
 }
 
-void AdaptiveNullableColumn::append_shallow_copy(const Column& src, size_t offset, size_t count) {
-    materialized_nullable();
-    NullableColumn::append_shallow_copy(src, offset, count);
-}
-
 void AdaptiveNullableColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from,
                                               uint32_t size) {
     materialized_nullable();
     NullableColumn::append_selective(src, indexes, from, size);
 }
 
-void AdaptiveNullableColumn::append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
-                                                           uint32_t size) {
+void AdaptiveNullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     materialized_nullable();
-    NullableColumn::append_selective_shallow_copy(src, indexes, from, size);
-}
-
-void AdaptiveNullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size,
-                                                         bool deep_copy) {
-    materialized_nullable();
-    NullableColumn::append_value_multiple_times(src, index, size, deep_copy);
+    NullableColumn::append_value_multiple_times(src, index, size);
 }
 
 bool AdaptiveNullableColumn::append_nulls(size_t count) {

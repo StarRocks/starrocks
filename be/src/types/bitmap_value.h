@@ -55,7 +55,7 @@ public:
     // Construct an empty bitmap.
     BitmapValue();
 
-    BitmapValue(const BitmapValue& other, bool deep_copy = true);
+    BitmapValue(const BitmapValue& other);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept;
@@ -99,7 +99,7 @@ public:
     BitmapValue& operator^=(const BitmapValue& rhs);
 
     // check if value x is present
-    bool contains(uint64_t x);
+    bool contains(uint64_t x) const;
 
     // TODO should the return type be uint64_t?
     int64_t cardinality() const;
@@ -138,11 +138,24 @@ public:
 
     void clear();
 
-    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
+    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const;
 
+<<<<<<< HEAD
+=======
+    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
+                                         BitmapValue* ret_bitmap) const;
+
+    int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
+                                            BitmapValue* ret_bitmap) const;
+
+    BitmapDataType type() const { return _type; }
+    bool is_shared() const { return _shared; }
+
+>>>>>>> 44ae317858 ([Enhancement] BitmapValue support copy on write (#34047))
 private:
     void _convert_to_smaller_type();
     void _from_set_to_bitmap();
+    void _copy_on_write();
 
     enum BitmapDataType {
         EMPTY = 0,
@@ -156,5 +169,6 @@ private:
     std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
+    mutable bool _shared = false;
 };
 } // namespace starrocks
