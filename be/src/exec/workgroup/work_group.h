@@ -187,7 +187,7 @@ public:
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
     Status check_big_query(const QueryContext& query_context);
-    StatusOr<RunningQueryTokenPtr> acquire_running_query_token();
+    StatusOr<RunningQueryTokenPtr> acquire_running_query_token(bool enable_group_level_query_queue);
     void decr_num_queries();
     int64_t num_running_queries() const { return _num_running_queries; }
     int64_t num_total_queries() const { return _num_total_queries; }

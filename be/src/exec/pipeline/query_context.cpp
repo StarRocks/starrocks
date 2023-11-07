@@ -140,12 +140,12 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
     });
 }
 
-Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
     Status st = Status::OK();
     if (wg != nullptr) {
-        std::call_once(_init_query_once, [this, &st, wg]() {
+        std::call_once(_init_query_once, [this, &st, wg, enable_group_level_query_queue]() {
             this->init_query_begin_time();
-            auto maybe_token = wg->acquire_running_query_token();
+            auto maybe_token = wg->acquire_running_query_token(enable_group_level_query_queue);
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
                 _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();

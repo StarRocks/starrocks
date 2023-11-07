@@ -58,7 +58,6 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.utframe.MockGenericPool;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.thrift.TApplicationException;
@@ -192,20 +191,20 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         {
             // 1. ScanNodes is empty.
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select 1");
-            Assert.assertFalse(manager.needCheckQueue(coordinator));
+            Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
         }
 
         {
             // 2. ScanNodes only contain SchemaNode.
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
-            Assert.assertFalse(manager.needCheckQueue(coordinator));
+            Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
         }
 
         {
             // 3. ScanNodes include non-SchemaNode.
             DefaultCoordinator coordinator = getSchedulerWithQueryId(
                     "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
-            Assert.assertTrue(manager.needCheckQueue(coordinator));
+            Assert.assertTrue(coordinator.getJobSpec().isNeedQueued());
         }
 
         {
@@ -213,7 +212,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             connectContext.setNeedQueued(false);
             DefaultCoordinator coordinator = getSchedulerWithQueryId(
                     "select TABLE_CATALOG from information_schema.tables UNION ALL select count(1) from lineitem");
-            Assert.assertFalse(manager.needCheckQueue(coordinator));
+            Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
             connectContext.setNeedQueued(true);
         }
     }
@@ -222,21 +221,25 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     public void testEnableQueue() throws Exception {
         {
             // 1. Load type.
-            DefaultCoordinator coordinator = getSchedulerWithQueryId("insert into lineitem select * from lineitem");
             GlobalVariable.setEnableQueryQueueLoad(false);
-            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("insert into lineitem select * from lineitem");
+            Assert.assertFalse(coordinator.getJobSpec().isEnableQueue());
+
             GlobalVariable.setEnableQueryQueueLoad(true);
-            Assert.assertTrue(manager.isEnableQueue(coordinator));
+            coordinator = getSchedulerWithQueryId("insert into lineitem select * from lineitem");
+            Assert.assertTrue(coordinator.getJobSpec().isEnableQueue());
             GlobalVariable.setEnableQueryQueueLoad(false);
         }
 
         {
             // 2. Query for select.
-            DefaultCoordinator coordinator = getSchedulerWithQueryId("select * from lineitem");
             GlobalVariable.setEnableQueryQueueSelect(false);
-            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertFalse(coordinator.getJobSpec().isEnableQueue());
+
             GlobalVariable.setEnableQueryQueueSelect(true);
-            Assert.assertTrue(manager.isEnableQueue(coordinator));
+            coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertTrue(coordinator.getJobSpec().isEnableQueue());
             GlobalVariable.setEnableQueryQueueSelect(false);
         }
 
@@ -244,21 +247,27 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // 3. Query for statistic.
             connectContext.setStatisticsContext(false);
             connectContext.setStatisticsJob(true); // Mock statistics job.
-            DefaultCoordinator coordinator = getSchedulerWithQueryId("select * from lineitem");
             GlobalVariable.setEnableQueryQueueStatistic(false);
-            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            DefaultCoordinator coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertFalse(coordinator.getJobSpec().isEnableQueue());
+
             GlobalVariable.setEnableQueryQueueStatistic(true);
-            Assert.assertTrue(manager.isEnableQueue(coordinator));
+            coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertTrue(coordinator.getJobSpec().isEnableQueue());
 
             connectContext.setStatisticsJob(false);
             GlobalVariable.setEnableQueryQueueStatistic(true);
-            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertFalse(coordinator.getJobSpec().isEnableQueue());
 
             connectContext.setStatisticsContext(true);
             GlobalVariable.setEnableQueryQueueStatistic(false);
-            Assert.assertFalse(manager.isEnableQueue(coordinator));
+            coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertFalse(coordinator.getJobSpec().isEnableQueue());
+
             GlobalVariable.setEnableQueryQueueStatistic(true);
-            Assert.assertTrue(manager.isEnableQueue(coordinator));
+            coordinator = getSchedulerWithQueryId("select * from lineitem");
+            Assert.assertTrue(coordinator.getJobSpec().isEnableQueue());
             connectContext.setStatisticsContext(false);
             GlobalVariable.setEnableQueryQueueStatistic(false);
         }
@@ -1518,42 +1527,6 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                     "wg2|12|be1-host|1.22|27|26\n" +
                     "wg3|13|be1-host|0.23|0|0");
         }
-    }
-
-    private void mockNeedCheckQueue() {
-        new Expectations(manager) {
-            {
-                manager.needCheckQueue((DefaultCoordinator) any);
-                result = true;
-            }
-        };
-    }
-
-    private void mockNotNeedCheckQueue() {
-        new Expectations(manager) {
-            {
-                manager.needCheckQueue((DefaultCoordinator) any);
-                result = false;
-            }
-        };
-    }
-
-    private void mockEnableQueue() {
-        new Expectations(manager) {
-            {
-                manager.isEnableQueue((DefaultCoordinator) any);
-                result = true;
-            }
-        };
-    }
-
-    private void mockNotEnableCheckQueue() {
-        new Expectations(manager) {
-            {
-                manager.isEnableQueue((DefaultCoordinator) any);
-                result = false;
-            }
-        };
     }
 
     private static class MockFrontendServiceClient extends FrontendService.Client {
