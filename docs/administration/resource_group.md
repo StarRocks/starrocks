@@ -12,12 +12,12 @@ The roadmap of Resource Group:
 - In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
 - StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
 
-|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change | INSERT |
-|---|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × | × |
-| 2.3 | √ | √ | √ | √ | × | × | × |
-| 2.4 | √ | √ | √ | √ | × | × | × |
-| 2.5 | √ | √ | √ | √ | √ | × | √ |
+|  | Internal Table | External Table | Big Query Restriction | Short Query | INSERT INTO, Broker Load  | Routine Load, Stream Load, Schema Change |
+|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × |
+| 2.3 | √ | √ | √ | √ | × | × |
+| 2.4 | √ | √ | √ | √ | × | × |
+| 2.5 | √ | √ | √ | √ | √ | × |
 
 ## Terms
 
@@ -31,7 +31,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 - `cpu_core_limit`
 
-  This parameter specifies the soft limit for the number of CPU cores that can be allocated to the resource group on the BE. Valid values: any non-zero positive integer.
+  This parameter specifies the soft limit for the number of CPU cores that can be allocated to the resource group on the BE. Valid values: any non-zero positive integer. Range: (1, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BEs.
 
   In actual business scenarios, CPU cores that are allocated to the resource group proportionally scale based on the availability of CPU cores on the BE.
 
@@ -64,9 +64,9 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
 
-- `big_query_cpu_second_limit`: This parameter specifies the upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
-- `big_query_scan_rows_limit`: This parameter specifies the upper limit of row count that a big query can scan. This parameter takes effect only when it is set greater than 0. Default: 0.
-- `big_query_mem_limit`: This parameter specifies the upper limit of memory usage of a big query. The unit is byte. This parameter takes effect only when it is set greater than 0. Default: 0.
+- `big_query_cpu_second_limit`: This parameter specifies the CPU upper time limit for a big query on a single BE. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
+- `big_query_scan_rows_limit`: This parameter specifies the scan row count upper limit for a big query on a single BE. This parameter takes effect only when it is set greater than 0. Default: 0.
+- `big_query_mem_limit`: This parameter specifies the memory usage upper limit for a big query on a single BE. The unit is byte. This parameter takes effect only when it is set greater than 0. Default: 0.
 
 > **NOTE**
 >
@@ -91,24 +91,17 @@ Classifiers support the following conditions:
 
 - `user`: the name of the user.
 - `role`: the role of the user.
-- `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
+- `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT INTO or BROKER LOAD tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
 - `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
+- `plan_cpu_cost_range`: The estimated CPU cost range of the query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. The `PlanCpuCost` column in `fe.audit.log` represents the system's estimate of the CPU cost for the query. This parameter is supported from v3.1.4 onwards.
+- `plan_mem_cost_range`: The system-estimated memory cost range of a query. The format is `(DOUBLE, DOUBLE]`. The default value is NULL, indicating no such restriction. The `PlanMemCost` column in `fe.audit.log` represents the system's estimate of the memory cost for the query. This parameter is supported from v3.1.4 onwards.
 
 A classifier matches a query only when one or all conditions of the classifier match the information about the query. If multiple classifiers match a query, StarRocks calculates the degree of matching between the query and each classifier and identifies the classifier with the highest degree of matching.
 
 > **NOTE**
 >
-> You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log**.
->
-> If a query does not hit any classifiers, the default resource group `default_wg` is used. The resource limits of `default_wg` are as follows:
->
-> - `cpu_core_limit`: 1 (`<=` v2.3.7) or the number of CPU cores in BE (`>` v2.3.7)
-> - `mem_limit`: 100%
-> - `concurrency_limit`: 0
-> - `big_query_cpu_second_limit`: 0
-> - `big_query_scan_rows_limit`: 0
-> - `big_query_mem_limit`: 0
+> You can view the resource group to which a query belongs in the `ResourceGroup` column of the FE node **fe.audit.log** or by running `EXPLAIN VERBOSE <query>`, as described in [View the resource group of a query](#view-the-resource-group-of-a-query).
 
 StarRocks calculates the degree of matching between a query and a classifier by using the following rules:
 
@@ -117,10 +110,12 @@ StarRocks calculates the degree of matching between a query and a classifier by 
 - If the classifier has the same value of `query_type` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: 1/Number of `query_type` fields in the classifier.
 - If the classifier has the same value of `source_ip` as the query, the degree of matching of the classifier increases by 1 plus the number obtained from the following calculation: (32 - `cidr_prefix`)/64.
 - If the classifier has the same value of `db` as the query, the degree of matching of the classifier increases by 10.
+- If the query's CPU cost falls within the `plan_cpu_cost_range`, the degree of matching of the classifier increases by 1.
+- If the query's memory cost falls within the `plan_mem_cost_range`, the degree of matching of the classifier increases by 1.
 
 If multiple classifiers match a query, the classifier with a larger number of conditions has a higher degree of matching.
 
-```plaintext
+```Plain
 -- Classifier B has more conditions than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 
 
@@ -132,7 +127,7 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
 If multiple matching classifiers have the same number of conditions, the classifier whose conditions are described more accurately has a higher degree of matching.
 
-```plaintext
+```Plain
 -- The CIDR block that is specified in Classifier B is smaller in range than Classifier A. Therefore, Classifier B has a higher degree of matching than Classifier A.
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
@@ -140,6 +135,15 @@ classifier B (user='Alice', source_ip = '192.168.1.0/24')
 -- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier C has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
 classifier D (user='Alice', query_type in ('insert','select'))
+```
+
+If multiple classifiers have the same degree of matching, one of the classifiers will be randomly selected.
+
+```Plain
+-- If a query simultaneously queries both db1 and db2 and the classifiers E and F have the 
+-- highest degree of matching among the hit classifiers, one of E and F will be randomly selected.
+classifier E (db='db1')
+classifier F (db='db2')
 ```
 
 ## Isolate computing resources
@@ -155,6 +159,12 @@ To use resource group, you must enable Pipeline Engine for your StarRcosk cluste
 SET enable_pipeline_engine = true;
 -- Enable Pipeline Engine globally.
 SET GLOBAL enable_pipeline_engine = true;
+```
+
+For loading tasks, you also need to set the FE configuration item `enable_pipeline_load` to enable the Pipeline engine for loading tasks. This item is supported from v2.5.0 onwards.
+
+```sql
+ADMIN SET FRONTEND CONFIG ("enable_pipeline_load" = "true");
 ```
 
 > **NOTE**
@@ -283,21 +293,91 @@ Execute the following statement to delete all classifiers of a resource group:
 ALTER RESOURCE GROUP <group_name> DROP ALL;
 ```
 
-## Monitor resource group
+## Observe resource groups
+
+### View the resource group of a query
+
+You can view the resource group that a query hits from the `ResourceGroup` column in the **fe.audit.log**, or from the `RESOURCE GROUP` column returned after executing `EXPLAIN VERBOSE <query>`. They indicate the resource group that a specific query task matches.
+
+- If the query is not under the management of resource groups, the column value is an empty string `""`.
+- If the query is under the management of resource groups but doesn't match any classifier, the column value is an empty string `""`. But this query is assigned to the default resource group `default_wg`.
+
+The resource limits of `default_wg` are as follows:
+
+- `cpu_core_limit`: 1 (for v2.3.7 or earlier) or the number of CPU cores of the BE (for versions later than v2.3.7).
+- `mem_limit`: 100%.
+- `concurrency_limit`: 0.
+- `big_query_cpu_second_limit`: 0.
+- `big_query_scan_rows_limit`: 0.
+- `big_query_mem_limit`: 0.
+
+### Monitoring resource groups
 
 You can set [monitor and alert](Monitor_and_Alert.md) for your resource groups.
 
-Metrics you can monitor regarding resource groups include:
+Resource group-related FE and BE metrics are as follows. All the metrics below have a `name` label indicating their corresponding resource group.
 
-- FE
-  - `starrocks_fe_query_resource_group`: The number of queries in each resource group.
-  - `starrocks_fe_query_resource_group_latency`: The query latency percentile for each resource group.
-  - `starrocks_fe_query_resource_group_err`: The number of terminated-with-error queries in each resource group.
-- BE
-  - `starrocks_be_resource_group_cpu_limit_ratio`: Instantaneous value of resource group CPU quota ratio.
-  - `starrocks_be_resource_group_cpu_use_ratio`: Instantaneous value of resource group CPU usage ratio.
-  - `starrocks_be_resource_group_mem_limit_bytes`: Instantaneous value of resource group memory quota.
-  - `starrocks_be_resource_group_mem_allocated_bytes`: Instantaneous value of resource group memory usage.
+### FE metrics
+
+The following FE metrics only provide statistics within the current FE node:
+
+| Metric                                          | Unit | Type          | Description                                                        |
+| ----------------------------------------------- | ---- | ------------- | ------------------------------------------------------------------ |
+| starrocks_fe_query_resource_group               | Count | Instantaneous | The number of queries historically run in this resource group (including those currently running). |
+| starrocks_fe_query_resource_group_latency       | ms    | Instantaneous | The query latency percentile for this resource group. The label `type` indicates specific percentiles, including `mean`, `75_quantile`, `95_quantile`, `98_quantile`, `99_quantile`, `999_quantile`. |
+| starrocks_fe_query_resource_group_err           | Count | Instantaneous | The number of queries in this resource group that encountered an error. |
+| starrocks_fe_resource_group_query_queue_total   | Count | Instantaneous | The total number of queries historically queued in this resource group (including those currently running). This metric is supported from v3.1.4 onwards. It is vailid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+| starrocks_fe_resource_group_query_queue_pending | Count | Instantaneous | The number of queries currently in the queue of this resource group. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+| starrocks_fe_resource_group_query_queue_timeout | Count | Instantaneous | The number of queries in this resource group that have timed out while in the queue. This metric is supported from v3.1.4 onwards. It is valid only when query queues are enabled, see [Query Queues](query_queues.md) for details. |
+
+### BE metrics
+
+| Metric                                      | Unit     | Type          | Description                                                        |
+| ----------------------------------------- | -------- | ------------- | ------------------------------------------------------------------ |
+| resource_group_running_queries            | Count    | Instantaneous | The number of queries currently running in this resource group.   |
+| resource_group_total_queries              | Count    | Instantaneous | The number of queries historically run in this resource group (including those currently running). |
+| resource_group_bigquery_count             | Count    | Instantaneous | The number of queries in this resource group that triggered the big query limit. |
+| resource_group_concurrency_overflow_count | Count    | Instantaneous | The number of queries in this resource group that triggered the `concurrency_limit` limit. |
+| resource_group_mem_limit_bytes            | Bytes    | Instantaneous | The memory limit for this resource group.                         |
+| resource_group_mem_inuse_bytes            | Bytes    | Instantaneous | The memory currently in use by this resource group.               |
+| resource_group_cpu_limit_ratio            | Percentage | Instantaneous | The ratio of this resource group's `cpu_core_limit` to the total `cpu_core_limit` across all resource groups. |
+| resource_group_inuse_cpu_cores            | Count     | Average     | The estimated number of CPU cores in use by this resource group. This value is an approximate estimate. It represents the average over two consecutive metric collection intervals. This metric is supported from v3.1.4 onwards. |
+| resource_group_cpu_use_ratio              | Percentage | Average     | **Deprecated** The ratio of the Pipeline thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. This represents the average over two consecutive metric collection intervals. |
+| resource_group_connector_scan_use_ratio   | Percentage | Average     | **Deprecated** The ratio of the external table Scan thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. This represents the average over two consecutive metric collection intervals. |
+| resource_group_scan_use_ratio             | Percentage | Average     | **Deprecated** The ratio of the internal table Scan thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. This represents the average over two consecutive metric collection intervals. |
+
+### View resource group usage information
+
+From v3.1.4 onwards, StarRocks supports the SQL statement `SHOW USAGE RESOURCE GROUPS`, which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
+
+- `Name`: The name of the resource group.
+- `Id`: The ID of the resource group.
+- `Backend`: The BE's IP or FQDN.
+- `BEInUseCpuCores`: The number of CPU cores currently in use by this resource group on this BE. This value is an approximate estimate.
+- `BEInUseMemBytes`: The number of memory bytes currently in use by this resource group on this BE.
+- `BERunningQueries`: The number of queries from this resource group that are still running on this BE.
+
+Please note:
+
+- BEs periodically report this resource usage information to the Leader FE at the interval specified in `report_resource_usage_interval_ms`, which is by default set to 1 second.
+- The results will only show rows where at least one of `BEInUseCpuCores`/`BEInUseMemBytes`/`BERunningQueries` is a positive number. In other words, the information is displayed only when a resource group is actively using some resources on a BE.
+
+Example:
+
+```Plain
+MySQL [(none)]> SHOW USAGE RESOURCE GROUPS;
++------------+----+-----------+-----------------+-----------------+------------------+
+| Name       | Id | Backend   | BEInUseCpuCores | BEInUseMemBytes | BERunningQueries |
++------------+----+-----------+-----------------+-----------------+------------------+
+| default_wg | 0  | 127.0.0.1 | 0.100           | 1               | 5                |
++------------+----+-----------+-----------------+-----------------+------------------+
+| default_wg | 0  | 127.0.0.2 | 0.200           | 2               | 6                |
++------------+----+-----------+-----------------+-----------------+------------------+
+| wg1        | 0  | 127.0.0.1 | 0.300           | 3               | 7                |
++------------+----+-----------+-----------------+-----------------+------------------+
+| wg2        | 0  | 127.0.0.1 | 0.400           | 4               | 8                |
++------------+----+-----------+-----------------+-----------------+------------------+
+```
 
 ## What to do next
 

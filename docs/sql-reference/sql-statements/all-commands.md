@@ -69,6 +69,8 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SHOW FRONTENDS](./Administration/SHOW_FRONTENDS.md)
 - [SHOW PROC](./Administration/SHOW_PROC.md)
 - [SHOW PROCESSLIST](./Administration/SHOW_PROCESSLIST.md)
+- [SHOW USAGE RESOURCE GROUPS](./Administration/SHOW_USAGE_RESOURCE_GROUPS.md)
+- [SHOW RUNNING QUERIES](./Administration/SHOW_RUNNING_QUERIES.md)
 
 ### Resource group
 

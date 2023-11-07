@@ -29,6 +29,8 @@ WITH resource_limit
     | query_type    | No           | The type of query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.   |
     | source_ip     | No           | The CIDR block from which the query is initiated.            |
     | db            | No           | The database which the query accesses. It can be specified by strings separated by commas (,). |
+    | plan_cpu_cost_range | No     | The estimated CPU cost range of the query.                   |
+    | plan_mem_cost_range | No     | The estimated memory cost range of the query.                |
 
 - `resource_limit`: Resource limits to be imposed on the resource group. You must specify resource limits using `"key"="value"` pairs. You can set multiple resource limits for a resource group.
 
