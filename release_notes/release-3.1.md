@@ -10,7 +10,7 @@
 - 异步物化视图支持通过 str2date 函数指定分区表达式，可用于外表分区类型为 STRING 类型数据的物化视图的增量刷新和查询改写。[#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
 - 新增会话变量 [`enable_query_tablet_affinity`](../reference/System_variable.md#enable_query_tablet_affinity25-及以后)，用于控制多次查询同一个 Tablet 时选择固定的同一个副本，默认关闭。[#33049](https://github.com/StarRocks/starrocks/pull/33049)
 - 新增工具函数 `is_role_in_session`，用于查看指定角色是否在当前会话下被激活，并且支持查看嵌套的角色被激活的情况。 [#32984](https://github.com/StarRocks/starrocks/pull/32984)
-- 增加资源组粒度的查询队列，需要通过全局变量 `enable_group_lelvel_query_queue` 开启（默认值为 `false`）。当全局粒度或资源组粒度任一资源消耗达到阈值时，会对查询进行排队，直到所有资源消耗都没有超过阈值，再执行查询。
+- 增加资源组粒度的查询队列，需要通过全局变量 `enable_group_level_query_queue` 开启（默认值为 `false`）。当全局粒度或资源组粒度任一资源消耗达到阈值时，会对查询进行排队，直到所有资源消耗都没有超过阈值，再执行查询。
   - 每个资源组可以设置 `concurrency_limit` 用于限制单个 BE 节点中并发查询上限。
   - 每个资源组可以设置 `max_cpu_cores` 用于限制单个 BE 节点可以使用的 CPU 上限。
 - 资源组分类器增加 `plan_cpu_cost_range` 和 `plan_mem_cost_range` 两个参数。
