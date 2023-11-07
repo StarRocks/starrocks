@@ -779,7 +779,7 @@ private:
         size_t j = element_start;
         while (j < element_end) {
             int k = j;
-            int l = 0;
+            i = target_start;
             while (i < target_end) {
                 bool null_target = false;
                 if constexpr (NullableTarget) {
@@ -805,16 +805,16 @@ private:
                         found = (elements_ptr[k] == targets_ptr[i]);
                     }
                 }
-                i++;
                 if (found) {
+                    i++;
                     k++;
-                    l++;
+                } else {
+                    break;
                 }
             }
-            if (l == target_end) {
+            if (i == target_end) {
                 return true;
             }
-            i = 0;
             j++;
         }
         return false;
