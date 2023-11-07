@@ -474,6 +474,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1222,6 +1224,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -2321,6 +2326,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
+    }
+
+    public long getCrossJoinCostPenalty() {
+        return crossJoinCostPenalty;
+    }
+
+    public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
+        this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
     // Serialize to thrift object
