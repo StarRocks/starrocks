@@ -17,20 +17,28 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ShowCreateTableStmtTest {
     private static ConnectContext ctx;
@@ -111,5 +119,23 @@ public class ShowCreateTableStmtTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
+    }
+
+    @Test
+    public void testHiveTableMapProperties() {
+        List<Column> fullSchema = new ArrayList<>();
+        fullSchema.add(new Column("id", Type.INT));
+        Map<String, String> props = new HashMap<>();
+        props.put("COLUMN_STATS_ACCURATE", "{\"BASIC_STATS\":\"true\"}");
+
+        HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx",
+                0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
+                props, HiveStorageFormat.ORC);
+        List<String> result = new ArrayList<>();
+        GlobalStateMgr.getDdlStmt(table, result, null, null, false, true);
+        Assert.assertEquals(result.size(), 1);
+        String value = result.get(0);
+        System.out.println(value);
+        Assert.assertTrue(value.contains("\"COLUMN_STATS_ACCURATE\"  =  \"{\\\"BASIC_STATS\\\":\\\"true\\\"}\""));
     }
 }
