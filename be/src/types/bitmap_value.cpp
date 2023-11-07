@@ -103,11 +103,7 @@ BitmapValue::BitmapValue(const BitmapValue& other)
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
-        if (other._type == BITMAP) {
-            _bitmap = other._bitmap;
-        } else {
-            _bitmap = nullptr;
-        }
+        this->_bitmap = other._bitmap;
         this->_set = other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
         this->_sv = other._sv;
         this->_type = other._type;
