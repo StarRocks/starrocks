@@ -2006,4 +2006,179 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView("mv_t1_v0");
         starRocksAssert.dropTable("t1_agg");
     }
+
+    /**
+     * MV rewrite should prefer the exact matched expression
+     */
+    @Test
+    public void testColumnPriority() throws Exception {
+        String createTable = "CREATE TABLE `t1_event_struct` (\n" +
+                "  `c1_event_date` date NOT NULL COMMENT \"\",\n" +
+                "  `c2_event` struct<name varchar(65533)> NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1_event_date`)\n" +
+                "PARTITION BY RANGE(`c1_event_date`)\n" +
+                "(PARTITION p1 VALUES [(\"2023-07-02\"), (\"2023-07-03\")),\n" +
+                "PARTITION p2 VALUES [(\"2023-07-03\"), (\"2023-07-04\")),\n" +
+                "PARTITION p3 VALUES [(\"2023-07-05\"), (\"2023-07-06\")))\n" +
+                "DISTRIBUTED BY HASH(`c1_event_date`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String createMv = "CREATE MATERIALIZED VIEW `mv_event_name_1` \n" +
+                "PARTITION BY (`c1_event_date`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `c1_event_date`, `c2_event`.`name` AS `name`, c2_event \n" +
+                "FROM `t1_event_struct`\n" +
+                "WHERE `t1_event_struct`.`c2_event`.`name` != 'haha';";
+
+        String tableName = "t1_event_struct";
+        String mvName = "mv_event_name_1";
+        starRocksAssert.withTable(createTable);
+        createAndRefreshMv("test", mvName, createMv);
+
+        // original expression
+        {
+            String query = "select c2_event.name from t1_event_struct " +
+                    "where c1_event_date = '2023-07-02' and c2_event.name = 'e1' ";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 4: c1_event_date = '2023-07-02', 5: name = 'e1'");
+        }
+
+        // function call
+        {
+            String query = "select upper(c2_event.name) from t1_event_struct " +
+                    "where c1_event_date = '2023-07-02' and c2_event.name = 'e1' ";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 4: c1_event_date = '2023-07-02', 5: name = 'e1'");
+        }
+
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    /**
+     * Put a not-equal predicate in the mv, and the query use an opposite predicate
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testExclusivePredicate_StructType() throws Exception {
+        String createTable = "CREATE TABLE `t1_event_struct` (\n" +
+                "  `c1_event_date` date NOT NULL COMMENT \"\",\n" +
+                "  `c2_event` struct<name varchar(65533)> NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1_event_date`)\n" +
+                "PARTITION BY RANGE(`c1_event_date`)\n" +
+                "(PARTITION p1 VALUES [(\"2023-07-02\"), (\"2023-07-03\")),\n" +
+                "PARTITION p2 VALUES [(\"2023-07-03\"), (\"2023-07-04\")),\n" +
+                "PARTITION p3 VALUES [(\"2023-07-05\"), (\"2023-07-06\")))\n" +
+                "DISTRIBUTED BY HASH(`c1_event_date`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String createMv = "CREATE MATERIALIZED VIEW `mv_filter_1` (`c1_event_date`, `name`)\n" +
+                "PARTITION BY (`c1_event_date`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1_event_struct`.`c1_event_date`, `t1_event_struct`.`c2_event`.`name` AS `name`\n" +
+                "FROM `t1_event_struct`\n" +
+                "WHERE `t1_event_struct`.`c2_event`.`name` != 'haha';";
+
+        String tableName = "t1_event_struct";
+        String mvName = "mv_filter_1";
+        starRocksAssert.withTable(createTable);
+        createAndRefreshMv("test", mvName, createMv);
+
+        // equal query 1
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name = 'hehe' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', 4: name = 'hehe'\n");
+        }
+        // equal query 2
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name = 'hehe' and c2_event.name != 'haha' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', 4: name = 'hehe'\n");
+        }
+
+        // not-equal query 1
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name <> 'haha' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', (4: name < 'haha') OR (4: name > 'haha')\n");
+        }
+        // not-equal query 2
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name <> 'e1' and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainWithout(mvName);
+        }
+
+        // in query
+        {
+            String query = "SELECT c1_event_date FROM t1_event_struct " +
+                    "WHERE c2_event.name in ('e1', 'e2', 'e3') and c1_event_date = '2023-07-02'";
+            starRocksAssert.query(query).explainContains(mvName,
+                    "PREDICATES: 3: c1_event_date = '2023-07-02', 4: name IN ('e1', 'e2', 'e3')\n");
+        }
+
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testExclusivePredicate_SimpleType() throws Exception {
+        String createTable = "CREATE TABLE `t1_event_struct` (\n" +
+                "  `c1_event_date` date NOT NULL COMMENT \"\",\n" +
+                "  `c2_event_name` string NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`c1_event_date`)\n" +
+                "PARTITION BY RANGE(`c1_event_date`)\n" +
+                "(PARTITION p1 VALUES [(\"2023-07-02\"), (\"2023-07-03\")),\n" +
+                "PARTITION p2 VALUES [(\"2023-07-03\"), (\"2023-07-04\")),\n" +
+                "PARTITION p3 VALUES [(\"2023-07-05\"), (\"2023-07-06\")))\n" +
+                "DISTRIBUTED BY HASH(`c1_event_date`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        String createMv = "CREATE MATERIALIZED VIEW `mv_filter_1` \n" +
+                "PARTITION BY (`c1_event_date`)\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `t1_event_struct`.`c1_event_date`, `t1_event_struct`.`c2_event_name` AS `name`\n" +
+                "FROM `t1_event_struct`\n" +
+                "WHERE `t1_event_struct`.`c2_event_name` != 'haha';";
+        String query = "SELECT c1_event_date FROM t1_event_struct " +
+                "WHERE c2_event_name = 'hehe' and c1_event_date = '2023-07-02'";
+
+        String tableName = "t1_event_struct";
+        String mvName = "mv_filter_1";
+        starRocksAssert.withTable(createTable);
+        createAndRefreshMv("test", mvName, createMv);
+        starRocksAssert.query(query).explainContains(mvName);
+
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
+    }
 }

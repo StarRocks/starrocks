@@ -62,17 +62,18 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             BinaryPredicateOperator predicate, PredicateExtractorContext context) {
         ScalarOperator left = predicate.getChild(0);
         ScalarOperator right = predicate.getChild(1);
-        if (left.isColumnRef() && right.isConstantRef()) {
+
+        if (left.hasColumnRef() && right.isConstantRef()) {
             ConstantOperator constant = (ConstantOperator) right;
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), constant));
             return new ColumnRangePredicate(left.cast(), rangeSet);
-        } else if (left.isConstantRef() && right.isColumnRef()) {
+        } else if (left.isConstantRef() && right.hasColumnRef()) {
             ConstantOperator constant = (ConstantOperator) left;
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), constant));
             return new ColumnRangePredicate(right.cast(), rangeSet);
-        } else if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
+        } else if (left.hasColumnRef() && right.hasColumnRef() && context.isAnd()) {
             if (predicate.getBinaryType().isEqual()) {
                 columnEqualityPredicates.add(predicate);
             } else {

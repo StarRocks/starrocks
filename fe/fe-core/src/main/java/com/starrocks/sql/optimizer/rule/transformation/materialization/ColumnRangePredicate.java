@@ -21,7 +21,6 @@ import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -33,13 +32,15 @@ import java.util.Objects;
 // eg: a > 10 and a < 100 => a -> (10, 100)
 // (a > 10 and a < 100) or (a > 1000 and a <= 10000) => a -> (10, 100) or (1000, 10000]
 public class ColumnRangePredicate extends RangePredicate {
-    private ColumnRefOperator columnRef;
+
+    // Must be an expression contains ColumnRef
+    private ScalarOperator columnRef;
     // the relation between each Range in RangeSet is 'or'
     private TreeRangeSet<ConstantOperator> columnRanges;
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
-    public ColumnRangePredicate(ColumnRefOperator columnRef, TreeRangeSet<ConstantOperator> columnRanges) {
+    public ColumnRangePredicate(ScalarOperator columnRef, TreeRangeSet<ConstantOperator> columnRanges) {
         this.columnRef = columnRef;
         this.columnRanges = columnRanges;
         List<Range<ConstantOperator>> canonicalRanges = new ArrayList<>();
@@ -54,7 +55,7 @@ public class ColumnRangePredicate extends RangePredicate {
         }
     }
 
-    public ColumnRefOperator getColumnRef() {
+    public ScalarOperator getColumnRef() {
         return columnRef;
     }
 
