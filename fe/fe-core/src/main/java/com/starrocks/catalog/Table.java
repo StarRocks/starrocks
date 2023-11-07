@@ -381,6 +381,11 @@ public class Table extends MetaObject implements Writable {
         return id == otherTable.id;
     }
 
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
     // return if this table is partitioned.
     // For OlapTable ture when is partitioned, or distributed by hash when no partition
     public boolean isPartitioned() {
