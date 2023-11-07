@@ -268,7 +268,9 @@ public class Optimizer {
             // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
             // projection before ReorderJoinRule's application, after that, we must separate operator's
             // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
             tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
             tree = new ReorderJoinRule().rewrite(tree, context);
