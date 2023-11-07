@@ -34,7 +34,6 @@ import com.aliyun.odps.table.arrow.accessor.ArrowTinyIntAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVarBinaryAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVarCharAccessor;
 import com.aliyun.odps.table.arrow.accessor.ArrowVectorAccessor;
-import com.aliyun.odps.table.utils.ConfigConstants;
 import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.DecimalTypeInfo;
 import com.aliyun.odps.type.MapTypeInfo;
@@ -60,6 +59,7 @@ import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -93,6 +93,7 @@ public class OdpsTypeUtils {
             case DECIMAL:
                 return parseDecimal((DecimalTypeInfo) column.getTypeInfo(), column.getName());
             case STRING:
+            case VARCHAR:
             case CHAR:
             case JSON:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.STRING);
@@ -116,6 +117,7 @@ public class OdpsTypeUtils {
 
     public static final int MAX_DECIMAL32_PRECISION = 9;
     public static final int MAX_DECIMAL64_PRECISION = 18;
+    public static final int MAX_DECIMAL128_PRECISION = 36;
 
     // convert decimal(x,y) to decimal
     private static ColumnType parseDecimal(DecimalTypeInfo type, String name) {
@@ -126,10 +128,11 @@ public class OdpsTypeUtils {
             typeName = "decimal32";
         } else if (precision <= MAX_DECIMAL64_PRECISION) {
             typeName = "decimal64";
-        } else {
+        } else if (precision <= MAX_DECIMAL128_PRECISION) {
             typeName = "decimal128";
+        } else {
+            typeName = "string";
         }
-
         ColumnType decimalType = new ColumnType(name, typeName);
         decimalType.setScale(scale);
         return decimalType;
@@ -200,11 +203,10 @@ public class OdpsTypeUtils {
             case DECIMAL:
                 return ((ArrowDecimalAccessor) dataAccessor).getDecimal(rowId);
             case STRING:
-                return new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId));
             case VARCHAR:
             case CHAR:
                 return new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId),
-                        ConfigConstants.DEFAULT_CHARSET);
+                        StandardCharsets.UTF_8);
             case BINARY:
                 return new Binary(((ArrowVarBinaryAccessor) dataAccessor).getBinary(rowId));
             case DATE:

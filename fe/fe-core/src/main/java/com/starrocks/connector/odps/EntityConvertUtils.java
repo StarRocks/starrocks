@@ -39,6 +39,7 @@ public class EntityConvertUtils {
 
     public static final int MAX_DECIMAL32_PRECISION = 9;
     public static final int MAX_DECIMAL64_PRECISION = 18;
+    public static final int MAX_DECIMAL128_PRECISION = 38;
 
     public static Type convertType(TypeInfo typeInfo) {
         switch (typeInfo.getOdpsType()) {
@@ -55,6 +56,10 @@ public class EntityConvertUtils {
             case DECIMAL:
                 DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
                 int precision = decimalTypeInfo.getPrecision();
+                // odps decimal v1 may overflow, use string type
+                if (precision > MAX_DECIMAL128_PRECISION) {
+                    return ScalarType.createDefaultExternalTableString();
+                }
                 PrimitiveType type;
                 if (precision <= MAX_DECIMAL32_PRECISION) {
                     type = PrimitiveType.DECIMAL32;
