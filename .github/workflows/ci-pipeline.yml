@@ -337,7 +337,7 @@ jobs:
           level: error
 
   sonarcloud-fe-checker:
-    runs-on: [self-hosted, sonarcloud]
+    runs-on: ubuntu-latest
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true' && github.repository == 'StarRocks/starrocks'
     name: FE Sonarcloud Check
@@ -347,18 +347,34 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: clean
-        run: |
-          rm -rf ${{ github.workspace }}
-          mkdir -p ${{ github.workspace }}
-
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
       - name: Checkout PR
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh && ./bin/checkout.sh
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: 11
+          distribution: 'adopt'
 
       - name: Cache SonarCloud packages
         uses: actions/cache@v3
@@ -367,28 +383,31 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
+      - name: Setup thrift
+        uses: dodopizza/setup-thrift@v1
+        with:
+          version: 0.13.0
+
       - name: Analyze FE
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
         run: |
-          set -x
-          export JAVA_HOME=/var/local/env/jdk17.0.8;
-          export PATH=$JAVA_HOME/bin:/var/local/env/tools/maven/bin:$PATH;
-          export MAVEN_OPTS=-D"maven.repo.local"=/var/local/env/.m2/repository;
+          thrift --version
+          whereis thrift
           export STARROCKS_HOME=${{ github.workspace }}
           source env.sh
           mkdir -p thirdparty/installed/bin/
-          cd thirdparty/installed/bin/ && ln -s /var/local/env/tools/thrift_0.13/thrift thrift
+          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          sed -i 's#<tasks>#<target>#g' fe-core/pom.xml
-          sed -i 's#</tasks>#</target>#g' fe-core/pom.xml
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
-
-      - name: clean
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*
 
   fe-ut:
     runs-on: [self-hosted, normal]
