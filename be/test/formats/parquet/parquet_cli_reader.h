@@ -41,17 +41,14 @@ public:
         if (_file == nullptr) {
             return Status::InternalError(fmt::format("File {} not found", _filepath));
         }
-        std::shared_ptr<FileMetaData> file_metadata;
-        {
-            std::shared_ptr<FileReader> reader =
-                    std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
-            HdfsScannerContext ctx;
-            HdfsScanStats stats;
-            ctx.stats = &stats;
-            ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-            RETURN_IF_ERROR(reader->init(&ctx));
-            file_metadata = reader->get_file_metadata();
-        }
+        std::shared_ptr<FileReader> reader =
+                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+        HdfsScannerContext ctx;
+        HdfsScanStats stats;
+        ctx.stats = &stats;
+        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        RETURN_IF_ERROR(reader->init(&ctx));
+        FileMetaData* file_metadata = reader->get_file_metadata();
 
         std::vector<SlotDesc> slot_descs;
         std::vector<TypeDescriptor> column_types;
@@ -73,7 +70,7 @@ public:
         _scanner_ctx->scan_ranges.emplace_back(_create_scan_range(_filepath));
 
         {
-            _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
+            _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
             RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
         }
         return Status::OK();

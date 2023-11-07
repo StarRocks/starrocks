@@ -93,6 +93,11 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+<<<<<<< HEAD
+=======
+    bool _enable_dynamic_prune_scan_range = true;
+    bool _use_file_metacache = false;
+>>>>>>> d1e90dec9e ([Enhancement] Support parquet footer cache. (#32799))
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
