@@ -11,6 +11,7 @@ on:
 jobs:
   sonarcloud-fe:
     runs-on: [self-hosted, sonarcloud]
+    if: github.repository == 'StarRocks/starrocks'
     steps:
       - name: clean
         run: |
