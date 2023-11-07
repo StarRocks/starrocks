@@ -1207,19 +1207,6 @@ build_libdeflate() {
 
 #clucene
 build_clucene() {
-    if [[ "$(uname -m)" == 'x86_64' ]]; then
-        USE_AVX2="${USE_AVX2:-1}"
-    else
-        USE_AVX2="${USE_AVX2:-0}"
-    fi
-    if [[ -z "${USE_BTHREAD_SCANNER}" ]]; then
-        USE_BTHREAD_SCANNER='OFF'
-    fi
-    if [[ ${USE_BTHREAD_SCANNER} == "ON" ]]; then
-        USE_BTHREAD=1
-    else
-        USE_BTHREAD=0
-    fi
 
     check_if_source_exist "${CLUCENE_SOURCE}"
     cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
@@ -1237,8 +1224,6 @@ build_clucene() {
         -DZLIB_ROOT="$TP_INSTALL_DIR" \
         -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing" \
         -DUSE_STAT64=0 \
-        -DUSE_AVX2="${USE_AVX2}" \
-        -DUSE_BTHREAD="${USE_BTHREAD}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_CONTRIBS_LIB=ON ..
     ${BUILD_SYSTEM} -j "${PARALLEL}"
