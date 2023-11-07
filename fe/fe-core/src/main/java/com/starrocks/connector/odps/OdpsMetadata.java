@@ -52,7 +52,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
@@ -105,6 +104,7 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
+        // TODO: perhaps not good to support users to fetch whole tables?
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         for (Partition partition : odps.tables().get(databaseName, tableName).getPartitions()) {
             builder.add(partition.getPartitionSpec().toString(false, true));
@@ -114,19 +114,27 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
-                                           List<Optional<String>> partitionValues) {
-        List<String> partitionColumns =
-                odps.tables().get(databaseName, tableName).getSchema().getPartitionColumns().stream()
-                        .map(com.aliyun.odps.Column::getName).collect(Collectors.toList());
-        PartitionSpec partitionSpec = new PartitionSpec();
-        for (int i = 0; i < partitionColumns.size(); i++) {
-            if (partitionValues.get(i).isPresent()) {
-                partitionSpec.set(partitionColumns.get(i), partitionValues.get(i).get());
-            } else {
-                break;
+                                                  List<Optional<String>> partitionValues) {
+        List<Partition> partitions = odps.tables().get(databaseName, tableName).getPartitions();
+        List<String> keys = new ArrayList<>(partitions.get(0).getPartitionSpec().keys());
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        for (Partition partition : partitions) {
+            PartitionSpec partitionSpec = partition.getPartitionSpec();
+            boolean present = true;
+            for (int index = 0; index < keys.size(); index++) {
+                String value = keys.get(index);
+                if (partitionValues.get(index).isPresent() && partitionSpec.get(value) != null) {
+                    if (!partitionSpec.get(value).equals(partitionValues.get(index).get())) {
+                        present = false;
+                        break;
+                    }
+                }
+            }
+            if (present) {
+                builder.add(partitionSpec.toString(false, true));
             }
         }
-        return Collections.singletonList(partitionSpec.toString(false, true));
+        return builder.build();
     }
 
     @Override
