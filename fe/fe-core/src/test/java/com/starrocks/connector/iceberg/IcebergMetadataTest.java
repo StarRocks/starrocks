@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -803,5 +804,25 @@ public class IcebergMetadataTest extends TableTestBase {
         mockedNativeTableF.refresh();
         List<PartitionKey> partitionKeys = metadata.getPrunedPartitions(icebergTable, null, -1);
         Assert.assertEquals("19660", partitionKeys.get(0).getKeys().get(0).getStringValue());
+    }
+
+    @Test
+    public void testIcebergFilter() {
+        List<ScalarOperator> arguments = new ArrayList<>(2);
+        arguments.add(ConstantOperator.createVarchar("day"));
+        arguments.add(new ColumnRefOperator(2, Type.INT, "date_col", true));
+        ScalarOperator callOperator = new CallOperator("date_trunc", Type.DATE, arguments);
+
+        List<ScalarOperator> newArguments = new ArrayList<>(2);
+        newArguments.add(ConstantOperator.createVarchar("day"));
+        newArguments.add(new ColumnRefOperator(22, Type.INT, "date_col", true));
+        ScalarOperator newCallOperator = new CallOperator("date_trunc", Type.DATE, newArguments);
+
+        IcebergFilter filter = IcebergFilter.of("db", "table", 1L, callOperator);
+        IcebergFilter newFilter = IcebergFilter.of("db", "table", 1L, newCallOperator);
+        Assert.assertEquals(filter, newFilter);
+
+        Assert.assertEquals(newFilter, IcebergFilter.of("db", "table", 1L, newCallOperator));
+        Assert.assertNotEquals(newFilter, IcebergFilter.of("db", "table", 1L, null));
     }
 }
