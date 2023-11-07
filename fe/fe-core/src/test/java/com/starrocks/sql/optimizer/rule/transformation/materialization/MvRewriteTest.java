@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,7 +36,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -1952,7 +1952,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
 
         {
-            for (int i = 0; i < 1010; i++) {
+            long testSize = Config.mv_plan_cache_max_size + 1;
+            for (int i = 0; i < testSize; i++) {
                 String mvName = "plan_cache_mv_" + i;
                 String mvSql = String.format("create materialized view %s" +
                         " distributed by hash(v1) as SELECT t0.v1 as v1," +
@@ -1966,7 +1967,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
                 Assert.assertNotNull(planContext);
             }
-            for (int i = 0; i < 1010; i++) {
+            for (int i = 0; i < testSize; i++) {
                 String mvName = "plan_cache_mv_" + i;
                 starRocksAssert.dropMaterializedView(mvName);
             }
@@ -1974,7 +1975,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore("flaky")
     public void testMVAggregateTable() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `t1_agg` (\n" +
                 "  `c_1_0` datetime NULL COMMENT \"\",\n" +

@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -85,7 +86,12 @@ public class MvRewriteTestBase {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
         FeConstants.enablePruneEmptyOutputScan = false;
+
+        // build a small cache for test
+        Config.mv_plan_cache_max_size = 10;
+        CachingMvPlanContextBuilder.getInstance().rebuildCache();
 
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
