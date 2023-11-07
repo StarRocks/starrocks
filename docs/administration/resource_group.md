@@ -62,6 +62,10 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   This parameter specifies the upper limit of concurrent queries in a resource group. It is used to avoid system overload caused by too many concurrent queries. This parameter takes effect only when it is set greater than 0. Default: 0.
 
+- `max_cpu_cores`
+
+  The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
+
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
 
 - `big_query_cpu_second_limit`: This parameter specifies the CPU upper time limit for a big query on a single BE. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
