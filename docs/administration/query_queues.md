@@ -65,7 +65,7 @@ You can set the thresholds that trigger query queues via the following global se
 
 ### Specify resource thresholds for resource group-level query queues
 
-From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_limit`) and CPU core limits (`max_cpu_cores`) for each resource group. When a query is initiated, if any of the resource consumptions exceed the resource threshold at either the global or resource group level, the query will be placed in queue until all resource consumptions are within the threshold.
+From v3.1.4 onwards, you can set individual concurrency limits (`concurrency_limit`) and CPU core limits (`max_cpu_cores`) when creating a resource group. When a query is initiated, if any of the resource consumptions exceed the resource threshold at either the global or resource group level, the query will be placed in queue until all resource consumptions are within the threshold.
 
 | **Variable**        | **Default** | **Description**                                              |
 | ------------------- | ----------- | ------------------------------------------------------------ |
