@@ -2,7 +2,7 @@
 
 ## Description
 
-Shows the usage information of resource groups.
+Shows the usage information of resource groups. This feature is supported from v3.1.4 onwards.
 
 ## Syntax
 
