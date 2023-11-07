@@ -81,6 +81,7 @@ import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
+import com.starrocks.thrift.TQueryQueueOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TScanRangeLocation;
