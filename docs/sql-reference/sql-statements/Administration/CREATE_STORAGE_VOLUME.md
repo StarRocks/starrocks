@@ -14,8 +14,8 @@ A storage volume consists of the properties and credential information of the re
 
 ```SQL
 CREATE STORAGE VOLUME [IF NOT EXISTS] <storage_volume_name>
-TYPE = S3
-LOCATIONS = ('<s3_path>')
+TYPE = { S3 | AZBLOB }
+LOCATIONS = ('<remote_storage_path>')
 [ COMMENT '<comment_string>' ]
 PROPERTIES
 ("key" = "value",...)
@@ -165,20 +165,18 @@ PROPERTIES
 Example 1: Create a storage volume `my_s3_volume` for the AWS S3 bucket `defaultbucket`, use the IAM user-based credential (Access Key and Secret Key) to access S3, and enable it.
 
 ```SQL
-MySQL > CREATE STORAGE VOLUME my_s3_volume
-    -> TYPE = S3
-    -> LOCATIONS = ("s3://defaultbucket/test/")
-    -> PROPERTIES
-    -> (
-    ->     "enabled" = "true",
-    ->     "aws.s3.region" = "us-west-2",
-    ->     "aws.s3.endpoint" = "https://s3.us-west-2.amazonaws.com",
-    ->     "aws.s3.use_aws_sdk_default_behavior" = "false",
-    ->     "aws.s3.use_instance_profile" = "false",
-    ->     "aws.s3.access_key" = "xxxxxxxxxx",
-    ->     "aws.s3.secret_key" = "yyyyyyyyyy"
-    -> );
-Query OK, 0 rows affected (0.05 sec)
+CREATE STORAGE VOLUME my_s3_volume
+TYPE = S3
+LOCATIONS = ("s3://defaultbucket/test/")
+PROPERTIES
+(
+    "aws.s3.region" = "us-west-2",
+    "aws.s3.endpoint" = "https://s3.us-west-2.amazonaws.com",
+    "aws.s3.use_aws_sdk_default_behavior" = "false",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.access_key" = "xxxxxxxxxx",
+    "aws.s3.secret_key" = "yyyyyyyyyy"
+);
 ```
 
 ## Relevant SQL statements
