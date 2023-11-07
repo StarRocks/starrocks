@@ -198,6 +198,10 @@ public class AuthorizationMgr {
                     Collections.singletonList(PrivilegeType.NODE),
                     null,
                     false);
+
+            // GRANT WAREHOUSE ON SYSTEM
+            ObjectType t = ObjectTypeEPack.WAREHOUSE;
+            initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 4. user_admin
@@ -210,7 +214,7 @@ public class AuthorizationMgr {
                     Collections.singletonList(PrivilegeType.GRANT),
                     null,
                     false);
-            ObjectType t = ObjectType.USER;
+            t = ObjectType.USER;
             initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             rolePrivilegeCollection.disableMutable(); // not mutable
 
