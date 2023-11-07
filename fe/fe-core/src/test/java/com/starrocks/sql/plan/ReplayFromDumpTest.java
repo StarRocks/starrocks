@@ -334,7 +334,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("33:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan, plan.contains("35:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
