@@ -227,6 +227,9 @@ public class ScalarOperatorToIcebergExpr {
                         return literalValue;
                     }).collect(Collectors.toList());
 
+            // It should not be pushed down if there is an implicit cast
+            // TODO: Some functions within ScalarOperatorFunctions could be computed on frontends.
+            // Maybe we can obtain the result first and then convert it into an Iceberg expression.
             if (literalValues.stream().anyMatch(Objects::isNull)) {
                 return null;
             }

@@ -16,9 +16,11 @@ create table ice_tbl_${uuid0} (
 insert into ice_tbl_${uuid0} values ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000),
   ('3e82e36e56718dc4abc1168d21ec91ab', 2000),
   ('abc', 2000),
+  (NULL, 2000),
   ('ab1d8cf2a2c0e14fa89d8117792be6eb6f', 2001),
   ('3e82e36e56718dc4abc1168d21ec91ab', 2001),
-  ('abc', 2001);
+  ('abc', 2001),
+  (NULL, 2001);
 -- result:
 -- !result
 select col_str from ice_tbl_${uuid0} where col_int=2000 and col_str not in (md5('1d8cf2a2c0e14fa89d8117792be6eb6f'), 'abc');
@@ -48,6 +50,18 @@ select col_str from ice_tbl_${uuid0} where col_int=2000 and col_str in ('1d8cf2a
 -- result:
 1d8cf2a2c0e14fa89d8117792be6eb6f
 -- !result
+select col_str from ice_tbl_${uuid0} where col_int=2000 and (col_str not in (md5('1d8cf2a2c0e14fa89d8117792be6eb6f'), 'abc') or col_str is null);
+-- result:
+1d8cf2a2c0e14fa89d8117792be6eb6f
+None
+-- !result
+select col_str from ice_tbl_${uuid0} where col_int=2000 and (col_str in ('1d8cf2a2c0e14fa89d8117792be6eb6f', md5('abc')) or col_str is null);
+-- result:
+1d8cf2a2c0e14fa89d8117792be6eb6f
+None
+-- !result
+drop table ice_tbl_${uuid0};
+drop database ice_db_${uuid0};
 drop catalog ice_cat_${uuid0};
 -- result:
 -- !result
