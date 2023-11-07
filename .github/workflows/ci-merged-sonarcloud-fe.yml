@@ -10,7 +10,7 @@ on:
 
 jobs:
   sonarcloud-fe:
-    runs-on: [self-hosted, normal]
+    runs-on: [self-hosted, sonarcloud]
     steps:
       - name: clean
         run: |
