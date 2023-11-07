@@ -170,7 +170,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
     if (_keys_type == PRIMARY_KEYS) {
         std::unique_ptr<Schema> schema_without_full_row_column;
         if (_vectorized_schema->field_names().back() == "__row") {
-            DCHECK_EQ(chunk.num_columns(), _vectorized_schema->num_fields() - 1);
+            DCHECK_GE(chunk.num_columns(), _vectorized_schema->num_fields() - 1);
             std::vector<ColumnId> cids(_vectorized_schema->num_fields() - 1);
             for (int i = 0; i < _vectorized_schema->num_fields() - 1; i++) {
                 cids[i] = i;
@@ -182,7 +182,9 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
             (void)row_encoder->encode_chunk_to_full_row_column(*schema_without_full_row_column, chunk,
                                                                full_row_col.get());
         } else {
-            DCHECK_EQ(chunk.num_columns(), _vectorized_schema->num_fields());
+            // when doing schema change, the chunk has shadow columns,
+            // so the columns in the chunk will be more than the fields in the schema.
+            DCHECK_GE(chunk.num_columns(), _vectorized_schema->num_fields());
         }
     }
 
