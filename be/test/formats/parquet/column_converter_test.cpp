@@ -76,7 +76,7 @@ protected:
                const std::string& expected_value, const size_t expected_rows, bool is_failed = false) {
         auto file = _create_file(filepath);
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                        std::filesystem::file_size(filepath));
+                                                        std::filesystem::file_size(filepath), 0);
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
