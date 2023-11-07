@@ -2692,21 +2692,21 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
-    public Boolean getUseLightSchemaChange() {
+    public Boolean getUseFastSchemaEvolution() {
         if (tableProperty != null) {
-            return tableProperty.getUseSchemaLightChange();
+            return tableProperty.getUseFastSchemaEvolution();
         }
         // property is set false by default
         return false;
     }
 
-    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
+    public void setUseFastSchemaEvolution(boolean useFastSchemaEvolution) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_fast_schema_evolution,
-                Boolean.valueOf(useLightSchemaChange).toString());
-        tableProperty.buildUseLightSchemaChange();
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
+                Boolean.valueOf(useFastSchemaEvolution).toString());
+        tableProperty.buildUseFastSchemaEvolution();
     }
 
 

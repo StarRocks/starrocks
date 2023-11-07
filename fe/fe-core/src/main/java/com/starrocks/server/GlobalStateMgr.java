@@ -2768,10 +2768,10 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // show lightSchemaChange only when it is set true
-                if (olapTable.getUseLightSchemaChange()) {
-                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_fast_schema_evolution).append("\" = \"");
-                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                // show fastSchemaEvolution only when it is set true
+                if (olapTable.getUseFastSchemaEvolution()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).append("\" = \"");
+                    sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
                 }
 
                 // storage media
