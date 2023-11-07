@@ -2455,7 +2455,6 @@ public class SchemaChangeHandler extends AlterHandler {
         Map<Long, LinkedList<Column>> indexSchemaMap = info.getIndexSchemaMap();
         List<Index> indexes = info.getIndexes();
         long jobId = info.getJobId();
-        long txnId = info.getTxnId();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
@@ -2464,7 +2463,7 @@ public class SchemaChangeHandler extends AlterHandler {
         OlapTable olapTable = (OlapTable) table;
         try {
             db.writeLock();
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, txnId, true);
+            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(), true);
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);
