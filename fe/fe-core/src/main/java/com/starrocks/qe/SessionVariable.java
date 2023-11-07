@@ -536,6 +536,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_NDV = "enable_iceberg_ndv";
 
+    public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
     public static final String CHOOSE_EXECUTE_INSTANCES_MODE = "choose_execute_instances_mode";
@@ -1151,6 +1153,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableParallelMerge(boolean enableParallelMerge) {
         this.enableParallelMerge = enableParallelMerge;
+    }
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
+    private boolean enableIcebergColumnStatistics = true;
+
+    public boolean enableIcebergColumnStatistics() {
+        return enableIcebergColumnStatistics;
+    }
+
+    public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
+        this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
     }
 
     public boolean isEnableIcebergNdv() {
