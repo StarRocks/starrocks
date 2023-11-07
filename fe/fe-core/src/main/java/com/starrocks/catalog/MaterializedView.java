@@ -272,6 +272,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         public void setLastRefreshTime(long lastRefreshTime) {
             this.lastRefreshTime = lastRefreshTime;
         }
+
+        public MvRefreshScheme copy() {
+            MvRefreshScheme res = new MvRefreshScheme();
+            res.type = this.type;
+            res.lastRefreshTime = this.lastRefreshTime;
+            if (this.asyncRefreshContext != null) {
+                res.asyncRefreshContext = this.asyncRefreshContext.copy();
+            }
+            return res;
+        }
     }
 
     @SerializedName(value = "dbId")
@@ -595,6 +605,26 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         return new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
                 fullSchema.size(), 0, getName(), "");
+    }
+
+    @Override
+    public void copyOnlyForQuery(OlapTable olapTable) {
+        super.copyOnlyForQuery(olapTable);
+        MaterializedView mv = (MaterializedView) olapTable;
+        mv.dbId = this.dbId;
+        mv.active = this.active;
+        mv.planMode = this.planMode;
+        mv.refreshScheme = this.refreshScheme.copy();
+        mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
+        if (this.baseTableIds != null) {
+            mv.baseTableIds = Sets.newHashSet(this.baseTableIds);
+        }
+        if (this.baseTableInfos != null) {
+            mv.baseTableInfos = Lists.newArrayList(this.baseTableInfos);
+        }
+        if (this.partitionRefTableExprs != null) {
+            mv.partitionRefTableExprs = Lists.newArrayList(this.partitionRefTableExprs);
+        }
     }
 
     @Override
