@@ -42,6 +42,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -193,13 +194,15 @@ public class DynamicPartitionUtil {
             return false;
         }
 
-        String timeUnit = properties.get(DynamicPartitionProperty.TIME_UNIT);
-        String prefix = properties.get(DynamicPartitionProperty.PREFIX);
-        String start = properties.get(DynamicPartitionProperty.START);
-        String timeZone = properties.get(DynamicPartitionProperty.TIME_ZONE);
-        String end = properties.get(DynamicPartitionProperty.END);
-        String enable = properties.get(DynamicPartitionProperty.ENABLE);
-        String buckets = properties.get(DynamicPartitionProperty.BUCKETS);
+        Map<String, String> checkProp = new CaseInsensitiveMap<>(properties);
+
+        String timeUnit = checkProp.get(DynamicPartitionProperty.TIME_UNIT);
+        String prefix = checkProp.get(DynamicPartitionProperty.PREFIX);
+        String start = checkProp.get(DynamicPartitionProperty.START);
+        String timeZone = checkProp.get(DynamicPartitionProperty.TIME_ZONE);
+        String end = checkProp.get(DynamicPartitionProperty.END);
+        String enable = checkProp.get(DynamicPartitionProperty.ENABLE);
+        String buckets = checkProp.get(DynamicPartitionProperty.BUCKETS);
 
         if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
                 && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
