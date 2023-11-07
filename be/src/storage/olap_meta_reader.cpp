@@ -34,8 +34,6 @@ OlapMetaReader::OlapMetaReader() : MetaReader() {}
 Status OlapMetaReader::_init_params(const OlapMetaReaderParams& read_params) {
     read_params.check_validation();
     _tablet = read_params.tablet;
-    _version = read_params.version;
-    _chunk_size = read_params.chunk_size;
     _params = read_params;
 
     return Status::OK();
@@ -121,7 +119,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
     Status acquire_rowset_st;
     {
         std::shared_lock l(tablet->get_header_lock());
-        acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &_rowsets);
+        acquire_rowset_st = tablet->capture_consistent_rowsets(_params.version, &_rowsets);
     }
 
     if (!acquire_rowset_st.ok()) {
@@ -144,7 +142,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
 }
 
 Status OlapMetaReader::do_get_next(ChunkPtr* result) {
-    const uint32_t chunk_capacity = _chunk_size;
+    const uint32_t chunk_capacity = _params.chunk_size;
     uint16_t chunk_start = 0;
 
     *result = std::make_shared<Chunk>();
