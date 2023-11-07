@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -1227,6 +1228,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testJoinPredicatePushdown() throws Exception {
+        List<String> tables = ImmutableList.of("pushdown_t1", "pushdown_t2");
         cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
                 "    `c0` string,\n" +
                 "    `c1` string,\n" +
@@ -1287,10 +1289,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "   ;";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv1");
+        starRocksAssert.dropTables(tables);
     }
 
     @Test
     public void testJoinPredicatePushdown1() throws Exception {
+        List<String> tables = ImmutableList.of("pushdown_t1", "pushdown_t2");
         cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
                 "    `c0` string,\n" +
                 "    `c1` string,\n" +
@@ -1350,6 +1354,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
+        starRocksAssert.dropTables(tables);
     }
 
     @Test

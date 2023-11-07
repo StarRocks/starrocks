@@ -93,6 +93,9 @@ public class MvRewriteTestBase {
         Config.mv_plan_cache_max_size = 10;
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
 
+        // Use sync analyze
+        Config.mv_auto_analyze_async = false;
+
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         cluster = PseudoCluster.getInstance();

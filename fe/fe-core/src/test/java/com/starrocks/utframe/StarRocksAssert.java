@@ -286,6 +286,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
+        for (String tableName : tableNames) {
+            dropTable(tableName);
+        }
+        return this;
+    }
+
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
