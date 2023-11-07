@@ -711,12 +711,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
-        data_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0,
-                                                   _probe_state->count);
+        data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
         // When left outer join is executed,
         // build_index[i] Equal to 0 means it is not found in the hash table,
-        // but append_selective_shallow_copy() has set item of NullColumn to not null
+        // but append_selective() has set item of NullColumn to not null
         // so NullColumn needs to be set back to null
         auto null_column = NullColumn::create(_probe_state->count, 0);
         size_t end = _probe_state->count;
@@ -729,8 +728,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
         auto dest_column = src_column->clone_empty();
-        dest_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0,
-                                                   _probe_state->count);
+        dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -740,11 +738,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const Co
                                                                         const SlotDescriptor* slot) {
     ColumnPtr dest_column = src_column->clone_empty();
 
-    dest_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
     // When left outer join is executed,
     // build_index[i] Equal to 0 means it is not found in the hash table,
-    // but append_selective_shallow_copy() has set item of NullColumn to not null
+    // but append_selective() has set item of NullColumn to not null
     // so NullColumn needs to be set back to null
     auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
     size_t end = _probe_state->count;
