@@ -38,7 +38,7 @@ ARG MAVEN_OPTS
 ARG BUILD_TYPE
 COPY . /build/starrocks
 WORKDIR /build/starrocks
-RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --use-staros --clean -j `nproc`
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --enable-shared-data --clean -j `nproc`
 
 
 FROM busybox:latest
