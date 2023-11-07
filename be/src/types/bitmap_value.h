@@ -93,7 +93,37 @@ public:
     // Construct a bitmap from given elements.
     explicit BitmapValue(const std::vector<uint64_t>& bits);
 
-    void add(uint64_t value);
+    // It is recommended to use batch writing to improve performance, such as add_many.
+    void add(uint64_t value) {
+        switch (_type) {
+        case EMPTY:
+            _sv = value;
+            _type = SINGLE;
+            break;
+        case SINGLE:
+            //there is no need to convert the type if two variables are equal
+            if (_sv == value) {
+                break;
+            }
+
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            _set->insert(_sv);
+            _set->insert(value);
+            _type = SET;
+            break;
+        case BITMAP:
+            _copy_on_write();
+            _bitmap->add(value);
+            break;
+        case SET:
+            if (_set->size() < 32) {
+                _set->insert(value);
+            } else {
+                _from_set_to_bitmap();
+                _bitmap->add(value);
+            }
+        }
+    }
 
     void add_many(size_t n_args, const uint32_t* vals);
 
@@ -168,18 +198,26 @@ public:
                                             BitmapValue* ret_bitmap) const;
 
     BitmapDataType type() const { return _type; }
-    bool is_shared() const { return _shared; }
+    bool is_shared() const { return _bitmap.use_count() > 1; }
 
 private:
     void _from_bitmap_to_smaller_type();
     void _from_set_to_bitmap();
-    void _copy_on_write();
+    inline void _copy_on_write() {
+        if (UNLIKELY(_bitmap == nullptr)) {
+            _bitmap = std::make_shared<detail::Roaring64Map>();
+            return;
+        }
+
+        if (UNLIKELY(_bitmap.use_count() > 1)) {
+            _bitmap = std::make_shared<detail::Roaring64Map>(*_bitmap);
+        }
+    }
 
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
-    mutable bool _shared = false;
 };
 } // namespace starrocks
