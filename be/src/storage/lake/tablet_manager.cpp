@@ -41,6 +41,7 @@
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
@@ -588,6 +589,11 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
 void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {
     auto cache_key = global_schema_cache_key(schema_id);
     _metacache->cache_tablet_schema(cache_key, std::move(schema), 0);
+}
+
+StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
+    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
+    return VersionedTablet(this, std::move(metadata));
 }
 
 } // namespace starrocks::lake

@@ -192,6 +192,7 @@ add_library(Storage STATIC
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
+    lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp

@@ -43,6 +43,7 @@ using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
 class CompactionScheduler;
 class Metacache;
+class VersionedTablet;
 
 class TabletManager {
     friend class Tablet;
@@ -64,6 +65,8 @@ public:
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
     [[nodiscard]] Status delete_tablet(int64_t tablet_id);
+
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
