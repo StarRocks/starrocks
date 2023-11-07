@@ -841,19 +841,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
-<<<<<<< HEAD
-        for (Replica replica : replicas) {
-            sb.append(String.format("%d:%d/%d/%d/%d:%s,", replica.getBackendId(), replica.getVersion(),
-                    replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
-                    replica.getState()));
-=======
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                sb.append(String.format("%d:%d/%d/%d/%d:%s:%s,", replica.getBackendId(), replica.getVersion(),
+                sb.append(String.format("%d:%d/%d/%d/%d:%s,", replica.getBackendId(), replica.getVersion(),
                         replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
-                        replica.getState(), getReplicaBackendState(replica.getBackendId())));
+                        replica.getState()));
             }
->>>>>>> 895dfc17fd ([BugFix] Remove the db lock when releasing schedule resource (#34237))
         }
         return sb.toString();
     }
