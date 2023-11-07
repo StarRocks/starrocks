@@ -796,7 +796,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildUseLightSchemaChange() {
         useSchemaLightChange = Boolean.parseBoolean(
-            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE, "false"));
+            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_fast_schema_evolution, "false"));
         return this;
     }
 

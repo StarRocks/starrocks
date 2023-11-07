@@ -2704,7 +2704,7 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE,
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_fast_schema_evolution,
                 Boolean.valueOf(useLightSchemaChange).toString());
         tableProperty.buildUseLightSchemaChange();
     }

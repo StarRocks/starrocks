@@ -197,7 +197,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
 
     // light schema change
-    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
+    public static final String PROPERTIES_USE_fast_schema_evolution = "fast_schema_evolution";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -602,19 +602,19 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return Config.allow_default_light_schema_change;
+            return Config.allow_default_fast_schema_evolution;
         }
-        String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        String value = properties.get(PROPERTIES_USE_fast_schema_evolution);
         if (null == value) {
-            return Config.allow_default_light_schema_change;
+            return Config.allow_default_fast_schema_evolution;
         }
-        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        properties.remove(PROPERTIES_USE_fast_schema_evolution);
         if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
             return true;
         } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
             return false;
         }
-        throw new AnalysisException(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE
+        throw new AnalysisException(PROPERTIES_USE_fast_schema_evolution
             + " must be `true` or `false`");
     }
 
