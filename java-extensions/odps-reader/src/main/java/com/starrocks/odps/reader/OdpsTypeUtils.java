@@ -105,11 +105,9 @@ public class OdpsTypeUtils {
             case TIMESTAMP:
                 return new ColumnType(column.getName(), ColumnType.TypeValue.DATETIME);
             case MAP:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.MAP);
             case STRUCT:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.STRUCT);
             case ARRAY:
-                return new ColumnType(column.getName(), ColumnType.TypeValue.ARRAY);
+                return new ColumnType(column.getName(), column.getTypeInfo().getTypeName());
             default:
                 throw new UnsupportedOperationException("Datatype not supported");
         }

@@ -50,7 +50,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
@@ -108,6 +110,23 @@ public class OdpsMetadata implements ConnectorMetadata {
             builder.add(partition.getPartitionSpec().toString(false, true));
         }
         return builder.build();
+    }
+
+    @Override
+    public List<String> listPartitionNamesByValue(String databaseName, String tableName,
+                                           List<Optional<String>> partitionValues) {
+        List<String> partitionColumns =
+                odps.tables().get(databaseName, tableName).getSchema().getPartitionColumns().stream()
+                        .map(com.aliyun.odps.Column::getName).collect(Collectors.toList());
+        PartitionSpec partitionSpec = new PartitionSpec();
+        for (int i = 0; i < partitionColumns.size(); i++) {
+            if (partitionValues.get(i).isPresent()) {
+                partitionSpec.set(partitionColumns.get(i), partitionValues.get(i).get());
+            } else {
+                break;
+            }
+        }
+        return Collections.singletonList(partitionSpec.toString(false, true));
     }
 
     @Override

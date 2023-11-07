@@ -14,6 +14,7 @@
 
 package com.starrocks.odps.reader;
 
+import com.aliyun.odps.data.Binary;
 import com.aliyun.odps.data.Struct;
 import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.MapTypeInfo;
@@ -88,7 +89,8 @@ public class OdpsColumnValue implements ColumnValue {
 
     @Override
     public byte[] getBytes() {
-        return new byte[0];
+        Binary b = (Binary) fieldData;
+        return b.data();
     }
 
     @Override
