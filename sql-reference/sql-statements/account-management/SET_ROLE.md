@@ -4,6 +4,8 @@
 
 在当前会话下，激活当前用户拥有权限的角色。激活后，用户可以使用该角色进行相关操作。
 
+您可以使用 `select is_role_in_session("<role_name>")` 来检查指定角色在当前会话下是否已经被激活。
+
 该命令从 3.0 版本开始支持。
 
 ## 注意事项
@@ -64,4 +66,5 @@ SET ROLE ALL;
 - [ALTER USER](ALTER_USER.md): 修改角色。
 - [SHOW ROLES](SHOW_ROLES.md): 查看当前系统所有角色。
 - [current_role](../../sql-functions/utility-functions/current_role.md): 查看当前用户拥有的角色。
+- [is_role_in_session](../../sql-functions/utility-functions/is_role_in_session.md)
 - [DROP ROLE](DROP_ROLE.md): 删除角色。

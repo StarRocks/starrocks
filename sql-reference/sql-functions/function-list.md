@@ -434,6 +434,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [database](./utility-functions/database.md)| 查询当前会话所在的数据库。 |
 |  [host_name](./utility-functions/host_name.md)| 获取计算所在节点的主机名。|
 |  [isnull](./utility-functions/isnull.md)| 判断输入值是否为 NULL。|
+| [is_role_in_session](./utility-functions/is_role_in_session.md) | 检查指定的角色（包括嵌套角色）在当前会话下是否已经激活。 |
 |  [last_query_id](./utility-functions/last_query_id.md)| 返回最近一次执行的查询的 ID。|
 |  [sleep](./utility-functions/sleep.md)| 将当前正在执行的线程休眠 x 秒。|
 |  [uuid](./utility-functions/uuid.md)| 以 VARCHAR 形式返回一个随机的 UUID 值。长度为36个字符，包含32个十六进制字符，由4个连字符进行连接，形式为8-4-4-4-12。|
