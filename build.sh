@@ -62,7 +62,9 @@ Usage: $0 <options>
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --clean            clean and build target
-     --use-staros       build Backend with staros
+     --enable-shared-data
+                        build Backend with shared-data feature support
+     --use-staros       DEPRECATED, an alias of --enable-shared-data option
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
@@ -91,6 +93,7 @@ OPTS=$(getopt \
   -l 'with-bench' \
   -l 'without-gcov' \
   -l 'use-staros' \
+  -l 'enable-shared-data' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -190,7 +193,7 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --use-staros) USE_STAROS=ON; shift ;;
+            --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
@@ -220,7 +223,12 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
+<<<<<<< HEAD
     USE_STAROS          -- $USE_STAROS
+=======
+    WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
+    ENABLE_SHARED_DATA  -- $USE_STAROS
+>>>>>>> 66dd1aff4d ([Enhancement] rename `use-staros` to `enable-shared-data` (#34480))
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
     PARALLEL            -- $PARALLEL
