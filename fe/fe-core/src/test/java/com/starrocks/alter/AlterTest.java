@@ -817,7 +817,7 @@ public class AlterTest {
                 ");";
         createTable(createOlapTblStmt);
         String alterStmt = "alter table test." + tableName + " set (\"dynamic_partition.enable\" = \"true\");";
-        alterTableWithNewParserAndExceptionMsg(alterStmt, "Must assign dynamic_partition.time_unit properties");
+        alterTableWithNewParserAndExceptionMsg(alterStmt, "Table test.no_dynamic_table is not a dynamic partition table.");
         // test set dynamic properties in a no dynamic partition table
         String stmt = "alter table test." + tableName + " set (\n" +
                 "'dynamic_partition.enable' = 'true',\n" +
@@ -872,6 +872,40 @@ public class AlterTest {
         alterTableWithNewParser(alterStmt5, false);
         String alterStmt6 = "alter table test." + tableName + " set (\"dynamic_partition.buckets\" = \"5\");";
         alterTableWithNewParser(alterStmt6, false);
+    }
+
+    @Test
+    public void testDynamicPartitionTableMetaFailed() throws Exception {
+        String tableName = "dynamic_table_test";
+        String createOlapTblStmt = "CREATE TABLE test.`" + tableName + "` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` int NULL COMMENT \"\",\n" +
+                "  `k3` smallint NULL COMMENT \"\",\n" +
+                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                "  `v2` datetime NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE (k1)\n" +
+                "(\n" +
+                "PARTITION p1 VALUES LESS THAN (\"2014-01-01\"),\n" +
+                "PARTITION p2 VALUES LESS THAN (\"2014-06-01\"),\n" +
+                "PARTITION p3 VALUES LESS THAN (\"2014-12-01\")\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"dynamic_partition.buckets\" = \"1\"\n" +
+                ");";
+        createTable(createOlapTblStmt);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable(tableName);
+        olapTable.getTableProperty().getProperties().remove("dynamic_partition.end");
+        olapTable.getTableProperty().gsonPostProcess();
     }
 
     @Test
