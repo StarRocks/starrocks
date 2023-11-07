@@ -34,9 +34,9 @@
 
 #include "types/bitmap_value.h"
 
-#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value_detail.h"
+#include "util/defer_op.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -61,9 +61,14 @@ static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_h
 BitmapValue::BitmapValue() = default;
 
 BitmapValue::BitmapValue(BitmapValue&& other) noexcept
-        : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {
+        : _bitmap(std::move(other._bitmap)),
+          _set(std::move(other._set)),
+          _sv(other._sv),
+          _type(other._type),
+          _shared(other._shared) {
     other._sv = 0;
     other._type = EMPTY;
+    other._shared = false;
 }
 
 BitmapValue& BitmapValue::operator=(BitmapValue&& other) noexcept {
@@ -72,8 +77,10 @@ BitmapValue& BitmapValue::operator=(BitmapValue&& other) noexcept {
         this->_set = std::move(other._set);
         this->_sv = other._sv;
         this->_type = other._type;
+        this->_shared = other._shared;
         other._sv = 0;
         other._type = EMPTY;
+        other._shared = false;
     }
     return *this;
 }
@@ -88,25 +95,35 @@ BitmapValue::BitmapValue(const char* src) {
 }
 
 BitmapValue::BitmapValue(const Slice& src) {
-    deserialize(src.data);
+    bool res = deserialize(src.data);
+    DCHECK(res);
 }
 
-BitmapValue::BitmapValue(const BitmapValue& other, bool deep_copy)
+BitmapValue::BitmapValue(const BitmapValue& other)
         : _set(other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set)),
           _sv(other._sv),
           _type(other._type) {
     // TODO: _set is usually relatively small, and it needs system performance testing to decide
     //  whether to change std::unique_ptr to std::shared_ptr and support shallow copy
-    if (deep_copy) {
-        _bitmap = (other._bitmap == nullptr) ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap);
+    if (other._type == BITMAP) {
+        _bitmap = other._bitmap;
+        _shared = true;
+        other._shared = true;
     } else {
-        _bitmap = (other._bitmap == nullptr) ? nullptr : other._bitmap;
+        _shared = false;
     }
 }
 
 BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
     if (this != &other) {
-        this->_bitmap = (other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap));
+        if (other._type == BITMAP) {
+            _bitmap = other._bitmap;
+            _shared = true;
+            other._shared = true;
+        } else {
+            _bitmap = nullptr;
+            _shared = false;
+        }
         this->_set = other._set == nullptr ? nullptr : std::make_unique<phmap::flat_hash_set<uint64_t>>(*other._set);
         this->_sv = other._sv;
         this->_type = other._type;
@@ -116,6 +133,8 @@ BitmapValue& BitmapValue::operator=(const BitmapValue& other) {
 
 // Construct a bitmap from given elements.
 BitmapValue::BitmapValue(const std::vector<uint64_t>& bits) {
+    _shared = false;
+    // TODO: why not use SET ?
     switch (bits.size()) {
     case 0:
         _type = EMPTY;
@@ -133,6 +152,7 @@ BitmapValue::BitmapValue(const std::vector<uint64_t>& bits) {
 
 void BitmapValue::_from_set_to_bitmap() {
     _bitmap = std::make_shared<detail::Roaring64Map>();
+    _shared = false;
     for (auto x : *_set) {
         _bitmap->add(x);
     }
@@ -156,20 +176,24 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
     case BITMAP:
         switch (_type) {
         case EMPTY:
-            // TODO: Reduce memory copy.
-            _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _bitmap = rhs._bitmap;
+            _shared = true;
+            rhs._shared = true;
             _type = BITMAP;
             break;
         case SINGLE:
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _shared = false;
             _bitmap->add(_sv);
             _type = BITMAP;
             break;
         case BITMAP:
+            _copy_on_write();
             *_bitmap |= *rhs._bitmap;
             break;
         case SET:
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _shared = false;
             for (auto x : *_set) {
                 _bitmap->add(x);
             }
@@ -199,10 +223,10 @@ BitmapValue& BitmapValue::operator|=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP:
+            _copy_on_write();
             for (auto x : *rhs._set) {
                 _bitmap->add(x);
             }
-            _type = BITMAP;
             break;
         }
     }
@@ -237,6 +261,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
                 _sv = rhs._sv;
             }
             _bitmap.reset();
+            _shared = false;
             break;
         case SET:
             if (!_set->contains(rhs._sv)) {
@@ -259,6 +284,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP:
+            _copy_on_write();
             *_bitmap &= *rhs._bitmap;
             _from_bitmap_to_smaller_type();
             break;
@@ -292,6 +318,7 @@ BitmapValue& BitmapValue::operator&=(const BitmapValue& rhs) {
             }
             _set = std::move(set);
             _bitmap.reset();
+            _shared = false;
             _type = SET;
             break;
         }
@@ -321,6 +348,7 @@ void BitmapValue::remove(uint64_t rhs) {
         }
         break;
     case BITMAP:
+        _copy_on_write();
         _bitmap->remove(rhs);
         break;
     case SET:
@@ -343,6 +371,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP:
+            _copy_on_write();
             _bitmap->remove(rhs._sv);
             break;
         case SET:
@@ -360,6 +389,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP:
+            _copy_on_write();
             *_bitmap -= *rhs._bitmap;
             _from_bitmap_to_smaller_type();
             break;
@@ -385,6 +415,7 @@ BitmapValue& BitmapValue::operator-=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP: {
+            _copy_on_write();
             for (auto x : *rhs._set) {
                 _bitmap->remove(x);
             }
@@ -424,6 +455,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
             }
             break;
         case BITMAP:
+            _copy_on_write();
             if (_bitmap->contains(rhs._sv)) {
                 _bitmap->remove(rhs._sv);
             } else {
@@ -442,11 +474,14 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
     case BITMAP:
         switch (_type) {
         case EMPTY:
-            _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _bitmap = rhs._bitmap;
+            _shared = true;
+            rhs._shared = true;
             _type = BITMAP;
             break;
         case SINGLE:
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _shared = false;
             if (_bitmap->contains(_sv)) {
                 _bitmap->remove(_sv);
             } else {
@@ -455,6 +490,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
             _type = BITMAP;
             break;
         case BITMAP: {
+            _copy_on_write();
             *_bitmap ^= *rhs._bitmap;
             break;
         }
@@ -466,6 +502,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
 
             // obtain values only in right bitmap
             _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+            _shared = false;
             *_bitmap -= bitmap;
 
             // collect all values that only in left set or only in right bitmap.
@@ -502,6 +539,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
 
             // obtain values only in left bitmap
             *_bitmap -= bitmap;
+            _shared = false;
 
             // collect all values that only in right set or only in left bitmap.
             for (auto x : set) {
@@ -538,7 +576,7 @@ BitmapValue& BitmapValue::operator^=(const BitmapValue& rhs) {
 }
 
 // check if value x is present
-bool BitmapValue::contains(uint64_t x) {
+bool BitmapValue::contains(uint64_t x) const {
     switch (_type) {
     case EMPTY:
         return false;
@@ -658,7 +696,6 @@ void BitmapValue::write(char* dst) const {
         _bitmap->write(dst, config::bitmap_serialize_version);
         break;
     case SET:
-
         *dst = BitmapTypeCode::SET;
         dst += 1;
         uint32_t size = _set->size();
@@ -674,6 +711,7 @@ void BitmapValue::write(char* dst) const {
 // Deserialize a bitmap value from `src`.
 // Return false if `src` begins with unknown type code, true otherwise.
 bool BitmapValue::deserialize(const char* src) {
+    _shared = false;
     if (src == nullptr) {
         _type = EMPTY;
         return true;
@@ -690,6 +728,7 @@ bool BitmapValue::deserialize(const char* src) {
         break;
     case BitmapTypeCode::SINGLE64:
         _type = SINGLE;
+        _shared = false;
         _sv = decode_fixed64_le(reinterpret_cast<const uint8_t*>(src + 1));
         break;
     case BitmapTypeCode::BITMAP32:
@@ -730,6 +769,7 @@ bool BitmapValue::valid_and_deserialize(const char* src, size_t max_bytes) {
 
     if (src == nullptr) {
         _type = EMPTY;
+        _shared = false;
         return true;
     }
 
@@ -794,6 +834,7 @@ bool BitmapValue::valid_and_deserialize(const char* src, size_t max_bytes) {
         default:
             return false;
         }
+        _shared = false;
         return true;
     }
 }
@@ -880,6 +921,7 @@ size_t BitmapValue::serialize(uint8_t* dst) const {
 // This method should be called before `serialize_size`.
 void BitmapValue::compress() const {
     if (_type == BITMAP) {
+        // no need to copy on write
         _bitmap->runOptimize();
         _bitmap->shrinkToFit();
     }
@@ -887,13 +929,18 @@ void BitmapValue::compress() const {
 
 void BitmapValue::clear() {
     if (_bitmap != nullptr) {
-        _bitmap->clear();
+        if (!_shared || _bitmap.use_count() <= 1) {
+            _bitmap->clear();
+        } else {
+            _bitmap.reset();
+        }
     }
     if (_set != nullptr) {
         _set->clear();
     }
     _sv = 0;
     _type = EMPTY;
+    _shared = false;
 }
 
 void BitmapValue::reset() {
@@ -901,6 +948,7 @@ void BitmapValue::reset() {
     _set.reset();
     _sv = 0;
     _type = EMPTY;
+    _shared = false;
 }
 
 void BitmapValue::_from_bitmap_to_smaller_type() {
@@ -915,9 +963,10 @@ void BitmapValue::_from_bitmap_to_smaller_type() {
         _sv = min_value.value();
     }
     _bitmap.reset();
+    _shared = false;
 }
 
-int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
+int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const {
     switch (_type) {
     case EMPTY:
         return 0;
@@ -973,7 +1022,7 @@ int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& l
 }
 
 int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
-                                                  BitmapValue* ret_bitmap) {
+                                                  BitmapValue* ret_bitmap) const {
     switch (_type) {
     case EMPTY:
         return 0;
@@ -1042,7 +1091,8 @@ int64_t BitmapValue::bitmap_subset_limit_internal(const int64_t& range_start, co
 }
 
 int64_t BitmapValue::bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
-                                                     BitmapValue* ret_bitmap) {
+                                                     BitmapValue* ret_bitmap) const {
+    // range_end < range_start already checked in BitmapFunctions::bitmap_subset_in_range
     switch (_type) {
     case EMPTY:
         return 0;
@@ -1084,8 +1134,26 @@ void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
             add(vals[i]);
         }
     } else {
+        _copy_on_write();
         _bitmap->addMany(n_args, vals);
     }
+}
+
+void BitmapValue::_copy_on_write() {
+    if (_bitmap == nullptr) {
+        _bitmap = std::make_shared<detail::Roaring64Map>();
+        _shared = false;
+        return;
+    }
+
+    if (!_shared) {
+        return;
+    }
+
+    if (_bitmap.use_count() > 1) {
+        _bitmap = std::make_shared<detail::Roaring64Map>(*_bitmap);
+    }
+    _shared = false;
 }
 
 void BitmapValue::add(uint64_t value) {
@@ -1106,6 +1174,7 @@ void BitmapValue::add(uint64_t value) {
         _type = SET;
         break;
     case BITMAP:
+        _copy_on_write();
         _bitmap->add(value);
         break;
     case SET:
