@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <future>
+
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -238,7 +240,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
 
     // load segment with indexes, and remove index meta (index meta is larger than index)
     auto sz2 = metacache->memory_usage();
-    std::cout << "metadata cache memory usage: " << sz0 << "-" << sz1 << "-" << sz2;
+    LOG(INFO) << "metadata cache memory usage: " << sz0 << "-" << sz1 << "-" << sz2;
     ASSERT_GT(sz1, sz0);
     ASSERT_LT(sz2, sz1);
 }
@@ -267,6 +269,106 @@ TEST_F(LakeMetacacheTest, test_prune) {
 
     auto meta3 = metacache->lookup_tablet_metadata("meta1");
     ASSERT_TRUE(meta3 == nullptr);
+}
+
+TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
+    // intend empty value for the following two variables
+    std::shared_ptr<FileSystem> fs;
+    std::shared_ptr<const TabletSchema> schema;
+
+    auto* metacache = _tablet_mgr->metacache();
+    metacache->prune();
+
+    uint32_t segment_id = 1000;
+    std::string segment_path("test_cache_segment_if_absent.dat");
+
+    EXPECT_EQ(nullptr, metacache->lookup_segment(segment_path));
+    auto seg1 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+
+    {
+        // cache seg1, since there is no segment cached before, cache_segment_if_absent will cache the seg1 and return it.
+        auto seg = metacache->cache_segment_if_absent(segment_path, seg1);
+        EXPECT_TRUE(seg != nullptr);
+        EXPECT_EQ(seg1, seg);
+        EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
+    }
+
+    auto seg2 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    {
+        auto seg = metacache->cache_segment_if_absent(segment_path, seg2);
+        EXPECT_TRUE(seg != nullptr);
+        EXPECT_NE(seg1, seg2);
+        // still returns seg1
+        EXPECT_EQ(seg1, seg);
+        EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
+    }
+}
+
+struct TestCacheSegmentConcurrency {
+    std::shared_ptr<Segment> segment;
+    std::promise<std::shared_ptr<Segment>> seg_promise;
+    std::mutex* mutex;
+    std::condition_variable* cv;
+    starrocks::lake::Metacache* cache;
+    std::unique_ptr<std::thread> thread;
+    std::atomic<int>* pending_count;
+};
+
+static void run_single(TestCacheSegmentConcurrency* ctx) {
+    std::unique_lock lk(*(ctx->mutex));
+    ctx->cv->wait(lk);
+    ctx->pending_count->fetch_sub(1);
+    auto seg = ctx->cache->cache_segment_if_absent(ctx->segment->file_name(), ctx->segment);
+    ctx->seg_promise.set_value(seg);
+}
+
+TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
+    std::mutex m;
+    std::condition_variable cv;
+
+    auto* metacache = _tablet_mgr->metacache();
+    metacache->prune();
+
+    std::shared_ptr<FileSystem> fs;
+    std::shared_ptr<const TabletSchema> schema;
+
+    uint32_t segment_id = 10001;
+    std::string segment_path("test_cache_segment_if_absent_concurrent.dat");
+
+    int kConcurrency = 128;
+    std::atomic<int> pending_count = kConcurrency;
+    std::vector<TestCacheSegmentConcurrency> ctx_arr;
+    ctx_arr.reserve(kConcurrency);
+    for (int i = 0; i < kConcurrency; ++i) {
+        TestCacheSegmentConcurrency ctx;
+        ctx.pending_count = &pending_count;
+        ctx.segment = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+        ctx.mutex = &m;
+        ctx.cv = &cv;
+        ctx.cache = metacache;
+        ctx_arr.push_back(std::move(ctx));
+        ctx_arr.back().thread = std::make_unique<std::thread>(&run_single, &(ctx_arr.back()));
+    }
+
+    using namespace std::chrono_literals;
+    // sleep for a while, so that all the threads can be ready as much as possible
+    std::this_thread::sleep_for(500ms);
+    while (pending_count.load() > 0) {
+        cv.notify_all();
+    }
+    std::shared_ptr<Segment> final_result;
+    bool first = true;
+    for (auto& ctx : ctx_arr) {
+        ctx.thread->join();
+        auto res = ctx.seg_promise.get_future().get();
+        if (first) {
+            final_result = res;
+            first = false;
+        } else {
+            // expect all threads' cache_segment_if_absent() call to the same segment path, returns the same result
+            EXPECT_EQ(final_result, res);
+        }
+    }
 }
 
 } // namespace starrocks::lake
