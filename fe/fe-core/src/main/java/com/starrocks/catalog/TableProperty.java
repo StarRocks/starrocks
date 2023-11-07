@@ -524,6 +524,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @Override
     public void gsonPostProcess() throws IOException {
         buildDynamicProperty();
+        try {
+            buildDynamicProperty();
+        } catch (Exception ex) {
+            LOG.warn("build dynamic property failed", ex);
+        }
         buildReplicationNum();
         buildInMemory();
         buildStorageFormat();
