@@ -1736,7 +1736,6 @@ public class LocalMetastore implements ConnectorMetadata {
                         numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
                     }
                 }
-<<<<<<< HEAD
                 countDownLatch.await();
                 if (countDownLatch.getStatus().ok()) {
                     taskSignatures.clear();
@@ -1745,21 +1744,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn(e);
                 countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.toString()));
             } finally {
-=======
-            }
-            LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
-                    table.getName(), Math.min(timeout, maxTimeout));
-            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
-            LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
-                    table.getName(), System.currentTimeMillis() - start);
-
-        } catch (Exception e) {
-            LOG.warn(e);
-            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
-            throw new DdlException(e.getMessage());
-        }  finally {
-            if (!countDownLatch.getStatus().ok()) {
->>>>>>> 39ae66b068 ([Enhancement] optimize the log when creating table (#33977))
                 for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
                     for (Long signature : entry.getValue()) {
                         AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
@@ -1769,7 +1753,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }, "partition-build");
         t.start();
         try {
+            LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
+                    table.getName(), Math.min(timeout, maxTimeout));
             waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+            LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
+                    table.getName(), System.currentTimeMillis() - start);
         } catch (Exception e) {
             countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
             throw e;
