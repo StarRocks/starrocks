@@ -5504,7 +5504,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         target->append_datum(DatumArray{"a", "d"});
         target->append_datum(DatumArray{"a", "c"});
 
-        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
         EXPECT_EQ(10, result->size());
         EXPECT_EQ(1, result->get(0).get_int8());
         EXPECT_TRUE(result->get(1).is_null());
@@ -5524,7 +5524,7 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
-        array->append_datum(DatumArray{Datum(DatumArray{"a", "c"}));
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "c"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
 
         auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
@@ -5532,50 +5532,50 @@ TEST_F(ArrayFunctionsTest, array_contains_seq) {
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
 
-        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(1, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
         EXPECT_EQ(1, result->get(2).get_int8());
     }
     // array_contains_seq([["a"], ["b"], [NULL]], [["c"]])
-    // array_contains_seq(["a","d","c"], ["e"])
+    // array_contains_seq([["a","d","c"]], [["e"]])
     // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
         array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"}), Datum()});
-        array->append_datum(DatumArray{"a", "d", "c"});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "d", "c"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
 
         auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
         target->append_datum(DatumArray{Datum(DatumArray{"c"})});
-        target->append_datum(DatumArray{"e"});
+        target->append_datum(DatumArray{Datum(DatumArray{"e"})});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
 
-        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
         EXPECT_EQ(1, result->get(2).get_int8());
     }
     // array_contains_seq([["a"], ["b"]], [["c"], [NULL]])
-    // array_contains_seq(["a","d","c"], ["e", NULL])
+    // array_contains_seq([["a","d","c"]], [["e", NULL]])
     // array_contains_seq([["a", "b"], ["c"]], [["a", "b"]])
     {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, false);
-        array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"}), Datum()});
-        array->append_datum(DatumArray{"a", "d", "c"});
+        array->append_datum(DatumArray{Datum(DatumArray{"a"}), Datum(DatumArray{"b"})});
+        array->append_datum(DatumArray{Datum(DatumArray{"a", "d", "c"})});
         array->append_datum(DatumArray{Datum(DatumArray{"a", "b"}), Datum(DatumArray{"c"})});
 
         auto target = ColumnHelper::create_column(TYPE_ARRAY_ARRAY_VARCHAR, true);
-        target->append_datum(DatumArray{Datum(DatumArray{"c"})}, DatumArray(Datum()));
-        target->append_datum(DatumArray{{"e", Datum()});
+        target->append_datum(DatumArray{Datum(DatumArray{"c"}), Datum()});
+        target->append_datum(DatumArray{Datum(DatumArray{"e"}), Datum()});
         target->append_datum(DatumArray{Datum(DatumArray{"a", "b"})});
 
-        auto result = ArrayFunctions::array_contains_all(nullptr, {array, target}).value();
+        auto result = ArrayFunctions::array_contains_seq(nullptr, {array, target}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(0, result->get(0).get_int8());
-        EXPECT_EQ(0, result->get(0).get_int8());
+        EXPECT_EQ(0, result->get(1).get_int8());
         EXPECT_EQ(1, result->get(2).get_int8());
     }
 }
