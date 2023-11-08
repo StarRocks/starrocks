@@ -35,6 +35,7 @@
 package org.apache.hadoop.hive.metastore;
 
 import com.google.common.collect.Lists;
+import com.starrocks.connector.hadoop.HadoopExt;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
@@ -436,6 +437,13 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     }
 
     private void open() throws MetaException {
+        HadoopExt.getInstance().doAs(conf, () -> {
+            openInternal();
+            return null;
+        });
+    }
+
+    private void openInternal() throws MetaException {
         isConnected = false;
         TTransportException tte = null;
         boolean useSSL = MetastoreConf.getBoolVar(conf, ConfVars.USE_SSL);
