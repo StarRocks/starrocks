@@ -780,10 +780,6 @@ private:
         while (j < element_end) {
             int k = j;
             i = target_start;
-            if (j <= element_end - (target_end - target_start)) {
-                return false;
-            }
-
             while (i < target_end) {
                 bool null_target = false;
                 if constexpr (NullableTarget) {
@@ -818,6 +814,9 @@ private:
             }
             if (i == target_end) {
                 return true;
+            }
+            if ((element_end - j) < (target_end - target_start)) {
+                return false;
             }
             j++;
         }
