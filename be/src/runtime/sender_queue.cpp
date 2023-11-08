@@ -550,9 +550,6 @@ void DataStreamRecvr::PipelineSenderQueue::cancel() {
 }
 
 void DataStreamRecvr::PipelineSenderQueue::close() {
-    if (UNLIKELY(!_is_cancelled && (!_chunk_queues.empty() || !_buffered_chunk_queues.empty()))) {
-        LOG(ERROR) << "Closing non-cancelled PipelineSenderQueue but its chunk queues are not empty";
-    }
     clean_buffer_queues();
 }
 
