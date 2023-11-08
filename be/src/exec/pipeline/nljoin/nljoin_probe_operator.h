@@ -73,8 +73,10 @@ private:
     void _move_build_chunk_index(int index);
     void _reset_build_chunk_index();
     void _next_build_chunk_index();
-    void _build_tmp_chunk(int chunk_size, const ChunkPtr& probe_chunk, int probe_start, int probe_end,
-                          const ChunkPtr& build_chunk, int build_start, int build_end, ChunkPtr* result_chunk);
+    bool _build_medium_chunk(size_t chunk_size, const ChunkPtr& probe_chunk, size_t* probe_start, size_t* probe_end,
+                          const ChunkPtr& build_chunk, size_t* build_start, size_t* build_end, ChunkPtr* result_chunk);
+    bool _build_tmp_chunk(size_t chunk_size, const ChunkPtr& probe_chunk, size_t* probe_start, size_t* probe_end,
+                          const ChunkPtr& build_chunk, size_t* build_start, size_t* build_end, ChunkPtr* result_chunk);
 
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
     Status _probe(RuntimeState* state, const ChunkPtr& chunk);

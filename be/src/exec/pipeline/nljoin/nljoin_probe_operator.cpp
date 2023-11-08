@@ -364,12 +364,89 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
-void NLJoinProbeOperator::_build_tmp_chunk(int chunk_size, const ChunkPtr& probe_chunk, int probe_start, int probe_end,
-                      const ChunkPtr& build_chunk, int build_start, int build_end, ChunkPtr* result_chunk) {
-    int result_chunk_size = (*result_chunk)->num_rows();
-    int append_size = chunk_size - result_chunk_size;
+bool NLJoinProbeOperator::_build_medium_chunk(size_t chunk_size, const ChunkPtr& probe_chunk, size_t* probe_start,
+                                              size_t* probe_end, const ChunkPtr& build_chunk, size_t* build_start,
+                                              size_t* build_end, ChunkPtr* result_chunk) {
+    ChunkPtr chunk = _init_output_chunk(nullptr);
+    bool eof = false;
 
+    do {
+        eof = _build_tmp_chunk(chunk_size, probe_chunk, probe_start, probe_end, build_chunk, build_start, build_end,
+                         result_chunk);
+    } while ((*result_chunk)->num_rows() < chunk_size && !eof);
 
+    return true;
+}
+
+bool NLJoinProbeOperator::_build_tmp_chunk(size_t chunk_size, const ChunkPtr& probe_chunk, size_t* probe_start,
+                                           size_t* probe_end, const ChunkPtr& build_chunk, size_t* build_start,
+                                           size_t* build_end, ChunkPtr* result_chunk) {
+    size_t result_chunk_size = (*result_chunk)->num_rows();
+    size_t need_size = chunk_size - result_chunk_size;
+    size_t probe_size = *probe_end - *probe_start;
+    size_t build_size = *build_end - *build_start;
+    bool base_probe;
+    if (probe_size < build_size) {
+        base_probe = false;
+        need_size = std::min(need_size, build_size);
+    } else {
+        base_probe = true;
+        need_size = std::min(need_size, probe_size);
+    }
+
+    if (base_probe) {
+        // probe column
+        for (size_t i = 0; i < _probe_column_count; i++) {
+            SlotDescriptor* slot = _col_types[i];
+            ColumnPtr& dst_col = (*result_chunk)->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = probe_chunk->get_column_by_slot_id(slot->id());
+            dst_col->append(*src_col, *probe_start, need_size);
+        }
+        // build column
+        for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
+            SlotDescriptor* slot = _col_types[i];
+            ColumnPtr& dst_col = (*result_chunk)->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
+            dst_col->append_value_multiple_times(*src_col, *build_start, need_size);
+        }
+        *probe_start += need_size;
+        if (*probe_start >= *probe_end) {
+            *probe_start = 0;
+        }
+        *build_start += 1;
+        if (*build_start >= *build_end) {
+            *build_end = 0;
+        }
+    } else {
+        // probe column
+        for (size_t i = 0; i < _probe_column_count; i++) {
+            SlotDescriptor* slot = _col_types[i];
+            ColumnPtr& dst_col = (*result_chunk)->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = probe_chunk->get_column_by_slot_id(slot->id());
+            dst_col->append_value_multiple_times(*src_col, *probe_start, need_size);
+        }
+        // build column
+        for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
+            SlotDescriptor* slot = _col_types[i];
+            ColumnPtr& dst_col = (*result_chunk)->get_column_by_slot_id(slot->id());
+            const ColumnPtr& src_col = build_chunk->get_column_by_slot_id(slot->id());
+            dst_col->append(*src_col, *build_start, need_size);
+        }
+        *probe_start += 1;
+        if (*probe_start >= *probe_end) {
+            *probe_start = 0;
+        }
+        *build_start += need_size;
+        if (*build_start >= *build_end) {
+            *build_end = 0;
+        }
+    }
+
+    if (*probe_start == 0 && *build_start == 0) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 // Permute enough rows from build side and probe side
