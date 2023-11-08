@@ -44,7 +44,6 @@
 #include "column/schema.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
-#include "segment_chunk_iterator_adapter.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
 #include "storage/lake/tablet_manager.h"
@@ -213,7 +212,6 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
-    _prepare_adapter_info();
     return Status::OK();
 }
 
@@ -269,23 +267,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     if (read_options.stats == nullptr) {
         return Status::InvalidArgument("stats is null pointer");
     }
-    // If input schema is not match the actual meta, must convert the read_options according
-    // to the actual format. And create an AdaptSegmentIterator to wrap
-    if (_needs_chunk_adapter) {
-        auto& ref_tablet_schema = read_options.tablet_schema ? read_options.tablet_schema : _tablet_schema.schema();
-        std::unique_ptr<SegmentChunkIteratorAdapter> adapter(new SegmentChunkIteratorAdapter(
-                ref_tablet_schema, *_column_storage_types, schema, read_options.chunk_size));
-        RETURN_IF_ERROR(adapter->prepare(read_options));
-
-        auto result = _new_iterator(adapter->in_schema(), adapter->in_read_options());
-        if (!result.ok()) {
-            return result;
-        }
-        adapter->set_iterator(std::move(result.value()));
-        return std::move(adapter);
-    } else {
-        return _new_iterator(schema, read_options);
-    }
+    return _new_iterator(schema, read_options);
 }
 
 Status Segment::load_index(bool skip_fill_local_cache) {
@@ -359,30 +341,6 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
         _column_readers.emplace(column.unique_id(), std::move(res).value());
     }
     return Status::OK();
-}
-
-void Segment::_prepare_adapter_info() {
-    ColumnId num_columns = _tablet_schema->num_columns();
-    _needs_chunk_adapter = false;
-    std::vector<LogicalType> types(num_columns);
-    for (ColumnId cid = 0; cid < num_columns; ++cid) {
-        LogicalType type;
-        auto column_unique_id = _tablet_schema->column(cid).unique_id();
-        if (_column_readers.count(column_unique_id) > 0) {
-            type = _column_readers.at(column_unique_id)->column_type();
-        } else {
-            // when the default column is used, column reader will be null.
-            // And the type will be same with the tablet schema.
-            type = _tablet_schema->column(cid).type();
-        }
-        types[cid] = type;
-        if (TypeUtils::specific_type_of_format_v1(type)) {
-            _needs_chunk_adapter = true;
-        }
-    }
-    if (_needs_chunk_adapter) {
-        _column_storage_types = std::make_unique<std::vector<LogicalType>>(std::move(types));
-    }
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid, ColumnAccessPath* path,
