@@ -58,6 +58,7 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
+        params->json_file_size_limit = 1024 * 1024;
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
