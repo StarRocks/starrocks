@@ -265,7 +265,7 @@ DISTRIBUTED BY HASH(LO_ORDERDATE, LO_ORDERKEY) BUCKETS 48
 PARTITION BY LO_ORDERDATE
 REFRESH MANUAL
 PROPERTIES (
-    "session.partition_refresh_nubmer"="1"
+    "partition_refresh_number"="1"
 )
 AS SELECT /*+ SET_VAR(query_timeout = 7200) */     -- Set timeout for the refresh operation.
        l.LO_ORDERDATE        AS LO_ORDERDATE,
