@@ -24,6 +24,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
@@ -181,9 +183,18 @@ public class TypeManager {
         // 2. Why only support equivalence and unequivalence expression cast to string? Because string order is different
         //    with number order, like: '12' > '2' is false, but 12 > 2 is true
         if (isNotRangeComparison) {
+            Type baseType = Type.STRING;
+            if (ConnectContext.get() != null && SessionVariableConstants.DECIMAL.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
+                baseType = Type.DEFAULT_DECIMAL128;
+                if (type1.isDecimalOfAnyVersion() || type2.isDecimalOfAnyVersion()) {
+                    baseType = type1.isDecimalOfAnyVersion() ? type1 : type2;
+                }
+            }
+
             if ((type1.isStringType() && type2.isExactNumericType()) ||
                     (type1.isExactNumericType() && type2.isStringType())) {
-                return Type.STRING;
+                return baseType;
             }
         }
 
