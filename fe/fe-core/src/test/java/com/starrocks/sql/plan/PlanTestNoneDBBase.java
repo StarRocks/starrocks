@@ -55,7 +55,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -562,21 +561,21 @@ public class PlanTestNoneDBBase {
         return i;
     }
 
-    public static Map<Integer, Integer>  extractFragmentAndInstanceFromSchedulerPlan(String plan){
+    public static Map<Integer, Integer> extractFragmentAndInstanceFromSchedulerPlan(String plan) {
         Map<Integer, Integer> result = new HashMap<>();
         String[] lines = plan.trim().split("\n");
         int index = 0;
 
         int fragmentIndex = -1;
         int instanceNumber = 0;
-        while(index < lines.length){
+        while (index < lines.length) {
             String line = lines[index];
             index++;
             if ("INSTANCES".equals(line.trim())) {
                 fragmentIndex++;
                 Map<Long, String> instances = Maps.newHashMap();
                 index = extractInstancesFromSchedulerPlan(lines, index, instances);
-                result.put(fragmentIndex,instances.size());
+                result.put(fragmentIndex, instances.size());
             }
         }
         return result;
