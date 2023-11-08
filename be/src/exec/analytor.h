@@ -37,44 +37,6 @@ struct FunctionTypes {
     bool is_nullable; // window function result whether is nullable
 };
 
-// [start, end)
-struct FrameRange {
-    int64_t start;
-    int64_t end;
-};
-
-class SegmentStatistics {
-private:
-    // We will not perform loop search until processing enough segments
-    // segment canbe partition or peer group
-    static constexpr int64_t MIN_SEGMENT_NUM = 16;
-
-    // Overhead of binary search is O(N/S logN), where S denote the average size of segment
-    // Overhead of loop search is O(N)
-    // The default chunk_size is 4096, then logN turns out to be log(4096) = 12
-    // Considering the error of estimation, we set the threshold to 8
-    static constexpr int64_t AVERAGE_SIZE_THRESHOLD = 8;
-
-public:
-    void update(int64_t segment_size) {
-        _count++;
-        _cumulative_size += segment_size;
-        _average_size = _cumulative_size / _count;
-    }
-
-    void reset() {
-        _count = 0;
-        _cumulative_size = 0;
-        _average_size = 0;
-    }
-
-    bool is_high_cardinality() { return _count > MIN_SEGMENT_NUM && _average_size < AVERAGE_SIZE_THRESHOLD; }
-
-    int64_t _count = 0;
-    int64_t _cumulative_size = 0;
-    int64_t _average_size = 0;
-};
-
 class Analytor;
 using AnalytorPtr = std::shared_ptr<Analytor>;
 using Analytors = std::vector<AnalytorPtr>;
@@ -83,6 +45,58 @@ using Analytors = std::vector<AnalytorPtr>;
 // it contains common data struct and algorithm of analysis
 class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
+
+    // [start, end)
+    struct FrameRange {
+        int64_t start;
+        int64_t end;
+    };
+
+    struct Segment {
+        // Start position of current partition/peer group.
+        int64_t start = 0;
+        bool is_real = false;
+        // If is_real = true, end represents the first position of next partition/peer_group.
+        // If is_real = false, end represents the first position of next upcoming chunk.
+        int64_t end = 0;
+
+        void remove_first_n(int64_t cnt) {
+            start -= cnt;
+            end -= cnt;
+        }
+    };
+
+    class SegmentStatistics {
+    private:
+        // We will not perform loop search until processing enough segments
+        // segment canbe partition or peer group
+        static constexpr int64_t MIN_SEGMENT_NUM = 16;
+
+        // Overhead of binary search is O(N/S logN), where S denote the average size of segment
+        // Overhead of loop search is O(N)
+        // The default chunk_size is 4096, then logN turns out to be log(4096) = 12
+        // Considering the error of estimation, we set the threshold to 8
+        static constexpr int64_t AVERAGE_SIZE_THRESHOLD = 8;
+
+    public:
+        void update(int64_t segment_size) {
+            _count++;
+            _cumulative_size += segment_size;
+            _average_size = _cumulative_size / _count;
+        }
+
+        void reset() {
+            _count = 0;
+            _cumulative_size = 0;
+            _average_size = 0;
+        }
+
+        bool is_high_cardinality() { return _count > MIN_SEGMENT_NUM && _average_size < AVERAGE_SIZE_THRESHOLD; }
+
+        int64_t _count = 0;
+        int64_t _cumulative_size = 0;
+        int64_t _average_size = 0;
+    };
 
 public:
     ~Analytor() override {
@@ -128,13 +142,16 @@ private:
     Status _evaluate_const_columns(int i);
 
     Status _check_has_error();
-    void _remove_unused_buffers(RuntimeState* state);
+    // All input chunk will first evaluate and then append to these big columns
+    // (_agg_intput_columns, _partition_columns, _order_columns), and these big columns may cause significant memory usage,
+    // so parts of first rows will be removed as long as it is not necessary for window evaluation.
+    void _remove_unused_rows(RuntimeState* state);
     Status _add_chunk(const ChunkPtr& chunk);
-    // if src_column is const, but dst is not, unpack src_column then append. Otherwise just append
+    // If src_column is const, but dst is not, unpack src_column then append. Otherwise just append
     void _append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column);
 
     using ProcessByPartitionIfNecessaryFunc = Status (Analytor::*)(RuntimeState* state);
-    using ProcessByPartitionFunc = void (Analytor::*)(RuntimeState* state, bool is_new_partition);
+    using ProcessByPartitionFunc = void (Analytor::*)(RuntimeState* state);
 
     // Process partition when all the data of current partition is reached
     Status _materializing_process(RuntimeState* state);
@@ -159,19 +176,19 @@ private:
     ProcessByPartitionIfNecessaryFunc _process_impl = nullptr;
 
     // For window frame `ROWS|RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`
-    void _materializing_process_for_unbounded_frame(RuntimeState* state, bool is_new_partition);
+    void _materializing_process_for_unbounded_frame(RuntimeState* state);
     // For window frame `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
     // materializing means that although the frame is `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, we
     // cannot evaluate window function until all the data of current partition is reached
     // For example, `ntile` need all the data to calculate the bucket step
-    void _materializing_process_for_half_unbounded_rows_frame(RuntimeState* state, bool is_new_partition);
+    void _materializing_process_for_half_unbounded_rows_frame(RuntimeState* state);
     // For window frame `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
     // materializing means that although the frame is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, we
     // cannot evaluate window function until all the data of current partition is reached
     // For example, `cume_dist` need all the data to calculate
-    void _materializing_process_for_half_unbounded_range_frame(RuntimeState* state, bool is_new_partition);
+    void _materializing_process_for_half_unbounded_range_frame(RuntimeState* state);
     // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
-    void _materializing_process_for_sliding_frame(RuntimeState* state, bool is_new_partition);
+    void _materializing_process_for_sliding_frame(RuntimeState* state);
     ProcessByPartitionFunc _materializing_process_impl = nullptr;
 
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
@@ -179,11 +196,6 @@ private:
 
     Status _output_result_chunk(ChunkPtr* chunk);
 
-    // Used for materializing process, when find a real partition end, the current partition can be processed,
-    // so we need to reset the state for current partition.
-    void _reset_state_for_cur_partition();
-    // Used for streaming process, when find a real partition end, the current partition has been well processed,
-    // so we need to reset the state for next partition.
     void _reset_state_for_next_partition();
     void _reset_window_state();
     void _init_window_result_columns();
@@ -194,12 +206,6 @@ private:
     int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
-    bool _is_new_partition() const {
-        // _current_row_position >= _partition_end : current partition data has been processed
-        // _partition_end == 0 : the first partition
-        return ((_current_row_position >= _partition_end) &
-                ((_partition_end == 0) | (_partition_end != _found_partition_end.second)));
-    }
 
     bool _has_output() const { return _output_chunk_index < _input_chunks.size(); }
     int64_t _first_global_position_of_current_chunk() const {
@@ -213,7 +219,7 @@ private:
     }
     FrameRange _get_frame_range() const {
         if (_is_unbounded_preceding) {
-            return {_partition_start, _current_row_position + _rows_end_offset + 1};
+            return {_partition.start, _current_row_position + _rows_end_offset + 1};
         } else {
             return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
         }
@@ -289,8 +295,8 @@ private:
     std::vector<int64_t> _partition_size_required_function_index;
 
     RuntimeProfile* _runtime_profile;
-    RuntimeProfile::Counter* _rows_returned_counter = nullptr;
-    RuntimeProfile::Counter* _remove_unused_buffer_cnt = nullptr;
+    RuntimeProfile::Counter* _remove_unused_rows_cnt = nullptr;
+    RuntimeProfile::Counter* _remove_unused_total_rows = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
@@ -319,26 +325,12 @@ private:
 
     // Refer to the position of current row.
     int64_t _current_row_position = 0;
-    // Refer to start position of current partition.
-    int64_t _partition_start = 0;
-    // Refer to end position of current partition.
-    // If the end position has not been found during the iteration, _partition_end = _partition_start.
-    int64_t _partition_end = 0;
-    // If first = true, then second record the first position of the latest Chunk that is not equal to the PartitionKey.
-    // If first = false, then second points to the last position + 1.
-    std::pair<bool, int64_t> _found_partition_end = {false, 0};
+
+    Segment _partition;
     SegmentStatistics _partition_statistics;
     std::queue<int64_t> _candidate_partition_ends;
 
-    // A peer group is all of the rows that are peers within the specified ordering.
-    // Refer to the start position of current peer group.
-    int64_t _peer_group_start = 0;
-    // Refer to the end position of current peer group.
-    // If the end position has not been found during the iteration, _peer_group_end = _peer_group_start.
-    int64_t _peer_group_end = 0;
-    // If first = true, then second record the first position of the latest Chunk that is not equal to the peer group.
-    // If first = false, then second points to the last position + 1.
-    std::pair<bool, int64_t> _found_peer_group_end = {false, 0};
+    Segment _peer_group;
     SegmentStatistics _peer_group_statistics;
     std::queue<int64_t> _candidate_peer_group_ends;
 };

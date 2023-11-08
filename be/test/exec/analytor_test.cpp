@@ -37,27 +37,14 @@ TEST_F(AnalytorTest, find_peer_group_end) {
     v = 2;
     c1->append_value_multiple_times(&v, 10);
 
-    analytor._update_input_rows(20);
+    analytor._input_rows += 20;
     analytor._order_columns.emplace_back(c1);
-    analytor._found_partition_end = {true, 20};
+    analytor._partition.is_real = true;
+    analytor._partition.end = 20;
 
     analytor._find_peer_group_end();
-    ASSERT_EQ(analytor._peer_group_end, 10);
-}
-
-// NOLINTNEXTLINE
-TEST_F(AnalytorTest, reset_state_for_cur_partition) {
-    TPlanNode plan_node;
-    RowDescriptor row_desc;
-    Analytor analytor(plan_node, row_desc, nullptr, false);
-
-    analytor._partition_start = 3;
-    analytor._partition_end = 10;
-    analytor._found_partition_end = {true, 20};
-    analytor._reset_state_for_cur_partition();
-    ASSERT_EQ(analytor._partition_start, 10);
-    ASSERT_EQ(analytor._partition_end, 20);
-    ASSERT_EQ(analytor._current_row_position, 10);
+    ASSERT_TRUE(analytor._peer_group.is_real);
+    ASSERT_EQ(analytor._peer_group.end, 10);
 }
 
 // NOLINTNEXTLINE
@@ -66,12 +53,12 @@ TEST_F(AnalytorTest, reset_state_for_next_partition) {
     RowDescriptor row_desc;
     Analytor analytor(plan_node, row_desc, nullptr, false);
 
-    analytor._partition_start = 10;
-    analytor._partition_end = 10;
-    analytor._found_partition_end = {true, 20};
+    analytor._partition.start = 10;
+    analytor._partition.is_real = true;
+    analytor._partition.end = 20;
     analytor._reset_state_for_next_partition();
-    ASSERT_EQ(analytor._partition_start, 20);
-    ASSERT_EQ(analytor._partition_end, 20);
+    ASSERT_EQ(analytor._partition.start, 20);
+    ASSERT_EQ(analytor._partition.end, 20);
     ASSERT_EQ(analytor._current_row_position, 20);
 }
 
@@ -94,46 +81,49 @@ TEST_F(AnalytorTest, find_partition_end) {
     v = 4;
     c2->append_value_multiple_times(&v, 15);
 
-    analytor1._update_input_rows(20);
+    analytor1._input_rows += 20;
+    analytor1._input_eos = true;
     analytor1._partition_columns.emplace_back(c1);
     analytor1._partition_columns.emplace_back(c2);
 
-    analytor1._current_row_position = analytor1._found_partition_end.second;
+    analytor1._current_row_position = analytor1._partition.end;
     analytor1._find_partition_end();
-    ASSERT_TRUE(analytor1._found_partition_end.first);
-    ASSERT_EQ(analytor1._found_partition_end.second, 5);
+    ASSERT_TRUE(analytor1._partition.is_real);
+    ASSERT_EQ(analytor1._partition.end, 5);
 
-    analytor1._reset_state_for_cur_partition();
+    analytor1._reset_state_for_next_partition();
 
-    analytor1._current_row_position = analytor1._found_partition_end.second;
+    analytor1._current_row_position = analytor1._partition.end;
     analytor1._find_partition_end();
-    ASSERT_TRUE(analytor1._found_partition_end.first);
-    ASSERT_EQ(analytor1._found_partition_end.second, 10);
+    ASSERT_TRUE(analytor1._partition.is_real);
+    ASSERT_EQ(analytor1._partition.end, 10);
 
-    analytor1._reset_state_for_cur_partition();
+    analytor1._reset_state_for_next_partition();
 
-    analytor1._current_row_position = analytor1._found_partition_end.second;
+    analytor1._current_row_position = analytor1._partition.end;
     analytor1._find_partition_end();
-    ASSERT_FALSE(analytor1._found_partition_end.first);
-    ASSERT_EQ(analytor1._found_partition_end.second, 20);
+    ASSERT_TRUE(analytor1._partition.is_real);
+    ASSERT_EQ(analytor1._partition.end, 20);
 
     // partition columns is empty
     Analytor analytor2(plan_node, row_desc, nullptr, false);
-    analytor2._update_input_rows(20);
+    analytor2._input_rows += 20;
+    analytor1._input_eos = true;
 
-    analytor2._current_row_position = analytor2._found_partition_end.second;
+    analytor2._current_row_position = analytor2._partition.end;
     analytor2._find_partition_end();
-    ASSERT_FALSE(analytor2._found_partition_end.first);
-    ASSERT_EQ(analytor2._found_partition_end.second, 20);
+    ASSERT_FALSE(analytor2._partition.is_real);
+    ASSERT_EQ(analytor2._partition.end, 20);
 
     // input rows = 0
     Analytor analytor3(plan_node, row_desc, nullptr, false);
-    analytor3._update_input_rows(0);
+    analytor3._input_rows = 0;
+    analytor1._input_eos = true;
 
-    analytor2._current_row_position = analytor2._found_partition_end.second;
+    analytor2._current_row_position = analytor2._partition.end;
     analytor3._find_partition_end();
-    ASSERT_FALSE(analytor3._found_partition_end.first);
-    ASSERT_EQ(analytor3._found_partition_end.second, 0);
+    ASSERT_FALSE(analytor3._partition.is_real);
+    ASSERT_EQ(analytor3._partition.end, 0);
 }
 
 } // namespace starrocks
