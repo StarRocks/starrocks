@@ -66,3 +66,23 @@ create table t2 like t0;
 insert into t2 SELECT generate_series, 40960 - generate_series FROM TABLE(generate_series(1,  409600));
 select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 > 400000;
 select count(*) from t0 l right join [shuffle]t2 r on l.c0=r.c0 where if(l.c0 is null, 0, l.c0) + r.c0 < 400000;
+
+-- make sure each time we only load one partition
+set spill_operator_max_bytes=0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [bucket] t1 r on l.c0 = r.c0;
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [shuffle] t1 r on l.c0 = r.c0;
+select count(*), count(r.c0), avg(r.c0), count(r.c1) from empty_t l right outer join [bucket] t1 r on l.c0 = r.c0;
+
+-- all string column
+create table tstring (
+    c0 STRING,
+    c1 STRING
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into tstring SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+insert into tstring select * from tstring;
+select count(*) from tstring;
+
+select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l join tstring r on l.c0 = r.c0; 
+select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l left join tstring r on l.c0 = r.c0; 
+select count(l.c0),sum(length(l.c0)), sum(length(l.c1)) from tstring l right join tstring r on l.c0 = r.c0;
+
