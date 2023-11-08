@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.common.OptimizerSetting;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
@@ -77,6 +78,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import javax.net.ssl.SSLContext;
@@ -214,6 +216,8 @@ public class ConnectContext {
     private boolean relationAliasCaseInsensitive = false;
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
+
+    protected Optional<OptimizerSetting> optimizerSetting = Optional.empty();
 
     public StmtExecutor getExecutor() {
         return executor;
@@ -818,6 +822,22 @@ public class ConnectContext {
             throw new IOException("construct SSLChannelImp class failed");
         }
     }
+
+    public Optional<OptimizerSetting> getOptimizerSetting() {
+        return optimizerSetting;
+    }
+
+    public void setOptimizerSetting(OptimizerSetting optimizerSetting) {
+        this.optimizerSetting = Optional.of(optimizerSetting);
+    }
+
+    // 1. enable queryDump need analyze table to collect table info
+    // 2. some ingest data scenes we need set specific values in individual tableRelation
+    // The above two scenes cannot reuse viewDef
+    public boolean cannotReuseViewDef() {
+        return dumpInfo != null || (optimizerSetting.isPresent() && !optimizerSetting.get().isReuseViewDef());
+    }
+
 
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);

@@ -26,7 +26,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -185,16 +184,14 @@ public enum ScalarOperatorEvaluator {
 
         try {
             ConstantOperator operator = invoker.invoke(root.getChildren());
-
             // check return result type, decimal will change return type
             if (operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
                 operator.setType(fn.getReturnType());
             }
-
             return operator;
-        } catch (AnalysisException e) {
+        } catch (Exception e) {
             LOG.debug("failed to invoke", e);
             if (invoker.isMetaFunction) {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
@@ -297,16 +294,12 @@ public enum ScalarOperatorEvaluator {
         }
 
         // Function doesn't support array type
-        public ConstantOperator invoke(List<ScalarOperator> args) throws AnalysisException {
+        public ConstantOperator invoke(List<ScalarOperator> args) throws IllegalAccessException, InvocationTargetException {
             final List<Object> invokeArgs = createInvokeArgs(args);
-            try {
-                return (ConstantOperator) method.invoke(null, invokeArgs.toArray());
-            } catch (InvocationTargetException | IllegalAccessException | IllegalArgumentException e) {
-                throw new AnalysisException(e.getLocalizedMessage(), e);
-            }
+            return (ConstantOperator) method.invoke(null, invokeArgs.toArray());
         }
 
-        private List<Object> createInvokeArgs(List<ScalarOperator> args) throws AnalysisException {
+        private List<Object> createInvokeArgs(List<ScalarOperator> args) {
             final List<Object> invokeArgs = Lists.newArrayList();
             for (int index = 0; index < method.getParameterTypes().length; index++) {
                 final Class<?> argType = method.getParameterTypes()[index];
@@ -324,7 +317,7 @@ public enum ScalarOperatorEvaluator {
 
                     // Array data must keep same kinds
                     if (checkSet.size() > 1) {
-                        throw new AnalysisException("Function's args does't match.");
+                        throw new IllegalArgumentException("Function's args does't match.");
                     }
 
                     ConstantOperator[] argsArray = new ConstantOperator[variableArgs.size()];

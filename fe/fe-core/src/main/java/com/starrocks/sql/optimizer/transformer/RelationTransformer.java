@@ -126,6 +126,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -273,17 +274,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
                     Type relationType = relation.getRelationFields().getFieldByIndex(i).getType();
                     if (!outputType.equals(relationType)) {
-                        try {
-                            if (relationType.isNull()) {
-                                row.get(i).setType(outputType);
-                            } else {
-                                ScalarOperator expr = foldCast(((ConstantOperator) row.get(i)).castTo(outputType));
-                                row.set(i, expr);
+                        if (relationType.isNull()) {
+                            row.get(i).setType(outputType);
+                        } else {
+                            Optional<ConstantOperator> expr = ((ConstantOperator) row.get(i)).castTo(outputType);
+                            if (!expr.isPresent()) {
+                                throw new SemanticException("can not cast value " + row.get(i) + "to type " + outputType);
                             }
-                            valuesOperator.getColumnRefSet().get(i).setType(outputType);
-                        } catch (Exception e) {
-                            throw new SemanticException(e.toString());
+                            row.set(i, expr.get());
                         }
+                        valuesOperator.getColumnRefSet().get(i).setType(outputType);
                     }
                 }
                 // Note: must copy here

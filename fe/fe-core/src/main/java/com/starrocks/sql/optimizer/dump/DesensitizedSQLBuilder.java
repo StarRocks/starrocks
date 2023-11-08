@@ -101,7 +101,7 @@ public class DesensitizedSQLBuilder {
     }
 
     public static String desensitizeViewDef(View view, Map<String, String> desensitizedDict, ConnectContext connectContext) {
-        QueryStatement stmt = view.getQueryStatement();
+        QueryStatement stmt = view.getViewDefCache();
         new QueryAnalyzer(connectContext).analyze(stmt);
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(stmt);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;

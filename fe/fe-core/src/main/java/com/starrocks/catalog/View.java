@@ -41,7 +41,9 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
@@ -54,6 +56,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Table metadata representing a globalStateMgr view or a local view from a WITH clause.
@@ -93,6 +96,12 @@ public class View extends Table {
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
+    // store the parsed result
+    private QueryStatement viewDefCache;
+
+    // store the analyzed result based on a new parsed queryStatement
+    private AtomicReference<QueryStatement> analyzedCache = new AtomicReference<>();
+
     // Used for read from image
     public View() {
         super(TableType.VIEW);
@@ -102,30 +111,47 @@ public class View extends Table {
         super(id, name, TableType.VIEW, schema);
     }
 
-    public QueryStatement getQueryStatement() throws StarRocksPlannerException {
+    /**
+     * Attention: if you want a new queryStatement when you want to set some special value different from
+     * its query definition, please set reuseViewDef to false.
+     * @return QueryStatement
+     */
+    public QueryStatement parseAndAnalyzeDef() {
         Preconditions.checkNotNull(inlineViewDef);
-        ParseNode node;
-        try {
-            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
-        } catch (Exception e) {
-            LOG.warn("stmt is {}", inlineViewDef);
-            LOG.warn("exception because: ", e);
-            throw new StarRocksPlannerException(
-                    String.format("Failed to parse view-definition statement of view: %s", name),
-                    ErrorType.INTERNAL_ERROR);
-        }
-        // Make sure the view definition parses to a query statement.
-        if (!(node instanceof QueryStatement)) {
-            throw new StarRocksPlannerException(String.format("View definition of %s " +
-                    "is not a query statement", name), ErrorType.INTERNAL_ERROR);
-        }
 
-        return (QueryStatement) node;
+        if (analyzedCache.get() == null || ConnectContext.get().cannotReuseViewDef()) {
+            ParseNode node;
+            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
+            // Make sure the view definition parses to a query statement.
+            if (!(node instanceof QueryStatement)) {
+                throw new StarRocksPlannerException(String.format("View %s without query statement. Its definition is:%n%s",
+                        name, inlineViewDef), ErrorType.INTERNAL_ERROR);
+            }
+
+            QueryStatement stmt = (QueryStatement) node;
+
+            if (ConnectContext.get().cannotReuseViewDef()) {
+                return stmt;
+            }  else {
+                Analyzer.analyze(stmt, ConnectContext.get());
+                analyzedCache.compareAndSet(null, stmt);
+            }
+        }
+        return analyzedCache.get();
+    }
+
+    public boolean isAnalyzed() {
+        return analyzedCache.get() != null;
+    }
+
+    public QueryStatement getViewDefCache() {
+        return viewDefCache;
     }
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
+        this.analyzedCache = new AtomicReference<>();
     }
 
     public String getInlineViewDef() {
@@ -146,26 +172,28 @@ public class View extends Table {
         try {
             node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
-            LOG.info("stmt is {}", inlineViewDef);
-            LOG.info("exception because: ", e);
-            LOG.info("msg is {}", inlineViewDef);
+            LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
             // Do not pass e as the exception cause because it might reveal the existence
             // of tables that the user triggering this load may not have privileges on.
             throw new UserException(
-                    String.format("Failed to parse view-definition statement of view: %s", name), e);
+                    String.format("Failed to parse view: %s. Its definition is:%n%s ", name, inlineViewDef));
         }
         // Make sure the view definition parses to a query statement.
         if (!(node instanceof QueryStatement)) {
-            throw new UserException(String.format("View definition of %s " +
-                    "is not a query statement", name));
+            throw new UserException(String.format("View %s without query statement. Its definition is:%n%s",
+                    name, inlineViewDef));
         }
-        return (QueryStatement) node;
+        viewDefCache = (QueryStatement) node;
+        return viewDefCache;
+    }
+
+    public void clearAnalyzedCache() {
+        analyzedCache.set(null);
     }
 
     public synchronized List<TableName> getTableRefs() {
         if (this.tableRefsCache.isEmpty()) {
-            QueryStatement qs = getQueryStatement();
-            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(qs);
+            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(viewDefCache);
             this.tableRefsCache = Lists.newArrayList(allTables.keySet());
         }
 
@@ -182,7 +210,7 @@ public class View extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         // just do not want to modify the meta version, so leave originalViewDef here but set it as empty
-        originalViewDef = Text.readString(in);
+        Text.readString(in);
         originalViewDef = "";
         inlineViewDef = Text.readString(in);
         inlineViewDef = inlineViewDef.replaceAll("default_cluster:", "");
