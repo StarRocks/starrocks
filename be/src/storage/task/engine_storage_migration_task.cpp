@@ -350,6 +350,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
                 }
 
                 if (dcgs.size() == 0) {
+                    ++idx;
                     continue;
                 }
 
