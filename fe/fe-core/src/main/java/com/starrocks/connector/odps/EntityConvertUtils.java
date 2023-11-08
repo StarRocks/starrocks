@@ -58,7 +58,7 @@ public class EntityConvertUtils {
                 int precision = decimalTypeInfo.getPrecision();
                 // odps decimal v1 may overflow, use string type
                 if (precision > MAX_DECIMAL128_PRECISION) {
-                    return ScalarType.createDefaultExternalTableString();
+                    return ScalarType.createDefaultCatalogString();
                 }
                 PrimitiveType type;
                 if (precision <= MAX_DECIMAL32_PRECISION) {
@@ -79,7 +79,7 @@ public class EntityConvertUtils {
                 return ScalarType.createVarcharType(varcharTypeInfo.getLength());
             case STRING:
             case JSON:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case BINARY:
                 return Type.VARBINARY;
             case BOOLEAN:

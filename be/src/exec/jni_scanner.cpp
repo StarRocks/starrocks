@@ -94,22 +94,17 @@ Status JniScanner::_init_jni_method(JNIEnv* _jni_env) {
 }
 
 Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state) {
-    LOG(INFO) << "start inti jni table scanner";
     jclass scanner_factory_class = _jni_env->FindClass(_jni_scanner_factory_class.c_str());
-    LOG(INFO) << "find class" << _jni_scanner_factory_class.c_str();
     jmethodID scanner_factory_constructor = _jni_env->GetMethodID(scanner_factory_class, "<init>", "()V");
     jobject scanner_factory_obj = _jni_env->NewObject(scanner_factory_class, scanner_factory_constructor);
-    LOG(INFO) << "new scanner factory";
     jmethodID get_scanner_method =
             _jni_env->GetMethodID(scanner_factory_class, "getScannerClass", "()Ljava/lang/Class;");
     _jni_scanner_cls = (jclass)_jni_env->CallObjectMethod(scanner_factory_obj, get_scanner_method);
-    LOG(INFO) << "init scanner factory success";
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to init the scanner class."));
     _jni_env->DeleteLocalRef(scanner_factory_class);
     _jni_env->DeleteLocalRef(scanner_factory_obj);
 
     jmethodID scanner_constructor = _jni_env->GetMethodID(_jni_scanner_cls, "<init>", "(ILjava/util/Map;)V");
-    LOG(INFO) << "try to construct scanner success";
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get a scanner class constructor."));
 
     jclass hashmap_class = _jni_env->FindClass("java/util/HashMap");
@@ -118,6 +113,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     jmethodID hashmap_put =
             _jni_env->GetMethodID(hashmap_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get the HashMap methods."));
+
     std::string message = "Initialize a scanner with parameters: ";
     for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
@@ -150,7 +146,6 @@ Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
     *chunk_meta = _jni_env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
     RETURN_IF_ERROR(
             _check_jni_exception(_jni_env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
-    LOG(INFO) << "[debug] get next chunk";
     return Status::OK();
 }
 

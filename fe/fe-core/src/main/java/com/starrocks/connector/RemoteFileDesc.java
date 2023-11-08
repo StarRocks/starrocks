@@ -50,6 +50,7 @@ public class RemoteFileDesc {
         this.blockDescs = blockDescs;
         this.hudiDeltaLogs = hudiDeltaLogs;
         this.icebergScanTasks = icebergScanTasks;
+        this.paimonSplitsInfo = paimonSplitsInfo;
         this.odpsSplitsInfo = odpsSplitsInfo;
     }
 
