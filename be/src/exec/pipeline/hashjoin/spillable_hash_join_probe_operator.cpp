@@ -384,7 +384,11 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     }
 
     // restore chunk from spilled partition then push it to hash join prober
+<<<<<<< HEAD
     if (!_current_reader.empty() && probe_has_output) {
+=======
+    if (!_current_reader.empty() && all_probe_partition_is_empty()) {
+>>>>>>> d1d4c441b0 ([BugFix] Fix query may hang in right outer join (#34527))
         RETURN_IF_ERROR(_restore_probe_partition(state));
     }
 
