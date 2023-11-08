@@ -151,8 +151,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             s3ClientBuilder.region(Region.of(s3Region));
         }
 
-        if (!s3Endpoint.isEmpty()) {
-            s3ClientBuilder.endpointOverride(URI.create(s3Endpoint));
+        URI uri;
+        if (!s3Endpoint.isEmpty() && (uri = URI.create(s3Endpoint)).getScheme() != null) {
+            s3ClientBuilder.endpointOverride(uri);
         }
 
         return s3ClientBuilder.build();
@@ -175,8 +176,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             glueClientBuilder.region(Region.of(glueRegion));
         }
 
-        if (!glueEndpoint.isEmpty()) {
-            glueClientBuilder.endpointOverride(URI.create(glueEndpoint));
+        URI uri;
+        if (!glueEndpoint.isEmpty() && (uri = URI.create(glueEndpoint)).getScheme() != null) {
+            glueClientBuilder.endpointOverride(uri);
         }
 
         return glueClientBuilder.build();
