@@ -106,7 +106,7 @@ public:
         _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
     }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
-        _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
+        _runtime_profile_report_interval_ns = 1'000'000'000LL * runtime_profile_report_interval_s;
     }
     int64_t get_runtime_profile_report_interval_ns() { return _runtime_profile_report_interval_ns; }
     void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }

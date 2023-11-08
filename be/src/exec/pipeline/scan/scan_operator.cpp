@@ -256,7 +256,7 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
         return 0;
     }
 
-    return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
+    return 1000'000LL * global_rf_collector->scan_wait_timeout_ms();
 }
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // to sure to put it here for updating state.
@@ -399,6 +399,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
+                LOG(WARNING) << get_name() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 

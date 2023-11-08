@@ -75,7 +75,6 @@ void PipelineDriverPoller::run_internal() {
 
             auto driver_it = _local_blocked_drivers.begin();
             while (driver_it != _local_blocked_drivers.end()) {
-                //
                 auto* driver = *driver_it;
                 if (!driver->is_query_never_expired() && driver->query_ctx()->is_query_expired()) {
                     // there are not any drivers belonging to a query context can make progress for an expiration period
@@ -86,8 +85,7 @@ void PipelineDriverPoller::run_internal() {
                     // The state of driver shouldn't be changed.
                     size_t expired_log_count = driver->fragment_ctx()->expired_log_count();
                     if (expired_log_count <= 100) {
-                        LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
-                                     << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                        LOG(WARNING) << "[Driver] Timeout " << driver->to_readable_string();
                         driver->fragment_ctx()->set_expired_log_count(++expired_log_count);
                     }
                     driver->fragment_ctx()->cancel(
