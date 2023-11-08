@@ -1161,12 +1161,12 @@ public class MvUtils {
             LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
             PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
 
-            StringLiteral upperString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            StringLiteral upperString = (StringLiteral) from.upperEndpoint().getKeys().get(0);
             LocalDateTime upperDateTime = DateUtils.parseDatTimeString(upperString.getStringValue());
             PartitionKey upperPartitionKey = PartitionKey.ofDate(upperDateTime.toLocalDate());
             return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
         } else if (from.hasUpperBound()) {
-            StringLiteral upperString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            StringLiteral upperString = (StringLiteral) from.upperEndpoint().getKeys().get(0);
             LocalDateTime upperDateTime = DateUtils.parseDatTimeString(upperString.getStringValue());
             PartitionKey upperPartitionKey = PartitionKey.ofDate(upperDateTime.toLocalDate());
             return Range.upTo(upperPartitionKey, from.upperBoundType());
