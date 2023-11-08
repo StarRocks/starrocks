@@ -107,24 +107,32 @@ TEST_F(StatusTest, ErrorWithContext) {
     ASSERT_EQ("123", st.message());
     ASSERT_EQ("123", st.detailed_message());
     ASSERT_EQ("Internal error: 123", st.to_string());
+    ASSERT_EQ("Internal error: 123", st.to_string(true));
+    ASSERT_EQ("Internal error: 123", st.to_string(false));
 
     Status st1 = st.clone_and_append_context("a.cpp", 10, "expr1");
     ASSERT_EQ("123", st1.get_error_msg());
     ASSERT_EQ("123", st1.message());
     ASSERT_EQ("123\na.cpp:10 expr1", st1.detailed_message());
     ASSERT_EQ("Internal error: 123\na.cpp:10 expr1", st1.to_string());
+    ASSERT_EQ("Internal error: 123\na.cpp:10 expr1", st1.to_string(true));
+    ASSERT_EQ("Internal error: 123", st1.to_string(false));
 
     Status st2 = st1.clone_and_append_context("b.cpp", 11, "expr2");
     ASSERT_EQ("123", st2.get_error_msg());
     ASSERT_EQ("123", st2.message());
     ASSERT_EQ("123\na.cpp:10 expr1\nb.cpp:11 expr2", st2.detailed_message());
     ASSERT_EQ("Internal error: 123\na.cpp:10 expr1\nb.cpp:11 expr2", st2.to_string());
+    ASSERT_EQ("Internal error: 123\na.cpp:10 expr1\nb.cpp:11 expr2", st2.to_string(true));
+    ASSERT_EQ("Internal error: 123", st2.to_string(false));
 
     Status st3 = st2.clone_and_append_context("c.cpp", 13, "expr3");
     ASSERT_EQ("123", st3.get_error_msg());
     ASSERT_EQ("123", st3.message());
     ASSERT_EQ("123\na.cpp:10 expr1\nb.cpp:11 expr2\nc.cpp:13 expr3", st3.detailed_message());
     ASSERT_EQ("Internal error: 123\na.cpp:10 expr1\nb.cpp:11 expr2\nc.cpp:13 expr3", st3.to_string());
+    ASSERT_EQ("Internal error: 123\na.cpp:10 expr1\nb.cpp:11 expr2\nc.cpp:13 expr3", st3.to_string(true));
+    ASSERT_EQ("Internal error: 123", st3.to_string(false));
 }
 
 TEST_F(StatusTest, LongContext) {

@@ -231,7 +231,7 @@ std::string Status::code_as_string() const {
     return {};
 }
 
-std::string Status::to_string() const {
+std::string Status::to_string(bool with_context_info) const {
     mark_checked();
     std::string result(code_as_string());
     if (_state == nullptr) {
@@ -239,7 +239,13 @@ std::string Status::to_string() const {
     }
 
     result.append(": ");
-    Slice msg = detailed_message();
+    Slice msg;
+    if (with_context_info) {
+        msg = detailed_message();
+    } else {
+        msg = message();
+    }
+
     result.append(reinterpret_cast<const char*>(msg.data), msg.size);
     return result;
 }
