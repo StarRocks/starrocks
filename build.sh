@@ -193,14 +193,14 @@ fi
 
 HELP=0
 if [ $# == 1 ] ; then
-    # default
+    # default. `sh build.sh``
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
-elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
-    # default
+elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
+    # default. `sh build.sh -j 32`
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
