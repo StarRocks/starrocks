@@ -239,8 +239,6 @@ private:
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    void _prepare_adapter_info();
-
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
 
     friend class SegmentIterator;
@@ -263,11 +261,6 @@ private:
     PageHandle _sk_index_handle;
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
-
-    // Actual storage type for each column, used to rewrite the input readoptions
-    std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
-    // When reading old type format data this will be set to true.
-    bool _needs_chunk_adapter = false;
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;
