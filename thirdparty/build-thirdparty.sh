@@ -1207,6 +1207,36 @@ build_libdeflate() {
     ${BUILD_SYSTEM} install
 }
 
+#clucene
+build_clucene() {
+
+    check_if_source_exist "${CLUCENE_SOURCE}"
+    cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib64 \
+        -DBUILD_STATIC_LIBRARIES=ON \
+        -DBUILD_SHARED_LIBRARIES=OFF \
+        -DBOOST_ROOT="$TP_INSTALL_DIR" \
+        -DZLIB_ROOT="$TP_INSTALL_DIR" \
+        -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing" \
+        -DUSE_STAT64=0 \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_CONTRIBS_LIB=ON ..
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+
+    cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
+    if [[ ! -d "$TP_INSTALL_DIR"/share ]]; then
+        mkdir -p "$TP_INSTALL_DIR"/share
+    fi
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1295,6 +1325,8 @@ build_datasketches
 build_async_profiler
 build_fiu
 build_llvm
+build_clucene
+
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
