@@ -2410,6 +2410,7 @@ PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
