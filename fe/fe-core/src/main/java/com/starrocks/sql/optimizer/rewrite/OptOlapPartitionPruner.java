@@ -23,6 +23,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -166,27 +167,31 @@ public class OptOlapPartitionPruner {
             }
 
             // None/Null bound predicate can't prune
-            if ((null == pcf.lowerBound || pcf.lowerBound.isConstantNull()) &&
-                    (null == pcf.upperBound || pcf.upperBound.isConstantNull())) {
+            LiteralExpr lowerBound = pcf.getLowerBound();
+            LiteralExpr upperBound = pcf.getUpperBound();
+            if ((null == lowerBound || lowerBound.isConstantNull()) &&
+                    (null == upperBound || upperBound.isConstantNull())) {
                 continue;
             }
 
             boolean lowerBind = true;
             boolean upperBind = true;
-            if (null != pcf.lowerBound) {
+            if (null != lowerBound) {
                 lowerBind = false;
                 PartitionKey min = new PartitionKey();
-                min.pushColumn(pcf.lowerBound, column.getPrimitiveType());
+                // TODO: take care `isConvertToDate` for olap table
+                min.pushColumn(pcf.getLowerBound(), column.getPrimitiveType());
                 int cmp = minRange.compareTo(min);
                 if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
                     lowerBind = true;
                 }
             }
 
-            if (null != pcf.upperBound) {
+            if (null != upperBound) {
                 upperBind = false;
                 PartitionKey max = new PartitionKey();
-                max.pushColumn(pcf.upperBound, column.getPrimitiveType());
+                // TODO: take care `isConvertToDate` for olap table
+                max.pushColumn(upperBound, column.getPrimitiveType());
                 int cmp = maxRange.compareTo(max);
                 if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
                     upperBind = true;
@@ -315,7 +320,7 @@ public class OptOlapPartitionPruner {
         } catch (AnalysisException e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
-        return null;
+        return specifyPartitionIds;
     }
 
     private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
@@ -340,7 +345,7 @@ public class OptOlapPartitionPruner {
         } catch (Exception e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
-        return null;
+        return Lists.newArrayList(keyRangeById.keySet());
     }
 
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
@@ -352,11 +357,7 @@ public class OptOlapPartitionPruner {
 
         // only support RANGE and EXPR_RANGE
         // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
-        if (partitionInfo.getType() == PartitionType.RANGE) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-            return rangePartitionInfo.getPartitionColumns().size() == 1
-                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
-        } else if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs();
             if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
@@ -366,6 +367,12 @@ public class OptOlapPartitionPruner {
                         || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
                         && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
             }
+        } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+            return false;
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            return rangePartitionInfo.getPartitionColumns().size() == 1
+                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
         }
         return false;
     }

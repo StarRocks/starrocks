@@ -93,6 +93,9 @@ public class MVUtils {
     // - only support specific function  for aggregate column.
     // 2. MV with Complex expressions will be used to rewrite query by AggregatedMaterializedViewRewriter.
     public static boolean containComplexExpresses(MaterializedIndexMeta mvMeta) {
+        if (mvMeta.getWhereClause() != null) {
+            return true;
+        }
         for (Column mvColumn : mvMeta.getSchema()) {
             Expr definedExpr = mvColumn.getDefineExpr();
             if (definedExpr == null) {

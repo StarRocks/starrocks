@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle profile processing
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store profile process task
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField
@@ -596,6 +608,12 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int http_max_chunk_size = 8192;
+
+    /**
+     * If a request takes longer than the configured time, a log will be generated to trace it.
+     */
+    @ConfField(mutable = true)
+    public static int http_slow_request_threshold_ms = 5000;
 
     /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through
@@ -707,7 +725,7 @@ public class Config extends ConfigBase {
      * handshake packet version.
      * global variable version.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
 
     /**
@@ -1639,6 +1657,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
+
+    /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
 
     /**
      * Check expire partition statistics data when StarRocks start up

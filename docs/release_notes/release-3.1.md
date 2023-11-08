@@ -1,20 +1,69 @@
 # StarRocks version 3.1
 
+## 3.1.4
+
+Release date: November 2, 2023
+
+### New Features
+
+- Supports sort keys for Primary Key tables created in shared-data StarRocks clusters.
+- Supports using the str2date function to specify partition expressions for asynchronous materialized views. This helps facilitate incremental updates and query rewrites of asynchronous materialized views created on tables that reside in external catalogs and use the STRING-type data as their partitioning expressions. [#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
+- Added a new session variable `enable_query_tablet_affinity`, which controls whether to direct multiple queries against the same tablet to a fixed replica. This session variable is set to `false` by default. [#33049](https://github.com/StarRocks/starrocks/pull/33049)
+- Added the utility function `is_role_in_session`, which is used to check whether the specified roles are activated in the current session. It supports checking nested roles granted to a user. [#32984](https://github.com/StarRocks/starrocks/pull/32984)
+- Supports setting resource group-level query queue, which is controlled by the global variable `enable_group_level_query_queue` (default value: `false`). When the global-level or resource group-level resource consumption reaches a predefined threshold, new queries are placed in queue, and will be run when both the global-level resource consumption and the resource group-level resource consumption fall below their thresholds.
+  - Users can set `concurrency_limit` for each resource group to limit the maximum number of concurrent queries allowed per BE.
+  - Users can set `max_cpu_cores` for each resource group to limit the maximum CPU consumption allowed per BE.
+- Added two parameters, `plan_cpu_cost_range` and `plan_mem_cost_range`, for resource group classifiers.
+  - `plan_cpu_cost_range`: the CPU consumption range estimated by the system. The default value `NULL` indicates no limit is imposed.
+  - `plan_mem_cost_range`: the memory consumption range estimated by the system. The default value `NULL` indicates no limit is imposed.
+
+### Improvements
+
+- Window functions COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP now support the ORDER BY clause and Window clause. [#30786](https://github.com/StarRocks/starrocks/pull/30786)
+- An error instead of NULL is returned if a decimal overflow occurs during queries on the DECIMAL type data. [#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- The number of concurrent queries allowed in a query queue is now managed by the leader FE. Each follower FE notifies of the leader FE when a query starts and finishes. If the number of concurrent queries reaches the global-level or resource group-level `concurrency_limit`, new queries are rejected or placed in queue.
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Spark or Flink may report data read errors due to inaccurate memory usage statistics. [#30702](https://github.com/StarRocks/starrocks/pull/30702)  [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- Memory usage statistics for Metadata Cache are inaccurate. [#31978](https://github.com/StarRocks/starrocks/pull/31978)
+- BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- When StarRocks materialized views created on Hive views are refreshed, an error "java.lang.ClassCastException: com.starrocks.catalog.HiveView cannot be cast to com.starrocks.catalog.HiveMetaStoreTable" is returned. [#31004](https://github.com/StarRocks/starrocks/pull/31004)
+- If the ORDER BY clause contains aggregate functions, an error "java.lang.IllegalStateException: null" is returned. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
+- In shared-data StarRocks clusters, the information of table keys is not recorded in `information_schema.COLUMNS`. As a result, DELETE operations cannot be performed when data is loaded by using Flink Connector. [#31458](https://github.com/StarRocks/starrocks/pull/31458)
+- When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP threads and the number of Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- When a field of only a few bytes is added, executing SELECT COUNT(*) before the data change finishes returns an error that reads "error: invalid field name". [#33243](https://github.com/StarRocks/starrocks/pull/33243)
+- Query results are incorrect after the query cache is enabled. [#32781](https://github.com/StarRocks/starrocks/pull/32781)
+- Queries fail during hash joins, causing BEs to crash. [#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)
+
+### Behavior Change
+
+- From v3.1.4 onwards, persistent indexing is enabled by default for Primary Key tables created in new StarRocks clusters (this does not apply to existing StarRocks clusters whose versions are upgraded to v3.1.4 from an earlier version). [#33374](https://github.com/StarRocks/starrocks/pull/33374)
+- A new FE parameter `enable_sync_publish` which is set to `true` by default is added. When this parameter is set to `true`, the Publish phase of a data load into a Primary Key table returns the execution result only after the Apply task finishes. As such, the data loaded can be queried immediately after the load job returns a success message. However, setting this parameter to `true` may cause data loads into Primary Key tables to take a longer time. (Before this parameter is added, the Apply task is asynchronous with the Publish phase.) [#27055](https://github.com/StarRocks/starrocks/pull/27055)
+
 ## 3.1.3
 
 Release date: September 25, 2023
 
-## New Features
+### Behavior Change
 
+- When using the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function, you must use the SEPARATOR keyword to declare the separator.
+
+### New Features
+
+- Primary Key tables created in shared-data StarRocks clusters support index persistence onto local disks in the same way as they do in shared-nothing StarRocks clusters.
 - The aggregate function [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) supports the DISTINCT keyword and the ORDER BY clause. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
 - [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Kafka Connector](../loading/Kafka-connector-starrocks.md), [Flink Connector](../loading/Flink-connector-starrocks.md), and [Spark Connector](../loading/Spark-connector-starrocks.md) support partial updates in column mode on a Primary Key table. [#28288](https://github.com/StarRocks/starrocks/pull/28288)
 - Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](../table_design/list_partitioning.md).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
-## Improvements
+### Improvements
 
 Executing SQL commands with invalid comments now returns results consistent with MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
 
-## Bug Fixes
+### Bug Fixes
 
 Fixed the following issues:
 
@@ -90,7 +139,7 @@ Release date: August 7, 2023
 - Added support for Primary Key tables, on which persistent indexes cannot be enabled.
 - Supports the [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) column attribute, which enables a globally unique ID for each data row and thus simplifies data management.
 - Supports [automatically creating partitions during loading and using partitioning expressions to define partitioning rules](../table_design/expression_partitioning.md), thereby making partition creation easier to use and more flexible.
-- Supports [abstraction of storage volumes](../deployment/shared_data/s3.md#create-default-storage-volume), in which users can configure storage location and authentication information, in StarRocks shared-data clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
+- Supports [abstraction of storage volumes](../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), in which users can configure storage location and authentication information, in shared-data StarRocks clusters. Users can directly reference an existing storage volume when creating a database or table, making authentication configuration easier.
 
 #### Data Lake analytics
 
@@ -106,7 +155,7 @@ Release date: August 7, 2023
 - Supports [list partitioning](../table_design/list_partitioning.md). Data is partitioned based on a list of values predefined for a particular column, which can accelerate queries and manage clearly categorized data more efficiently.
 - Added a new table named `loads` to the `Information_schema` database. Users can query the results of [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [Insert](../sql-reference/sql-statements/data-manipulation/insert.md) jobs from the `loads` table.
 - Supports logging the unqualified data rows that are filtered out by [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), and [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) jobs. Users can use the `log_rejected_record_num` parameter in their load job to specify the maximum number of data rows that can be logged.
-- Supports [random bucketing](../table_design/Data_distribution.md#choose-bucketing-columns). With this feature, users do not need to configure bucketing columns at table creation, and StarRocks will randomly distribute the data loaded into it to buckets. Using this feature together with the capability of automatically setting the number of buckets (`BUCKETS`) that StarRocks has provided since v2.5.7, users no longer need to consider bucket configurations, and table creation statements are greatly simplified. In big data and high performance-demanding scenarios, however, we recommend that users continue using hash bucketing, because this way they can use bucket pruning to accelerate queries.
+- Supports [random bucketing](../table_design/Data_distribution.md#how-to-choose-the-bucketing-columns). With this feature, users do not need to configure bucketing columns at table creation, and StarRocks will randomly distribute the data loaded into it to buckets. Using this feature together with the capability of automatically setting the number of buckets (`BUCKETS`) that StarRocks has provided since v2.5.7, users no longer need to consider bucket configurations, and table creation statements are greatly simplified. In big data and high performance-demanding scenarios, however, we recommend that users continue using hash bucketing, because this way they can use bucket pruning to accelerate queries.
 - Supports using the table function FILES() in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3. The FILES() function can automatically infer the table schema, which relieves the need to create external catalogs or file external tables before data loading and therefore greatly simplifies the data loading process.
 - Supports [generated columns](../sql-reference/sql-statements/generated_columns.md). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
 - Supports loading data from Spark to StarRocks by using [Spark connector](../loading/Spark-connector-starrocks.md). Compared to [Spark Load](../loading/SparkLoad.md), the Spark connector provides more comprehensive capabilities. Users can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
@@ -139,7 +188,7 @@ Added [privilege items](../administration/privilege_item.md#storage-volume) rela
 
 #### Shared-data cluster
 
-Optimized the data cache in StarRocks shared-data clusters. The optimized data cache allows for specifying the range of hot data. It can also prevent queries against cold data from occupying the local disk cache, thereby ensuring the performance of queries against hot data.
+Optimized the data cache in shared-data StarRocks clusters. The optimized data cache allows for specifying the range of hot data. It can also prevent queries against cold data from occupying the local disk cache, thereby ensuring the performance of queries against hot data.
 
 #### Materialized view
 
@@ -212,7 +261,7 @@ Fixed the following issues:
 
 ### Behavior Change
 
-- The `storage_cache_ttl` parameter is deleted from the table creation syntax used for StarRocks shared-data clusters. Now the data in the local cache is evicted based on the LRU algorithm.
+- The `storage_cache_ttl` parameter is deleted from the table creation syntax used for shared-data StarRocks clusters. Now the data in the local cache is evicted based on the LRU algorithm.
 - The BE configuration items `disable_storage_page_cache` and `alter_tablet_worker_count` and the FE configuration item `lake_compaction_max_tasks` are changed from immutable parameters to mutable parameters.
 - The default value of the BE configuration item `block_cache_checksum_enable` is changed from `true` to `false`.
 - The default value of the BE configuration item `enable_new_load_on_memory_limit_exceeded` is changed from `false` to `true`.

@@ -231,8 +231,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PROFILE_TIMEOUT = "profile_timeout";
     public static final String RUNTIME_PROFILE_REPORT_INTERVAL = "runtime_profile_report_interval";
-    public static final String PROFILE_LIMIT_FOLD = "profile_limit_fold";
     public static final String PIPELINE_PROFILE_LEVEL = "pipeline_profile_level";
+    public static final String ENABLE_ASYNC_PROFILE = "enable_async_profile";
 
     public static final String RESOURCE_GROUP_ID = "workgroup_id";
     public static final String RESOURCE_GROUP_ID_V2 = "resource_group_id";
@@ -317,7 +317,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
+    public static final String GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT = "global_runtime_filter_wait_timeout";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
+    public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
+
+    public static final String ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF =
+            "enable_pipeline_level_multi_partitioned_rf";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
@@ -364,6 +371,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
 
+    public static final String HASH_JOIN_INTERPOLATE_PASSTHROUGH = "hash_join_interpolate_passthrough";
+
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
@@ -380,7 +389,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
 
+    public static final String ENABLE_FILE_METACACHE = "enable_file_metacache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
+    public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
@@ -452,6 +463,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+    public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -544,6 +556,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -828,11 +842,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = RUNTIME_PROFILE_REPORT_INTERVAL)
     private int runtimeProfileReportInterval = 10;
 
-    @VariableMgr.VarAttr(name = PROFILE_LIMIT_FOLD, flag = VariableMgr.INVISIBLE)
-    private boolean profileLimitFold = true;
-
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
+
+    @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
+    private boolean enableAsyncProfile = true;
+
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
+    private int bigQueryProfileSecondThreshold = 0;
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -968,7 +985,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
-    private int newPlannerAggStage = 0;
+    private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
@@ -1004,6 +1021,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_GLOBAL_RUNTIME_FILTER)
     private boolean enableGlobalRuntimeFilter = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_TOPN_RUNTIME_FILTER)
+    private boolean enableTopNRuntimeFilter = true;
+
     // Parameters to determine the usage of runtime filter
     // Either the build_max or probe_min equal to 0 would force use the filter,
     // otherwise would decide based on the cardinality
@@ -1016,8 +1036,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterWaitTimeout = 20;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterRpcTimeout = 400;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterRpcHttpMinSize = 64L * 1024 * 1024;
+
+    @VarAttr(name = ENABLE_PIPELINE_LEVEL_MULTI_PARTITIONED_RF)
+    private boolean enablePipelineLevelMultiPartitionedRf = false;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -1067,6 +1096,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
     private boolean interpolatePassthrough = true;
+
+    @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean hashJoinInterpolatePassthrough = false;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -1186,6 +1218,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
+    private boolean enableDynamicPruneScanRange = true;
+
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
 
@@ -1203,6 +1238,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
+    private boolean enableFileMetaCache = true;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
@@ -1408,6 +1446,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
     }
@@ -1435,6 +1476,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
+
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
 
@@ -1622,6 +1664,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
         this.enableLoadProfile = enableLoadProfile;
+    }
+
+    public boolean isEnableBigQueryProfile() {
+        return bigQueryProfileSecondThreshold > 0;
+    }
+
+    public int getBigQueryProfileSecondThreshold() {
+        return bigQueryProfileSecondThreshold;
     }
 
     public int getWaitTimeoutS() {
@@ -1984,6 +2034,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         enableGlobalRuntimeFilter = value;
     }
 
+    public boolean getEnableTopNRuntimeFilter() {
+        return enableTopNRuntimeFilter;
+    }
+
     public void setGlobalRuntimeFilterBuildMaxSize(long globalRuntimeFilterBuildMaxSize) {
         this.globalRuntimeFilterBuildMaxSize = globalRuntimeFilterBuildMaxSize;
     }
@@ -2010,6 +2064,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public float getGlobalRuntimeFilterProbeMinSelectivity() {
         return globalRuntimeFilterProbeMinSelectivity;
+    }
+
+    public void setEnablePipelineLevelMultiPartitionedRf(boolean on) {
+        enablePipelineLevelMultiPartitionedRf = on;
+        if (on) {
+            enableRuntimeAdaptiveDop = false;
+        }
+    }
+
+    public boolean isEnablePipelineLevelMultiPartitionedRf() {
+        return enablePipelineLevelMultiPartitionedRf && enablePipelineEngine;
     }
 
     public boolean isMVPlanner() {
@@ -2044,6 +2109,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine && pipelineDop <= 0;
     }
 
+    public void setEnableRuntimeAdaptiveDop(boolean on) {
+        enableRuntimeAdaptiveDop = on;
+        if (on) {
+            enablePipelineLevelMultiPartitionedRf = false;
+        }
+    }
     public boolean isEnableRuntimeAdaptiveDop() {
         return enablePipelineEngine && enableRuntimeAdaptiveDop;
     }
@@ -2124,20 +2195,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return runtimeProfileReportInterval;
     }
 
-    public void setProfileLimitFold(boolean profileLimitFold) {
-        this.profileLimitFold = profileLimitFold;
-    }
-
-    public boolean isProfileLimitFold() {
-        return profileLimitFold;
-    }
-
     public void setPipelineProfileLevel(int pipelineProfileLevel) {
         this.pipelineProfileLevel = pipelineProfileLevel;
     }
 
     public int getPipelineProfileLevel() {
         return pipelineProfileLevel;
+    }
+
+    public boolean isEnableAsyncProfile() {
+        return enableAsyncProfile;
+    }
+
+    public void setEnableAsyncProfile(boolean enableAsyncProfile) {
+        this.enableAsyncProfile = enableAsyncProfile;
     }
 
     public boolean isEnableReplicationJoin() {
@@ -2330,6 +2401,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
+    }
+    public boolean isHashJoinInterpolatePassthrough() {
+        return hashJoinInterpolatePassthrough;
     }
 
     public int getParseTokensLimit() {
@@ -2669,6 +2743,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
@@ -2717,6 +2799,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
+        tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);
@@ -2763,11 +2846,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
-        final int global_runtime_filter_wait_timeout = 20;
-        final int global_runtime_filter_rpc_timeout = 400;
-        tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
-        tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
+        tResult.setGlobal_runtime_filter_build_max_size(globalRuntimeFilterBuildMaxSize);
+        tResult.setRuntime_filter_wait_timeout_ms(globalRuntimeFilterWaitTimeout);
+        tResult.setRuntime_filter_send_timeout_ms(globalRuntimeFilterRpcTimeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
+        tResult.setRuntime_filter_rpc_http_min_size(globalRuntimeFilterRpcHttpMinSize);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);
@@ -2787,9 +2870,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_scan_datacache(enableScanDataCache);
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
+        tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
         tResult.setUse_page_cache(usePageCache);
 
         tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);

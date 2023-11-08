@@ -83,6 +83,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.PublishVersionTask;
@@ -822,7 +823,7 @@ public class ReportHandler extends Daemon {
                                             olapTable.getPartitionInfo().getTabletType(partitionId),
                                             olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
                                             indexMeta.getSortKeyUniqueIds());
-                                    createReplicaTask.setIsRecoverTask(true);
+                                    createReplicaTask.setRecoverySource(RecoverySource.REPORT);
                                     createReplicaBatchTask.addTask(createReplicaTask);
                                 } else {
                                     // just set this replica as bad
@@ -1052,6 +1053,10 @@ public class ReportHandler extends Daemon {
             long maxRowsetCreationTime = -1L;
             for (Replica replica : tablet.getImmutableReplicas()) {
                 maxRowsetCreationTime = Math.max(maxRowsetCreationTime, replica.getMaxRowsetCreationTime());
+                if (replica.getLastReportVersion() <= 1) {
+                    // unmigratable if it is a empty tablet
+                    return false;
+                }
             }
 
             // get negative max rowset creation time or too close to the max rowset creation time, unmigratable

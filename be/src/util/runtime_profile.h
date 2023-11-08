@@ -80,6 +80,10 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
+    (profile)->add_child_counter(                                                                                      \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            parent)
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
     (profile)->add_child_counter(                                  \
             name, TUnit::TIME_NS,                                  \
@@ -122,23 +126,29 @@ class ObjectPool;
 // Thread-safe.
 class RuntimeProfile {
 public:
+    inline static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    inline static const std::string MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+
     class Counter {
     public:
-        static TCounterStrategy create_strategy(TCounterAggregateType::type aggregate_type,
-                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
-                                                int64_t display_threshold = 0) {
+        static TCounterStrategy create_strategy(
+                TCounterAggregateType::type aggregate_type,
+                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             TCounterStrategy strategy;
             strategy.aggregate_type = aggregate_type;
             strategy.merge_type = merge_type;
             strategy.display_threshold = display_threshold;
+            strategy.min_max_type = min_max_type;
             return strategy;
         }
 
-        static TCounterStrategy create_strategy(TUnit::type type,
-                                                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
-                                                int64_t display_threshold = 0) {
+        static TCounterStrategy create_strategy(
+                TUnit::type type, TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
             auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
-            return create_strategy(aggregate_type, merge_type, display_threshold);
+            return create_strategy(aggregate_type, merge_type, display_threshold, min_max_type);
         }
 
         explicit Counter(TUnit::type type, int64_t value = 0)
@@ -178,6 +188,8 @@ public:
             return _strategy.merge_type == TCounterMergeType::SKIP_ALL ||
                    _strategy.merge_type == TCounterMergeType::SKIP_FIRST_MERGE;
         }
+
+        bool skip_min_max() const { return _strategy.min_max_type == TCounterMinMaxType::SKIP_ALL; }
 
         int64_t display_threshold() const { return _strategy.display_threshold; }
 

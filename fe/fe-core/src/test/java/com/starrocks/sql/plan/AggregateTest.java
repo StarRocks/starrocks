@@ -1560,55 +1560,59 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testGroupByConstantWithAggPrune() throws Exception {
-        connectContext.getSessionVariable().setNewPlanerAggStage(4);
         FeConstants.runningUnitTest = true;
 
         String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (merge finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY");
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (merge finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY");
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY), sum(21: count)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(21: count)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: L_PARTKEY)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(2: L_PARTKEY)\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY");
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         FeConstants.runningUnitTest = false;
-        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test

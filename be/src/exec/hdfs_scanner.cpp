@@ -137,6 +137,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
+    ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.timezone = _runtime_state->timezone();
     ctx.iceberg_schema = _scanner_params.iceberg_schema;
     ctx.stats = &_app_stats;
@@ -180,21 +181,19 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     return status;
 }
 
-void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
+void HdfsScanner::close() noexcept {
+    if (!_runtime_state) {
+        return;
+    }
+
     DCHECK(!has_pending_token());
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
-    do_close(runtime_state);
+    do_close(_runtime_state);
     _file.reset(nullptr);
     if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
-    }
-}
-
-void HdfsScanner::finalize() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
     }
 }
 
@@ -243,6 +242,7 @@ Status HdfsScanner::open_random_access_file() {
             _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename,
                                                                          file_size, _scanner_params.modification_time);
             _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
+            _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
             _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
             input_stream = _cache_input_stream;
         }
@@ -416,28 +416,8 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     return !(chunk->has_rows());
 }
 
-void HdfsScannerContext::update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.empty() || row_count <= 0) return;
-
-    ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < partition_columns.size(); i++) {
-        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
-        DCHECK(partition_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
-        ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
-
-        if (data_column->is_nullable()) {
-            chunk_part_column->append_nulls(1);
-        } else {
-            chunk_part_column->append(*data_column, 0, 1);
-        }
-        chunk_part_column->assign(row_count, 0);
-    }
-}
-
-void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0) return;
+void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (partition_columns.size() == 0 || row_count <= 0) return;
 
     ChunkPtr& ck = (*chunk);
     ck->set_num_rows(row_count);
@@ -457,7 +437,12 @@ void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_
             }
             chunk_part_column->assign(row_count, 0);
         }
-        ck->append_column(std::move(chunk_part_column), slot_desc->id());
+
+        if (ck->is_slot_exist(slot_desc->id())) {
+            ck->update_column(std::move(chunk_part_column), slot_desc->id());
+        } else {
+            ck->append_column(std::move(chunk_part_column), slot_desc->id());
+        }
     }
 }
 

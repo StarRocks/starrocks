@@ -764,4 +764,24 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(1L));
         Assert.assertEquals(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, svm.getStorageVolumeNameOfDb(2L));
     }
+
+    @Test
+    public void testCreateHDFS() throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        // create
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("hdfs://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put("dfs.nameservices", "ha_cluster");
+        storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
+        storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
+        storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n2", "<hdfs_host>:<hdfs_port>");
+        String svKey = svm.createStorageVolume(svName, "hdfs", locations, storageParams, Optional.empty(), "");
+        Assert.assertEquals(true, svm.exists(svName));
+
+        storageParams.put("dfs.client.failover.proxy.provider",
+                "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+        svm.updateStorageVolume("test", storageParams, Optional.of(false), "");
+        Assert.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
+    }
 }

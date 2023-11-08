@@ -190,6 +190,7 @@ import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
+import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
@@ -3532,6 +3533,10 @@ public class GlobalStateMgr {
 
     public void replayRenamePartition(TableInfo tableInfo) throws DdlException {
         localMetastore.replayRenamePartition(tableInfo);
+    }
+
+    public void replayRenameColumn(ColumnRenameInfo columnRenameInfo) throws DdlException {
+        localMetastore.replayRenameColumn(columnRenameInfo);
     }
 
     public void renameColumn(Database db, OlapTable table, ColumnRenameClause renameClause) throws DdlException {

@@ -71,6 +71,8 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# JEMALLOC enable DEBUG 
+# export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
 # Set JEMALLOC_CONF environment variable if not already set
 if [[ -z "$JEMALLOC_CONF" ]]; then
     export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"

@@ -13,9 +13,10 @@
         <module>udf-extensions</module>
         <module>java-utils</module>
         <module>jni-connector</module>
-        <module>hudi-reader</module>
         <module>udf-examples</module>
+        <module>hudi-reader</module>
         <module>paimon-reader</module>
+        <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>
     </modules>

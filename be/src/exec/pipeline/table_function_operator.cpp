@@ -18,7 +18,7 @@ namespace starrocks::pipeline {
 
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {
-        _table_function->close(state, _table_function_state);
+        (void)_table_function->close(state, _table_function_state);
         _table_function_state = nullptr;
     }
     Operator::close(state);

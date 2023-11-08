@@ -223,12 +223,12 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         auto iter = _pid_to_process_id.find(probe_partition->partition_id);
         if (iter == _pid_to_process_id.end()) {
             auto mem_table = probe_partition->spill_writer->mem_table();
-            mem_table->append_selective(*chunk, selection.data(), from, size);
+            (void)mem_table->append_selective(*chunk, selection.data(), from, size);
         } else {
             // maybe has some small chunk problem
             // TODO: add chunk accumulator here
             auto partitioned_chunk = chunk->clone_empty();
-            partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
+            (void)partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
             (void)_probers[iter->second]->push_probe_chunk(state, std::move(partitioned_chunk));
         }
         probe_partition->num_rows += size;
@@ -257,7 +257,7 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(RuntimeState* 
         auto chunk_st = reader->restore(state, spill::SyncTaskExecutor{}, spill::MemTrackerGuard(tls_mem_tracker));
         if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
             int64_t old_mem_usage = hash_table_mem_usage;
-            RETURN_IF_ERROR(builder->append_chunk(state, std::move(chunk_st.value())));
+            RETURN_IF_ERROR(builder->append_chunk(std::move(chunk_st.value())));
             hash_table_mem_usage = builder->hash_table_mem_usage();
             COUNTER_ADD(metrics.build_partition_peak_memory_usage, hash_table_mem_usage - old_mem_usage);
         } else if (chunk_st.status().is_end_of_file()) {
@@ -378,7 +378,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     }
 
     // restore chunk from spilled partition then push it to hash join prober
-    if (!_current_reader.empty() && probe_has_no_output) {
+    if (!_current_reader.empty() && all_probe_partition_is_empty()) {
         RETURN_IF_ERROR(_restore_probe_partition(state));
     }
 
@@ -393,6 +393,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
     size_t eofs = std::accumulate(_probe_read_eofs.begin(), _probe_read_eofs.end(), 0);
     if (_need_post_probe && _has_probe_remain) {
         if (_is_finishing) {
+            bool has_remain = false;
             for (size_t i = 0; i < _probers.size(); ++i) {
                 if (!_probe_post_eofs[i] && _probe_read_eofs[i]) {
                     bool has_remain = false;
@@ -403,8 +404,9 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
                         return res;
                     }
                 }
+                has_remain |= !_probe_post_eofs[i];
             }
-            _has_probe_remain = false;
+            _has_probe_remain = has_remain;
         }
     } else {
         _has_probe_remain = false;

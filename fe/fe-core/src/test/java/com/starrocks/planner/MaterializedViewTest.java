@@ -18,7 +18,9 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -393,6 +395,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
+
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("emps");
+        setTableStatistics(t7, 6000000);
     }
 
     @Test
@@ -4007,7 +4013,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testAggWithoutRollup() throws Exception {
-        {
+        try {
             starRocksAssert.withTable("create table dim_test_sr_table (\n" +
                     "fplat_form_itg2 bigint,\n" +
                     "fplat_form_itg2_name string\n" +
@@ -4052,9 +4058,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "WHERE t1.fdate = 20230705\n" +
                     "GROUP BY fplat_form_itg2_name;";
                     testRewriteOK(mv, query);
+        } finally {
+            starRocksAssert.dropTable("test_sr_table_join");
+            starRocksAssert.dropTable("dim_test_sr_table");
         }
-        starRocksAssert.dropTable("test_sr_table_join");
-        starRocksAssert.dropTable("dim_test_sr_table");
     }
 
     @Test
@@ -4289,35 +4296,39 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testJoinWithToBitmapRewrite() throws Exception {
-        String table1 = "CREATE TABLE test_sr_table_join(\n" +
-                "fdate int,\n" +
-                "fetl_time BIGINT ,\n" +
-                "facct_type BIGINT ,\n" +
-                "userid STRING ,\n" +
-                "fplat_form_itg2 BIGINT ,\n" +
-                "funit BIGINT ,\n" +
-                "flcnt BIGINT\n" +
-                ")PARTITION BY range(fdate) (\n" +
-                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
-                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
-                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
-                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(userid)\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert.withTable(table1);
-        String table2 = "create table dim_test_sr_table (\n" +
-                "fplat_form_itg2 bigint,\n" +
-                "fplat_form_itg2_name string\n" +
-                ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert.withTable(table2);
+        try {
+            String table1 = "CREATE TABLE test_sr_table_join(\n" +
+                    "fdate int,\n" +
+                    "fetl_time BIGINT ,\n" +
+                    "facct_type BIGINT ,\n" +
+                    "userid STRING ,\n" +
+                    "fplat_form_itg2 BIGINT ,\n" +
+                    "funit BIGINT ,\n" +
+                    "flcnt BIGINT\n" +
+                    ")PARTITION BY range(fdate) (\n" +
+                    "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                    "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                    "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                    "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(userid)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(table1);
+            String table2 = "create table dim_test_sr_table (\n" +
+                    "fplat_form_itg2 bigint,\n" +
+                    "fplat_form_itg2_name string\n" +
+                    ")DISTRIBUTED BY HASH(fplat_form_itg2)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(table2);
 
-        {
+            OlapTable t4 = (OlapTable) GlobalStateMgr.getCurrentState().getDb(MATERIALIZED_DB_NAME)
+                    .getTable("test_sr_table_join");
+            setTableStatistics(t4, 150000);
+
             String mv = "select t1.fdate, t2.fplat_form_itg2_name," +
                     " BITMAP_UNION(to_bitmap(abs(MURMUR_HASH3_32(t1.userid)))) AS index_0_8228," +
                     " sum(t1.flcnt)as index_xxx\n" +
@@ -4334,9 +4345,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "WHERE t1.fdate >= 20230703 and t1.fdate < 20230706\n" +
                     "GROUP BY fplat_form_itg2_name;";
             testRewriteOK(mv, query);
+        } finally {
+            starRocksAssert.dropTable("test_sr_table_join");
+            starRocksAssert.dropTable("dim_test_sr_table");
         }
-        starRocksAssert.dropTable("test_sr_table_join");
-        starRocksAssert.dropTable("dim_test_sr_table");
     }
 
     @Test
@@ -4563,5 +4575,145 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive1() {
+        // constraints are upper case.
+        String mv = "select a.c1, a.c2 from\n"
+                + "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n"
+                + "join hive0.partitioned_db2.t2 using (c2)";
+        String query = "select c2 from hive0.partitioned_db.t1 where c1 = 1";
+        // catalog name is case-sensitive.
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive2() {
+        // MV and sql are both upper case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2); " +
+                "hive0.PARTITIONED_DB.T1(C3) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive3() {
+        // MV is upper case, but sql is lower case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive4() {
+        // sql is upper case, but MV is lower case.
+        String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, r.c3 from hive0.partitioned_db.t1 " +
+                "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive1() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"DEPENDENTS.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("test_mv.DEPENDENTS does not exist."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive2() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"EMPS_NO_CONSTRAINT(empid) references DEPENDENTS(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("table:DEPENDENTS do not exist."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive3() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                + "WHERE EMPID = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive4() {
+        try {
+        String mv = "SELECT EMPS.EMPID, EMPS.DEPTNO, DEPENDENTS.NAME FROM EMPS_NO_CONSTRAINT EMPS\n"
+                + "JOIN DEPENDENTS USING (EMPID)"
+                + "INNER JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO)\n"
+                + "WHERE EMPS.EMPID = 1";
+        String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                + "WHERE EMPID = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
     }
 }

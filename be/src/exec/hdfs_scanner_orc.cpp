@@ -111,7 +111,11 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
     ChunkPtr max_chunk = ChunkHelper::new_chunk(*min_max_tuple_desc, 0);
     for (size_t i = 0; i < min_max_tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = min_max_tuple_desc->slots()[i];
-        int32_t column_index = _reader->get_column_id_by_slot_name(slot->col_name());
+        const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(slot->col_name());
+        int32_t column_index = -1;
+        if (orc_type != nullptr) {
+            column_index = orc_type->getColumnId();
+        }
         if (column_index >= 0) {
             auto row_idx_iter = rowIndexes.find(column_index);
             // there is no column stats, skip filter process.
@@ -123,7 +127,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = OrcMinMaxDecoder::decode(slot, stats, min_col, max_col, tz_offset_in_seconds);
+            Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }
@@ -187,11 +191,15 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
             if (!_scanner_ctx.can_use_dict_filter_on_slot(slot)) {
                 continue;
             }
-            int32_t column_index = _reader->get_column_id_by_slot_name(col.col_name);
+            int32_t column_index = -1;
+            const orc::Type* orc_type = _reader->get_orc_type_by_slot_name(col.col_name);
+            if (orc_type != nullptr) {
+                column_index = orc_type->getColumnId();
+            }
             if (column_index < 0) {
                 continue;
             }
-            _use_dict_filter_slots.emplace_back(std::make_pair(slot, column_index));
+            _use_dict_filter_slots.emplace_back(slot, column_index);
         }
         _init_use_dict_filter_slots = true;
     }
@@ -311,6 +319,9 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;
+        if (errno == ENOENT) {
+            return Status::RemoteFileNotFound(s);
+        }
         return Status::InternalError(s);
     }
 
@@ -446,7 +457,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             // important to add columns before evaluation
             // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
             _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-            _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+            _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);

@@ -645,6 +645,9 @@ public class OlapTable extends Table {
             origIdxIdToName.put(entry.getValue(), entry.getKey());
         }
 
+        // reset table id
+        setId(globalStateMgr.getNextId());
+
         // reset all 'indexIdToXXX' map
         for (Map.Entry<Long, String> entry : origIdxIdToName.entrySet()) {
             long newIdxId = globalStateMgr.getNextId();
@@ -2264,14 +2267,13 @@ public class OlapTable extends Table {
             tableProperty = new TableProperty(new HashMap<>());
         }
 
-        // only support LOCAL for now
-        if (persistentIndexType == TPersistentIndexType.LOCAL) {
-            tableProperty
-                    .modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
-                            TableProperty.persistentIndexTypeToString(persistentIndexType));
+        // only support LOCAL and CLOUD_NATIVE for now
+        if (persistentIndexType == TPersistentIndexType.LOCAL || persistentIndexType == TPersistentIndexType.CLOUD_NATIVE) {
+            tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                    TableProperty.persistentIndexTypeToString(persistentIndexType));
         } else {
             // do nothing
-            LOG.warn("Unknown TPersistentIndexType, only supports LOCAL at now");
+            LOG.warn("Unknown TPersistentIndexType");
             return;
         }
 
@@ -2906,8 +2908,11 @@ public class OlapTable extends Table {
     }
 
     public boolean supportColumnWithRow() {
+        // must have noKey column
         List<Column> noKeys = getColumns().stream().filter(column -> !column.isKey()).collect(Collectors.toList());
-        return noKeys.size() > 0;
+        // not support complex type
+        boolean hasComplexType = getColumns().stream().anyMatch(col -> col.getType().isComplexType());
+        return noKeys.size() > 0 && !hasComplexType;
     }
 
     public boolean hasRowStorageType() {

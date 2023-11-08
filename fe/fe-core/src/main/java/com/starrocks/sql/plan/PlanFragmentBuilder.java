@@ -2391,6 +2391,10 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
+            if (node.getCanLocalShuffle()) {
+                joinNode.setCanLocalShuffle(true);
+            }
+
             // Build outputColumns
             fillSlotsInfo(node.getProjection(), joinNode, optExpr, joinExpr.requiredColsForFilter);
 

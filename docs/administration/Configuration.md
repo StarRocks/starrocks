@@ -509,13 +509,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 10000
 - **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
 
+##### enable_sync_publish
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to synchronously execute the apply task at the publish phase of a load transaction. This parameter is applicable only to Primary Key tables. Valid values:
+  - `TRUE` (default): The apply task is synchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful only after the apply task is completed, and the loaded data can truly be queried. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `true` can improve query performance and stability, but may increase load latency.
+  - `FALSE`: The apply task is asynchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful after the apply task is submitted, but the loaded data cannot be immediately queried. In this case, concurrent queries need to wait for the apply task to complete or time out before they can continue. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `false` may affect query performance and stability.
+- **Introduced in**: v3.2.0
+
 #### Storage
 
 ##### default_replication_num
 
 - **Unit**: -
 - **Default**: 3
-- **Description**: The `default_replication_number` parameter is a system variable that sets the default number of replicas for each data partition when creating a table in StarRocks. The parameter can be set globally by using `set global default_replication_num=x`, where x is a positive integer. This will affect all subsequent table creations in all sessions, unless overridden by a session-level setting or a table-level setting. To set the parameter for the current session use `set default_replication_number=x`. This will affect only the current session and override the global setting, unless overridden by a table-level setting. Both global and session settings can be overridden by specifying the `replication_num=x` in the CREATE TABLE DDL.
+- **Description**: `default_replication_num` sets the default number of replicas for each data partition when creating a table in StarRocks. This setting can be overridden when creating a table by specifying `replication_num=x` in the CREATE TABLE DDL.
 
 ##### enable_strict_storage_medium_check
 
@@ -1517,7 +1526,7 @@ BE dynamic parameters are as follows.
 #### txn_commit_rpc_timeout_ms
 
 - **Default:** 60,000 ms
-- **Description:** The timeout for a transaction commit RPC.
+- **Description:** The timeout of a load transaction. From v3.1 onwards, this parameter controls the timeout of a transaction commit RPC.
 
 #### max_consumer_num_per_group
 
@@ -2123,7 +2132,7 @@ BE static parameters are as follows.
 | dictionary_encoding_ratio | 0.7 | N/A | |
 | dictionary_speculate_min_chunk_size | 10000 | N/A | |
 | directory_of_inject |  | N/A | |
-| disable_column_pool | 0 | N/A | |
+| disable_column_pool | 1 | N/A | |
 | disable_mem_pools | 0 | N/A | |
 | download_worker_count | 1 | N/A | |
 | enable_check_string_lengths | 1 | N/A | |

@@ -507,6 +507,16 @@ PROPERTIES (
 | dynamic_partition.prefix    | No       | The prefix added to the names of dynamic partitions. Default value: `p`. |
 | dynamic_partition.buckets   | No       | The number of buckets per dynamic partition. The default value is the same as the number of buckets determined by the reserved word `BUCKETS` or automatically set by StarRocks. |
 
+#### Specify the bucket size for tables configured with random bucketing
+
+Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation. The default size is `1024 * 1024 * 1024 B` (1 GB), and the maximum size is 4 GB.
+
+```sql
+PROPERTIES (
+    "bucket_size" = "3221225472"
+)
+```
+
 #### Set data compression algorithm
 
 You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
@@ -563,7 +573,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
 
-To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
+To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
 
 ```SQL
 PROPERTIES (
@@ -585,7 +595,7 @@ PROPERTIES (
 
 > **CAUTION**
 >
-> - The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+> - `unique_constraints` and `foreign_key_constraints` are only used for query rewrite. Foreign Key constraints checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
 > - The primary keys of a Primary Key table or the unique keys of a Unique Key table are, by default, the corresponding `unique_constraints`. You do not need to set it manually.
 > - The `child_column` in a table's `foreign_key_constraints` must be referenced to a `unique_key` in another table's `unique_constraints`.
 > - The number of `child_column` and `parent_column` must agree.
@@ -918,7 +928,7 @@ PROPERTIES(
 
 ### Create a Hive external table
 
-Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#hive-external-table).
+Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#deprecated-hive-external-table).
 
 ```SQL
 CREATE EXTERNAL TABLE example_db.table_hive

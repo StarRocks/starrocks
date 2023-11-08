@@ -166,21 +166,26 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
     }
 
     bool is_column_with_row = false;
-    std::unique_ptr<Schema> schema_without_full_row_column;
     auto full_row_col = std::make_unique<BinaryColumn>();
-    if (_vectorized_schema->field_names().back() == "__row") {
-        DCHECK_EQ(chunk.num_columns(), _vectorized_schema->num_fields() - 1);
-        std::vector<ColumnId> cids(_vectorized_schema->num_fields() - 1);
-        for (int i = 0; i < _vectorized_schema->num_fields() - 1; i++) {
-            cids[i] = i;
+    if (_keys_type == PRIMARY_KEYS) {
+        std::unique_ptr<Schema> schema_without_full_row_column;
+        if (_vectorized_schema->field_names().back() == "__row") {
+            DCHECK_GE(chunk.num_columns(), _vectorized_schema->num_fields() - 1);
+            std::vector<ColumnId> cids(_vectorized_schema->num_fields() - 1);
+            for (int i = 0; i < _vectorized_schema->num_fields() - 1; i++) {
+                cids[i] = i;
+            }
+            schema_without_full_row_column = std::make_unique<Schema>(const_cast<Schema*>(_vectorized_schema), cids);
+            is_column_with_row = true;
+            // add row column
+            auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
+            (void)row_encoder->encode_chunk_to_full_row_column(*schema_without_full_row_column, chunk,
+                                                               full_row_col.get());
+        } else {
+            // when doing schema change, the chunk has shadow columns,
+            // so the columns in the chunk will be more than the fields in the schema.
+            DCHECK_GE(chunk.num_columns(), _vectorized_schema->num_fields());
         }
-        schema_without_full_row_column = std::make_unique<Schema>(const_cast<Schema*>(_vectorized_schema), cids);
-        is_column_with_row = true;
-        // add row column
-        auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
-        row_encoder->encode_chunk_to_full_row_column(*schema_without_full_row_column, chunk, full_row_col.get());
-    } else {
-        DCHECK_EQ(chunk.num_columns(), _vectorized_schema->num_fields());
     }
 
     size_t cur_row_count = _chunk->num_rows();

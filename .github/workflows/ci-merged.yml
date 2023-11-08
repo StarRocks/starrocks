@@ -10,6 +10,7 @@ on:
 permissions:
   pull-requests: write
   issues: write
+  actions: write
 
 jobs:
   backport:
@@ -136,7 +137,7 @@ jobs:
 
       - name: update merged coverage
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/upload_cov_after_merge.sh --pr ${PR_NUMBER} --commit ${{ steps.commit_sha.outputs.commit_sha }}
@@ -149,11 +150,12 @@ jobs:
   clean_ci_workflow:
     runs-on: ubuntu-latest
     if: >
-      github.event.pull_request.merged != true && github.base_ref == 'main'
+      github.event.pull_request.merged != true
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
       BRANCH: ${{ github.base_ref }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: cancel
         run: |

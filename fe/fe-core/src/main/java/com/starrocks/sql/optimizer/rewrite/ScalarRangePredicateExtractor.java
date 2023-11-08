@@ -59,7 +59,7 @@ public class ScalarRangePredicateExtractor {
     }
 
     private ScalarOperator rewrite(ScalarOperator predicate, boolean onlyExtractColumnRef) {
-        if (predicate.getOpType() != OperatorType.COMPOUND) {
+        if (predicate == null || predicate.getOpType() != OperatorType.COMPOUND) {
             return predicate;
         }
 

@@ -83,3 +83,18 @@ select * from array_top_n order by c2[1] limit 2,10;
 select * from array_top_n order by c2[1] limit 3,10;
 select * from array_top_n order by c2[1] limit 4,10;
 select * from array_top_n order by c2[1] limit 5,10;
+
+-- name: testArrayExpr
+CREATE TABLE array_exprr
+    (
+    c1 int not null,
+    c2 int not null
+    )
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_exprr SELECT generate_series, generate_series FROM TABLE(generate_series(1,  13336));
+
+select count([CAST(if(c2 is null, c1 + c2, 0) as DECIMAL128(38,0)) + if(c1 is null, c2 ,0)] is null) from array_exprr;

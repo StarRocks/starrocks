@@ -1,4 +1,4 @@
-# Table Types
+# Overview of table types
 
 You must specify a table type and define one or more columns as a sort key at table creation. This way, when data is initially loaded into the table that you created, StarRocks can sort, process, and store the data based on the sort key. This topic describes the table types that StarRocks provides to meet your varying business requirements.
 

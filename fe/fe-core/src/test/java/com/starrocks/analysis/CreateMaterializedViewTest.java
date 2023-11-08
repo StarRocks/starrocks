@@ -33,8 +33,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -307,20 +305,6 @@ public class CreateMaterializedViewTest {
 
     private void dropMv(String mvName) throws Exception {
         String sql = "drop materialized view " + mvName;
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
-        stmtExecutor.execute();
-    }
-
-    private void dropTableForce(String tableName) throws Exception {
-        String sql = "drop table " + tableName + " force";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
-        stmtExecutor.execute();
-    }
-
-    private void dropTable(String tableName) throws Exception {
-        String sql = "drop table " + tableName;
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
         stmtExecutor.execute();
@@ -3077,164 +3061,6 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testSelectFromSyncMV() throws Exception {
-        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        sql = "select * from sync_mv1 [_SYNC_MV_];";
-        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-        String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-        Assert.assertTrue(explainString.contains("partitions=2/2\n" +
-                "     rollup: sync_mv1\n" +
-                "     tabletRatio=6/6"));
-        starRocksAssert.dropMaterializedView("sync_mv1");
-    }
-
-    // create sync mv that mv's name already existed in the db
-    @Test
-    public void testCreateSyncMV1() throws Exception {
-        try {
-            String sql = "create materialized view aggregate_table_with_null as select k1, sum(v1) from tbl1 group by k1;";
-            CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                    parseStmtWithNewParser(sql, connectContext);
-            // aggregate_table_with_null already existed in the db
-            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-            Assert.fail();
-        } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
-        }
-    }
-
-    // create sync mv that mv's name already existed in the same table
-    @Test
-    public void testCreateSyncMV2() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
-        Assert.assertTrue(tbl1 != null);
-        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
-
-        try {
-            // sync_mv1 already existed in the tbl1
-            sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-            createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                    parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-            Assert.fail();
-        } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
-                    "the table tbl1"));
-        }
-        starRocksAssert.dropMaterializedView("sync_mv1");
-    }
-
-    // create sync mv that mv's name already existed in other table
-    @Test
-    public void testCreateSyncMV3() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
-        Assert.assertTrue(tbl1 != null);
-        Assert.assertTrue(tbl1.hasMaterializedIndex("sync_mv1"));
-        try {
-            // sync_mv1 already existed in tbl1
-            sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl3 group by k1;";
-            createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                    parseStmtWithNewParser(sql, connectContext);
-            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-            Assert.fail();
-        } catch (Throwable e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
-                    "in table tbl1"));
-        }
-        starRocksAssert.dropMaterializedView("sync_mv1");
-    }
-
-    @Test
-    public void testCreateSyncMV_WithUpperColumn() throws Exception {
-        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        {
-            sql = "select * from UPPER_MV1 [_SYNC_MV_];";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            // output columns should be same with the base table.
-            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
-                    " OUTPUT EXPRS:1: K1 | 2: mv_sum_V1\n" +
-                    "  PARTITION: UNPARTITIONED"));
-        }
-        {
-            sql = "select K1, sum(V1) from TBL1 group by K1";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(4: mv_sum_V1)\n" +
-                    "  |  group by: 1: K1\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: TBL1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     partitions=2/2\n" +
-                    "     rollup: UPPER_MV1"));
-        }
-        starRocksAssert.dropMaterializedView("UPPER_MV1");
-    }
-
-    @Test
-    public void testCreateSyncMV_WithLowerColumn() throws Exception {
-        // `tbl1`'s distribution keys is k2, sync_mv1 no `k2` in its outputs.
-        String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-
-        waitingRollupJobV2Finish();
-        {
-            sql = "select * from lower_mv1 [_SYNC_MV_];";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            // output columns should be same with the base table.
-            Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
-                    " OUTPUT EXPRS:1: k1 | 2: mv_sum_v1\n" +
-                    "  PARTITION: UNPARTITIONED"));
-        }
-        {
-            sql = "select K1, sum(v1) from tbl1 group by K1";
-            Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            String explainString = pair.second.getExplainString(StatementBase.ExplainLevel.NORMAL);
-            Assert.assertTrue(explainString.contains("1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(4: mv_sum_v1)\n" +
-                    "  |  group by: 1: k1\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode\n" +
-                    "     TABLE: tbl1\n" +
-                    "     PREAGGREGATION: ON\n" +
-                    "     partitions=2/2\n" +
-                    "     rollup: lower_mv1"));
-        }
-        starRocksAssert.dropMaterializedView("lower_mv1");
-    }
-
-    @Test
     public void testCreateAsyncDateTruncAndTimeSLice() throws Exception {
         LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
 
@@ -3732,37 +3558,6 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropView("view_3");
     }
 
-    @Test
-    public void testCreateSynchronousMVOnLakeTable() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        Table table = getTable("test", "mocked_cloud_table");
-        // Change table type to cloud native table
-        Deencapsulation.setField(table, "type", Table.TableType.CLOUD_NATIVE);
-        DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-        });
-        Assert.assertTrue(e.getMessage().contains("Creating synchronous materialized view(rollup) is not supported in " +
-                "shared data clusters.\nPlease use asynchronous materialized view instead.\n" +
-                "Refer to https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements" +
-                "/data-definition/CREATE%20MATERIALIZED%20VIEW#asynchronous-materialized-view for details."));
-    }
-
-    @Test
-    public void testCreateSynchronousMVOnAnotherMV() throws Exception {
-        String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
-        CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
-                parseStmtWithNewParser(sql, connectContext);
-        Table table = getTable("test", "mocked_cloud_table");
-        // Change table type to materialized view
-        Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
-        DdlException e = Assert.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
-        });
-        Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
-    }
-
     MaterializedView getMaterializedViewChecked(String sql) {
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -3997,5 +3792,34 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
                 " refresh manual" +
                 " as select * from deltalake_catalog.deltalake_db.tbl");
+    }
+
+    @Test
+    public void testCreateMvWithUnsupportedStr2date() {
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by ss " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select str2date(d, '%m-%d-%Y') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
+            Assert.assertThrows("Materialized view partition function date_trunc check failed",
+                    AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+        }
+
+        {
+            String sql = "create materialized view mv1 " +
+                    "partition by date_trunc('month', ss) " +
+                    "distributed by hash(a) buckets 10 " +
+                    "REFRESH DEFERRED MANUAL " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") " +
+                    "as select str2date(d, '%m-%d-%Y') ss, a, b, c from jdbc0.partitioned_db0.tbl1;";
+            Assert.assertThrows("Materialized view partition function date_trunc check failed",
+                    AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
+        }
     }
 }

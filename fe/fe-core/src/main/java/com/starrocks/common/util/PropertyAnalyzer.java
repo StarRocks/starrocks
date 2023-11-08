@@ -539,7 +539,8 @@ public class PropertyAnalyzer {
             } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
                 if (!olapTable.supportColumnWithRow()) {
-                    throw new AnalysisException("Olap Table must have more value columns exclude key columns");
+                    throw new AnalysisException("Column With Row Table must have more value columns exclude key columns "
+                            + "or column's type not supported");
                 }
             } else {
                 throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
@@ -939,7 +940,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                    uniqueConstraint -> parentTable.getName().equals(uniqueConstraint.getTableName()))
+                    uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 
@@ -1099,6 +1100,8 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
             if (type.equalsIgnoreCase("LOCAL")) {
                 return TPersistentIndexType.LOCAL;
+            } else if (type.equalsIgnoreCase("CLOUD_NATIVE")) {
+                return TPersistentIndexType.CLOUD_NATIVE;
             } else {
                 throw new AnalysisException("Invalid persistent index type: " + type);
             }

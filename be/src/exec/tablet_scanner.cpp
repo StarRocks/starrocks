@@ -110,9 +110,9 @@ Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
     }
 }
 
-Status TabletScanner::close(RuntimeState* state) {
+void TabletScanner::close(RuntimeState* state) {
     if (_is_closed) {
-        return Status::OK();
+        return;
     }
     if (_prj_iter) {
         _prj_iter->close();
@@ -124,7 +124,6 @@ Status TabletScanner::close(RuntimeState* state) {
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(state->chunk_size() * 512);
     _is_closed = true;
-    return Status::OK();
 }
 
 Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {

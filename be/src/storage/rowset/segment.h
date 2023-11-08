@@ -144,10 +144,13 @@ public:
     size_t num_columns() const { return _column_readers.size(); }
 
     const ColumnReader* column(size_t i) const {
-        return _column_readers.at(_tablet_schema->column(i).unique_id()).get();
+        auto unique_id = _tablet_schema->column(i).unique_id();
+        return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
     }
 
-    const ColumnReader* column_with_uid(size_t uid) const { return _column_readers.at(uid).get(); }
+    const ColumnReader* column_with_uid(size_t uid) const {
+        return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
+    }
 
     FileSystem* file_system() const { return _fs.get(); }
 
@@ -166,9 +169,7 @@ public:
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
-    size_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage(); }
-
-    bool is_valid_column(uint32_t column_unique_id) const;
+    size_t mem_usage() const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
@@ -220,9 +221,9 @@ private:
 
     void _reset();
 
-    size_t _basic_info_mem_usage() { return sizeof(Segment) + _fname.size(); }
+    size_t _basic_info_mem_usage() const { return sizeof(Segment) + _fname.size(); }
 
-    size_t _short_key_index_mem_usage() {
+    size_t _short_key_index_mem_usage() const {
         size_t size = _sk_index_handle.mem_usage();
         if (_sk_index_decoder != nullptr) {
             size += _sk_index_decoder->mem_usage();
@@ -230,7 +231,7 @@ private:
         return size;
     }
 
-    size_t _column_index_mem_usage();
+    size_t _column_index_mem_usage() const;
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);

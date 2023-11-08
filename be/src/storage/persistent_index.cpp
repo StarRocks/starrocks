@@ -1863,6 +1863,13 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
 }
 
 Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
+    auto format_version = meta.format_version();
+    if (format_version != PERSISTENT_INDEX_VERSION_2 && format_version != PERSISTENT_INDEX_VERSION_3) {
+        std::string msg = strings::Substitute("different l0 format, should rebuid index. actual:$0, expect:$1",
+                                              format_version, PERSISTENT_INDEX_VERSION_3);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     const IndexSnapshotMetaPB& snapshot_meta = meta.snapshot();
     const EditVersion& start_version = snapshot_meta.version();
     const PagePointerPB& page_pb = snapshot_meta.data();
@@ -2632,6 +2639,16 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         return Status::Corruption(
                 strings::Substitute("load immutable index failed $0 parse meta pb failed", file->filename()));
     }
+
+    auto format_version = meta.format_version();
+    if (format_version != PERSISTENT_INDEX_VERSION_2 && format_version != PERSISTENT_INDEX_VERSION_3) {
+        std::string msg =
+                strings::Substitute("different immutable index format, should rebuid index. actual:$0, expect:$1",
+                                    format_version, PERSISTENT_INDEX_VERSION_3);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+
     std::unique_ptr<ImmutableIndex> idx = std::make_unique<ImmutableIndex>();
     idx->_version = EditVersion(meta.version());
     idx->_size = meta.size();
@@ -2902,7 +2919,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
         // if has l1, idx range is [0, 1)
-        _reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false);
+        RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false));
     }
 
     return Status::OK();
@@ -3027,13 +3044,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
 }
 
 bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_meta) {
-    if (index_meta.format_version() != PERSISTENT_INDEX_VERSION_2 &&
-        index_meta.format_version() != PERSISTENT_INDEX_VERSION_3) {
-        // If format version is not equal to PERSISTENT_INDEX_VERSION_3, this maybe upgrade from
-        // PERSISTENT_INDEX_VERSION_2.
-        // We need to rebuild persistent index because the meta structure is changed
-        return true;
-    } else if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
+    if (index_meta.l2_versions_size() > 0 && !config::enable_pindex_minor_compaction) {
         // When l2 exist, and we choose to disable minor compaction, then we need to rebuild index.
         return true;
     }
@@ -3282,7 +3293,7 @@ bool PersistentIndex::_enable_minor_compaction() {
         } else {
             LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
-            _reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+            (void)_reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
         }
     }
     return false;
@@ -4010,6 +4021,10 @@ Status merge_shard_kvs_fixed_len(std::vector<KVRef>& l0_kvs, std::vector<std::ve
     kvs_set.reserve(estimated_size);
     DCHECK(!l1_kvs.empty());
     for (const auto& kv : l1_kvs[0]) {
+        const auto v = UNALIGNED_LOAD64(kv.kv_pos + KeySize);
+        if (v == NullIndexValue) {
+            continue;
+        }
         const auto [_, inserted] = kvs_set.emplace(kv);
         DCHECK(inserted) << "duplicate key found when in l1 index";
         if (!inserted) {
@@ -4060,6 +4075,10 @@ Status merge_shard_kvs_var_len(std::vector<KVRef>& l0_kvs, std::vector<std::vect
     kvs_set.reserve(estimate_size);
     DCHECK(!l1_kvs.empty());
     for (const auto& kv : l1_kvs[0]) {
+        const auto v = UNALIGNED_LOAD64(kv.kv_pos + kv.size - kIndexValueSize);
+        if (v == NullIndexValue) {
+            continue;
+        }
         const auto [_, inserted] = kvs_set.emplace(kv);
         DCHECK(inserted) << "duplicate key found when in l1 index";
         if (!inserted) {
@@ -4435,15 +4454,6 @@ Status PersistentIndex::_merge_compaction() {
     if (_l1_vec.empty()) {
         return Status::InternalError("cannot do merge_compaction without l1");
     }
-    // if _l0 is empty() and _l1_vec only has one _l1, we can rename it directly
-    if (_l0->size() == 0) {
-        if (!_has_l1 && _l1_vec.size() == 1) {
-            const std::string idx_file_path =
-                    strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
-            const std::string idx_file_path_tmp = _l1_vec[0]->_file->filename();
-            return FileSystem::Default()->rename_file(idx_file_path_tmp, idx_file_path);
-        }
-    }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     const std::string idx_file_path =
             strings::Substitute("$0/index.l1.$1.$2", _path, _version.major_number(), _version.minor_number());
@@ -4455,6 +4465,13 @@ Status PersistentIndex::_merge_compaction() {
     // so we use total_kv_size to correct the _usage.
     if (_usage != writer->total_kv_size()) {
         _usage = writer->total_kv_size();
+    }
+    if (_size != writer->total_kv_num()) {
+        std::string msg =
+                strings::Substitute("inconsistent kv num after merge compaction, actual:$0, expect:$1, index_file:$2",
+                                    writer->total_kv_num(), _size, writer->index_file());
+        LOG(ERROR) << msg;
+        return Status::InternalError(msg);
     }
     return writer->finish();
 }
@@ -4714,7 +4731,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     RETURN_IF_ERROR(_delete_expired_index_file(
             _version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
-    _delete_major_compaction_tmp_index_file();
+    (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 
@@ -4766,7 +4783,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
                 _version, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
-    _delete_major_compaction_tmp_index_file();
+    (void)_delete_major_compaction_tmp_index_file();
     return Status::OK();
 }
 

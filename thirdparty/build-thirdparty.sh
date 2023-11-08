@@ -247,6 +247,9 @@ build_llvm() {
         "LLVMJITLink"
         "LLVMCFGuard"
         "LLVMInstrumentation"
+        "LLVMInstCombine"
+        "LLVMipo"
+        "LLVMVectorize"
         "LLVMIRReader"
         "LLVMCore"
         "LLVMTarget"
@@ -311,7 +314,6 @@ build_llvm() {
 
     restore_compile_flags
 }
-
 # protobuf
 build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
@@ -497,7 +499,7 @@ build_curl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6
+    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli
     make -j$PARALLEL
     make install
 }
@@ -678,7 +680,7 @@ build_arrow() {
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
-    -DJEMALLOC_HOME=$TP_INSTALL_DIR \
+    -DJEMALLOC_HOME=$TP_INSTALL_DIR/jemalloc \
     -Dzstd_SOURCE=BUNDLED \
     -DRapidJSON_ROOT=$TP_INSTALL_DIR \
     -DARROW_SNAPPY_USE_SHARED=OFF \
@@ -1047,8 +1049,14 @@ build_jemalloc() {
         # change to 64K for arm architecture
         addition_opts=" --with-lg-page=16"
     fi
+    # build jemalloc with release
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
-    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    make -j$PARALLEL
+    make install
+    # build jemalloc with debug options
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
 }

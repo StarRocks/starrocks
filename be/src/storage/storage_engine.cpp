@@ -615,6 +615,10 @@ void StorageEngine::stop() {
 
     JOIN_THREAD(_pk_index_major_compaction_thread)
 
+#ifdef USE_STAROS
+    JOIN_THREAD(_local_pk_index_shard_data_gc_thread)
+#endif
+
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)
 
@@ -642,6 +646,10 @@ void StorageEngine::stop() {
 
     if (_update_manager) {
         _update_manager->stop();
+    }
+
+    if (_compaction_manager) {
+        _compaction_manager->stop();
     }
 }
 
@@ -1491,6 +1499,28 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
         }
     }
     return Status::OK();
+}
+
+Status StorageEngine::_clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir) {
+    // remove meta in RocksDB
+    WriteBatch wb;
+    auto status = TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id);
+    if (status.ok()) {
+        status = data_dir->get_meta()->write_batch(&wb);
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to remove persistent index meta, tablet_id=[" + std::to_string(tablet_id)
+                         << "] error[" << status.to_string() << "]";
+        } else {
+            // remove tablet persistent_index dir
+            status = fs::remove_all(dir);
+            if (!status.ok()) {
+                LOG(WARNING) << "fail to remove local persistent index dir=[" + dir << "] error[" << status.to_string()
+                             << "]";
+            }
+        }
+    }
+
+    return status;
 }
 
 void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys) {

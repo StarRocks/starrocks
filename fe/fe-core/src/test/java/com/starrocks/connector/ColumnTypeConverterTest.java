@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
+import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,7 +35,8 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.ScalarType.OLAP_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
@@ -111,7 +113,7 @@ public class ColumnTypeConverterTest {
         Type resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createDefaultExternalTableString();
+        itemType = ScalarType.createDefaultCatalogString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = fromHiveTypeToArrayType(typeStr);
@@ -165,7 +167,7 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.DATE);
-        valueType = ScalarType.createDefaultExternalTableString();
+        valueType = ScalarType.createDefaultCatalogString();
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -236,7 +238,7 @@ public class ColumnTypeConverterTest {
             String typeStr = "struct<struct_test:int,c1:struct<c1:int,cc1:string>>";
             StructType c1 = new StructType(Lists.newArrayList(
                     new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                    new StructField("cc1", ScalarType.createDefaultExternalTableString())
+                    new StructField("cc1", ScalarType.createDefaultCatalogString())
             ));
             StructType root = new StructType(Lists.newArrayList(
                     new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
@@ -296,10 +298,15 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
-        Type stringType = ScalarType.createDefaultExternalTableString();
+        Type stringType = ScalarType.createDefaultCatalogString();
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
+
+        Assert.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(OLAP_MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
     }
 
     @Test
@@ -321,7 +328,7 @@ public class ColumnTypeConverterTest {
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultExternalTableString()));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultCatalogString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
@@ -338,7 +345,7 @@ public class ColumnTypeConverterTest {
         Schema structSchema = Schema.createRecord(fields);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
@@ -362,13 +369,13 @@ public class ColumnTypeConverterTest {
         Schema mapSchema = Schema.createMap(structSchema);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
-        StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
 
-        MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
+        MapType mapType = new MapType(ScalarType.createDefaultCatalogString(), structType);
 
         Assert.assertEquals(mapType, fromHudiType(mapSchema));
 
@@ -422,11 +429,9 @@ public class ColumnTypeConverterTest {
                 () -> toHiveType(ScalarType.createCharType(10000)));
 
         Assert.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Unsupported Hive type: VARCHAR(200000). Supported VARCHAR types: VARCHAR(<=65535)",
-                () -> toHiveType(ScalarType.createVarcharType(200000)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarcharType(200000)));
 
-        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(OLAP_MAX_VARCHAR_LENGTH)));
 
         ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));

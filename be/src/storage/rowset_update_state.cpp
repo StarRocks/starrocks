@@ -422,7 +422,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
 
     if (tablet->is_column_with_row_store()) {
-        _prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids);
+        RETURN_IF_ERROR(_prepare_partial_update_value_columns(tablet, rowset, idx, update_column_uids));
     }
     int64_t t_end = MonotonicMillis();
     _partial_update_states[idx].update_byte_size();
@@ -578,24 +578,24 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         return Status::InternalError(msg);
     }
 
-    // _read_version is equal to latest_applied_version which means there is no other rowset is applied
-    // the data of write_columns can be write to segment file directly
-    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
-            << _partial_update_states[segment_id].read_version.to_string();
-    if (latest_applied_version == _partial_update_states[segment_id].read_version &&
-        _partial_update_states[segment_id].schema_version >= tablet_schema->schema_version()) {
-        return Status::OK();
-    }
-
     // TODO
     // we don't need to rebuil all partial update state but just resolve the conflict rows and columns
-    if (_partial_update_states[segment_id].schema_version >= tablet_schema->schema_version()) {
+    if (_partial_update_states[segment_id].schema_version < tablet_schema->schema_version()) {
         Status st = _rebuild_partial_update_states(tablet, rowset, rowset_id, segment_id, tablet_schema);
         LOG(INFO) << "tablet schema version change from " << _partial_update_states[segment_id].schema_version << " to "
                   << tablet_schema->schema_version() << " before partial state apply finished, rebuild"
                   << " segment: " << segment_id << ", status: " << st;
         return st;
     }
+
+    // _read_version is equal to latest_applied_version which means there is no other rowset is applied
+    // the data of write_columns can be write to segment file directly
+    VLOG(2) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+            << _partial_update_states[segment_id].read_version.to_string();
+    if (latest_applied_version == _partial_update_states[segment_id].read_version) {
+        return Status::OK();
+    }
+
     // check if there are delta column files generated from read_version to now.
     // If yes, then need to force resolve conflict.
     const bool need_resolve_conflict = tablet->updates()->check_delta_column_generate_from_version(
@@ -666,8 +666,9 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& vs) {
     return os;
 }
 
-static void append_full_row_column(const Schema& tschema, const std::vector<uint32_t>& partial_update_value_column_ids,
-                                   const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
+static Status append_full_row_column(const Schema& tschema,
+                                     const std::vector<uint32_t>& partial_update_value_column_ids,
+                                     const std::vector<uint32_t>& read_column_ids, PartialUpdateState& state) {
     CHECK(state.write_columns.size() == read_column_ids.size());
     size_t input_column_size = tschema.num_fields() - tschema.num_key_fields() - 1;
     LOG(INFO) << "partial_update_value_column_ids:" << partial_update_value_column_ids
@@ -679,12 +680,13 @@ static void append_full_row_column(const Schema& tschema, const std::vector<uint
                 state.partial_update_value_columns->columns()[i];
     }
     for (size_t i = 0; i < read_column_ids.size(); ++i) {
-        columns[read_column_ids[i] - tschema.num_key_fields()] = std::move(state.write_columns[i]);
+        columns[read_column_ids[i] - tschema.num_key_fields()] = state.write_columns[i]->clone_shared();
     }
     auto full_row_column = std::make_unique<BinaryColumn>();
     auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
-    row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column);
+    RETURN_IF_ERROR(row_encoder->encode_columns_to_full_row_column(tschema, columns, *full_row_column));
     state.write_columns.emplace_back(std::move(full_row_column));
+    return Status::OK();
 }
 
 Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_schema, Rowset* rowset,
@@ -732,8 +734,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                                         read_column_ids_without_full_row, index, _tablet_schema));
         }
         if (tablet->is_column_with_row_store()) {
-            append_full_row_column(*_tablet_schema->schema(), _partial_update_value_column_ids,
-                                   read_column_ids_without_full_row, _partial_update_states[segment_id]);
+            RETURN_IF_ERROR(append_full_row_column(*_tablet_schema->schema(), _partial_update_value_column_ids,
+                                                   read_column_ids_without_full_row,
+                                                   _partial_update_states[segment_id]));
         }
     }
 

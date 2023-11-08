@@ -152,6 +152,9 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitLogicalCTEConsume(OptExpression optExpression, Integer step) {
+            if (optExpression.getInputs().isEmpty()) {
+                return new OperatorStr("logical cte consume", step, Collections.emptyList());
+            }
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
             return new OperatorStr("logical cte consume", step, Collections.singletonList(child));

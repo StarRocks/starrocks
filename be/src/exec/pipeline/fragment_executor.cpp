@@ -135,6 +135,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _query_ctx->set_enable_profile();
     }
+    if (query_options.__isset.big_query_profile_second_threshold) {
+        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_second_threshold);
+    }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
@@ -189,7 +192,16 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
         wg = WorkGroupManager::instance()->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
-    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
+
+    const auto& query_options = request.common().query_options;
+    bool enable_group_level_query_queue = false;
+    if (query_options.__isset.query_queue_options) {
+        const auto& queue_options = query_options.query_queue_options;
+        enable_group_level_query_queue =
+                queue_options.__isset.enable_group_level_query_queue && queue_options.enable_group_level_query_queue;
+    }
+    RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get(), enable_group_level_query_queue));
+
     _fragment_ctx->set_workgroup(wg);
     _wg = wg;
 
@@ -232,9 +244,17 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_be_number(request.backend_num());
 
     // RuntimeFilterWorker::open_query is idempotent
-    if (params.__isset.runtime_filter_params && !params.runtime_filter_params.id_to_prober_params.empty()) {
+    const TRuntimeFilterParams* runtime_filter_params = nullptr;
+    if (request.unique().params.__isset.runtime_filter_params &&
+        !request.unique().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.unique().params.runtime_filter_params;
+    } else if (request.common().params.__isset.runtime_filter_params &&
+               !request.common().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.common().params.runtime_filter_params;
+    }
+    if (runtime_filter_params != nullptr) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, query_options, params.runtime_filter_params, true);
+        exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
 
@@ -682,6 +702,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
+    _query_ctx->mark_prepared();
     prepare_success = true;
 
     return Status::OK();

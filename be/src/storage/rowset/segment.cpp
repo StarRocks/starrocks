@@ -193,13 +193,14 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
         return Status::OK();
     }
 
-    auto res = success_once(_open_once, [&] {
-        Status st = _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache);
-        if (st.ok()) {
-            update_cache_size();
-        }
-        return st;
-    });
+    auto res = success_once(_open_once,
+                            [&] { return _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache); });
+
+    // move the cache size update out of the `success_once`,
+    // so that the onceflag `_open_once` can be set before the cache_size is updated.
+    if (res.ok() && *res) {
+        update_cache_size();
+    }
     return res.status();
 }
 
@@ -252,7 +253,9 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
             // skip segment zonemap filter when this segment has column files link to it.
             if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                if (read_options.is_first_split_of_segment) {
+                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                }
                 return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
             } else {
                 break;
@@ -333,10 +336,6 @@ void Segment::_reset() {
 
 bool Segment::has_loaded_index() const {
     return invoked(_load_index_once);
-}
-
-bool Segment::is_valid_column(uint32_t column_unique_id) const {
-    return _column_readers.count(column_unique_id) > 0;
 }
 
 Status Segment::_create_column_readers(SegmentFooterPB* footer) {
@@ -435,7 +434,7 @@ Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
     return Status::OK();
 }
 
-size_t Segment::_column_index_mem_usage() {
+size_t Segment::_column_index_mem_usage() const {
     size_t size = 0;
     for (auto& r : _column_readers) {
         auto& reader = r.second;
@@ -446,8 +445,15 @@ size_t Segment::_column_index_mem_usage() {
 
 void Segment::update_cache_size() {
     if (_tablet_manager != nullptr) {
-        _tablet_manager->update_segment_cache_size(file_name());
+        _tablet_manager->update_segment_cache_size(file_name(), reinterpret_cast<intptr_t>(this));
     }
 }
 
+size_t Segment::mem_usage() const {
+    if (!invoked(_open_once)) {
+        // just report the basic info memory usage if not opened yet
+        return _basic_info_mem_usage();
+    }
+    return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
+}
 } // namespace starrocks

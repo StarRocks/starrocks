@@ -94,32 +94,32 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
                 new HashDistributionDesc(rightColumns, SHUFFLE_JOIN));
 
         PhysicalPropertySet leftRequiredPropertySet =
-                new PhysicalPropertySet(new DistributionProperty(leftDistribution));
+                new PhysicalPropertySet(DistributionProperty.createProperty(leftDistribution));
         PhysicalPropertySet rightRequiredPropertySet =
-                new PhysicalPropertySet(new DistributionProperty(rightDistribution));
+                new PhysicalPropertySet(DistributionProperty.createProperty(rightDistribution));
 
         return Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet);
     }
 
     protected PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {
-        DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
+        DistributionProperty distributionProperty = DistributionProperty.createProperty(distributionSpec);
         return new PhysicalPropertySet(distributionProperty);
     }
 
     protected DistributionProperty createShuffleAggProperty(List<DistributionCol> partitionColumns) {
-        return new DistributionProperty(DistributionSpec.createHashDistributionSpec(
+        return DistributionProperty.createProperty(DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(partitionColumns, HashDistributionDesc.SourceType.SHUFFLE_AGG)));
     }
 
     protected PhysicalPropertySet createShuffleAggPropertySet(List<DistributionCol> partitions) {
         HashDistributionDesc desc = new HashDistributionDesc(partitions, HashDistributionDesc.SourceType.SHUFFLE_AGG);
-        DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(desc));
+        DistributionProperty property = DistributionProperty.createProperty(DistributionSpec.createHashDistributionSpec(desc));
         return new PhysicalPropertySet(property);
     }
 
     protected PhysicalPropertySet createGatherPropertySet() {
         DistributionProperty distributionProperty =
-                new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
+                DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
         return new PhysicalPropertySet(distributionProperty);
     }
 

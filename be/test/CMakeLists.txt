@@ -150,6 +150,7 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
+        ./formats/orc/orc_chunk_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
@@ -217,7 +218,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
-        ./storage/lake/metadata_cache_test.cpp
+        ./storage/lake/metacache_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -338,6 +339,7 @@ set(EXEC_FILES
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
         ./util/bthreads/promise_test.cpp
+        ./util/bthreads/semaphore_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp
@@ -388,6 +390,8 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/lake_persistent_index_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

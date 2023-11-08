@@ -63,7 +63,7 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
     //    deleting newly created binlog files
     bool fail_delete_new_files = false;
     if (!_new_files.empty()) {
-        _close_current_writer();
+        WARN_IF_ERROR(_close_current_writer(), "close writer failed");
         Status st = BinlogBuilder::delete_binlog_files(_new_files);
         fail_delete_new_files = !st.ok();
     } else if (_current_writer != nullptr) {
@@ -73,7 +73,7 @@ void BinlogBuilder::abort(BinlogBuildResult* result) {
         if (_current_writer->is_writing()) {
             Status status = _abort_current_writer();
             if (!status.ok()) {
-                _close_current_writer();
+                WARN_IF_ERROR(_close_current_writer(), "close writer failed");
             }
         }
     }

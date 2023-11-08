@@ -457,4 +457,48 @@ public class CreateLakeTableTest {
                         "distributed by hash(dt) buckets 3;"));
         checkLakeTable("lake_test", "auto_list_partition");
     }
+
+    @Test
+    public void testCreateLakeTableEnableCloudNativePersistentIndex(@Mocked StarOSAgent agent) throws Exception {
+        new Expectations() {
+            {
+                agent.allocateFilePath(anyString, anyLong);
+                result = getPathInfo();
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
+                returns(Lists.newArrayList(20001L, 20002L, 20003L),
+                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
+                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.table_with_cloud_native_persistent_index\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "PRIMARY KEY(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('enable_persistent_index' = 'true', 'persistent_index_type' = 'cloud_native');"));
+        {
+            LakeTable lakeTable = getLakeTable("lake_test", "table_with_cloud_native_persistent_index");
+            // check table persistentIndex
+            boolean enablePersistentIndex = lakeTable.enablePersistentIndex();
+            Assert.assertTrue(enablePersistentIndex);
+            // check table persistentIndexType
+            String indexType = lakeTable.getPersistentIndexTypeString();
+            Assert.assertEquals("CLOUD_NATIVE", indexType);
+
+            String sql = "show create table lake_test.table_with_cloud_native_persistent_index";
+            ShowCreateTableStmt showCreateTableStmt =
+                    (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
+            ShowResultSet resultSet = executor.execute();
+
+            Assert.assertNotEquals(0, resultSet.getResultRows().size());
+        }
+    }
 }

@@ -35,10 +35,13 @@ import ast
 import time
 import unittest
 import uuid
+from typing import List, Dict
 
 import pymysql as _mysql
+import requests
 from nose import tools
 from cup import log
+from requests.auth import HTTPBasicAuth
 
 from lib import skip
 from lib import data_delete_lib
@@ -908,10 +911,10 @@ class StarrocksSQLApiLib(object):
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
             if status != "FINISHED":
-                time.sleep(5)
+                time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(5)
+                time.sleep(1)
                 break
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
@@ -946,7 +949,7 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        print(res)
+        #print(res)
         tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
     def check_no_hit_materialized_view(self, query, mv_name):
@@ -1246,6 +1249,16 @@ class StarrocksSQLApiLib(object):
         )
         return str(res)
 
+    def post_http_request(self, exec_url) -> str:
+        """Sends a POST request.
+
+        Returns:
+            the response content.
+        """
+        res = requests.post(exec_url, auth=HTTPBasicAuth(self.mysql_user, self.mysql_password))
+        tools.assert_equal(200, res.status_code, f"failed to post http request [res={res}] [url={exec_url}]")
+        return res.content.decode("utf-8")
+
     def manual_compact(self, database_name, table_name):
         sql = "show tablet from " + database_name + "." + table_name
         res = self.execute_sql(sql, "dml")
@@ -1304,3 +1317,34 @@ class StarrocksSQLApiLib(object):
             counter = counter + 1
 
         tools.assert_true(finished, "analyze timeout")
+
+    def _get_backend_http_endpoints(self) -> List[Dict]:
+        """Get the http host and port of all the backends.
+
+        Returns:
+            a dict list, each of which contains the key "host" and "host" of a backend.
+        """
+        res = self.execute_sql("show backends;", ori=True)
+        tools.assert_true(res["status"], res["msg"])
+
+        backends = []
+        for row in res["result"]:
+            backends.append({
+                "host": row[1],
+                "port": row[4],
+            })
+
+        return backends
+
+    def update_be_config(self, key, value):
+        """Update the config to all the backends.
+        """
+        backends = self._get_backend_http_endpoints()
+        for backend in backends:
+            exec_url = f"http://{backend['host']}:{backend['port']}/api/update_config?{key}={value}"
+            print(f"post {exec_url}")
+            res = self.post_http_request(exec_url)
+
+            res_json = json.loads(res)
+            tools.assert_dict_contains_subset({"status": "OK"}, res_json,
+                                              f"failed to update be config [response={res}] [url={exec_url}]")

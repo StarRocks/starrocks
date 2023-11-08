@@ -256,10 +256,8 @@ Status Compaction::_merge_rowsets_vertically(size_t segment_iterator_num, Statis
             total_num_rows += rowset->num_rows();
             for (auto& segment : rowset->segments()) {
                 for (uint32_t column_index : _column_groups[i]) {
-                    if (!segment->is_valid_column(tablet_schema->column(column_index).unique_id())) {
-                        continue;
-                    }
-                    const auto* column_reader = segment->column(column_index);
+                    auto uid = tablet_schema->column(column_index).unique_id();
+                    const auto* column_reader = segment->column_with_uid(uid);
                     if (column_reader == nullptr) {
                         continue;
                     }
