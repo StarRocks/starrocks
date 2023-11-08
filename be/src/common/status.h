@@ -327,7 +327,7 @@ public:
 
     /// @return A string representation of this status suitable for printing.
     ///   Returns the string "OK" for success.
-    std::string to_string() const;
+    std::string to_string(bool with_context_info = true) const;
 
     /// @return A string representation of the status code, without the message
     ///   text or sub code information.

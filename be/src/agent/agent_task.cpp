@@ -223,7 +223,7 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
                      << ", signature: " << agent_task_req->signature;
         status_code = TStatusCode::RUNTIME_ERROR;
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-            error_msgs.emplace_back("create tablet failed");
+            error_msgs.emplace_back(create_status.to_string(false));
         } else {
             error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
         }
