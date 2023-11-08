@@ -945,17 +945,25 @@ public class MaterializedViewRewriter {
                         continue;
                     }
 
-                    Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns = ArrayListMultimap.create();
-                    if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys, parentKeys,
-                            constraintCompensationJoinColumns, materializedView)) {
+                    Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns
+                            = ArrayListMultimap.create();
+                    Optional<OptExpression> joinOperatorOptional = findJoin(mvParentTableScanDesc,
+                            mvTableScanDesc, columnPairs, materializationContext.getMvExpression());
+                    if (!joinOperatorOptional.isPresent()) {
+                        continue;
+                    }
+                    if (!extraJoinCheck(mvParentTableScanDesc, mvTableScanDesc, columnPairs, childKeys,
+                            parentKeys, constraintCompensationJoinColumns, materializedView,
+                            materializationContext.getMvExpression(), joinOperatorOptional.get())) {
                         continue;
                     }
 
                     // If `mvParentTableScanDesc` is not included in query's plan, add it
                     // to extraColumns.
-                    JoinOperator joinOperator = mvParentTableScanDesc.getJoinType();
+                    LogicalJoinOperator joinOperator = joinOperatorOptional.get().getOp().cast();
+                    JoinOperator joinType = joinOperator.getJoinType();
                     if (mvExtraTableScanDescs.contains(mvParentTableScanDesc)) {
-                        if (joinOperator.isInnerJoin() || joinOperator.isCrossJoin() || joinOperator.isSemiJoin()) {
+                        if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
                             compensationJoinColumns.putAll(constraintCompensationJoinColumns);
                         }
                         List<ColumnRefOperator> parentTableCompensationColumns =
@@ -964,7 +972,7 @@ public class MaterializedViewRewriter {
                                 .addAll(parentTableCompensationColumns);
                     }
                     if (mvExtraTableScanDescs.contains(mvTableScanDesc)) {
-                        if (joinOperator.isInnerJoin() || joinOperator.isCrossJoin() || joinOperator.isSemiJoin()) {
+                        if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
                             compensationJoinColumns.putAll(constraintCompensationJoinColumns);
                         }
                         List<ColumnRefOperator> childTableCompensationColumns =
@@ -1016,12 +1024,10 @@ public class MaterializedViewRewriter {
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
             Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns,
-            MaterializedView materializedView) {
+            MaterializedView materializedView, OptExpression mvExpression, OptExpression extraJoin) {
         Table parentTable = parentTableScanDesc.getTable();
         Table childTable = tableScanDesc.getTable();
-        OptExpression joinOptExpr = parentTableScanDesc.getJoinOptExpression();
-        Preconditions.checkNotNull(joinOptExpr);
-        LogicalJoinOperator joinOperator = joinOptExpr.getOp().cast();
+        LogicalJoinOperator joinOperator = extraJoin.getOp().cast();
         JoinOperator parentJoinType = joinOperator.getJoinType();
         if (parentJoinType.isInnerJoin()) {
             // to check:
@@ -1064,21 +1070,39 @@ public class MaterializedViewRewriter {
                         childColumn == null, parentColumn == null);
                 return false;
             }
-            if (!isJoinOnCondition(joinOptExpr, childColumn, parentColumn)) {
-                logMVRewrite(mvRewriteContext, "UK/FK relation(child {}, parent {}) is not in join's on predicate{}",
-                        childColumn, parentColumn, joinOperator.getOnPredicate());
-                return false;
-            }
             constraintCompensationJoinColumns.put(parentColumn, childColumn);
         }
         return true;
     }
 
+    private Optional<OptExpression> findJoin(
+            TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
+            List<Pair<String, String>> columnPairs, OptExpression mvExpression) {
+        List<OptExpression> joins = MvUtils.collectJoinExpr(mvExpression);
+        for (OptExpression joinOptExpr : joins) {
+            boolean allMatched = true;
+            for (Pair<String, String> pair : columnPairs) {
+                ColumnRefOperator childColumn = getColumnRef(pair.first, tableScanDesc.getScanOperator());
+                ColumnRefOperator parentColumn = getColumnRef(pair.second, parentTableScanDesc.getScanOperator());
+                if (childColumn == null || parentColumn == null) {
+                    return Optional.empty();
+                }
+                if (!isJoinOnCondition(joinOptExpr.getOp().cast(), childColumn, parentColumn)) {
+                    allMatched = false;
+                    break;
+                }
+            }
+            if (allMatched) {
+                return Optional.of(joinOptExpr);
+            }
+        }
+        return Optional.empty();
+    }
+
     private boolean isJoinOnCondition(
-            OptExpression joinExpr,
+            LogicalJoinOperator joinOperator,
             ColumnRefOperator childColumn,
             ColumnRefOperator parentColumn) {
-        LogicalJoinOperator joinOperator = joinExpr.getOp().cast();
         List<ScalarOperator> onConjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
         List<ScalarOperator> binaryConjuncts =
                 onConjuncts.stream().filter(ScalarOperator::isColumnEqualBinaryPredicate).collect(Collectors.toList());
