@@ -364,6 +364,14 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+void NLJoinProbeOperator::_build_tmp_chunk(int chunk_size, const ChunkPtr& probe_chunk, int probe_start, int probe_end,
+                      const ChunkPtr& build_chunk, int build_start, int build_end, ChunkPtr* result_chunk) {
+    int result_chunk_size = (*result_chunk)->num_rows();
+    int append_size = chunk_size - result_chunk_size;
+
+
+}
+
 // Permute enough rows from build side and probe side
 // The chunk either consists two conditions:
 // 1. Multiple probe rows and multiple build single-chunk
