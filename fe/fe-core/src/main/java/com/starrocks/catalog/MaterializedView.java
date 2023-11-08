@@ -114,12 +114,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         DEFERRED
     }
 
-    public enum PlanMode {
-        VALID,
-        INVALID,
-        UNKNOWN
-    }
-
     @Override
     public Boolean getUseLightSchemaChange() {
         return false;
@@ -908,7 +902,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         MaterializedView mv = (MaterializedView) olapTable;
         mv.dbId = this.dbId;
         mv.active = this.active;
-        mv.planMode = this.planMode;
         mv.refreshScheme = this.refreshScheme.copy();
         mv.maxMVRewriteStaleness = this.maxMVRewriteStaleness;
         if (this.baseTableIds != null) {
