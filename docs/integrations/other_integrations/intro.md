@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-# Integrate with StarRocks
-=======
 # Other tools and systems
->>>>>>> be9973708c ([Doc] Rename other integrations doc. (#34243))
 
 This topic introduces how to integrate with StarRocks.
 
