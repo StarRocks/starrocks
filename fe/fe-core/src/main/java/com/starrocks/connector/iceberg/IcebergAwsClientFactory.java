@@ -151,6 +151,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             s3ClientBuilder.region(Region.of(s3Region));
         }
 
+        // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
+        // 'scheme', it is considered invalid, we will not set 'endpointOverride' property.
         URI uri;
         if (!s3Endpoint.isEmpty() && (uri = URI.create(s3Endpoint)).getScheme() != null) {
             s3ClientBuilder.endpointOverride(uri);
@@ -176,6 +178,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             glueClientBuilder.region(Region.of(glueRegion));
         }
 
+        // To prevent the 'glueClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
+        // 'scheme', it is considered invalid, we will not set 'endpointOverride' property.
         URI uri;
         if (!glueEndpoint.isEmpty() && (uri = URI.create(glueEndpoint)).getScheme() != null) {
             glueClientBuilder.endpointOverride(uri);
