@@ -7,6 +7,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -308,7 +309,14 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
             return decimal.stripTrailingZeros().toPlainString();
-        } else if (type.isDecimalV2()) {
+        }
+
+        if (ConnectContext.get() != null &&
+                !ConnectContext.get().getSessionVariable().isCboDecimalCastStringStrict()) {
+            return String.valueOf(value);
+        }
+
+        if (type.isDecimalV2()) {
             // remove trailing zero and use plain string, keep same with BE
             return ((BigDecimal) value).stripTrailingZeros().toPlainString();
         } else if (type.isDecimalOfAnyVersion()) {
