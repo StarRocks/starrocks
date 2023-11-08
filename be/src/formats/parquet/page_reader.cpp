@@ -96,6 +96,7 @@ Status PageReader::next_header() {
         // prefer peek data instead to read data.
         bool peek_mode = false;
         IOBuffer buffer;
+        buffer.clear();
         RETURN_IF_ERROR(_get_header(allowed_page_size, &page_buf, &peek_mode, &buffer));
 
         header_length = allowed_page_size;
@@ -162,8 +163,12 @@ Status PageReader::_get_header(size_t allowed_page_size, uint8_t** page_buf, boo
     if (res.ok()) {
         _local_page_buffer.header.resize(allowed_page_size);
         _local_page_buffer.offset = 0;
-        *page_buf = _local_page_buffer.header.data();
-        buffer->copy_to(*page_buf, allowed_page_size, 0);
+        if (buffer->backing_block_num() == 1 || buffer->backing_block_size(0) >= allowed_page_size) {
+            *page_buf = (uint8_t*)buffer->backing_block_data(0);
+        } else {
+            *page_buf = _local_page_buffer.header.data();
+            buffer->copy_to(*page_buf, allowed_page_size, 0);
+        }
         _opts.stats->pagecache_read_bytes += buffer->size();
         _opts.stats->pagecache_read_count++;;
         return res;

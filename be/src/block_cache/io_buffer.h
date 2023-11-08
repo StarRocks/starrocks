@@ -47,6 +47,18 @@ public:
 
     const IOBuf& const_raw_buf() const { return _buf; }
 
+    size_t backing_block_num() { return _buf.backing_block_num(); }
+
+    const char* backing_block_data(size_t i) {
+        return _buf.backing_block(i).data();
+    }
+
+    size_t backing_block_size(size_t i) {
+        return _buf.backing_block(i).size();
+    }
+
+    void clear() { _buf.clear(); }
+
 private:
     butil::IOBuf _buf;
 };
