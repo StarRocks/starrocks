@@ -21,8 +21,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -36,14 +36,14 @@ import java.util.Map;
 
 public class ArrayDistinctAfterAggRule extends TransformationRule {
     public ArrayDistinctAfterAggRule() {
-        super(RuleType.TF_ARRAY_DISTINCT_AFTER_AGG, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
+        super(RuleType.TF_ARRAY_DISTINCT_AFTER_AGG, Pattern.create(OperatorType.LOGICAL_PROJECT)
+                .addChildren(Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF)));
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
-        return aggregate.getAggregations().values().stream().anyMatch(x -> x.getFnName().equals(FunctionSet.ARRAY_AGG))
-                && aggregate.getProjection() != null;
+        LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
+        return aggregate.getAggregations().values().stream().anyMatch(x -> x.getFnName().equals(FunctionSet.ARRAY_AGG));
     }
 
     private boolean checkScalarOp(ColumnRefOperator col, ScalarOperator op) {
@@ -82,8 +82,9 @@ public class ArrayDistinctAfterAggRule extends TransformationRule {
         return op.accept(visitor, null);
     }
 
-    private boolean checkAllUseOfArrayAggResultHasDistinct(ColumnRefOperator colRef, LogicalAggregationOperator agg) {
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : agg.getProjection().getColumnRefMap().entrySet()) {
+    private boolean checkAllUseOfArrayAggResultHasDistinct(ColumnRefOperator colRef, LogicalProjectOperator project,
+                                                           LogicalAggregationOperator agg) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : project.getColumnRefMap().entrySet()) {
             if (!checkScalarOp(colRef, entry.getValue())) {
                 return false;
             }
@@ -127,29 +128,26 @@ public class ArrayDistinctAfterAggRule extends TransformationRule {
     }
 
     private void rewriteProject(ColumnRefOperator oldCol, ColumnRefOperator newCol,
-                                            LogicalAggregationOperator agg) {
+                                            LogicalProjectOperator project) {
         Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : agg.getProjection().getColumnRefMap().entrySet()) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : project.getColumnRefMap().entrySet()) {
             newColumnRefMap.put(entry.getKey(), rewriteScalarOp(oldCol, newCol, entry.getValue()));
         }
-        Map<ColumnRefOperator, ScalarOperator> newCommonSubOperatorMap = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : agg.getProjection().getCommonSubOperatorMap().entrySet()) {
-            newCommonSubOperatorMap.put(entry.getKey(), rewriteScalarOp(oldCol, newCol, entry.getValue()));
-        }
-        Projection newProject = new Projection(newColumnRefMap, newCommonSubOperatorMap);
-        agg.setProjection(newProject);
+        project.getColumnRefMap().clear();
+        newColumnRefMap.forEach((k, v) -> project.getColumnRefMap().put(k, v));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
+        LogicalProjectOperator project = (LogicalProjectOperator) input.getOp();
+        LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getInputs().get(0).getOp();
 
         ScalarOperator newPredicate = aggregate.getPredicate();
 
         Map<ColumnRefOperator, CallOperator> replaceMap = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
             if (entry.getValue().getFnName().equals(FunctionSet.ARRAY_AGG) &&
-                    checkAllUseOfArrayAggResultHasDistinct(entry.getKey(), aggregate)) {
+                    checkAllUseOfArrayAggResultHasDistinct(entry.getKey(), project, aggregate)) {
                 Function oldFn = entry.getValue().getFunction();
                 Function newFn = Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, oldFn.getArgs(),
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -159,7 +157,7 @@ public class ArrayDistinctAfterAggRule extends TransformationRule {
                 ColumnRefOperator newCol = new ColumnRefOperator(
                         oldCol.getId(), oldCol.getType(), newFn.functionName(), oldCol.isNullable());
                 replaceMap.put(newCol, newCall);
-                rewriteProject(oldCol, newCol, aggregate);
+                rewriteProject(oldCol, newCol, project);
                 if (newPredicate != null) {
                     rewriteScalarOp(oldCol, newCol, newPredicate);
                 }
@@ -170,6 +168,7 @@ public class ArrayDistinctAfterAggRule extends TransformationRule {
 
         LogicalAggregationOperator newAggOp = LogicalAggregationOperator.builder().withOperator(aggregate)
                 .setAggregations(replaceMap).setPredicate(newPredicate).build();
-        return Lists.newArrayList(OptExpression.create(newAggOp, input.getInputs()));
+        return Lists.newArrayList(OptExpression.create(project,
+                OptExpression.create(newAggOp, input.getInputs().get(0).getInputs().get(0))));
     }
 }
