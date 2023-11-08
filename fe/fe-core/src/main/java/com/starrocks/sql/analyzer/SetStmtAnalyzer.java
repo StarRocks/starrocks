@@ -202,6 +202,15 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
+            String baseType = resolvedExpression.getStringValue();
+            if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
+                        "supported list is {varchar, decimal}", baseType));
+            }
+        }
+
         var.setResolvedExpression(resolvedExpression);
     }
 

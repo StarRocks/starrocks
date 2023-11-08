@@ -544,6 +544,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
+<<<<<<< HEAD
+=======
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+    
+    public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
+
+    public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
+
+>>>>>>> 3fcdc4e1f4 ([Enhancement] support decimal eq string cast flag (#34208))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1388,6 +1397,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
 
+<<<<<<< HEAD
     @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
     private String chooseExecuteInstancesMode = ADAPTIVE_DECREASE.name();
 
@@ -1398,6 +1408,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
                         StringUtils.upperCase(chooseExecuteInstancesMode))
                 .or(SessionVariableConstants.ChooseInstancesMode.LOCALITY);
+=======
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
+    private String cboEqBaseType = SessionVariableConstants.VARCHAR;
+
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
+
+    public boolean isEnablePruneIcebergManifest() {
+        return enablePruneIcebergManifest;
+>>>>>>> 3fcdc4e1f4 ([Enhancement] support decimal eq string cast flag (#34208))
     }
 
     public void setChooseExecuteInstancesMode(String mode) {

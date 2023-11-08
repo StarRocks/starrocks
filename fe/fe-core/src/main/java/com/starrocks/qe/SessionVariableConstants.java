@@ -32,12 +32,18 @@ public class SessionVariableConstants {
 
     public static final String DECIMAL = "decimal";
 
+<<<<<<< HEAD
     public static final String ADAPTIVE_INCREASE = "adaptive_increase";
     public static final String ADAPTIVE_DECREASE = "adaptive_decrease";
 
 
     public enum ChooseInstancesMode {
         LOCALITY,
+=======
+    public static final String VARCHAR = "varchar";
+
+    public enum AggregationStage {
+>>>>>>> 3fcdc4e1f4 ([Enhancement] support decimal eq string cast flag (#34208))
         AUTO,
         ADAPTIVE_INCREASE,
         ADAPTIVE_DECREASE;
