@@ -414,6 +414,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
+    public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
+
+    public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -1028,6 +1032,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long crossJoinCostPenalty = 1000000;
 
     private int exprChildrenLimit = -1;
+
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
+    private String cboEqBaseType = "varchar";
+
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
