@@ -358,7 +358,7 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
     private String getSplitAggFunctionName(Function fn) {
         String fnName = fn.getFunctionName().getFunction();
         if (fnName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-            fnName = FunctionSet.ARRAY_FLATTEN_DISTINCT;
+            fnName = FunctionSet.ARRAY_FLATTEN;
         } else if (fnName.equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT)) {
             fnName = FunctionSet.ARRAY_FLATTEN_DISTINCT;
         }
