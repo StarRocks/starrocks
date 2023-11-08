@@ -721,8 +721,9 @@ Status JsonReader::_read_file_broker() {
     }
 
     if (sz >= _scanner->_params.json_file_size_limit) {
-        return Status::MemoryLimitExceeded(
-                fmt::format("File size {} beyond limit {}, if you insist to do, please set a larger json_file_size_limit", sz, _scanner->_params.json_file_size_limit));
+        return Status::MemoryLimitExceeded(fmt::format(
+                "File size {} beyond limit {}, if you insist to do, please set a larger json_file_size_limit", sz,
+                _scanner->_params.json_file_size_limit));
     }
 
     if (sz > _payload_buffer_capacity) {
