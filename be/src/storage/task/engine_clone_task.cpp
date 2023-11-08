@@ -288,6 +288,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                             DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
 
                     if (dcgs.size() == 0) {
+                        ++idx;
                         continue;
                     }
 
@@ -769,6 +770,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
                             DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(dcg_list_pb, &dcgs));
 
                     if (dcgs.size() == 0) {
+                        ++idx;
                         continue;
                     }
 
