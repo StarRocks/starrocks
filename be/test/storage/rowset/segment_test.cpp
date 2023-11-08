@@ -77,11 +77,9 @@ protected:
     void SetUp() override {
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
-        _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
     void build_segment(const SegmentWriterOptions& opts, const TabletSchemaCSPtr& build_schema,
                        const TabletSchemaCSPtr& query_schema, size_t nrows, const ValueGenerator& generator,
