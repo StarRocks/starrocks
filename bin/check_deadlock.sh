@@ -4,11 +4,11 @@
 user=root
 passwd=
 fe_ip=127.0.0.1
-http_port=8632
+http_port=8030
 timeout=30
 max_failed_time=5
-stop_bin=/home/disk4/gengjun/fe3/bin/stop_fe.sh
-start_bin=/home/disk4/gengjun/fe3/bin/start_fe.sh
+stop_bin=/home/starrocks/fe/bin/stop_fe.sh
+start_bin=/home/starrocks/fe/bin/start_fe.sh
 
 
 failed_time=0
