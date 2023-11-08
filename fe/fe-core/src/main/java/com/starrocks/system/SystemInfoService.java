@@ -724,6 +724,21 @@ public class SystemInfoService implements GsonPostProcessable {
                 v -> !v.diskExceedLimitByStorageMedium(storageMedium));
     }
 
+    public Long seqChooseBackendOrComputeId() throws UserException {
+        List<Long> backendIds = seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No backend or compute node alive.");
+    }
+
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
 
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());

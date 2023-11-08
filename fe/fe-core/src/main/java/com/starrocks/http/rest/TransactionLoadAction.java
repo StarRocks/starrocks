@@ -45,16 +45,18 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.Backend;
+=======
+import com.starrocks.system.ComputeNode;
+>>>>>>> f7fa2e5acf ([BugFix] forget to choose cn when starosAgent returned "failed to get primary backend" (#34317))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 public class TransactionLoadAction extends RestBaseAction {
@@ -206,6 +208,7 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
+<<<<<<< HEAD
                     List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
                     if (CollectionUtils.isEmpty(backendIds)) {
                         throw new UserException("No backend alive.");
@@ -213,6 +216,11 @@ public class TransactionLoadAction extends RestBaseAction {
                     backendID = backendIds.get(0);
                     // txnBackendMap is LRU cache, it automic remove unused entry
                     txnBackendMap.put(label, backendID);
+=======
+                    nodeID = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                    // txnNodeMap is LRU cache, it atomic remove unused entry
+                    txnNodeMap.put(label, nodeID);
+>>>>>>> f7fa2e5acf ([BugFix] forget to choose cn when starosAgent returned "failed to get primary backend" (#34317))
                 } else if (channelIdStr == null) {
                     backendID = txnBackendMap.get(label);
                 }
@@ -299,5 +307,9 @@ public class TransactionLoadAction extends RestBaseAction {
                 redirectAddr, dbName, tableName, op, label);
         redirectTo(request, response, redirectAddr);
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> f7fa2e5acf ([BugFix] forget to choose cn when starosAgent returned "failed to get primary backend" (#34317))
 }
 
