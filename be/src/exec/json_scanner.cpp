@@ -597,10 +597,12 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             auto& column = chunk->get_column_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
-                if (column->is_binary()) {
-                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
-                } else {
+                if (column->data_column()->is_binary()) {
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else if (column->data_column()->is_numeric()) {
                     column->append_datum(Datum((uint8_t)0));
+                } else {
+                    column->append_nulls(1);
                 }
             } else {
                 column->append_nulls(1);
@@ -624,10 +626,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         if (i >= jsonpath_size) {
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
-                if (column->is_binary()) {
+                if (column->data_column()->is_binary()) {
                     column->append_strings(std::vector{Slice{"0"}});
-                } else {
+                } else if (column->data_column()->is_numeric()) {
                     column->append_datum(Datum((uint8_t)0));
+                } else {
+                    column->append_nulls(1);
                 }
             } else {
                 column->append_nulls(1);
@@ -656,10 +660,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             } else if (st.is_not_found()) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
-                    if (column->is_binary()) {
+                    if (column->data_column()->is_binary()) {
                         column->append_strings(std::vector{Slice{"0"}});
-                    } else {
+                    } else if (column->data_column()->is_numeric()) {
                         column->append_datum(Datum((uint8_t)0));
+                    } else {
+                        column->append_nulls(1);
                     }
                 } else {
                     column->append_nulls(1);

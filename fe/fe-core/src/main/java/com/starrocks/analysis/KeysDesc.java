@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.Load;
@@ -252,9 +253,12 @@ public class KeysDesc implements ParseNode, Writable {
             }
         }
 
-        for (int i = 0; i < cols.size(); ++i) {
-            if (cols.get(i).getName().equals(Load.LOAD_OP_COLUMN)) {
-                throw new SemanticException("column name [" + cols.get(i).getName() + "] is reserved by StarRocks, please use another one");
+        if (Config.prohibit_op_column_name) {
+            for (int i = 0; i < cols.size(); ++i) {
+                if (cols.get(i).getName().equals(Load.LOAD_OP_COLUMN)) {
+                    throw new SemanticException("[" + cols.get(i).getName() + "] is a prohibited system reserved name, " +
+                            "if you are sure you want to use it. Please reset FE configuration prohibit_op_column_name");
+                }
             }
         }
     }

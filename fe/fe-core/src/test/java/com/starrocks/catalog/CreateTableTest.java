@@ -1679,7 +1679,8 @@ public class CreateTableTest {
         String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
                 " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "Getting analyzing error. Detail message: column name [__op] is reserved by StarRocks, please use another one",
+                "Getting analyzing error. Detail message: [__op] is a prohibited system reserved name, " +
+                        "if you are sure you want to use it. Please reset FE configuration prohibit_op_column_name.",
                 () -> starRocksAssert.withTable(sql1));
     }
 }
