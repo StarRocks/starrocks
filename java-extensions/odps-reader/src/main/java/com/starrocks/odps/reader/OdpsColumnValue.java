@@ -118,7 +118,6 @@ public class OdpsColumnValue implements ColumnValue {
         List<TypeInfo> fieldTypeInfos = structTypeInfo.getFieldTypeInfos();
         Struct data = (Struct) fieldData;
         for (int i = 0; i < data.getFieldCount(); i++) {
-            structFieldIndex.add(i);
             values.add(new OdpsColumnValue(data.getFieldValue(i), fieldTypeInfos.get(i)));
         }
     }

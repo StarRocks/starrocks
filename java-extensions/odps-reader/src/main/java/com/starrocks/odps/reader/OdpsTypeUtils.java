@@ -107,7 +107,7 @@ public class OdpsTypeUtils {
             case MAP:
             case STRUCT:
             case ARRAY:
-                return new ColumnType(column.getName(), column.getTypeInfo().getTypeName());
+                return new ColumnType(column.getName(), column.getTypeInfo().getTypeName().toLowerCase());
             default:
                 throw new UnsupportedOperationException("Datatype not supported");
         }
