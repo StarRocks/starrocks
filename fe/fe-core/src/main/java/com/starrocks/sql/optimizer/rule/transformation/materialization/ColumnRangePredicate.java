@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.ImmutableList;
@@ -148,7 +149,7 @@ public class ColumnRangePredicate extends RangePredicate {
         for (DateTimeFormatter format : SUPPORTED_DATE_FORMATS) {
             TreeRangeSet<ConstantOperator> stringRangeSet = TreeRangeSet.create();
             // convert constant date to constant string
-            for (Range<ConstantOperator> range : canonicalColumnRanges.asRanges()) {
+            for (Range<ConstantOperator> range : columnRanges.asRanges()) {
                 Range<ConstantOperator> stringRange = convertRange(range, format);
                 stringRangeSet.add(stringRange);
             }
@@ -156,6 +157,11 @@ public class ColumnRangePredicate extends RangePredicate {
             results.add(rangePredicate);
         }
         return results;
+    }
+
+    @VisibleForTesting
+    public TreeRangeSet<ConstantOperator> getColumnRanges() {
+        return columnRanges;
     }
 
     private Range<ConstantOperator> convertRange(Range<ConstantOperator> from, DateTimeFormatter format) {
