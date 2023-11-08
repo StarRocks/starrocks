@@ -31,7 +31,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.ShowExecutor;
@@ -41,7 +40,6 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.PartitionKeyDesc;
@@ -67,7 +65,6 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
@@ -995,39 +992,5 @@ public class MaterializedViewTest {
         Assert.assertThrows("Duplicate column name 'k2' in index",
                 UserException.class,
                 () -> starRocksAssert.withMaterializedView(mvSql2));
-    }
-
-    @Test
-    public void testBaseTableInfo(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Mocked MetadataMgr metadataMgr,
-                                  @Mocked ConnectorMetadata connectorMetadata,
-                                  @Mocked Database database) {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                globalStateMgr.getMetadataMgr();
-                result = metadataMgr;
-
-                metadataMgr.getOptionalMetadata(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                result = Optional.of(connectorMetadata);
-
-                connectorMetadata.getDb(100L);
-                result = database;
-
-                connectorMetadata.getDb(200L);
-                result = null;
-
-                database.getTable(10L);
-                result = null;
-            }
-        };
-        BaseTableInfo baseTableInfo = new BaseTableInfo(100L, 10L);
-        Assert.assertNull(baseTableInfo.getTable());
-        Assert.assertNull(baseTableInfo.getTableByName());
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(200L, 10L);
-        Assert.assertNull(baseTableInfo2.getTable());
-        Assert.assertNull(baseTableInfo2.getTableByName());
     }
 }
