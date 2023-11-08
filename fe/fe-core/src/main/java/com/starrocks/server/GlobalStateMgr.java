@@ -340,6 +340,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
+
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
     // 0 ~ 9999 used for qe
@@ -2805,6 +2807,18 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
+                }
+
+                // store type
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+                    if (olapTable.storageType() != null &&
+                            !PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(olapTable.storageType())) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+                                .append("\" = \"");
+
+                        sb.append(olapTable.storageType()).append("\"");
+                    }
                 }
             }
 

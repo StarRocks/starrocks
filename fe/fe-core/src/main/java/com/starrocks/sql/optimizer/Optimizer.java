@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -65,6 +66,7 @@ import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
+import com.starrocks.sql.optimizer.rule.tree.JoinLocalShuffleRule;
 import com.starrocks.sql.optimizer.rule.tree.PhysicalDistributionAggOptRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
@@ -257,7 +259,9 @@ public class Optimizer {
             // MergeProjectWithChildRule to merge LogicalProjectionOperator into its child's
             // projection before ReorderJoinRule's application, after that, we must separate operator's
             // projection as LogicalProjectionOperator from the operator by applying SeparateProjectRule.
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
             ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            CTEUtils.collectForceCteStatisticsOutsideMemo(tree, context);
             tree = new UniquenessBasedTablePruneRule().rewrite(tree, rootTaskContext);
             deriveLogicalProperty(tree);
             tree = new ReorderJoinRule().rewrite(tree, context);
@@ -415,6 +419,8 @@ public class Optimizer {
         // select count(distinct c) from t group by a, b
         // if this rule has applied before MV.
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
+
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         return tree.getInputs().get(0);
     }
@@ -614,8 +620,7 @@ public class Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
-
-        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
+        result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.

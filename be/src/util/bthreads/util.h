@@ -25,13 +25,11 @@
 namespace starrocks::bthreads {
 
 namespace {
-struct FunctorArg {
-    std::function<void()> func;
-};
+typedef std::function<void()> FunctorArg;
 
 static void* bthread_func(void* arg) {
     auto func_arg = static_cast<FunctorArg*>(arg);
-    func_arg->func();
+    func_arg->operator()();
     delete func_arg;
     return nullptr;
 }
@@ -39,7 +37,7 @@ static void* bthread_func(void* arg) {
 
 // Starts a new bthread that runs the specified function.
 // Note: The function provided must not throw any exceptions.
-StatusOr<bthread_t> start_bthread(std::function<void()> func) {
+inline StatusOr<bthread_t> start_bthread(std::function<void()> func) {
     auto arg = std::make_unique<FunctorArg>(std::move(func));
     bthread_t bid;
     int rc = bthread_start_background(&bid, nullptr, bthread_func, arg.get());
@@ -53,7 +51,7 @@ StatusOr<bthread_t> start_bthread(std::function<void()> func) {
 // Starts a new bthread that runs the specified function, then waits for the new bthread
 // to complete before returning to the caller.
 // Note: The function provided must not throw any exceptions.
-Status start_bthread_and_join(std::function<void()> func) {
+inline Status start_bthread_and_join(std::function<void()> func) {
     ASSIGN_OR_RETURN(auto bid, start_bthread(std::move(func)));
     int rc = bthread_join(bid, nullptr);
     if (rc != 0) {

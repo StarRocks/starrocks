@@ -540,6 +540,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1386,6 +1390,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
     private boolean cboPredicateSubfieldPath = true;
 
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
+
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
     }
@@ -1406,6 +1413,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
 
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
@@ -1434,7 +1444,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
-    
+
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2662,6 +2672,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
@@ -2679,6 +2697,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
+    }
+
+    public long getCrossJoinCostPenalty() {
+        return crossJoinCostPenalty;
+    }
+
+    public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
+        this.crossJoinCostPenalty = crossJoinCostPenalty;
     }
 
     // Serialize to thrift object
