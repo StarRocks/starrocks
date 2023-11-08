@@ -303,6 +303,7 @@ public class FileScanNode extends LoadScanNode {
         params.setTrim_space(fileGroup.isTrimspace());
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
+        params.setJson_file_size_limit(Config.json_file_size_limit);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -415,6 +416,7 @@ public class FileScanNode extends LoadScanNode {
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());
         context.params.setDest_tuple_id(desc.getId().asInt());
         context.params.setStrict_mode(strictMode);
+        context.params.setJson_file_size_limit(Config.json_file_size_limit);
         // Need re compute memory layout after set some slot descriptor to nullable
         context.tupleDescriptor.computeMemLayout();
     }

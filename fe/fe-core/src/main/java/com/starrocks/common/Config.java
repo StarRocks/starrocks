@@ -2593,4 +2593,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    // This limit limits the maximum size of json file to load.
+    @ConfField(mutable = true)
+    public static long json_file_size_limit = 4294967296L;
 }
