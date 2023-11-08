@@ -172,7 +172,7 @@ public class PartitionColPredicateEvaluator {
                 if (constantOperator.isNull()) {
                     literalExpr = LiteralExpr.createInfinity(childType, false);
                 } else {
-                    literalExpr = ColumnFilterConverter.convertLiteral(partitionColumn, constantOperator);
+                    literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
                 }
             } catch (AnalysisException e) {
                 return createAllTrueBitSet();
@@ -239,7 +239,7 @@ public class PartitionColPredicateEvaluator {
             if (IN_OPERANDS_LIMIT >= constList.size()) {
                 for (ConstantOperator constantOperator : constList) {
                     try {
-                        LiteralExpr literalExpr = ColumnFilterConverter.convertLiteral(partitionColumn, constantOperator);
+                        LiteralExpr literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
                         PartitionKey conditionKey = new PartitionKey();
                         conditionKey.pushColumn(literalExpr, childType);
                         Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
@@ -251,8 +251,8 @@ public class PartitionColPredicateEvaluator {
                 }
             } else {
                 try {
-                    LiteralExpr min = ColumnFilterConverter.convertLiteral(partitionColumn, constList.get(0));
-                    LiteralExpr max = ColumnFilterConverter.convertLiteral(partitionColumn, constList.get(constList.size() - 1));
+                    LiteralExpr min = ColumnFilterConverter.convertLiteral(constList.get(0));
+                    LiteralExpr max = ColumnFilterConverter.convertLiteral(constList.get(constList.size() - 1));
                     PartitionKey minKey = new PartitionKey();
                     minKey.pushColumn(min, childType);
                     PartitionKey maxKey = new PartitionKey();
@@ -358,7 +358,7 @@ public class PartitionColPredicateEvaluator {
             if (result.isConstantRef()) {
                 LiteralExpr newLiteralExpr;
                 try {
-                    newLiteralExpr = ColumnFilterConverter.convertLiteral(partitionColumn, (ConstantOperator) result);
+                    newLiteralExpr = ColumnFilterConverter.convertLiteral((ConstantOperator) result);
                 } catch (Exception e) {
                     return Optional.empty();
                 }
