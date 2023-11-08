@@ -547,6 +547,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+    
+    public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
+
+    public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1420,6 +1424,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
+    private String cboEqBaseType = SessionVariableConstants.VARCHAR;
+
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
 
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
