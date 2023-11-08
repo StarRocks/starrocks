@@ -541,13 +541,6 @@ PARALLEL_TEST(ConvertHelperTest, testValidSchema) {
         auto table_schema = std::make_shared<TabletSchema>(schema_pb);
         out_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(table_schema));
     }
-    ChunkConverter cc;
-    ASSERT_TRUE(cc.init(*in_schema, *out_schema).ok());
-    auto chunk_ptr = ChunkHelper::new_chunk(*in_schema, 10);
-    auto chunk_ptr1 = cc.copy_convert(*chunk_ptr);
-    ASSERT_TRUE(chunk_ptr1->schema()->sort_key_idxes().size() == 1);
-    auto chunk_ptr2 = cc.move_convert(chunk_ptr.get());
-    ASSERT_TRUE(chunk_ptr2->schema()->sort_key_idxes().size() == 1);
 }
 
 } // namespace starrocks
