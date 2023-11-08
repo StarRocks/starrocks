@@ -196,8 +196,9 @@ public class PropertyAnalyzer {
      */
     public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
 
-    // light schema change
+    // fast schema evolution
     public static final String PROPERTIES_USE_FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
+    public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
@@ -606,9 +607,13 @@ public class PropertyAnalyzer {
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
-            return Config.allow_default_fast_schema_evolution;
+            vaule = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            if (null == value) {
+                return Config.allow_default_fast_schema_evolution;
+            }
         }
         properties.remove(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
+        properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
         if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
             return true;
         } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
