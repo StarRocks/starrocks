@@ -35,6 +35,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
@@ -189,6 +190,29 @@ public class SetStmtAnalyzer {
             checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
         }
 
+<<<<<<< HEAD
+=======
+        // materialized_view_rewrite_mode
+        if (variable.equalsIgnoreCase(SessionVariable.MATERIALIZED_VIEW_REWRITE_MODE)) {
+            String rewriteModeName = resolvedExpression.getStringValue();
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.MaterializedViewRewriteMode.class, rewriteModeName)) {
+                String supportedList = StringUtils.join(
+                        EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
+                throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
+                                "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
+            String baseType = resolvedExpression.getStringValue();
+            if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
+                        "supported list is {varchar, decimal}", baseType));
+            }
+        }
+
+>>>>>>> 3fcdc4e1f4 ([Enhancement] support decimal eq string cast flag (#34208))
         var.setResolvedExpression(resolvedExpression);
     }
 

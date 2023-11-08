@@ -31,4 +31,17 @@ public class SessionVariableConstants {
     public static final String DOUBLE = "double";
 
     public static final String DECIMAL = "decimal";
+<<<<<<< HEAD
+=======
+
+    public static final String VARCHAR = "varchar";
+
+    public enum AggregationStage {
+        AUTO,
+        ONE_STAGE,
+        TWO_STAGE,
+        THREE_STAGE,
+        FOUR_STAGE
+    }
+>>>>>>> 3fcdc4e1f4 ([Enhancement] support decimal eq string cast flag (#34208))
 }
