@@ -338,7 +338,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
     # Once the starcache version is stable, we will turn on it by default.
     if [[ -z ${WITH_STARCACHE} ]]; then
-      WITH_STARCACHE=${USE_STAROS}
+      WITH_STARCACHE=ON
     fi
 
     if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
