@@ -165,6 +165,7 @@ public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
+    HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
 
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
@@ -192,6 +193,8 @@ public:
     virtual bool is_partition_col(const SlotDescriptor* slot) const;
     virtual int get_partition_col_index(const SlotDescriptor* slot) const;
     virtual HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
+    virtual bool has_base_path() const { return false; }
+    virtual const std::string& get_base_path() const { return _table_location; }
 
     Status create_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
@@ -199,6 +202,9 @@ public:
         }
         return Status::OK();
     }
+
+    StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
+                                                       ObjectPool* pool);
 
 protected:
     std::string _hdfs_base_path;
@@ -235,6 +241,9 @@ public:
     const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
     const std::vector<std::string> full_column_names();
     std::vector<int32_t> partition_index_in_schema();
+    bool has_base_path() const override { return true; }
+
+    Status set_partition_desc_map(const TIcebergTable& thrift_table, ObjectPool* pool);
 
 private:
     TIcebergSchema _t_iceberg_schema;
@@ -271,7 +280,6 @@ public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;
     bool has_partition() const override { return true; }
-    const std::string& get_base_path() const;
     const std::string& get_instant_time() const;
     const std::string& get_hive_column_names() const;
     const std::string& get_hive_column_types() const;
