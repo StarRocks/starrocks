@@ -35,17 +35,24 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TableIdentifier;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,6 +61,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.StringJoiner;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Table metadata representing a globalStateMgr view or a local view from a WITH clause.
@@ -93,6 +104,12 @@ public class View extends Table {
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
+    private AtomicReference<Set<TableIdentifier>> tblIdCache = new AtomicReference<>();
+
+    // store the parsed result
+    // store the analyzed result based on a new parsed queryStatement
+    private AtomicReference<ViewCache> analyzedCache = new AtomicReference<>();
+
     // Used for read from image
     public View() {
         super(TableType.VIEW);
@@ -102,30 +119,42 @@ public class View extends Table {
         super(id, name, TableType.VIEW, schema);
     }
 
-    public QueryStatement getQueryStatement() throws StarRocksPlannerException {
+    /**
+     * Attention: if you want a new queryStatement when you want to set some special value different from
+     * its query definition, please set reuseViewDef to false.
+     * @return QueryStatement
+     */
+    public QueryStatement getQueryStatement() {
         Preconditions.checkNotNull(inlineViewDef);
-        ParseNode node;
-        try {
-            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
-        } catch (Exception e) {
-            LOG.warn("stmt is {}", inlineViewDef);
-            LOG.warn("exception because: ", e);
-            throw new StarRocksPlannerException(
-                    String.format("Failed to parse view-definition statement of view: %s", name),
-                    ErrorType.INTERNAL_ERROR);
-        }
-        // Make sure the view definition parses to a query statement.
-        if (!(node instanceof QueryStatement)) {
-            throw new StarRocksPlannerException(String.format("View definition of %s " +
-                    "is not a query statement", name), ErrorType.INTERNAL_ERROR);
+
+        if (analyzedCache.get() == null || analyzedCache.get().getFingerprint().isEmpty() ||
+                ConnectContext.get().cannotReuseViewDef()) {
+            QueryStatement stmt = parseAndAnalyzeDef();
+            if (ConnectContext.get().cannotReuseViewDef()) {
+                return stmt;
+            }
+            analyzedCache.compareAndSet(null, new ViewCache(createViewFingerprint(), stmt));
+            return analyzedCache.get().getAnalyzedDef();
         }
 
-        return (QueryStatement) node;
+        String latestFingerprint = createViewFingerprint();
+        ViewCache oldCache = analyzedCache.get();
+        if (!latestFingerprint.equals(oldCache.getFingerprint())) {
+            QueryStatement stmt = parseAndAnalyzeDef();
+            analyzedCache.compareAndSet(oldCache, new ViewCache(latestFingerprint, stmt));
+        }
+        return analyzedCache.get().getAnalyzedDef();
     }
+
+    public boolean isAnalyzed() {
+        return analyzedCache.get() != null;
+    }
+
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
+        this.analyzedCache = new AtomicReference<>();
     }
 
     public String getInlineViewDef() {
@@ -144,33 +173,110 @@ public class View extends Table {
         // populate a view definition.
         ParseNode node;
         try {
-            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
+            node = SqlParser.parse(inlineViewDef, sqlMode).get(0);
         } catch (Exception e) {
-            LOG.info("stmt is {}", inlineViewDef);
-            LOG.info("exception because: ", e);
-            LOG.info("msg is {}", inlineViewDef);
+            LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
             // Do not pass e as the exception cause because it might reveal the existence
             // of tables that the user triggering this load may not have privileges on.
             throw new UserException(
-                    String.format("Failed to parse view-definition statement of view: %s", name), e);
+                    String.format("Failed to parse view: %s. Its definition is:%n%s ", name, inlineViewDef));
         }
         // Make sure the view definition parses to a query statement.
         if (!(node instanceof QueryStatement)) {
-            throw new UserException(String.format("View definition of %s " +
-                    "is not a query statement", name));
+            throw new UserException(String.format("View %s without query statement. Its definition is:%n%s",
+                    name, inlineViewDef));
         }
         return (QueryStatement) node;
     }
 
+    public QueryStatement parseAndAnalyzeDef() {
+        ParseNode node;
+        node = SqlParser.parse(inlineViewDef, sqlMode).get(0);
+        // Make sure the view definition parses to a query statement.
+        if (!(node instanceof QueryStatement)) {
+            throw new StarRocksPlannerException(String.format("View %s without query statement. Its definition is:%n%s",
+                    name, inlineViewDef), ErrorType.INTERNAL_ERROR);
+        }
+
+        QueryStatement stmt = (QueryStatement) node;
+        Analyzer.analyze(stmt, ConnectContext.get());
+        return stmt;
+    }
+
     public synchronized List<TableName> getTableRefs() {
         if (this.tableRefsCache.isEmpty()) {
-            QueryStatement qs = getQueryStatement();
-            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(qs);
+            QueryStatement stmt = parseAndAnalyzeDef();
+            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(stmt);
             this.tableRefsCache = Lists.newArrayList(allTables.keySet());
         }
 
         return Lists.newArrayList(this.tableRefsCache);
     }
+
+    public Set<TableIdentifier> getTableIdentifiers() {
+        if (tblIdCache.get() == null) {
+            QueryStatement stmt = parseAndAnalyzeDef();
+            Set<TableIdentifier> tblIds = AnalyzerUtils.collectAllTableIdentifier(stmt);
+            tblIdCache.compareAndSet(null, tblIds);
+        }
+        return tblIdCache.get();
+    }
+
+    public String createViewFingerprint() {
+        StringJoiner joiner = new StringJoiner(", ", "[", "]");
+        Set<TableIdentifier> tblIds = getTableIdentifiers();
+        for (TableIdentifier tableId : tblIds) {
+            Optional<OlapTable> table = resolveOlapTable(tableId);
+            if (table.isPresent()) {
+                joiner.add(table.get().getId() + "-" + table.get().lastSchemaUpdateTime.get());
+            } else {
+                return "";
+            }
+        }
+        return joiner.toString();
+    }
+
+    public Optional<OlapTable> resolveOlapTable(TableIdentifier identifier) {
+        TableName tableName = identifier.getTableName();
+        if (identifier.isSyncMv()) {
+            return Optional.empty();
+        }
+        MetaUtils.normalizationTableName(ConnectContext.get(), tableName);
+        String catalogName = tableName.getCatalog();
+        String dbName = tableName.getDb();
+        String tbName = tableName.getTbl();
+        if (Strings.isNullOrEmpty(dbName)) {
+            return Optional.empty();
+        }
+
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+            return Optional.empty();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        Database database = metadataMgr.getDb(catalogName, dbName);
+        if (database == null) {
+            return Optional.empty();
+        }
+
+        Table table = metadataMgr.getTable(catalogName, dbName, tbName);
+        if (table == null) {
+            return Optional.empty();
+        }
+
+        if (!table.isNativeTableOrMaterializedView()) {
+            return Optional.empty();
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getState() == OlapTable.OlapTableState.RESTORE ||
+                olapTable.getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD) {
+            return Optional.empty();
+        }
+
+        return Optional.of(olapTable);
+    }
+
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -182,9 +288,45 @@ public class View extends Table {
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         // just do not want to modify the meta version, so leave originalViewDef here but set it as empty
-        originalViewDef = Text.readString(in);
+        Text.readString(in);
         originalViewDef = "";
         inlineViewDef = Text.readString(in);
         inlineViewDef = inlineViewDef.replaceAll("default_cluster:", "");
+    }
+
+    public static class ViewCache {
+        private final String fingerprint;
+
+        private final QueryStatement analyzedDef;
+
+        public ViewCache(String fingerprint, QueryStatement analyzedDef) {
+            this.fingerprint = fingerprint;
+            this.analyzedDef = analyzedDef;
+        }
+
+        public String getFingerprint() {
+            return fingerprint;
+        }
+
+        public QueryStatement getAnalyzedDef() {
+            return analyzedDef;
+        }
+
+        @Override
+        public int hashCode() {
+            return fingerprint.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            return fingerprint.equals(((ViewCache) o).fingerprint);
+        }
     }
 }
