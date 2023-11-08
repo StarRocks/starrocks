@@ -593,7 +593,8 @@ public abstract class FileSystem extends Configured
             }
         }
 
-        FileSystem fs = HadoopExt.getInstance().doAs(conf, () -> {
+        UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
+        FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> {
             String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
             if (conf.getBoolean(disableCacheName, false)) {
                 LOGGER.debug("Bypassing cache to create filesystem {}", uri);

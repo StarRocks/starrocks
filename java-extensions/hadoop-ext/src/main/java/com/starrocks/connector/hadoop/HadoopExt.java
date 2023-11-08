@@ -43,12 +43,15 @@ public class HadoopExt {
         return conf.get(HDFS_CLOUD_CONFIGURATION_STRING, "");
     }
 
-    public UserGroupInformation getUGI(Configuration conf) {
+    public UserGroupInformation getHMSUGI(Configuration conf) {
         return null;
     }
 
-    public <R, E extends Exception> R doAs(Configuration conf, GenericExceptionAction<R, E> action) throws E {
-        UserGroupInformation ugi = getUGI(conf);
+    public UserGroupInformation getHDFSUGI(Configuration conf) {
+        return null;
+    }
+
+    public <R, E extends Exception> R doAs(UserGroupInformation ugi, GenericExceptionAction<R, E> action) throws E {
         if (ugi == null) {
             return action.run();
         }

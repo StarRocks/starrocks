@@ -437,7 +437,8 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     }
 
     private void open() throws MetaException {
-        HadoopExt.getInstance().doAs(conf, () -> {
+        UserGroupInformation ugi = HadoopExt.getInstance().getHMSUGI(conf);
+        HadoopExt.getInstance().doAs(ugi, () -> {
             openInternal();
             return null;
         });
@@ -552,7 +553,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                     if (isConnected && !useSasl && MetastoreConf.getBoolVar(conf, ConfVars.EXECUTE_SET_UGI)) {
                         // Call set_ugi, only in unsecure mode.
                         try {
-                            UserGroupInformation ugi = SecurityUtils.getUGI();
+                            UserGroupInformation ugi = HadoopExt.getInstance().getHMSUGI(conf);
+                            if (ugi == null) {
+                                ugi = SecurityUtils.getUGI();
+                            }
                             client.set_ugi(ugi.getUserName(), Arrays.asList(ugi.getGroupNames()));
                         } catch (LoginException e) {
                             LOG.warn("Failed to do login. set_ugi() is not successful, " +
