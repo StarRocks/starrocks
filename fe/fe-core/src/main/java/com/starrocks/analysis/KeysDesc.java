@@ -211,7 +211,7 @@ public class KeysDesc implements ParseNode, Writable {
         for (String column : keysColumnNames) {
             int idx = columnNames.indexOf(column);
             if (idx == -1) {
-                throw new SemanticException("Invalid key column '%s' not exists in all columns", column);
+                throw new SemanticException("Unknown column '%s' does not exist", column);
             } 
             keyColIdxes.add(idx);
         }
@@ -258,17 +258,18 @@ public class KeysDesc implements ParseNode, Writable {
             // we should check sort key column type if table is primary key table
             if (type == KeysType.PRIMARY_KEYS) {
                 for (int i = 0; i < sortKeyIdxes.size(); i++) {
-                    String name = cols.get(sortKeyIdxes.get(i)).getName();
                     ColumnDef cd = cols.get(sortKeyIdxes.get(i));
                     Type t = cd.getType();
                     if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
                             t.isDatetime())) {
-                        throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
+                        throw new SemanticException("sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
                     }
                 }
             } else if (type == KeysType.DUP_KEYS) {
-                // do nothing
+                // sort key column of duplicate table has no limitation
             } else if (type == KeysType.AGG_KEYS || type == KeysType.UNIQUE_KEYS) {
+                // sort key column of AGG and UNIQUE table must include all key columns and cannot have any columns other than
+                // the key columns
                 boolean res = new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes));
                 if (!res) {
                     throw new SemanticException("The sort columns of " + type.toSql() + " table must include all key " +

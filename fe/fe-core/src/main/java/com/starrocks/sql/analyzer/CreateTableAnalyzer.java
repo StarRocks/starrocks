@@ -169,20 +169,14 @@ public class CreateTableAnalyzer {
         KeysDesc keysDesc = statement.getKeysDesc();
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
-            if (keysDesc == null) {
-                //TODO (zhangqiang)
-                // Duplicate table does not need to specify key column
-                throw new SemanticException("only OLAP Table support sort key");
-            } else {
-                List<String> columnNames = 
-                        statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
-                for (String column : statement.getSortKeys()) {
-                    int idx = columnNames.indexOf(column);
-                    if (idx == -1) {
-                        throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
-                    }
-                    sortKeyIdxes.add(idx);
+            List<String> columnNames = 
+                    statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+            for (String column : statement.getSortKeys()) {
+                int idx = columnNames.indexOf(column);
+                if (idx == -1) {
+                    throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
+                sortKeyIdxes.add(idx);
             }
         } else {
             int cid = 0;

@@ -480,7 +480,8 @@ void MemTable::_sort_column_inc() {
         key_idxes.resize(_vectorized_schema->num_key_fields());
         std::iota(key_idxes.begin(), key_idxes.end(), 0);
         if (!std::equal(tmp.begin(), tmp.end(), key_idxes.begin(), key_idxes.end())) {
-            std::string msg = strings::Substitute("tablet type: $0 sort key columns is different with key columns", _keys_type);
+            std::string msg =
+                    strings::Substitute("tablet type: $0 sort key columns is different with key columns", _keys_type);
             LOG(FATAL) << msg;
         }
     }

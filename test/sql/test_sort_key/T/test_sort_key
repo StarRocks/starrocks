@@ -163,7 +163,7 @@ CREATE TABLE `dup_test` (
     `v2` bigint REPLACE NULL COMMENT "",
     `v3` bigint REPLACE NULL COMMENT ""
 )
-UNIQUE KEY(k1, k2)
+DUPLICATE KEY(k1, k2)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
 ORDER BY (k2, k1)
@@ -184,8 +184,8 @@ select * from dup_test;
 
 alter table dup_test order by (k2,v1);
 function: wait_alter_table_finish()
-show create table uni_test;
-select * from uni_test;
+show create table dup_test;
+select * from dup_test;
 
 
 alter table dup_test order by (k2,k1,v2,v1,v3);

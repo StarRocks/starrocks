@@ -676,7 +676,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for handling other indices
     }
 
-    // Because modifing the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
+    // Because modifying the sort key columns and reordering table schema use the same syntax(Alter table xxx ORDER BY(...))
     // And reordering table schema need to provide all columns, so we use the number of columns in the alterClause to determine 
     // whether it's modifying the sorting columns or reordering the table schema
     private boolean changeSortKeyColumn(ReorderColumnsClause alterClause, OlapTable table) throws DdlException {
@@ -729,8 +729,6 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processModifySortKeyColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes,
                                             List<Integer> sortKeyUniqueIds) throws DdlException {
-        List<Integer> keyColumnIdxes = new ArrayList<>();
-
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -752,15 +750,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 useSortKeyUniqueId = false;
                 sortKeyUniqueIds.clear();
             }
-            Type t = oneCol.get().getType();
-            if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
-                        t.isDatetime())) {
-                    throw new DdlException("Sort key column[" + colName + "] type not supported: " + t + " in PrimaryKey table");
-                }
-            }
         }
 
+        List<Integer> keyColumnIdxes = new ArrayList<>();
         int columnId = 0;
         for (Column column : targetIndexSchema) {
             if (column.isKey()) {
@@ -768,14 +760,25 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             columnId++;
         }
-        if (olapTable.getKeysType() == KeysType.DUP_KEYS || olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-            // do nothing
+        if (olapTable.getKeysType() == KeysType.DUP_KEYS) {
+            // duplicate table has no limit in sort key columns
+        } else if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+            // sort key column of primary key table has type limitation
+            for (int sortKeyIdx : sortKeyIdxes) {
+                Column col = targetIndexSchema.get(sortKeyIdx);
+                Type t = col.getType();
+                if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                        t.isDatetime())) {
+                    throw new DdlException("Sort key column[" + col.getName() + "] type not supported: " + t + 
+                                           " in PrimaryKey table");
+                }
+            }
         } else if (olapTable.getKeysType() == KeysType.AGG_KEYS || olapTable.getKeysType() == KeysType.UNIQUE_KEYS) {
-            // check sortkey
+            // sort key column must include all key columns and can not have any other columns
             boolean res = new HashSet<>(keyColumnIdxes).equals(new HashSet<>(sortKeyIdxes));
             if (!res) {
                 throw new DdlException("The sort columns of " + olapTable.getKeysType().toSql() + " table must include all key " +
-                                       "columns and cannot have any columns other than key columns.");
+                                       "columns and cannot have any other columns");
             }
         } else {
             throw new DdlException("Table type:" + olapTable.getKeysType().toSql() + " does not support sort key column");
