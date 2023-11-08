@@ -27,8 +27,9 @@ import com.starrocks.proto.PSlotDescriptor;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -287,13 +288,22 @@ public class TableFunctionTable extends Table {
             return Lists.newArrayList();
         }
         TNetworkAddress address;
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-        if (backendIds.isEmpty()) {
-            throw new DdlException("Failed to send proxy request. No alive backends");
+        List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        if (nodeIds.isEmpty()) {
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+                throw new DdlException("Failed to send proxy request. No alive backends");
+            } else {
+                nodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+                if (nodeIds.isEmpty()) {
+                    throw new DdlException("Failed to send proxy request. " +
+                            "No alive backends or compute nodes");
+                }
+            }
         }
-        Collections.shuffle(backendIds);
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
-        address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
+
+        Collections.shuffle(nodeIds);
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
 
         PGetFileSchemaResult result;
         try {
