@@ -40,6 +40,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.UserException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -58,6 +59,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -66,6 +68,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 public class SystemInfoServiceTest {
@@ -398,6 +401,31 @@ public class SystemInfoServiceTest {
         GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
         List<Long> computeNods = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true, false);
         Assert.assertEquals(1, computeNods.size());
+
+        // test seqChooseBackendOrComputeId func
+        Exception exception = Assertions.assertThrows(UserException.class, () -> {
+            GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+        });
+        Assert.assertTrue(exception.getMessage().contains("No backend alive."));
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> seqChooseComputeNodes(int computeNodeNum,
+                                                    boolean needAvailable, boolean isCreate) {
+                return new ArrayList<>();
+            }
+        };
+
+        exception = Assert.assertThrows(UserException.class, () -> {
+            GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+        });
+        Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));
     }
 
 }
