@@ -204,15 +204,24 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
                     remain_rpc_num++;
                 }
             }
-            LOG(WARNING) << "Finishing fragment " << print_id(_fragment_ctx->fragment_instance_id())
-                         << " SinkBuffer remains " << remain_rpc_num << " rpcs, dest are " << ss.str();
+            LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id()) << " SinkBuffer remains "
+                         << remain_rpc_num << " rpcs, dest are " << ss.str();
+        }
+        if (_num_remaining_eos > 0) {
+            std::stringstream ss;
+            for (auto& remain_eos : _num_sinkers) {
+                ss << print_id(_instance_id2finst_id[remain_eos.first]) << "(" << remain_eos.second << "),";
+            }
+            LOG(WARNING) << "Fragment " << print_id(_fragment_ctx->fragment_instance_id())
+                         << " remains EOS : " << ss.str();
         }
     }
     if (state != nullptr) {
         LOG(INFO) << fmt::format(
-                "fragment_instance_id {} -> {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}",
-                print_id(_fragment_ctx->fragment_instance_id()), print_id(state->fragment_instance_id()),
-                _num_uncancelled_sinkers, _is_finishing, _num_remaining_eos);
+                "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
+                "_num_sending_rpc {}, chunk is full {}",
+                print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
+                _num_remaining_eos, _num_sending_rpc, is_full());
     }
 }
 
