@@ -14,21 +14,37 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.DdlException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.SystemInfoService;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class TableFunctionTableTest {
-    @Test
-    public void testNormal() {
-        Map<String, String> properties = new HashMap<>();
+
+    Map<String, String> properties = new HashMap<>();
+
+    @Before
+    public void setUp() {
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
+    }
 
+    @Test
+    public void testNormal() {
         Assertions.assertDoesNotThrow(() -> {
             TableFunctionTable table = new TableFunctionTable(properties);
             List<Column> schema = table.getFullSchema();
@@ -39,5 +55,44 @@ public class TableFunctionTableTest {
             Assertions.assertEquals(new Column("col_path2", ScalarType.createDefaultString(), true), schema.get(3));
             Assertions.assertEquals(new Column("col_path3", ScalarType.createDefaultString(), true), schema.get(4));
         });
+    }
+
+    @Test
+    public void testGetFileSchema(@Mocked GlobalStateMgr globalStateMgr,
+                                  @Mocked SystemInfoService systemInfoService) {
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                minTimes = 0;
+
+
+                systemInfoService.getBackendIds(anyBoolean);
+                result = new ArrayList<>();
+                minTimes = 0;
+            }
+        };
+
+        try {
+            new TableFunctionTable(properties);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Failed to send proxy request. No alive backends"));
+        }
+
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        try {
+            new TableFunctionTable(properties);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().
+                    contains("Failed to send proxy request. No alive backends or compute nodes"));
+        }
+
     }
 }

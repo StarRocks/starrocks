@@ -289,15 +289,14 @@ public class TableFunctionTable extends Table {
         }
         TNetworkAddress address;
         List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            nodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+        }
         if (nodeIds.isEmpty()) {
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
                 throw new DdlException("Failed to send proxy request. No alive backends");
             } else {
-                nodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
-                if (nodeIds.isEmpty()) {
-                    throw new DdlException("Failed to send proxy request. " +
-                            "No alive backends or compute nodes");
-                }
+                throw new DdlException("Failed to send proxy request. No alive backends or compute nodes");
             }
         }
 
