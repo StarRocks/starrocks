@@ -285,16 +285,19 @@ private:
     TTupleId _buffered_tuple_id = 0;
 
     bool _has_udaf = false;
-    // Some window functions, eg. NTILE, need the boundary of partition to calculate its value.
-    // For these functions, we must wait util the partition finished.
+    // There are many reasons requiring the materializing processing.
+    // 1. Unbounded window clause, like `UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`
+    // 2. Some certian window functions, eg. `NTILE`, need the boundary of partition to calculate its value.
+    // Any of these conditions is satisfied, the materializing processing is required.
     bool _need_partition_materializing = false;
-    bool _support_cumulative_algo = false;
+    bool _use_removable_cumulative_process = false;
     // When calculating window functions such as CUME_DIST and PERCENT_RANK,
     // it's necessary to specify the size of the partition.
     bool _should_set_partition_size = false;
     std::vector<int64_t> _partition_size_required_function_index;
 
     RuntimeProfile* _runtime_profile;
+    RuntimeProfile::HighWaterMarkCounter* _peak_buffered_rows = nullptr;
     RuntimeProfile::Counter* _remove_unused_rows_cnt = nullptr;
     RuntimeProfile::Counter* _remove_unused_total_rows = nullptr;
     RuntimeProfile::Counter* _column_resize_timer = nullptr;

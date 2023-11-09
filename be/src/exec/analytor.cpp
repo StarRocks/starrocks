@@ -74,6 +74,7 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
         if (!window.__isset.window_start && !window.__isset.window_end) {
             _need_partition_materializing = true;
         }
+        _is_unbounded_preceding = !window.__isset.window_start;
     } else {
         if (!window.__isset.window_start && !window.__isset.window_end) {
             _need_partition_materializing = true;
@@ -102,6 +103,9 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                 DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
                 _rows_end_offset = 0;
             }
+        }
+        if (config::pipeline_analytic_enable_removable_cumulative_process) {
+            _use_removable_cumulative_process = (window.__isset.window_start && window.__isset.window_end);
         }
         _is_unbounded_preceding = !window.__isset.window_start;
     }
@@ -161,8 +165,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count") {
-            _support_cumulative_algo = true;
+        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count")) {
+            _use_removable_cumulative_process = false;
         }
 
         bool is_input_nullable = false;
@@ -271,6 +275,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
+    _peak_buffered_rows = ADD_PEAK_COUNTER(_runtime_profile, "PeakBufferedRows", TUnit::UNIT);
     _remove_unused_rows_cnt = ADD_COUNTER(_runtime_profile, "RemoveUnusedRowsCount", TUnit::UNIT);
     _remove_unused_total_rows = ADD_COUNTER(_runtime_profile, "RemoveUnusedTotalRows", TUnit::UNIT);
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
@@ -413,7 +418,11 @@ std::string Analytor::debug_string() const {
 Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* runtime_profile) {
     TAnalyticWindow window = _tnode.analytic_node.window;
     _process_impl = &Analytor::_materializing_process;
-    runtime_profile->add_info_string("ProcessMode", "Materializing");
+    std::stringstream process_mode;
+    process_mode << (_need_partition_materializing ? "Materializing/" : "Streaming/");
+    process_mode << (_use_removable_cumulative_process ? "RemovableCumulative"
+                                                       : (_is_unbounded_preceding ? "Cumulative" : "ByDefinition"));
+    runtime_profile->add_info_string("ProcessMode", process_mode.str());
     if (!_tnode.analytic_node.__isset.window) {
         _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
     } else if (window.type == TAnalyticWindowType::RANGE) {
@@ -430,7 +439,6 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
             if (_need_partition_materializing) {
                 _materializing_process_impl = &Analytor::_materializing_process_for_half_unbounded_range_frame;
             } else {
-                runtime_profile->add_info_string("ProcessMode", "Streaming");
                 _process_impl = &Analytor::_streaming_process_for_half_bounded_range_frame;
                 _materializing_process_impl = nullptr;
             }
@@ -446,7 +454,6 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
             if (_need_partition_materializing) {
                 _materializing_process_impl = &Analytor::_materializing_process_for_half_unbounded_rows_frame;
             } else {
-                runtime_profile->add_info_string("ProcessMode", "Streaming");
                 _process_impl = &Analytor::_streaming_process_for_half_unbounded_rows_frame;
                 _materializing_process_impl = nullptr;
             }
@@ -459,7 +466,6 @@ Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* r
             if (_need_partition_materializing) {
                 _materializing_process_impl = &Analytor::_materializing_process_for_sliding_frame;
             } else {
-                runtime_profile->add_info_string("ProcessMode", "Streaming");
                 _process_impl = &Analytor::_streaming_process_for_sliding_frame;
                 _materializing_process_impl = nullptr;
             }
@@ -508,7 +514,14 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         if (_get_global_position(_partition.start) <= remove_end_position) {
             return;
         }
+    } else if (_use_removable_cumulative_process || !_is_unbounded_preceding) {
+        // Both cumulative process or sliding process need to access position around range.start
+        const auto frame = _get_frame_range();
+        if (_get_global_position(frame.start - 1) <= remove_end_position) {
+            return;
+        }
     } else {
+        // Cumulative process only access the position around the frame.end
         const auto frame = _get_frame_range();
         if (_get_global_position(std::min(_current_row_position, frame.end)) <= remove_end_position) {
             return;
@@ -516,6 +529,7 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
     }
 
     const int64_t remove_rows = remove_end_position - _removed_from_buffer_rows;
+    COUNTER_ADD(_peak_buffered_rows, -remove_rows);
     COUNTER_UPDATE(_remove_unused_rows_cnt, 1);
     COUNTER_UPDATE(_remove_unused_total_rows, remove_rows);
 
@@ -600,6 +614,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     _input_chunk_first_row_positions.emplace_back(_input_rows);
     _input_rows += chunk_size;
     _input_chunks.emplace_back(chunk);
+    COUNTER_ADD(_peak_buffered_rows, chunk_size);
 
     return Status::OK();
 }
@@ -794,7 +809,7 @@ Status Analytor::_streaming_process_for_sliding_frame(RuntimeState* state) {
                 return Status::OK();
             }
 
-            if (_support_cumulative_algo) {
+            if (_use_removable_cumulative_process) {
                 _update_window_batch_removable_cumulatively();
             } else {
                 // Update agg state in batch manner for each row.
@@ -889,7 +904,7 @@ void Analytor::_materializing_process_for_half_unbounded_range_frame(RuntimeStat
 }
 
 void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
-    if (_support_cumulative_algo) {
+    if (_use_removable_cumulative_process) {
         while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
             _update_window_batch_removable_cumulatively();
 
@@ -940,9 +955,8 @@ void Analytor::_update_window_batch_removable_cumulatively() {
         const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
-                _current_row_position, _partition.start, _partition.end,
-                _is_unbounded_preceding ? (_partition.start - _current_row_position) : _rows_start_offset,
-                _rows_end_offset, false, false);
+                _current_row_position, _partition.start, _partition.end, _rows_start_offset, _rows_end_offset, false,
+                false);
     }
 }
 
