@@ -46,11 +46,11 @@ If you are using the Community Edition of StarRocks, follow these steps to acces
 2. On the page this is displayed, click **queries** on the top navigation pane.
 3. In the **Finished Queries** list, choose the query you want to check and click the link in the **Profile** column.
 
-![img](../assets/profile-1.png)
+![img](../../assets/profile-1.png)
 
 The browser redirects you to a new page that contains the corresponding query profile.
 
-![img](../assets/profile-2.png)
+![img](../../assets/profile-2.png)
 
 ## Interpret a query profile
 
@@ -85,7 +85,7 @@ A query profile consists of three sections:
 - Pipeline: the execution chain. An execution chain does not have branches. A fragment can be split into several pipelines.
 - Operator: A pipeline consists of a number of operators.
 
-![img](../assets/profile-3.png)
+![img](../../assets/profile-3.png)
 
 *A fragment consists of several pipelines.*
 
@@ -326,17 +326,17 @@ By default, the analysis output presents only the most crucial metrics for each 
 
 Example 1: Analyze the profile without specifying plan node ID:
 
-![img](../assets/profile-16.png)
+![img](../../assets/profile-16.png)
 
 Example 2: Analyze the profile and specify the ID of plan nodes:
 
-![img](../assets/profile-17.png)
+![img](../../assets/profile-17.png)
 
 The ANALYZE PROFILE statement offers an enhanced approach to analyzing and comprehending the runtime profile. It distinguishes operators with different states, such as blocked, running, and finished. Moreover, this statement provides a comprehensive view of the entire progress as well as the progress of individual operators based on the processed row numbers, enabling a deeper understanding of query execution and performance. This feature further facilitates the profiling and optimization of queries in StarRocks.
 
 Example 3: Analyze the runtime profile of a running query:
 
-![img](../assets/profile-20.png)
+![img](../../assets/profile-20.png)
 
 ### Analyze a simulated query
 
@@ -350,11 +350,11 @@ Currently, EXPLAIN ANALYZE supports two types of SQL statements: the query (SELE
 
 Example 1: Analyze the profile of a given query:
 
-![img](../assets/profile-18.png)
+![img](../../assets/profile-18.png)
 
 Example 1: Analyze the profile of an INSERT INTO operation:
 
-![img](../assets/profile-19.png)
+![img](../../assets/profile-19.png)
 
 ## Visualize a query profile
 
@@ -362,7 +362,7 @@ If you are a user of StarRocks Enterprise Edition, you can visualize your query 
 
 The **Profile Overview** page displays some summary metrics, including the total execution time `ExecutionWallTime`, I/O metrics, network transmission size, and the proportion of CPU and I/O time.
 
-![img](../assets/profile-4.jpeg)
+![img](../../assets/profile-4.jpeg)
 
 By clicking the card of an operator (a node), you can view its detailed information in the right pane of the page. There are three tabs:
 
@@ -370,41 +370,41 @@ By clicking the card of an operator (a node), you can view its detailed informat
 - **Node Detail**: all metrics of this operator.
 - **Pipeline**: metrics of the pipeline to which the operator belongs. You do not need to pay much attention to this tab because it is related only to scheduling.
 
-![img](../assets/profile-5.jpeg)
+![img](../../assets/profile-5.jpeg)
 
 ### Identify bottlenecks
 
 The larger the proportion of time taken by an operator, the darker color its card becomes. This helps you easily identify bottlenecks of the query.
 
-![img](../assets/profile-6.jpeg)
+![img](../../assets/profile-6.jpeg)
 
 ### Check whether data is skewed
 
 Click the card of the operator that takes a large proportion of time, and check its `MaxTime` and `MinTime`. A noticeable difference between `MaxTime` and `MinTime` usually indicates data is skewed.
 
-![img](../assets/profile-7.jpeg)
+![img](../../assets/profile-7.jpeg)
 
 Then, click the **Node Detail** tab, and check if any metric shows an exception. In this example, the metric `PushRowNum` of the Aggregate operator shows data skew.
 
-![img](../assets/profile-8.jpeg)
+![img](../../assets/profile-8.jpeg)
 
 ### Check whether the partitioning or bucketing strategy takes effect
 
 You can check whether the partitioning or bucketing strategy takes effect by viewing the corresponding query plan using `EXPLAIN <sql_statement>`.
 
-![img](../assets/profile-9.png)
+![img](../../assets/profile-9.png)
 
 ### Check whether the correct materialized view is used
 
 Click the corresponding Scan operator and check the `Rollup` field on the **Node Detail** tab.
 
-![img](../assets/profile-10.jpeg)
+![img](../../assets/profile-10.jpeg)
 
 ### Check whether the JOIN plan is proper for left and right tables
 
 Usually, StarRocks selects the smaller table as the right table of Join. An exception occurs if the query profile shows otherwise.
 
-![img](../assets/profile-11.jpeg)
+![img](../../assets/profile-11.jpeg)
 
 ### Check whether the distribution type of JOIN is correct
 
@@ -418,19 +418,19 @@ For Inner Join, the right table can be the `HASH_PARTITIONED` and `BUCKET_SHUFFL
 
 In the following example, the type of the Exchange operator is Broadcast, but the size of data transmitted by the operator greatly exceeds the threshold.
 
-![img](../assets/profile-12.jpeg)
+![img](../../assets/profile-12.jpeg)
 
 ### Check whether JoinRuntimeFilter takes effect
 
 When the right child of Join is building a hash table, it creates a runtime filter. This runtime filter is sent to the left child tree, and is pushed down to the Scan operator if it is possible. You can check `JoinRuntimeFilter`-related metrics on the **Node Detail** tab of the Scan operator.
 
-![img](../assets/profile-13.jpeg)
+![img](../../assets/profile-13.jpeg)
 
 ## FAQ
 
 ### Why is the time cost of the Exchange operator abnormal?
 
-![img](../assets/profile-14.jpeg)
+![img](../../assets/profile-14.jpeg)
 
 The time cost of an Exchange operator consists of two parts: CPU time and network time. Network time relies on the system clock. Network time is calculated as follows:
 
@@ -448,4 +448,4 @@ Example:
 
 From the profile, we can see that `ExecutionWallTime` is about 55 ms. However, the total time cost of all operators is less than 10 ms, which is significantly less than `ExecutionWallTime`.
 
-![img](../assets/profile-15.jpeg)
+![img](../../assets/profile-15.jpeg)
