@@ -152,10 +152,8 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
-# Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
-# Once the starcache version is stable, we will turn on it by default.
 if [[ -z ${WITH_STARCACHE} ]]; then
-  WITH_STARCACHE=${USE_STAROS}
+    WITH_STARCACHE=ON
 fi
 
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
