@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Overview
 
 This topic describes what a catalog is, and how to manage and query internal data and external data by using a catalog.

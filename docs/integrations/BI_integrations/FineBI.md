@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # FineBI
 
 This topic describes how to connect FineBI to StarRocks to perform visualized analysis of StarRocks data on FineBI.

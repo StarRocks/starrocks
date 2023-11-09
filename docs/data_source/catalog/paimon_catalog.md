@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Paimon catalog
 
 StarRocks supports Paimon catalogs from v3.1 onwards.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Query Management
 
 ## Number of user connections

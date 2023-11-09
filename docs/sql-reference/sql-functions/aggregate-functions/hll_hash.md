@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # hll_hash
 
 ## Description

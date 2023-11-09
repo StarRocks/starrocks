@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load and query data
 
 This QuickStart tutorial will lead you step by step in loading data into the table you created (see [Create a table](../quick_start/Create_table.md) for more instruction), and running a query on the data.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SSB Flat-table Benchmarking
 
 Star schema benchmark (SSB) is designed to test basic performance metrics of OLAP database products. SSB uses a star schema test set that is widely applied in academia and industry. For more information, see the paper [Star Schema Benchmark](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF).

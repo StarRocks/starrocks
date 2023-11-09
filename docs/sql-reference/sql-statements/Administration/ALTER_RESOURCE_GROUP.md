@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ALTER RESOURCE GROUP
 
 ## Description

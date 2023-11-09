@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # List partitioning
 
 Since v3.1, StarRocks supports list partitioning. Data is partitioned based on a predefined value list for each partition, which can accelerate queries and facilitate management according to enumerated values.

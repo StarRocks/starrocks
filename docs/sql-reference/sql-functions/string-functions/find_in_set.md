@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # find_in_set
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # AVG
 
 ## Description

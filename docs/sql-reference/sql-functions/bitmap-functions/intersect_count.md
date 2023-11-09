@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # intersect_count
 
 ## Description

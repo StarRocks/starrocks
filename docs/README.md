@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # How to contribute documentation
 
 Thank you very much for contributing to StarRocks documentation! Your help is important to help improve the docs!

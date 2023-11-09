@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # User-defined variables
 
 This topic describes how to declare and use user-defined variables.

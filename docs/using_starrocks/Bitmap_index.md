@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Bitmap indexing
 
 This topic describes how to create and manage a bitmap index, along with usage cases.

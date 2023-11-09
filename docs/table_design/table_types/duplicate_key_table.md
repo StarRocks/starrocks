@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Duplicate Key table
 
 The Duplicate Key table is the default model in StarRocks. If you did not specify a model when you create a table, a Duplicate Key table is created by default.

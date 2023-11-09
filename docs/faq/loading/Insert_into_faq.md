@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Insert Into
 
 ## When performing data insert, each insert in SQL takes up 50 to 100ms. Is there any way to increase efficiency?

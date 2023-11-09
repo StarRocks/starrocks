@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Realtime synchronization from MySQL
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'

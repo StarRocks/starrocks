@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Continuously load data from Apache Kafka®
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
