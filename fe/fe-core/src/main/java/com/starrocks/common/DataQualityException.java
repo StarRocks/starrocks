@@ -21,7 +21,7 @@ package com.starrocks.common;
  * Exception for data quality check failed
  */
 public class DataQualityException extends LoadException {
-    public static final String QUALITY_FAIL_MSG = "quality not good enough to cancel";
+    public static final String QUALITY_FAIL_MSG = "quality issues with ingested data, please check trackingSQL for details";
 
     public DataQualityException(String msg) {
         super(msg);
