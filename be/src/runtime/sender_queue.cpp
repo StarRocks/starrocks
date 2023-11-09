@@ -667,8 +667,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
-        LOG(WARNING) << print_id(request.finst_id()) << " adds chunks to " << _is_cancelled ? "cancelled queue"
-                                                                                            : "ended queue";
+        LOG(WARNING) << print_id(request.finst_id()) << " adds chunks to "
+                     << (_is_cancelled ? "cancelled queue" : "ended queue");
         return Status::OK();
     }
 
