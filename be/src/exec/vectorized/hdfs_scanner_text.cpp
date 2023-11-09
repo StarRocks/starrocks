@@ -92,7 +92,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     // maybe its a SequenceFile because we support to read compressed text file.
     // For uncompressed text file, we can split csv file into chunks and process chunks parallelly.
     // For compressed text file, we only can parse csv file in sequential way.
-    ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
+    ASSIGN_OR_RETURN(s.size, _file->read(s.data, std::min(s.size, _file_length - _offset)));
     _offset += s.size;
     _buff.add_limit(s.size);
     if (s.size == 0) {

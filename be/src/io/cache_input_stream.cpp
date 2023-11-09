@@ -46,6 +46,9 @@ CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, 
 Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
     count = std::min(_size - offset, count);
+    if (count < 0) {
+        return Status::EndOfFile("");
+    }
     const int64_t BLOCK_SIZE = cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
