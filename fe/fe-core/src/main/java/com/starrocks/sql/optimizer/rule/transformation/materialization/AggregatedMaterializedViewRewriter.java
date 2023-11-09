@@ -387,7 +387,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregates(
                 queryAggregation, equationRewriter, rewriteContext.getOutputMapping(),
                 new ColumnRefSet(rewriteContext.getQueryColumnSet()), queryColumnRefToScalarMap,
-                newProjection);
+                newProjection, !newQueryGroupKeys.isEmpty());
         if (newAggregations == null) {
             logMVRewrite(mvRewriteContext, "Rewrite rollup aggregate failed: cannot rewrite aggregate functions");
             return null;
@@ -471,7 +471,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         final Map<ColumnRefOperator, ScalarOperator> newProjection = new HashMap<>();
         Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregatesForUnion(
-                queryAgg.getAggregations(), columnMapping, aggregateMapping, newProjection);
+                queryAgg.getAggregations(), columnMapping, aggregateMapping, newProjection, !originalGroupKeys.isEmpty());
         if (newAggregations == null) {
             logMVRewrite(mvRewriteContext, "Rewrite aggregate with union failed: rewrite aggregate for union failed");
             return null;
@@ -599,7 +599,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                                                                    Map<ColumnRefOperator, ColumnRefOperator> mapping,
                                                                    ColumnRefSet queryColumnSet,
                                                                    Map<ColumnRefOperator, ScalarOperator> aggregateMapping,
-                                                                   Map<ColumnRefOperator, ScalarOperator> newProjection) {
+                                                                   Map<ColumnRefOperator, ScalarOperator> newProjection,
+                                                                   boolean hasGroupByKeys) {
         final Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         equationRewriter.setOutputMapping(mapping);
 
@@ -627,7 +628,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             }
             ColumnRefOperator oldColRef = (ColumnRefOperator) aggregateMapping.get(entry.getKey());
             newAggregations.put(oldColRef, newAggregate);
-            newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef));
+            newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef, hasGroupByKeys));
         }
 
         return newAggregations;
@@ -637,7 +638,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Map<ColumnRefOperator, CallOperator> aggregates,
             Map<ColumnRefOperator, ColumnRefOperator> mapping,
             Map<ColumnRefOperator, ScalarOperator> aggregateMapping,
-            Map<ColumnRefOperator, ScalarOperator> newProjection) {
+            Map<ColumnRefOperator, ScalarOperator> newProjection,
+            boolean hasGroupByKeys) {
         Map<ColumnRefOperator, CallOperator> rewrittens = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregates.entrySet()) {
             Preconditions.checkState(entry.getValue() != null);
@@ -657,14 +659,17 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             }
             ColumnRefOperator oldColRef = (ColumnRefOperator) aggregateMapping.get(entry.getKey());
             rewrittens.put(oldColRef, newAggregate);
-            newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef));
+            newProjection.put(oldColRef, genRollupProject(aggCall, oldColRef, hasGroupByKeys));
         }
 
         return rewrittens;
     }
 
-    private ScalarOperator genRollupProject(CallOperator aggCall, ColumnRefOperator oldColRef) {
-        if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+    private ScalarOperator genRollupProject(CallOperator aggCall, ColumnRefOperator oldColRef, boolean hasGroupByKeys) {
+        if (!hasGroupByKeys && aggCall.getFnName().equals(FunctionSet.COUNT)) {
+            // NOTE: This can only happen when query has no group-by keys.
+            // The behavior is different between count(NULL) and sum(NULL),  count(NULL) = 0, sum(NULL) = NULL.
+            // Add `coalesce(count_col, 0)` to avoid return NULL instead of 0 for count rollup.
             List<ScalarOperator> args = Arrays.asList(oldColRef, ConstantOperator.createBigint(0L));
             Type[] argTypes = args.stream().map(a -> a.getType()).toArray(Type[]::new);
             return new CallOperator(FunctionSet.COALESCE, aggCall.getType(), args,

@@ -2694,21 +2694,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv2, "select user_id, avg(tag_id % 10) from user_tags group by user_id;");
     }
 
-
     @Test
     public void testCountWithRollup() {
         String mv = "select user_id, count(tag_id) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, count(tag_id) from user_tags group by user_id, time;")
                 .notContain("coalesce");
         testRewriteOK(mv, "select user_id, count(tag_id) from user_tags group by user_id;")
-                .contains(" 2:Project\n" +
-                        "  |  <slot 2> : 6: user_id\n" +
-                        "  |  <slot 5> : 8: count\n" +
-                        "  |  <slot 8> : coalesce(8: count, 0)\n" +
-                        "  |  \n" +
-                        "  1:AGGREGATE (update finalize)\n" +
-                        "  |  output: sum(7: count(tag_id))\n" +
-                        "  |  group by: 6: user_id");
+                .notContain("coalesce");
+        testRewriteOK(mv, "select count(tag_id) from user_tags;")
+                .contains("coalesce");
     }
 
     @Test
