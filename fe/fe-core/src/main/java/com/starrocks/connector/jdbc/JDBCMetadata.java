@@ -168,23 +168,22 @@ public class JDBCMetadata implements ConnectorMetadata {
             String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
 
             ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
-            if (!partitions.isEmpty()) {
-                for (Partition partition : partitions) {
-                    String partitionName = partition.getPartitionName();
-                    if (partitionNames.contains(partitionName)) {
-                        list.add(partition);
-                    }
-                    // Determine boundary value
-                    if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
-                        if (partitionNames.contains(maxInt) || partitionNames.contains(maxDate)) {
-                            list.add(partition);
-                        }
-                    }
-                }
-                return list.build();
-            } else {
+            if (partitions.isEmpty()) {
                 return Lists.newArrayList();
             }
+            for (Partition partition : partitions) {
+                String partitionName = partition.getPartitionName();
+                if (partitionNames.contains(partitionName)) {
+                    list.add(partition);
+                }
+                // Determine boundary value
+                if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
+                    if (partitionNames.contains(maxInt) || partitionNames.contains(maxDate)) {
+                        list.add(partition);
+                    }
+                }
+            }
+            return list.build();
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }

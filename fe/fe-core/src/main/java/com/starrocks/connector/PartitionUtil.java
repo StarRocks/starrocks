@@ -522,11 +522,11 @@ public class PartitionUtil {
     }
 
     private static void putRangeToMvPartitionRangeMapForJDBCTable(Map<String, Range<PartitionKey>> mvPartitionRangeMap,
-                                                      String lastPartitionName,
+                                                      String partitionName,
                                                       PartitionKey lastPartitionKey,
                                                       PartitionKey upperBound) {
-        Preconditions.checkState(!mvPartitionRangeMap.containsKey(lastPartitionName));
-        mvPartitionRangeMap.put(lastPartitionName, Range.openClosed(lastPartitionKey, upperBound));
+        Preconditions.checkState(!mvPartitionRangeMap.containsKey(partitionName));
+        mvPartitionRangeMap.put(partitionName, Range.openClosed(lastPartitionKey, upperBound));
     }
     /**
      * If base table column type is string but partition type is date, we need to convert the string to date
