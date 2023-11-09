@@ -607,8 +607,8 @@ public class PropertyAnalyzer {
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
-            String res = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
-            if (null == res) {
+            value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            if (null == value) {
                 return Config.allow_default_fast_schema_evolution;
             }
         }
