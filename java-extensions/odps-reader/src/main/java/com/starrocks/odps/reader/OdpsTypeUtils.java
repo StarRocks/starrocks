@@ -113,24 +113,16 @@ public class OdpsTypeUtils {
         }
     }
 
-    public static final int MAX_DECIMAL32_PRECISION = 9;
-    public static final int MAX_DECIMAL64_PRECISION = 18;
-    public static final int MAX_DECIMAL128_PRECISION = 36;
+    public static final int MAX_DECIMAL128_PRECISION = 38;
 
     // convert decimal(x,y) to decimal
     private static ColumnType parseDecimal(DecimalTypeInfo type, String name) {
-        String typeName;
         int precision = type.getPrecision();
         int scale = type.getScale();
-        if (precision <= MAX_DECIMAL32_PRECISION) {
-            typeName = "decimal32";
-        } else if (precision <= MAX_DECIMAL64_PRECISION) {
-            typeName = "decimal64";
-        } else if (precision <= MAX_DECIMAL128_PRECISION) {
-            typeName = "decimal128";
-        } else {
-            typeName = "string";
+        if (precision > MAX_DECIMAL128_PRECISION) {
+            return new ColumnType(name, ColumnType.TypeValue.STRING);
         }
+        String typeName = String.format("decimal(%d,%d)", precision, scale);
         ColumnType decimalType = new ColumnType(name, typeName);
         decimalType.setScale(scale);
         return decimalType;
