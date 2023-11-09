@@ -1247,9 +1247,9 @@ public class LocalMetastore implements ConnectorMetadata {
             AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
             GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
 
-            for (Partition partition : partitionList) {
-                LOG.info("succeed in creating partitions[{}], name: {}, temp: {}", partition.getId(),
-                        partition.getName(), isTempPartition);
+            for (PartitionPersistInfoV2 infoV2 : partitionInfoV2List) {
+                LOG.info("succeed in creating partition[{}], name: {}, temp: {}", infoV2.getPartition().getId(),
+                        infoV2.getPartition().getName(), isTempPartition);
             }
         }
     }
