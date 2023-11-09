@@ -42,6 +42,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -60,6 +61,12 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -81,6 +88,8 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.PartitionRangeDesc;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -90,11 +99,13 @@ import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -346,18 +357,44 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert refreshMvByName(String mvName) throws Exception {
-        String sql = String.format("refresh materialized view %s with sync mode", mvName);
-        getCtx().executeSql(sql);
+    public StarRocksAssert refreshMvPartition(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof RefreshMaterializedViewStatement) {
+            RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
+
+            TableName mvName = refreshMaterializedViewStatement.getMvName();
+            Database db = GlobalStateMgr.getCurrentState().getDb(mvName.getDb());
+            Table table = db.getTable(mvName.getTbl());
+            Assert.assertNotNull(table);
+            Assert.assertTrue(table instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) table;
+
+            HashMap<String, String> taskRunProperties = new HashMap<>();
+            PartitionRangeDesc range = refreshMaterializedViewStatement.getPartitionRangeDesc();
+            taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+            taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+            taskRunProperties.put(TaskRun.FORCE, "true");
+
+            Task task = TaskBuilder.rebuildMvTask(mv, "test", taskRunProperties);
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+            taskRun.executeTaskRun();
+            waitingTaskFinish(taskRun);
+        }
         return this;
     }
 
-    public StarRocksAssert refreshMvPartition(String sql) throws Exception {
-        if (!sql.contains("sync")) {
-            sql += " with sync mode";
+    private void waitingTaskFinish(TaskRun taskRun) {
+        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
         }
-        getCtx().executeSql(sql);
-        return this;
     }
 
     public void updateTablePartitionVersion(String dbName, String tableName, long version) {
