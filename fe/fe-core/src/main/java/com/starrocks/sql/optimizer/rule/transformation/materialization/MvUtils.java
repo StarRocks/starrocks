@@ -96,6 +96,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -1197,6 +1198,44 @@ public class MvUtils {
             StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
             LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
             PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
+            return Range.downTo(lowerPartitionKey, from.lowerBoundType());
+        }
+        return Range.all();
+    }
+
+    public static boolean isDateRange(Range<PartitionKey> range) {
+        if (range.hasUpperBound()) {
+            PartitionKey partitionKey = range.upperEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        } else if (range.hasLowerBound()) {
+            PartitionKey partitionKey = range.lowerEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        }
+        return false;
+    }
+
+    // convert date to varchar type
+    public static Range<PartitionKey> convertToVarcharRange(
+            Range<PartitionKey> from, String dateFormat) throws AnalysisException {
+        DateTimeFormatter formatter = DateUtils.unixDatetimeFormatter(dateFormat);
+        if (from.hasLowerBound() && from.hasUpperBound()) {
+            DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
+            String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey lowerPartitionKey = PartitionKey.ofString(lowerDateString);
+
+            DateLiteral upperDate = (DateLiteral) from.upperEndpoint().getKeys().get(0);
+            String upperDateString = upperDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey upperPartitionKey = PartitionKey.ofString(upperDateString);
+            return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
+        } else if (from.hasUpperBound()) {
+            DateLiteral upperDate = (DateLiteral) from.upperEndpoint().getKeys().get(0);
+            String upperDateString = upperDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey upperPartitionKey = PartitionKey.ofString(upperDateString);
+            return Range.upTo(upperPartitionKey, from.upperBoundType());
+        } else if (from.hasLowerBound()) {
+            DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
+            String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey lowerPartitionKey = PartitionKey.ofString(lowerDateString);
             return Range.downTo(lowerPartitionKey, from.lowerBoundType());
         }
         return Range.all();
