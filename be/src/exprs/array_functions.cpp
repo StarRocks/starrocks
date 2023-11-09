@@ -778,6 +778,9 @@ private:
         size_t i = target_start;
         size_t j = element_start;
         while (j < element_end) {
+            if (element_end - j < (target_end - target_start)) {
+                return false;
+            }
             int k = j;
             i = target_start;
             while (i < target_end) {
@@ -814,9 +817,6 @@ private:
             }
             if (i == target_end) {
                 return true;
-            }
-            if ((element_end - j) < (target_end - target_start)) {
-                return false;
             }
             j++;
         }
