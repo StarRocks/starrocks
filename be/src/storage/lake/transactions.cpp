@@ -29,6 +29,10 @@ namespace starrocks::lake {
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
                                             int64_t commit_time) {
+    if (txn_ids.size() > 1) {
+        CHECK_EQ(new_version, base_version + txn_ids.size());
+    }
+
     VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << JoinInts(txn_ids, ",")
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
@@ -57,7 +61,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     // Apply txn logs
     int64_t alter_version = -1;
-    // Do not delete txn logs if txns_size != 1, let gc do the work
+    // Do not delete txn logs if txns_size != 1, let vacuum do the work
     // If the txn logs are deleted, it will be tricky to handle the situation of batch publish switching to single.
 
     // for example:
@@ -100,7 +104,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                     return new_version_metadata_or_error(missig_txn_log_meta.status());
                 } else {
                     base_metadata = std::move(missig_txn_log_meta).value();
-                    break;
+                    continue;
                 }
             } else {
                 return new_version_metadata_or_error(txn_log_st.status());

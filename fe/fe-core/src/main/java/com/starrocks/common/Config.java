@@ -767,11 +767,10 @@ public class Config extends ConfigBase {
     public static int publish_version_interval_ms = 10;
 
     @ConfField(mutable = true)
-    public static boolean enable_lake_batch_publish_version = false;
-
+    public static boolean lake_enable_batch_publish_version  = false;
 
     @ConfField(mutable = true)
-    public static int lake_batch_publish_max_version_num = 5;
+    public static int lake_batch_publish_max_version_num = 10;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_min_version_num = 1;

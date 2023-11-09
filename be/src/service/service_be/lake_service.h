@@ -98,8 +98,8 @@ public:
                      ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
-    void _submit_publish_log_version_task(std::span<const int64_t> tablet_ids, std::span<const int64_t> txn_ids,
-                                          std::span<const int64_t> log_versions,
+    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
+                                          const int64_t* log_versions, size_t txn_size,
                                           ::starrocks::lake::PublishLogVersionResponse* response);
 
 private:

@@ -65,7 +65,7 @@ public class LakePublishBatchTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.enable_lake_batch_publish_version = true;
+        Config.lake_enable_batch_publish_version = true;
         Config.lake_batch_publish_min_version_num = 2;
 
         new MockUp<PublishVersionDaemon>() {

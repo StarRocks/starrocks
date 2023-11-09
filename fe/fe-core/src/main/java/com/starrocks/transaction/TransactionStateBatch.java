@@ -40,7 +40,6 @@ public class TransactionStateBatch implements Writable {
     List<TransactionState> transactionStates = new ArrayList<>();
 
     public TransactionStateBatch() {
-
     }
     public TransactionStateBatch(List<TransactionState> transactionStates) {
         this.transactionStates = transactionStates;
