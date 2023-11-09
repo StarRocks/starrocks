@@ -363,15 +363,18 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
-    if (_column_readers.count(id) < 1) {
+    auto iter = _column_readers.find(id);
+    if (iter != _column_readers.end()) {
+        return iter->second->new_iterator(path);
+    } else {
         return Status::NotFound(fmt::format("{} does not contain column of id {}", _fname, id));
     }
-    return _column_readers.at(id)->new_iterator(path);
 }
 
-Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** iter) {
-    if (_column_readers.count(id) > 0 && _column_readers.at(id)->has_bitmap_index()) {
-        return _column_readers.at(id)->new_bitmap_index_iterator(options, iter);
+Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** res) {
+    auto iter = _column_readers.find(id);
+    if (iter != _column_readers.end() && iter->second->has_bitmap_index()) {
+        return iter->second->new_bitmap_index_iterator(options, res);
     }
     return Status::OK();
 }
