@@ -214,9 +214,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     const auto lake_service_max_concurrency = config::lake_service_max_concurrency;
     const auto service_name = "starrocks.lake.LakeService";
-    const auto methods = {"abort_txn",           "abort_compaction", "compact",          "drop_table",
-                          "delete_data",         "delete_tablet",    "get_tablet_stats", "publish_version",
-                          "publish_log_version", "publish_log_version_batch", "vacuum",   "vacuum_full"};
+    const auto methods = {
+            "abort_txn",     "abort_compaction", "compact",         "drop_table",          "delete_data",
+            "delete_tablet", "get_tablet_stats", "publish_version", "publish_log_version", "publish_log_version_batch",
+            "vacuum",        "vacuum_full"};
     for (auto method : methods) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
