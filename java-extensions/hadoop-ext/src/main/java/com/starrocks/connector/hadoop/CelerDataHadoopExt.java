@@ -16,18 +16,41 @@ package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+
 public class CelerDataHadoopExt extends HadoopExt {
+    public static final String HIVE_METASTORE_SASL_ENABLED = "hive.metastore.sasl.enabled";
+    public static final String HIVE_METASTORE_KERBEROS_KEYTAB_FILE = "hive.metastore.kerberos.keytab.file";
+    public static final String HIVE_METASTORE_CLIENT_KERBEROS_PRINCIPAL = "hive.metastore.client.kerberos.principal";
+
+    public static final String HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
+    public static final String DFS_NAMENODE_KEYTAB_FILE = "dfs.namenode.keytab.file";
+    public static final String DFS_DATANODE_KEYTAB_FILE = "dfs.datanode.keytab.file";
+
+    public static final String DFS_NAMENODE_KERBEROS_PRINCIPAL = "dfs.namenode.kerberos.principal";
+    public static final String DFS_DATANODE_KERBEROS_PRINCIPAL = "dfs.daranode.kerberos.principal";
+
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CelerDataHadoopExt.class);
     public static final String HADOOP_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
     public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
 
+    private CelerDataUGIManager globalUGIManager;
+
     public static void addConfigResourcesToConfiguration(Configuration conf) {
         String configResources = conf.get(HADOOP_CONFIG_RESOURCES);
         addConfigResourcesToConfiguration(configResources, conf);
+    }
+
+    public CelerDataHadoopExt() {
+        if (!UserGroupInformation.isInitialized()) {
+            UserGroupInformation.setConfiguration(new Configuration());
+        }
+        globalUGIManager = new CelerDataUGIManager();
     }
 
     public static void addConfigResourcesToConfiguration(String configResources, Configuration conf) {
@@ -39,20 +62,90 @@ public class CelerDataHadoopExt extends HadoopExt {
         }
         final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
         if (STARROCKS_HOME_DIR == null) {
-            LOGGER.warn(String.format("%s env '%s' is not defined", LOGGER_MESSAGE_PREFIX, STARROCKS_HOME_ENV));
+            LOGGER.warn(String.format("env '%s' is not defined", STARROCKS_HOME_ENV));
             return;
         }
         String[] parts = configResources.split(",");
         for (String p : parts) {
             Path path = new Path(STARROCKS_HOME_DIR + "/conf/", p);
-            LOGGER.info(String.format("%s Add path '%s' to configuration", LOGGER_MESSAGE_PREFIX, path.toString()));
+            LOGGER.info(String.format("add path '%s' to configuration", path.toString()));
             conf.addResource(path);
         }
         conf.setBoolean(HADOOP_CONFIG_RESOURCES_LOADED, true);
     }
 
+    private static boolean isHMSKerberosEnabled(Configuration conf) {
+        return conf.getBoolean(HIVE_METASTORE_SASL_ENABLED, false);
+    }
+
+    private static String getHMSKerberosKeytabFile(Configuration conf) {
+        return conf.get(HIVE_METASTORE_KERBEROS_KEYTAB_FILE);
+    }
+
+    private static String getHMSKerberosPrincipal(Configuration conf) {
+        return conf.get(HIVE_METASTORE_CLIENT_KERBEROS_PRINCIPAL);
+    }
+
+    private static boolean isHDFSKerberosEnabled(Configuration conf) {
+        return conf.get(HADOOP_SECURITY_AUTHENTICATION, "").equalsIgnoreCase("kerberos");
+    }
+
+    public static String getHDFSKerberosKeytabFile(Configuration conf) {
+        return conf.get(DFS_NAMENODE_KEYTAB_FILE, conf.get(DFS_DATANODE_KEYTAB_FILE));
+    }
+
+    public static String getHDFSKerberosPrincipal(Configuration conf) {
+        return conf.get(DFS_NAMENODE_KERBEROS_PRINCIPAL, conf.get(DFS_DATANODE_KERBEROS_PRINCIPAL));
+    }
+
     @Override
     public void rewriteConfiguration(Configuration conf) {
         addConfigResourcesToConfiguration(conf);
+    }
+
+    @Override
+    public UserGroupInformation getHMSUGI(Configuration conf) {
+        if (!isHMSKerberosEnabled(conf)) {
+            return null;
+        }
+        String keytab = getHMSKerberosKeytabFile(conf);
+        String principal = getHMSKerberosPrincipal(conf);
+        if (keytab == null) {
+            LOGGER.warn("hms kerberos enabled, but keytab is null");
+            return null;
+        }
+        if (principal == null) {
+            LOGGER.warn("hms kerberos enabled, but principal is null");
+            return null;
+        }
+        try {
+            return globalUGIManager.getOrCreate(keytab, principal);
+        } catch (IOException e) {
+            LOGGER.warn("create hms ugi failed", e);
+        }
+        return null;
+    }
+
+    @Override
+    public UserGroupInformation getHDFSUGI(Configuration conf) {
+        if (!isHDFSKerberosEnabled(conf)) {
+            return null;
+        }
+        String keytab = getHDFSKerberosKeytabFile(conf);
+        String principal = getHDFSKerberosPrincipal(conf);
+        if (keytab == null) {
+            LOGGER.warn("hdfs kerberos enabled, but keytab is null");
+            return null;
+        }
+        if (principal == null) {
+            LOGGER.warn("hdfs kerberos enabled, but principal is null");
+            return null;
+        }
+        try {
+            return globalUGIManager.getOrCreate(keytab, principal);
+        } catch (IOException e) {
+            LOGGER.warn("create hdfs ugi failed", e);
+        }
+        return null;
     }
 }
