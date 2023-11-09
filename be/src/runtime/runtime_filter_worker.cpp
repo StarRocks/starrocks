@@ -52,7 +52,7 @@ static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRp
     doris::PBackendService_Stub* stub = nullptr;
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
-        if (auto res = BrpcStubCache::create_http_stub(dest); res.ok()) {
+        if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {
             stub = res.value().release();
         }
     } else {
