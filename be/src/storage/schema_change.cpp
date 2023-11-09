@@ -461,6 +461,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             LOG(WARNING) << alter_msg_header() + err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
+        // Since mv supports where expression, new_chunk may be empty after where expression evalutions.
         if (new_chunk->num_rows() == 0) {
             continue;
         }
@@ -563,6 +564,7 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
+        // Since mv supports where expression, new_chunk may be empty after where expression evalutions.
         if (new_chunk->num_rows() == 0) {
             continue;
         }

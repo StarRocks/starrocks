@@ -110,7 +110,43 @@ distributed by hash(id);
 -- result:
 -- !result
  
-
+ ------- CASE0: NO DATA
+create materialized view test_mv1
+as 
+select
+ds
+,column_19 
+,column_36
+,sum(column_01) as column_01_sum
+,bitmap_union(to_bitmap( user_id)) as user_id_dist_cnt
+,bitmap_union(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1
+,bitmap_union(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2
+,bitmap_union(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3
+,bitmap_union(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4
+,bitmap_union(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
+ from user_event
+ where ds >= '2023-11-02'
+ group by
+ ds
+ ,column_19
+ ,column_36;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select ds,column_19 ,column_36,sum(column_01) as column_01_sum,count(distinct  user_id) as user_id_dist_cnt,count(distinct (case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,count(distinct ( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,count(distinct (case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,count(distinct (case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,count(distinct ( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5 from user_event group by ds,column_19,column_36", "test_mv1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select ds,column_19 ,column_36,sum(column_01) as column_01_sum,count(distinct  user_id) as user_id_dist_cnt,count(distinct (case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,count(distinct ( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,count(distinct (case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,count(distinct (case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,count(distinct ( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5 from user_event where ds >= '2023-11-02' group by ds,column_19,column_36", "test_mv1")
+-- result:
+None
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
 INSERT INTO user_event (ds, id, user_id, user_id1, user_id2, column_01, column_02, column_03, column_04, column_05, column_06, column_07, column_08, column_09, column_10, column_11, column_12, column_13, column_14, column_15, column_16, column_17, column_18, column_19, column_20, column_21, column_22, column_23, column_24, column_25, column_26, column_27, column_28, column_29, column_30, column_31, column_32, column_33, column_34, column_35, column_36, column_37, column_38, column_39, column_40, column_41, column_42, column_43, column_44, column_45, column_46, column_47, column_48, column_49, column_50, column_51, column_52, column_53, column_54, column_55, column_56, column_57, column_58, column_59, column_60, column_61, column_62, column_63, column_64, column_65, column_66, column_67, column_68, column_69, column_70, column_71, column_72, column_73, column_74, column_75, column_76, column_77, column_78, column_79, column_80, column_81, column_82, column_83, column_84, column_85, column_86, column_87, column_88, column_89, column_90, column_91, column_92, column_93, column_94, column_95, column_96, column_97, column_98)
 VALUES
 ('2023-11-02', '1', 1, '2', '1', 10, 20, 30, 40, 50, 12.34, 56.789, '{"key":""}', '2023-11-02 12:34:56', '2023-11-02 12:34:56', '2023-11-02', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '53', '54', '55', '56', '57', '58', '59', '60', '61', '62', '63', '64', '65', '66', '67', '68', '69', '70', '71', '72', '73', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '90', '91', '92', '93', '94', '95', '96', '97', '98'),

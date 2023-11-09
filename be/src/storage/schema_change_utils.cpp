@@ -268,14 +268,13 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 return false;
             }
 
-            // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
             if (new_col->only_null()) {
+                // unfold only null columns to avoid no default values.
                 auto unfold_col = new_col->clone_empty();
-                if (!unfold_col->append_nulls(new_col->size())) {
-                    return false;
-                }
+                unfold_col->append_nulls(new_col->size());
                 new_col = std::move(unfold_col);
             } else {
+                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
                 new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
             }
 
