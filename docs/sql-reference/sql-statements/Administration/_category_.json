@@ -1,0 +1,10 @@
+{
+    "position": 10,
+    "label": "Cluster Management",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "Administration"
+    }
+  }

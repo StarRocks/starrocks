@@ -1,0 +1,10 @@
+{
+    "position": 10,
+    "label": "User Account Management",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "account-management"
+    }
+  }

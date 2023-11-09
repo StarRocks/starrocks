@@ -1,0 +1,11 @@
+
+{
+    "position": 80,
+    "label": "Data Lakes",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "data_source"
+    }
+  }

@@ -1,0 +1,10 @@
+{
+    "position": 40,
+    "label": "Manage your deployment",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "manage"
+    }
+  }

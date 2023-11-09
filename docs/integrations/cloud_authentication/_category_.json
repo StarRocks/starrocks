@@ -1,0 +1,11 @@
+
+{
+    "position": 30,
+    "label": "Cloud Authentication",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "cloud_authentication"
+    }
+  }

@@ -1,0 +1,11 @@
+
+{
+    "position": 50,
+    "label": "Table Design",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "StarRocks_table_design"
+    }
+  }

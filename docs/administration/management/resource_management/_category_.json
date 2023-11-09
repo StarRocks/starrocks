@@ -1,0 +1,11 @@
+
+{
+    "position": 10,
+    "label": "Resource Management",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "resource_management"
+    }
+  }

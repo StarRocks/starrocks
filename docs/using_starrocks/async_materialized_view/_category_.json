@@ -1,0 +1,11 @@
+
+{
+    "position": 80,
+    "label": "Asynchronous Materialized Views",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "Materialized_view"
+    }
+  }
