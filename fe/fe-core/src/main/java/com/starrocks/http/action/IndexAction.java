@@ -77,7 +77,12 @@ public class IndexAction extends WebBaseAction {
         getPageHeader(request, response.getContent());
         appendVersionInfo(response.getContent());
         if (Config.http_web_page_display_hardware) {
-            appendHardwareInfo(response.getContent());
+            try {
+                appendHardwareInfo(response.getContent());
+            } catch (Throwable t) {
+                response.getContent().append("<h2>Hardware Info</h2>");
+                response.getContent().append("<pre>Hardware info is generated with error: " + t.getMessage() + "</pre>");
+            }
         } else {
             response.getContent().append("<h2>Hardware Info</h2>");
             response.getContent().append("<pre>Hardware info is disabled by config http_web_page_display_hardware</pre>");
