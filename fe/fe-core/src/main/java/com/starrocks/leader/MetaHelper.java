@@ -164,6 +164,8 @@ public class MetaHelper {
             }
         }
 
+
+
         Path imageDir = Paths.get(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);
         Path bdbDir = Paths.get(BDBEnvironment.getBdbDir());
         boolean haveImageData = false;
