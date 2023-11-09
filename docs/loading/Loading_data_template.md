@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data from \<SOURCE\> TEMPLATE
 
 ## Template instructions

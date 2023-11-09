@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 
 The usage of shared-data StarRocks clusters is also similar to that of a classic shared-nothing StarRocks cluster, except that the shared-data cluster uses storage volumes and cloud-native tables to store data in object storage.
 

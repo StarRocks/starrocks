@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data lake-related FAQ
 
 This topic describes some commonly asked questions (FAQ) about data lake and provides solutions to these issues. Some metrics mentioned in this topic can be obtained only from the profiles of the SQL queries. To obtain the profiles of SQL queries, you must specify `set enable_profile=true`.

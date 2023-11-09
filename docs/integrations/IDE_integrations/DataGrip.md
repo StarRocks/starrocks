@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # DataGrip
 
 DataGrip supports querying both internal data and external data in StarRocks.

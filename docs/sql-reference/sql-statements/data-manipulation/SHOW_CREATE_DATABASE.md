@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW CREATE DATABASE
 
 Shows the SQL command used to create a database.

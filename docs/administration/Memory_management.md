@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Memory Management
 
 This section briefly introduces memory classification and StarRocks’ methods of managing memory.

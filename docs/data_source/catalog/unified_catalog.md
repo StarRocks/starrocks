@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Unified catalog
 
 A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from various data sources, including Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake, as a unified data source without ingestion. With unified catalogs, you can:

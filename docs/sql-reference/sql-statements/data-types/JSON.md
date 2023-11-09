@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # JSON
 
 StarRocks starts to support the JSON data type since v2.2.0. This topic describes the basic concepts of JSON. It also describes how to create a JSON column, load JSON data, query JSON data, and use JSON functions and operators to construct and process JSON data.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # xx_hash3_64
 
 ## Description

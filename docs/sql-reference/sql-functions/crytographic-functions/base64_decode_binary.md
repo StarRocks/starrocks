@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # base64_decode_binary
 
 ## Description

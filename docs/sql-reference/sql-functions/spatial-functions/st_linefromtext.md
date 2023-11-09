@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ST_LineFromText,ST_LineStringFromText
 
 ## Description

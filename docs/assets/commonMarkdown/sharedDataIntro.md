@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 This topic describes how to deploy and use a shared-data StarRocks cluster. This feature is supported from v3.0 for S3 compatible storage and v3.1 for Azure Blob Storage. 
 
 > **NOTE**
