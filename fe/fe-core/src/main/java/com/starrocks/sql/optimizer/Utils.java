@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
@@ -697,5 +698,22 @@ public class Utils {
                     && (callOperator.getChildren().size() > 1 ||
                     callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
         }
+    }
+
+    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
+        for (ScalarOperator child : operator.getChildren()) {
+            if (child instanceof CallOperator) {
+                CallOperator call = (CallOperator) child;
+                String fnName = call.getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
