@@ -15,8 +15,11 @@
 package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.security.PrivilegedAction;
 
 public class HadoopExt {
     private static final Logger LOGGER =
@@ -38,5 +41,56 @@ public class HadoopExt {
 
     public String getCloudConfString(Configuration conf) {
         return conf.get(HDFS_CLOUD_CONFIGURATION_STRING, "");
+    }
+
+    public UserGroupInformation getHMSUGI(Configuration conf) {
+        return null;
+    }
+
+    public UserGroupInformation getHDFSUGI(Configuration conf) {
+        return null;
+    }
+
+    public <R, E extends Exception> R doAs(UserGroupInformation ugi, GenericExceptionAction<R, E> action) throws E {
+        if (ugi == null) {
+            return action.run();
+        }
+        return executeActionInDoAs(ugi, action);
+    }
+
+    private static <R, E extends Exception> R executeActionInDoAs(UserGroupInformation userGroupInformation,
+                                                                  GenericExceptionAction<R, E> action) throws E {
+        return userGroupInformation.doAs((PrivilegedAction<ResultOrException<R, E>>) () -> {
+            try {
+                return new ResultOrException<>(action.run(), null);
+            } catch (Throwable e) {
+                return new ResultOrException<>(null, e);
+            }
+        }).get();
+    }
+
+    private static class ResultOrException<T, E extends Exception> {
+        private final T result;
+        private final Throwable exception;
+
+        public ResultOrException(T result, Throwable exception) {
+            this.result = result;
+            this.exception = exception;
+        }
+
+        @SuppressWarnings("unchecked")
+        public T get()
+                throws E {
+            if (exception != null) {
+                if (exception instanceof Error) {
+                    throw (Error) exception;
+                }
+                if (exception instanceof RuntimeException) {
+                    throw (RuntimeException) exception;
+                }
+                throw (E) exception;
+            }
+            return result;
+        }
     }
 }
