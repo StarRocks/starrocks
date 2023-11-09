@@ -106,7 +106,7 @@ FROM lineorder INNER JOIN customer
 ON lo_custkey = c_custkey;
 ```
 
-![Rewrite-1](../assets/Rewrite-1.png)
+![Rewrite-1](../../../assets/Rewrite-1.png)
 
 StarRocks supports rewriting join queries with complex expressions, such as arithmetic operations, string functions, date functions, CASE WHEN expressions, and OR predicates. For example, the above materialized view can rewrite the following query:
 
@@ -138,7 +138,7 @@ FROM
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-2](../assets/Rewrite-2.png)
+![Rewrite-2](../../../assets/Rewrite-2.png)
 
 ### View Delta Join rewrite
 
@@ -146,7 +146,7 @@ View Delta Join refers to a scenario in which the tables joined in a query are a
 
 To perform a View Delta Join rewrite, the materialized view must contain the 1:1 cardinality preservation join that does not exist in the query. Here are the nine types of joins that are considered cardinality preservation joins, and satisfying any one of them enables View Delta Join rewriting:
 
-![Rewrite-3](../assets/Rewrite-3.png)
+![Rewrite-3](../../../assets/Rewrite-3.png)
 
 Take SSB tests as an example, create the following base tables:
 
@@ -350,7 +350,7 @@ ORDER BY d_year, p_brand;
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-4](../assets/Rewrite-4.png)
+![Rewrite-4](../../../assets/Rewrite-4.png)
 
 Similarly, other queries in the SSB can also be transparently rewritten using `lineorder_flat_mv`, thus optimizing query performance.
 
@@ -397,7 +397,7 @@ Join Derivability refers to a scenario in which the join types in the materializ
 
   Its original query plan and the one after the rewrite are as follows:
 
-  ![Rewrite-5](../assets/Rewrite-5.png)
+  ![Rewrite-5](../../../assets/Rewrite-5.png)
 
   Similarly, if the materialized view is defined as `t1 INNER JOIN t2 INNER JOIN t3`, and the query is `LEFT OUTER JOIN t2 INNER JOIN t3`, the query can also be rewritten. Furthermore, this rewriting capability extends to scenarios involving more than three tables.
 
@@ -405,7 +405,7 @@ Join Derivability refers to a scenario in which the join types in the materializ
 
   The Join Derivability Rewrite feature involving two tables supports the following specific cases:
 
-  ![Rewrite-6](../assets/Rewrite-6.png)
+  ![Rewrite-6](../../../assets/Rewrite-6.png)
 
   In cases 1 to 9, filtering predicates must be added to the rewritten result to ensure semantic equivalence. For example, create a materialized view as follows:
 
@@ -428,7 +428,7 @@ Join Derivability refers to a scenario in which the join types in the materializ
 
   Its original query plan and the one after the rewrite are as follows:
 
-  ![Rewrite-7](../assets/Rewrite-7.png)
+  ![Rewrite-7](../../../assets/Rewrite-7.png)
 
   In case 10, the Left Outer Join query must include the filtering predicate `IS NOT NULL` in the right table, for example, `=`, `<>`, `>`, `<`, `<=`, `>=`, `LIKE`, `IN`, `NOT LIKE`, or `NOT IN`. For example, create a materialized view as follows:
 
@@ -452,7 +452,7 @@ Join Derivability refers to a scenario in which the join types in the materializ
 
   Its original query plan and the one after the rewrite are as follows:
 
-  ![Rewrite-8](../assets/Rewrite-8.png)
+  ![Rewrite-8](../../../assets/Rewrite-8.png)
 
 ## Aggregation rewrite
 
@@ -489,7 +489,7 @@ GROUP BY lo_orderkey, lo_linenumber, c_name;
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-9](../assets/Rewrite-9.png)
+![Rewrite-9](../../../assets/Rewrite-9.png)
 
 The following sections expound on the scenarios where the Aggregation Rewrite feature can be useful.
 
@@ -510,7 +510,7 @@ GROUP BY lo_orderkey, c_name;
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-10](../assets/Rewrite-10.png)
+![Rewrite-10](../../../assets/Rewrite-10.png)
 
 > **NOTE**
 >
@@ -613,7 +613,7 @@ GROUP BY lo_orderkey;
 
 Their relationship is as follows:
 
-![Rewrite-11](../assets/Rewrite-11.png)
+![Rewrite-11](../../../assets/Rewrite-11.png)
 
 `agg_mv3` can rewrite the following query:
 
@@ -629,7 +629,7 @@ GROUP BY lo_orderkey;
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-12](../assets/Rewrite-12.png)
+![Rewrite-12](../../../assets/Rewrite-12.png)
 
 ## Union rewrite
 
@@ -665,7 +665,7 @@ GROUP BY lo_orderkey;
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-13](../assets/Rewrite-13.png)
+![Rewrite-13](../../../assets/Rewrite-13.png)
 
 In this context, `agg_mv5` contains data where `lo_orderkey < 300000000`. Data where `lo_orderkey >= 300000000` is directly obtained from the base table `lineorder`. Finally, these two sets of data are combined using a UNION operation and then aggregated to obtain the final result.
 
@@ -704,7 +704,7 @@ GROUP BY lo_orderkey;
 
 Its original query plan and the one after the rewrite are as follows:
 
-![Rewrite-14](../assets/Rewrite-14.png)
+![Rewrite-14](../../../assets/Rewrite-14.png)
 
 As shown above, `agg_mv5` contains the data from partitions `p1` to `p7`, and the data from partition `p8` is directly queried from `lineorder`. Finally, these two sets of data are combined using a UNION operation.
 
@@ -798,7 +798,7 @@ mysql> EXPLAIN SELECT
 
 By default, StarRocks enables query rewrite for asynchronous materialized views created based on the default catalog. You can disable this feature by setting the session variable `enable_materialized_view_rewrite` to `false`.
 
-For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md).
+For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../../../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md).
 
 ## Limitations
 

@@ -63,7 +63,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 - DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
 - CHAR[(length)]: Fixed length string. Range: 1 ~ 255. Default value: 1.
 - VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
-- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
+- HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../../sql-functions/aggregate-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
 **agg_type**: aggregation type. If not specified, this column is key column.
@@ -85,17 +85,17 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
-- **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
+- **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../../sql-functions/date-time-functions/current_timestamp.md).
 - **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
-- **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+- **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
-**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
+**AUTO_INCREMENT**: specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../../sql-statements/auto_increment.md). Since v3.0, StarRocks supports `AUTO_INCREMENT` columns.
 
-**AS generation_expr**: specifies the generated column and its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
+**AS generation_expr**: specifies the generated column and its expression. [The generated column](../../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
 
 ### index_definition
 
-You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
@@ -105,13 +105,13 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 
 Default value: `olap`. If this parameter is not specified, an OLAP table (StarRocks native table) is created by default.
 
-Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../data_source/External_table.md) for more information.
+Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `iceberg`, and `hudi` (2.2 and later). If you want to create an external table to query external data sources, specify `CREATE EXTERNAL TABLE` and set `ENGINE` to any of these values. You can refer to [External table](../../../../data_source/External_table.md) for more information.
 
-**From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md).**
+**From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. External tables are deprecated. For more information, see [Hive catalog](../../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../../../../data_source/catalog/jdbc_catalog.md).**
 
-**From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../data-manipulation/insert.md). See [Create an Iceberg table](../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
+**From v3.1 onwards, StarRocks supports creating Parquet-formatted tables in Iceberg catalogs, and you can insert data to these Parquet-formatted Iceberg tables by using [INSERT INTO](../../data-manipulation/insert.md). See [Create an Iceberg table](../../../../data_source/catalog/iceberg_catalog.md#create-an-iceberg-table).**
 
-**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../data-manipulation/insert.md). See [Create a Hive table](../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
+**From v3.2 onwards, StarRocks supports creating Parquet-formatted tables in Hive catalogs, and you can insert data to these Parquet-formatted Hive tables by using [INSERT INTO](../../data-manipulation/insert.md). See [Create a Hive table](../../../../data_source/catalog/hive_catalog.md#create-a-hive-table).**
 
 - For MySQL, specify the following properties:
 
@@ -227,7 +227,7 @@ Partition description can be used in the following ways:
 
 #### Create partitions dynamically
 
-[Dynamic partitioning](../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
+[Dynamic partitioning](../../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
 
 #### Create partitions one by one
 
@@ -323,7 +323,7 @@ You can specify the start and end values in `START()` and `END()` and the time u
 - The partitioning column can be of a date or integer type.
 - If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md).
+For more information, see [Data distribution](../../../../table_design/Data_distribution.md).
 
 ### distribution_desc
 
@@ -341,11 +341,11 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
   **Precautions**
   - You can only use random bucketing to create Duplicate Key tables.
-  - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
-  - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
-  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  - You can not specify a [Colocation Group](../../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
+  - [Spark Load](../../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
-  For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
+  For more information, see [Random bucketing](../../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
 - Hash bucketing
 
@@ -365,14 +365,14 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
   - If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
 
-  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md#hash-bucketing).
+  If partition data cannot be evenly distributed into each bucket by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../../table_design/Data_distribution.md#hash-bucketing).
 
   **Precautions**:
 
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
-  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ### ORDER BY
 
@@ -388,7 +388,7 @@ Since version 3.0, the primary key and sort key are decoupled in the Primary Key
 
 If the engine type is `OLAP`, you can specify initial storage medium (`storage_medium`), automatic storage cooldown time (`storage_cooldown_time`) or time interval (`storage_cooldown_ttl`), and replica number (`replication_num`) when you create a table.
 
-The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md) after table creation.
+The scope where the properties take effect: If the table has only one partition, the properties belong to the table. If the table is divided into multiple partitions, the properties belong to each partition. And when you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../../data-definition/ALTER_TABLE.md) after table creation.
 
 **Set initial storage medium and automatic storage cooldown time**
 
@@ -426,7 +426,7 @@ PROPERTIES (
 
   For example, you specify the value as `"storage_cooldown_ttl"="1 DAY"` when creating the table, and the partition `p20230801` with a range of `[2023-08-01 00:00:00,2023-08-02 00:00:00)` exists. The automatic storage cooldown time for this partition is `2023-08-03 00:00:00`, which is `2023-08-02 00:00:00 + 1 DAY`. If you specify the value as `"storage_cooldown_ttl"="0 DAY"` when creating the table, the automatic storage cooldown time for this partition is `2023-08-02 00:00:00`.
 
-  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md).
+  - `storage_cooldown_time`: the automatic storage cooldown time (**absolute time**) when the table is cooled down from SSD to HDD. The specified time needs to be later than the current time. Format: "yyyy-MM-dd HH:mm:ss". When you need to configure different properties for specified partitions, you can execute [ALTER TABLE ... ADD PARTITION or ALTER TABLE ... MODIFY PARTITION](../../data-definition/ALTER_TABLE.md).
 
 **Usages**
 
@@ -467,7 +467,7 @@ The following limits apply when you use bloom filter index:
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
-For more information, see [Bloom filter indexing](../../../using_starrocks/Bloomfilter_index.md)
+For more information, see [Bloom filter indexing](../../../../using_starrocks/Bloomfilter_index.md)
 
 ```SQL
 PROPERTIES (
@@ -532,7 +532,7 @@ The valid values of `compression` are:
 - `ZLIB`: the zlib algorithm.
 - `SNAPPY`: the Snappy algorithm.
 
-For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
+For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../../table_design/data_compression.md).
 
 #### Set write quorum for data loading
 
@@ -577,7 +577,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### Define Unique Key constraints and Foreign Key constraints for View Delta Join query rewrite
 
-To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
+To enable query rewrite in the View Delta Join scenario, you must define the Unique Key constraints `unique_constraints` and Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../../using_starrocks/query_rewrite_with_materialized_views.md#query-delta-join-rewrite) for further information.
 
 ```SQL
 PROPERTIES (
@@ -607,7 +607,7 @@ PROPERTIES (
 
 #### Create cloud-native tables for StarRocks Shared-data cluster
 
-To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
+To [use your StarRocks Shared-data cluster](../../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster), you must create cloud-native tables with the following properties:
 
 ```SQL
 PROPERTIES (
@@ -624,7 +624,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/Configuration.md#be-configuration-items).
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../../administration/Configuration.md#be-configuration-items).
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 
@@ -932,7 +932,7 @@ PROPERTIES(
 
 ### Create a Hive external table
 
-Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#deprecated-hive-external-table).
+Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../../data_source/External_table.md#deprecated-hive-external-table).
 
 ```SQL
 CREATE EXTERNAL TABLE example_db.table_hive
@@ -979,7 +979,7 @@ PROPERTIES(
 
 ## References
 
-- [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
+- [SHOW CREATE TABLE](../../data-manipulation/SHOW_CREATE_TABLE.md)
 - [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)
 - [USE](USE.md)
 - [ALTER TABLE](ALTER_TABLE.md)

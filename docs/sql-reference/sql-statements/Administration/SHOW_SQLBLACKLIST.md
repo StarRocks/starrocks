@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Shows the SQL regular expressions in the SQL blacklist.
 
-For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/Blacklist.md).
+For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/management/resource_management/Blacklist.md).
 
 ## Syntax
 

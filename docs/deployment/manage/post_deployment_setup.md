@@ -32,8 +32,8 @@ StarRocks automatically assigns an empty password to the `root` user when the cl
 
 > **NOTE**
 >
-> - Keep the password properly after resetting it. If you forgot the password, see [Reset lost root password](../administration/User_privilege.md#reset-lost-root-password) for detailed instructions.
-> - After completing the post-deployment setup, you can create new users and roles to manage the privileges within your team. See [Manage user privileges](../administration/User_privilege.md) for detailed instructions.
+> - Keep the password properly after resetting it. If you forgot the password, see [Reset lost root password](../../administration/User_privilege.md#reset-lost-root-password) for detailed instructions.
+> - After completing the post-deployment setup, you can create new users and roles to manage the privileges within your team. See [Manage user privileges](../../administration/User_privilege.md) for detailed instructions.
 
 ## Set necessary system variables
 
@@ -77,7 +77,7 @@ To allow your StarRocks cluster to work properly in production, you need to set 
   SET GLOBAL pipeline_dop = 0;
   ```
 
-For more information about system variables, see [System variables](../reference/System_variable.md).
+For more information about system variables, see [System variables](../../reference/System_variable.md).
 
 ## Set user property
 
@@ -90,4 +90,4 @@ SET PROPERTY FOR '<username>' 'max_user_connections' = '1000';
 
 ## What to do next
 
-After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../table_design/Table_design.md) for detailed instructions on designing a table.
+After deploying and setting up your StarRocks cluster, you can then proceed to design tables that best work for your scenarios. See [Understand StarRocks table design](../../table_design/Table_design.md) for detailed instructions on designing a table.

@@ -45,12 +45,12 @@ Parameters in brackets [] is optional.
 | **Parameter**           | **Required** | **Description**                                              |
 | ----------------------- | ------------ | ------------------------------------------------------------ |
 | mv_name                 | yes          | The name of the materialized view to alter.                  |
-| new_refresh_scheme_desc | no           | New refresh strategy, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../data-definition/CREATE_MATERIALIZED_VIEW.md#parameters) for details. |
+| new_refresh_scheme_desc | no           | New refresh strategy, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../view/CREATE_MATERIALIZED_VIEW.md#parameters) for details. |
 | new_mv_name             | no           | New name for the materialized view.                          |
 | ACTIVE                  | no           |Set the status of the materialized view to active. StarRocks automatically sets a materialized view to inactive if any of its base tables is changed, for example, dropped and re-created, to prevent the situation that original metadata mismatches the changed base table. Inactive materialized views cannot be used for query acceleration or query rewrite. You can use this SQL to activate the materialized view after changing the base tables. |
 | INACTIVE                | no           | Set the status of the materialized view to inactive. An inactive asynchronous materialized view cannot be refreshed. But you can still query it as a table. |
 | SWAP WITH               | no           | Perform an atomic exchange with another asynchronous materialized view after necessary consistency checks. |
-| key                     | no           | The name of the property to alter, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../data-definition/CREATE_MATERIALIZED_VIEW.md#parameters) for details.<br />**NOTE**<br />If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`. |
+| key                     | no           | The name of the property to alter, see [SQL Reference - CREATE MATERIALIZED VIEW - Parameters](../view/CREATE_MATERIALIZED_VIEW.md#parameters) for details.<br />**NOTE**<br />If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`. |
 | value                   | no           | The value of the property to alter.                         |
 
 ## Example

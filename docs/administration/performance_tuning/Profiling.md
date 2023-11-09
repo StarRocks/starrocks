@@ -83,7 +83,7 @@ PROPERTIES(
 );
 ~~~
 
-For more information about colocate join and replica management, see [Colocate join](../using_starrocks/Colocate_join.md)
+For more information about colocate join and replica management, see [Colocate join](../../using_starrocks/Colocate_join.md)
 
 ## Flat table and star schema
 

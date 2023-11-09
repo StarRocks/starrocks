@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Cancels an on-going RESTORE task in a specified database. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
+Cancels an on-going RESTORE task in a specified database. For more information, see [data backup and restoration](../../../../administration/management/Backup_and_restore.md).
 
 > **CAUTION**
 >

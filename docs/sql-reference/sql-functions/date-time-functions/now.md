@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Returns the current date and time.
 
-This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/timezone.md).
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/management/timezone.md).
 
 ## Syntax
 

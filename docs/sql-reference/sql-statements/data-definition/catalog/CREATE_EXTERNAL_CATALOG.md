@@ -132,6 +132,6 @@ PROPERTIES(
 
 ## References
 
-- To view all catalogs in your StarRocks cluster, see [SHOW CATALOGS](../data-manipulation/SHOW_CATALOGS.md).
-- To view the creation statement of an external catalog, see [SHOW CREATE CATALOG](../data-manipulation/SHOW_CREATE_CATALOG.md).
-- To delete an external catalog from your StarRocks cluster, see [DROP CATALOG](../data-definition/DROP_CATALOG.md).
+- To view all catalogs in your StarRocks cluster, see [SHOW CATALOGS](../../data-manipulation/SHOW_CATALOGS.md).
+- To view the creation statement of an external catalog, see [SHOW CREATE CATALOG](../../data-manipulation/SHOW_CREATE_CATALOG.md).
+- To delete an external catalog from your StarRocks cluster, see [DROP CATALOG](../../data-definition/catalog/DROP_CATALOG.md).

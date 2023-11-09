@@ -194,7 +194,7 @@ Grafana is an open-source metric analysis and visualization system that supports
 
 ### Monitoring architecture
 
-![8.10.2-1](../assets/8.10.2-1.png)
+![8.10.2-1](../../assets/8.10.2-1.png)
 
 Prometheus pulls the metrics from the FE/BE interface and then stores the data into its temporal database.
 
@@ -260,7 +260,7 @@ This command runs Prometheus in the background and specifies its web port as 909
 
 Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (`http://fe_host:fe_http_port/metrics` or `http://be_host:be_http_port/metrics`) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
 
-![8.10.2-6](../assets/8.10.2-6.png)
+![8.10.2-6](../../assets/8.10.2-6.png)
 
 A simple Prometheus has been built and configured. For more advanced usage, please refer to the [official documentation](https://prometheus.io/docs/introduction/overview/)
 
@@ -306,7 +306,7 @@ Configuration path: `Configuration-->Data sources-->Add data source-->Prometheus
 
 Data Source Configuration Introduction
 
-![8.10.2-2](../assets/8.10.2-2.png)
+![8.10.2-2](../../assets/8.10.2-2.png)
 
 * Name: Name of the data source. Can be customized, e.g. starrocks_monitor
 * URL: The web address of Prometheus, e.g. `http://prometheus_host:9090`
@@ -340,7 +340,7 @@ Add a description for your dashboard. Update the description for each version.
 
 **1.** Top bar
 
-![8.10.2-3](../assets/8.10.2-3.png)
+![8.10.2-3](../../assets/8.10.2-3.png)
 
 The top left corner shows the Dashboard name.
 The top right corner shows the current time range. Use the drop down to select a different time range and specify an interval for page refresh.
@@ -353,7 +353,7 @@ cluster_name: The `job_name` of each job in the Prometheus configuration file, r
 
 **2.** Row
 
-![8.10.2-4](../assets/8.10.2-4.png)
+![8.10.2-4](../../assets/8.10.2-4.png)
 
 In Grafana, the concept of a `Row` is a collection of diagrams. You can collapse a `Row` by clicking on it. The current Dashboard has the following `Rows` :
 
@@ -368,7 +368,7 @@ In Grafana, the concept of a `Row` is a collection of diagrams. You can collapse
 
 **3.** A typical chart is divided into the following parts.
 
-![8.10.2-5](../assets/8.10.2-5.png)
+![8.10.2-5](../../assets/8.10.2-5.png)
 
 * Hover over the i icon in the upper left corner to see the chart description.
 * Click on the legend below to view a particular item. Click again to display all.

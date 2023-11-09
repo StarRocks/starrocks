@@ -4,21 +4,21 @@ displayed_sidebar: "English"
 
 # Load data from cloud storage
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md).
 
 In v3.0 and earlier, StarRocks only supports Broker Load, which runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
 Broker Load ensures the transactional atomicity of each load job that is run to load multiple data files, which means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
 
-Additionally, Broker Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
+Additionally, Broker Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../../loading/Etl_in_loading.md) and [Change data through loading](../../loading/Load_to_Primary_Key_tables.md).
 
 <InsertPrivNote />
 
-From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
+From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 
-This topic focuses on using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) to load data from cloud storage.
+This topic focuses on using [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) to load data from cloud storage.
 
 ## Background information
 
@@ -28,7 +28,7 @@ From v2.5 onwards, StarRocks no longer depends on brokers to set up connections 
 
 > **NOTE**
 >
-> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
+> You can use the [SHOW BROKER](../../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../../deployment/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -53,7 +53,7 @@ After you submit a load job to an FE, the FE generates a query plan, splits the 
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../../assets/broker_load_how-to-work_en.png)
 
 ## Prepare data examples
 
@@ -107,7 +107,7 @@ The following figure shows the workflow of a Broker Load job.
 
 Note that Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path (`DATA INFILE`).
 
-Also, note that the following examples use the CSV file format and the instance profile-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+Also, note that the following examples use the CSV file format and the instance profile-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -138,7 +138,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -182,7 +182,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -235,7 +235,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -271,7 +271,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 Note that Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path (`DATA INFILE`).
 
-Also, note that the following examples use the CSV file format and the VM-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+Also, note that the following examples use the CSV file format and the VM-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -301,7 +301,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -344,7 +344,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -396,7 +396,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -440,7 +440,7 @@ Note that when you load data from Azure Storage, you need to determine which pre
   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
-Also, note that the following examples use the CSV file format, Azure Blob Storage, and the shared key-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other Azure storage services and authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+Also, note that the following examples use the CSV file format, Azure Blob Storage, and the shared key-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other Azure storage services and authentication methods, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -471,7 +471,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -515,7 +515,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -568,7 +568,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -602,7 +602,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 ## Load data from an S3-compatible storage system
 
-The following examples use the CSV file format and the MinIO storage system. For information about how to load data in other formats, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+The following examples use the CSV file format and the MinIO storage system. For information about how to load data in other formats, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -636,7 +636,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -683,7 +683,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1`:
 
 ```SQL
 SELECT * FROM table1;
@@ -739,7 +739,7 @@ PROPERTIES
 
 After you submit the load job, you can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
-After you confirm that the load job is successful, you can use [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
+After you confirm that the load job is successful, you can use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the data of `table1` and `table2`:
 
 1. Query `table1`:
 
@@ -773,7 +773,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 ## View a load job
 
-Use the [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
+Use the [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
 Example 1: Query the results of load jobs executed on the `test_db` database. In the query statement, specify that a maximum of two results can be returned and the return results must be sorted by creation time (`CREATE_TIME`) in descending order.
 
@@ -873,11 +873,11 @@ The following result is returned:
 REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
-For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
+For information about the fields in the return results, see [Information Schema > loads](../../administration/management/information_schema.md#loads).
 
 ## Cancel a load job
 
-When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) statement to cancel the job.
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) statement to cancel the job.
 
 For example, you can execute the following statement to cancel a load job, whose label is `label1`, in the database `test_db`:
 
@@ -895,7 +895,7 @@ A Broker Load job can be split into one or more tasks that concurrently run. The
 
 - If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
 
-Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/Configuration.md#fe-configuration-items):
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../../administration/management/Configuration.md#fe-configuration-items):
 
 - `min_bytes_per_broker_scanner`: the minimum amount of data processed by each instance. The default amount is 64 MB.
 
@@ -909,4 +909,4 @@ In most cases, only one `data_desc` is declared for each load job, each load job
 
 ## Troubleshooting
 
-See [Broker Load FAQ](../faq/loading/Broker_load_faq.md).
+See [Broker Load FAQ](../../faq/loading/Broker_load_faq.md).

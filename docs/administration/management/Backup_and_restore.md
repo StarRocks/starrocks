@@ -18,11 +18,11 @@ StarRocks supports the following remote storage systems:
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
 
-If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
+If you have stored a large amount of data in a table, we recommend that you back up and restore data by partition. This way, you can reduce the cost of retries in case of job failures. If you need to back up incremental data on a regular basis, you can strategize a [dynamic partitioning](../../table_design/dynamic_partitioning.md) plan (by a certain time interval, for example) for your table, and back up only new partitions each time.
 
 ### Create a repository
 
-Before backing up data, you need to create a repository, which is used to store data snapshots in a remote storage system. You can create multiple repositories in a StarRocks cluster. For detailed instructions, see [CREATE REPOSITORY](../sql-reference/sql-statements/data-definition/CREATE_REPOSITORY.md).
+Before backing up data, you need to create a repository, which is used to store data snapshots in a remote storage system. You can create multiple repositories in a StarRocks cluster. For detailed instructions, see [CREATE REPOSITORY](../../sql-reference/sql-statements/data-definition/backup/CREATE_REPOSITORY.md).
 
 - Create a repository in HDFS
 
@@ -103,11 +103,11 @@ PROPERTIES(
 >
 > StarRocks supports creating repositories in Google GCS only according to the S3A protocol. Therefore, when you create repositories in Google GCS, you must replace the prefix in the GCS URI you pass as a repository location in `ON LOCATION` with `s3a://`.
 
-After the repository is created, you can check the repository via [SHOW REPOSITORIES](../sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES.md). After restoring data, you can delete the repository in StarRocks using [DROP REPOSITORY](../sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md). However, data snapshots backed up in the remote storage system cannot be deleted through StarRocks. You need to delete them manually in the remote storage system.
+After the repository is created, you can check the repository via [SHOW REPOSITORIES](../../sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES.md). After restoring data, you can delete the repository in StarRocks using [DROP REPOSITORY](../../sql-reference/sql-statements/data-definition/DROP_REPOSITORY.md). However, data snapshots backed up in the remote storage system cannot be deleted through StarRocks. You need to delete them manually in the remote storage system.
 
 ### Back up a data snapshot
 
-After the repository is created, you need to create a data snapshot and back up it in the remote repository. For detailed instructions, see [BACKUP](../sql-reference/sql-statements/data-definition/BACKUP.md).
+After the repository is created, you need to create a data snapshot and back up it in the remote repository. For detailed instructions, see [BACKUP](../../sql-reference/sql-statements/data-definition/BACKUP.md).
 
 The following example creates a data snapshot `sr_member_backup` for the table `sr_member` in the database `sr_hub` and backs up it in the repository `test_repo`.
 
@@ -117,7 +117,7 @@ TO test_repo
 ON (sr_member);
 ```
 
-BACKUP is an asynchronous operation. You can check the status of a BACKUP job using [SHOW BACKUP](../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md).
+BACKUP is an asynchronous operation. You can check the status of a BACKUP job using [SHOW BACKUP](../../sql-reference/sql-statements/data-manipulation/SHOW_BACKUP.md), or cancel a BACKUP job using [CANCEL BACKUP](../../sql-reference/sql-statements/data-definition/CANCEL_BACKUP.md).
 
 ## Restore or migrate data
 
@@ -129,7 +129,7 @@ To migrate data to another StarRocks cluster, you need to create a repository wi
 
 ### Check the snapshot
 
-Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md).
+Before restoring data, you can check the snapshots in a specified repository using [SHOW SNAPSHOT](../../sql-reference/sql-statements/data-manipulation/SHOW_SNAPSHOT.md).
 
 The following example checks the snapshot information in `test_repo`.
 
@@ -145,7 +145,7 @@ mysql> SHOW SNAPSHOT ON test_repo;
 
 ### Restore data via the snapshot
 
-You can use the [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md) statement to restore data snapshots in the remote storage system to the current or other StarRocks clusters.
+You can use the [RESTORE](../../sql-reference/sql-statements/data-definition/RESTORE.md) statement to restore data snapshots in the remote storage system to the current or other StarRocks clusters.
 
 The following example restores the data snapshot `sr_member_backup` in `test_repo` on the table `sr_member`. It only restores ONE data replica.
 
@@ -159,7 +159,7 @@ PROPERTIES (
 );
 ```
 
-RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md).
+RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../../sql-reference/sql-statements/data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../../sql-reference/sql-statements/data-definition/CANCEL_RESTORE.md).
 
 ## Configure BACKUP or RESTORE jobs
 
@@ -183,6 +183,6 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 - You do not need to create the table to be restored in the new cluster before restoring it. The RESTORE job automatically creates it.
 - If there is an existing table that has a duplicated name with the table to be restored, StarRocks first checks whether or not the schema of the existing table matches that of the table to be restored. If the schemas match, StarRocks overwrites the existing table with the data in the snapshot. If the schema does not match, the RESTORE job fails. You can either rename the table to be restored using the keyword `AS`, or delete the existing table before restoring data.
 - If the RESTORE job overwrites an existing database, table, or partition, the overwritten data cannot be restored after the job enters the COMMIT phase. If the RESTORE job fails or is canceled at this point, the data may be corrupted and inaccessible. In this case, you can only perform the RESTORE operation again and wait for the job to complete. Therefore, we recommend that you do not restore data by overwriting unless you are sure that the current data is no longer used. The overwrite operation first checks metadata consistency between the snapshot and the existing database, table, or partition. If an inconsistency is detected, the RESTORE operation cannot be performed.
-- During a BACKUP or a RESTORE job, StarRocks automatically backs up or restores the [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md), which can still accelerate or rewrite your queries after data restoration. Currently, StarRocks does not support backing up views and [Asynchronous materialized views](../using_starrocks/Materialized_view.md). You can only back up the physical table of the materialized view, which cannot be used for query acceleration or query rewriting.
+- During a BACKUP or a RESTORE job, StarRocks automatically backs up or restores the [Synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md), which can still accelerate or rewrite your queries after data restoration. Currently, StarRocks does not support backing up views and [Asynchronous materialized views](../../using_starrocks/Materialized_view.md). You can only back up the physical table of the materialized view, which cannot be used for query acceleration or query rewriting.
 - Currently, StarRocks does not support backing up the configuration data related to user accounts, privileges, and resource groups.
 - Currently, StarRocks does not support backing up and restoring the Colocate Join relationship among tables.

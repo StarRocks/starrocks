@@ -78,9 +78,9 @@ You can create an asynchronous materialized view if you have the following deman
 
 For specific use cases of asynchronous materialized views, refer to the following content:
 
-- [Data Modeling](./data_modeling_with_materialized_views.md)
-- [Query Rewrite](./query_rewrite_with_materialized_views.md)
-- [Data Lake Query Acceleration](./data_lake_query_acceleration_with_materialized_views.md)
+- [Data Modeling](./use_cases/data_modeling_with_materialized_views.md)
+- [Query Rewrite](./use_cases/query_rewrite_with_materialized_views.md)
+- [Data Lake Query Acceleration](./use_cases/data_lake_query_acceleration_with_materialized_views.md)
 
 ## Create an asynchronous materialized view
 

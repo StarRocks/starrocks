@@ -25,7 +25,7 @@ The following scenario calculates UVs based on detailed data in table (dt, page,
 
 StarRocks computes data according to the following figure. It first groups data by the `page` and `user_id` columns, and then counts the processed result.
 
-![alter](../assets/6.1.2-2.png)
+![alter](../../assets/6.1.2-2.png)
 
 * Note: The figure shows a schematic of 6 rows of data computed on two BE nodes.
 
@@ -54,8 +54,8 @@ For the implementation of Roaring Bitmap, see [specific paper and implementation
 ## Usage notes
 
 * Both bitmap indexing and bitmap Count Distinct use the bitmap technique. However, the purpose for introducing them and the problem they solve are completely different. The former is used to filter enumerated columns with a low cardinality, while the latter is used to calculate the number of distinct elements in the value columns of a data row.
-* StarRocks 2.3 and later versions support defining a value column as BITMAP regardless of the table types (Aggregate table, Duplicate Key table, Primary Key table, or Unique Key table). However, the [sort key](../table_design/Sort_key.md) of a table cannot be of the BITMAP type.
-* When creating a table, you can define the value column as BITMAP and the aggregate function as [BITMAP_UNION](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md).
+* StarRocks 2.3 and later versions support defining a value column as BITMAP regardless of the table types (Aggregate table, Duplicate Key table, Primary Key table, or Unique Key table). However, the [sort key](../../table_design/Sort_key.md) of a table cannot be of the BITMAP type.
+* When creating a table, you can define the value column as BITMAP and the aggregate function as [BITMAP_UNION](../../sql-reference/sql-functions/bitmap-functions/bitmap_union.md).
 * You can only use roaring bitmaps to compute the number of distinct values for data of the following types: TINYINT, SMALLINT, INT, and BIGINT. For data of other types, you need to [build global dictionaries](#global-dictionary).
 
 ## Count Distinct with Bitmap
