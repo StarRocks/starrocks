@@ -35,6 +35,7 @@
 package org.apache.hadoop.hive.metastore;
 
 import com.google.common.collect.Lists;
+import com.starrocks.connector.hadoop.HadoopExt;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
@@ -436,6 +437,14 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     }
 
     private void open() throws MetaException {
+        UserGroupInformation ugi = HadoopExt.getInstance().getHMSUGI(conf);
+        HadoopExt.getInstance().doAs(ugi, () -> {
+            openInternal();
+            return null;
+        });
+    }
+
+    private void openInternal() throws MetaException {
         isConnected = false;
         TTransportException tte = null;
         boolean useSSL = MetastoreConf.getBoolVar(conf, ConfVars.USE_SSL);
@@ -544,7 +553,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
                     if (isConnected && !useSasl && MetastoreConf.getBoolVar(conf, ConfVars.EXECUTE_SET_UGI)) {
                         // Call set_ugi, only in unsecure mode.
                         try {
-                            UserGroupInformation ugi = SecurityUtils.getUGI();
+                            UserGroupInformation ugi = HadoopExt.getInstance().getHMSUGI(conf);
+                            if (ugi == null) {
+                                ugi = SecurityUtils.getUGI();
+                            }
                             client.set_ugi(ugi.getUserName(), Arrays.asList(ugi.getGroupNames()));
                         } catch (LoginException e) {
                             LOG.warn("Failed to do login. set_ugi() is not successful, " +

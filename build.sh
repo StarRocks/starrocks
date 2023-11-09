@@ -193,14 +193,14 @@ fi
 
 HELP=0
 if [ $# == 1 ] ; then
-    # default
+    # default. `sh build.sh``
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
-elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
-    # default
+elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
+    # default. `sh build.sh -j 32`
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
@@ -338,7 +338,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
     # Once the starcache version is stable, we will turn on it by default.
     if [[ -z ${WITH_STARCACHE} ]]; then
-      WITH_STARCACHE=${USE_STAROS}
+      WITH_STARCACHE=ON
     fi
 
     if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
