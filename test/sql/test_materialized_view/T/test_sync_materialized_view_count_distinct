@@ -137,6 +137,29 @@ ds
 
 function: wait_materialized_view_finish()
 
+result=explain select
+ds
+,column_19 
+,column_36
+,sum(column_01) as column_01_sum
+,bitmap_union_count(to_bitmap( user_id)) as user_id_dist_cnt
+,bitmap_union_count(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1
+,bitmap_union_count(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2
+,bitmap_union_count(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3
+,bitmap_union_count(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4
+,bitmap_union_count(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
+ from user_event
+ group by
+ ds
+ ,column_19
+ ,column_36
+ order by 
+ ds
+ ,column_19
+ ,column_36;
+
+function: check_hit_materialized_view_plan("""${result}""", "test_mv1")
+
 function: check_hit_materialized_view("select ds,column_19 ,column_36,sum(column_01) as column_01_sum,count(distinct  user_id) as user_id_dist_cnt,count(distinct (case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,count(distinct ( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,count(distinct (case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,count(distinct (case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,count(distinct ( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5 from user_event group by ds,column_19,column_36", "test_mv1")
 
 select
@@ -191,7 +214,8 @@ ds
  from user_event
  where ds in ('2023-11-02')
  group by
- column_19
+ ds
+ ,column_19
  ,column_36
   order by 
  ds
@@ -257,7 +281,8 @@ ds
  from user_event
  where ds in ('2023-11-02')
  group by
- column_19
+ ds
+ ,column_19
  ,column_36
   order by 
  ds
@@ -288,6 +313,7 @@ ds
  ,column_36;
 
 function: wait_materialized_view_finish()
+
 function: check_no_hit_materialized_view("select ds,column_19 ,column_36,sum(column_01) as column_01_sum,count(distinct  user_id) as user_id_dist_cnt,count(distinct (case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,count(distinct ( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,count(distinct (case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,count(distinct (case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,count(distinct ( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5 from user_event group by ds,column_19,column_36", "test_mv1")
 function: check_hit_materialized_view("select ds,column_19 ,column_36,sum(column_01) as column_01_sum,count(distinct  user_id) as user_id_dist_cnt,count(distinct (case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,count(distinct ( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,count(distinct (case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,count(distinct (case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,count(distinct ( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5 from user_event where ds >= '2023-11-02' group by ds,column_19,column_36", "test_mv1")
 
@@ -345,7 +371,8 @@ ds
  from user_event
  where ds in ('2023-11-02')
  group by
- column_19
+ ds
+ ,column_19
  ,column_36
   order by 
  ds
@@ -414,7 +441,8 @@ ds
  from user_event
  where ds in ('2023-11-02')
  group by
- column_19
+ ds
+ ,column_19
  ,column_36
   order by 
  ds

@@ -942,6 +942,14 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
 
 
+    def check_hit_materialized_view_plan(self, res, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        time.sleep(1)
+        print(res)
+        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
     def check_hit_materialized_view(self, query, mv_name):
         """
         assert mv_name is hit in query
