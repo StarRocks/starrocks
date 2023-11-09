@@ -1,10 +1,10 @@
 ﻿
 | Role | Responsibilities | Requirements |
 | -----| ---------------- | ------------ |
-| Contributor | Active participant in the community | Finish at least one contribution to the project in specific repos |
-| Active Contributor | Active contributor in the community | Have 5 merged PRs or fixed major bugs|
-| Committer | Contributions acceptance approval| Have proven track record of contributions and lead major development. Nominees must be approved by a majority vote of the TSC voting members.|
-| Maintainer | A maintainer makes and approves technical design decisions. Define milestones and releases. Elect new community members.| Highly experienced committer. Nominees must be approved by a majority vote of the TSC voting members.|
+| Contributor | Participate in the community. | Finish at least one contribution to the project in specific repos. |
+| Active Contributor | Actively contribute to the community. | Have 5 merged PRs or fixed major bugs.|
+| Committer | Accept and approve contributions. | Have a proven track record of contributions and lead major development. Nominees must be approved by a minimum of two votes (excluding the nominator's vote) from the TSC members.|
+| Maintainer | Make and approve technical design decisions. Define milestones and releases. Nominate new SIG committers.| Highly experienced committer. Nominees must be approved by a minimum of two votes (excluding the nominator's vote) from the TSC members.|
 
 **Note:** This document is a work in progress.
 This doc outlines the various responsibilities of contributor roles in StarRocks.
@@ -52,7 +52,7 @@ Committers are Contributors who have earned the ability to modify ("commit") sou
 - Have a deep understanding of StarRocks' principles and future plans
 - Have the ability to deal with various issues that arise in the project promptly
 - Lead at least one major development, write and revise related documents
-- A contributor may become a Committer by a majority approval of the voting members of the TSC as defined in the Technical Charter.
+- A contributor may become a Committer by a minimum of two votes (excluding the nominator's vote) from the TSC members.
 
 ### Responsibilities and privileges
 
@@ -63,20 +63,20 @@ Committers are Contributors who have earned the ability to modify ("commit") sou
 
 ## Maintainer
 
-Maintainers are a subset of Committers with additional responsibilities for driving a project’s release and serving on the TSC. 
+Maintainers are a subset of Committers with additional responsibilities for driving a project’s release and serving on the TSC (optional). 
 
 ### How to become a Maintainer?
 
 - In-depth understanding of StarRocks principles and a clear understanding of StarRocks' future plans
 - Have the ability to deal with project issues promptly
 - Lead project development and iterations, and steer the overall direction of the project
-- A Committer may become a Maintainer by a majority approval of the existing Maintainers as defined in the Technical Charter.
-
+- A Committer may become a Maintainer by a minimum of two votes (excluding the nominator's vote) from the TSC members.
+  
 ### Responsibilities and privileges
 
 - Mentor and guide other members in the community
 - Ensure continued health of the project, such as code quality and test coverage
 - Make and approve technical design decisions
 - Define milestones and releases
-- Vote and promote new TSC members (Committers and Maintainers)
+- Nominate new SIG committers to TSC
 - Be recognized as a StarRocks Maintainer
