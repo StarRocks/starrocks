@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 This topic describes how to optimize query performance in your data lake using StarRocks' asynchronous materialized views.
 
-StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../data_source/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
+StarRocks offers out-of-the-box data lake query capabilities, which are highly effective for exploratory queries and analysis of data in the lake. In most scenarios, [Data Cache](../../../data_source/data_cache.md) can provide block-level file caching, avoiding performance degradation caused by remote storage jitter and a large number of I/O operations.
 
 However, when it comes to building complex and efficient reports using data from the lake or further accelerating these queries, you may still encounter performance challenges. With asynchronous materialized views, you can achieve higher concurrency and better query performance for reports and data applications on the lake.
 
@@ -104,9 +104,9 @@ For Hive catalogs, you can enable the Hive metadata cache refresh feature to all
 
   > **NOTE**
   >
-  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
-To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
+To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
 
 | **Configuration item**                                       | **Default**                | **Description**                                              |
 | ------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------ |
@@ -137,7 +137,7 @@ In scenarios involving query rewriting, if you use a very complex query statemen
 
 ## Best practices
 
-In real-world business scenarios, you can identify queries with high execution latency and resource consumption by analyzing audit logs or [big query logs](../administration/monitor_manage_big_queries.md#analyze-big-query-logs). You can further use [query profiles](../administration/query_profile.md) to pinpoint the specific stages where the query is slow. The following sections provide instructions and examples on how to boost data lake query performance with materialized views.
+In real-world business scenarios, you can identify queries with high execution latency and resource consumption by analyzing audit logs or [big query logs](../../../administration/monitor_manage_big_queries.md#analyze-big-query-logs). You can further use [query profiles](../../../administration/query_profile.md) to pinpoint the specific stages where the query is slow. The following sections provide instructions and examples on how to boost data lake query performance with materialized views.
 
 ### Case One: Accelerate join calculation in data lake
 

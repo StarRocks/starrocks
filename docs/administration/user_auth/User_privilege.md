@@ -16,7 +16,7 @@ Users with the system-defined role `user_admin` can view all the user and role i
 
 ### View privilege information
 
-You can view the privileges granted to a user or a role using [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md).
+You can view the privileges granted to a user or a role using [SHOW GRANTS](../../sql-reference/sql-statements/account-management/SHOW_GRANTS.md).
 
 - View the privileges of the current user.
 
@@ -46,7 +46,7 @@ You can view the privileges granted to a user or a role using [SHOW GRANTS](../s
 
 ### View user property
 
-You can view the property of a user using [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md).
+You can view the property of a user using [SHOW PROPERTY](../../sql-reference/sql-statements/account-management/SHOW_PROPERTY.md).
 
 The following example shows the property of the user `jack`:
 
@@ -56,7 +56,7 @@ SHOW PROPERTY FOR jack@'172.10.1.10';
 
 ### View roles
 
-You can view all the roles within the StarRocks cluster using [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW_ROLES.md).
+You can view all the roles within the StarRocks cluster using [SHOW ROLES](../../sql-reference/sql-statements/account-management/SHOW_ROLES.md).
 
 ```SQL
 SHOW ROLES;
@@ -78,7 +78,7 @@ Users with the system-defined role `user_admin` can create users, alter users, a
 
 You can create a user by specifying the user identity, authentication method, and default role.
 
-StarRocks supports user authentication with login credentials or LDAP authentication. For more information about StarRocks' authentication, see [Authentication](../administration/Authentication.md). For more information and advanced instructions on creating a user, see [CREATE USER](../sql-reference/sql-statements/account-management/CREATE_USER.md).
+StarRocks supports user authentication with login credentials or LDAP authentication. For more information about StarRocks' authentication, see [Authentication](../../administration/Authentication.md). For more information and advanced instructions on creating a user, see [CREATE USER](../../sql-reference/sql-statements/account-management/CREATE_USER.md).
 
 The following example creates the user `jack`, allows it to connect only from the IP address `172.10.1.10`, sets the password to `12345` for it, and assigns the role `example_role` to it as its default role:
 
@@ -99,7 +99,7 @@ The default role of a user is automatically activated when the user connects to 
 
 #### Alter the default role of a user
 
-You can set the default role of a user using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md).
+You can set the default role of a user using [SET DEFAULT ROLE](../../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER](../../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
 Both of the following examples set the default role of `jack` to `db1_admin`. Note that `db1_admin` must have been assigned to `jack`.
 
@@ -117,7 +117,7 @@ Both of the following examples set the default role of `jack` to `db1_admin`. No
 
 #### Alter the property of a user
 
-You can set the property of a user using [SET PROPERTY](../sql-reference/sql-statements/account-management/SET_PROPERTY.md).
+You can set the property of a user using [SET PROPERTY](../../sql-reference/sql-statements/account-management/SET_PROPERTY.md).
 
 The following example sets the maximum number of connections for user `jack` to `1000`. User identities that have the same user name share the same property.
 
@@ -129,7 +129,7 @@ SET PROPERTY FOR jack 'max_user_connections' = '1000';
 
 #### Reset password for a user
 
-You can reset the password for a user using [SET PASSWORD](../sql-reference/sql-statements/account-management/SET_PASSWORD.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md).
+You can reset the password for a user using [SET PASSWORD](../../sql-reference/sql-statements/account-management/SET_PASSWORD.md) or [ALTER USER](../../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
 > **NOTE**
 >
@@ -200,7 +200,7 @@ If you have lost the password of the `root` user and cannot connect to StarRocks
 
 ### Drop a user
 
-You can drop a user using [DROP USER](../sql-reference/sql-statements/account-management/DROP_USER.md).
+You can drop a user using [DROP USER](../../sql-reference/sql-statements/account-management/DROP_USER.md).
 
 The following example drops the user `jack`:
 
@@ -214,7 +214,7 @@ Users with the system-defined role `user_admin` can create, grant, revoke, or dr
 
 ### Create a role
 
-You can create a role using [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE_ROLE.md).
+You can create a role using [CREATE ROLE](../../sql-reference/sql-statements/account-management/CREATE_ROLE.md).
 
 The following example creates the role `example_role`:
 
@@ -224,7 +224,7 @@ CREATE ROLE example_role;
 
 ### Grant a role
 
-You can grant roles to a user or another role using [GRANT](../sql-reference/sql-statements/account-management/GRANT.md).
+You can grant roles to a user or another role using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
 
 - Grant a role to a user.
 
@@ -244,7 +244,7 @@ You can grant roles to a user or another role using [GRANT](../sql-reference/sql
 
 ### Revoke a role
 
-You can revoke roles from a user or another role using [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md).
+You can revoke roles from a user or another role using [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 > **NOTE**
 >
@@ -268,7 +268,7 @@ You can revoke roles from a user or another role using [REVOKE](../sql-reference
 
 ### Drop a role
 
-You can drop a role using [DROP ROLE](../sql-reference/sql-statements/account-management/DROP_ROLE.md).
+You can drop a role using [DROP ROLE](../../sql-reference/sql-statements/account-management/DROP_ROLE.md).
 
 The following example drops the role `example_role`:
 
@@ -300,7 +300,7 @@ Users with the system-defined role `user_admin` can grant or revoke privileges i
 
 ### Grant privileges
 
-You can grant privileges to a user or a role using [GRANT](../sql-reference/sql-statements/account-management/GRANT.md).
+You can grant privileges to a user or a role using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
 
 - Grant a privilege to a user.
 
@@ -320,7 +320,7 @@ You can grant privileges to a user or a role using [GRANT](../sql-reference/sql-
 
 ### Revoke privileges
 
-You can revoke privileges from a user or a role using [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md).
+You can revoke privileges from a user or a role using [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
 - Revoke a privilege from a user.
 
@@ -346,15 +346,15 @@ Usually, a company-owned StarRocks cluster is managed by a sole service provider
 
 As shown below, a StarRocks cluster's users include members from the service provider and two LOBs (A and B). Each LOB is operated by two roles - analysts and executives. Analysts generate and analyze business statements, and executives query the statements.
 
-![User Privileges](../assets/user_privilege_1.png)
+![User Privileges](../../assets/user_privilege_1.png)
 
 LOB A independently manages the database `DB_A`, and LOB B the database `DB_B`. LOB A and LOB B use different tables in `DB_C`. `DB_PUBLIC` can be accessed by all members of both LOBs.
 
-![User Privileges](../assets/user_privilege_2.png)
+![User Privileges](../../assets/user_privilege_2.png)
 
 Because different members perform different operations on different databases and tables, we recommend you create roles in accordance with their services and positions, apply only the necessary privileges to each role, and assign these roles to corresponding members. As shown below:
 
-![User Privileges](../assets/user_privilege_3.png)
+![User Privileges](../../assets/user_privilege_3.png)
 
 1. Assign the system-defined roles `db_admin`, `user_admin`, and `cluster_admin` to cluster maintainers, set `db_admin` and `user_admin` as their default roles for daily maintenance, and manually activate the role `cluster_admin` when they need to operate the nodes of the cluster.
 

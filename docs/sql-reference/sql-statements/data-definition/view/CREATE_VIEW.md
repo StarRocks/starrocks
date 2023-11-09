@@ -10,7 +10,7 @@ Creates a view.
 
 A view, or a logical view, is a virtual table whose data is derived from a query against other existing physical tables. Therefore, a view uses no physical storage, and all queries against the view are equivalent to sub-queries of the query statement used to build the view.
 
-For information about materialized views supported by StarRocks, see [Synchronous materialized views](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized views](../../../using_starrocks/Materialized_view.md).
+For information about materialized views supported by StarRocks, see [Synchronous materialized views](../../../using_starrocks/async_materialized_view/Materialized_view-single_table.md) and [Asynchronous materialized views](../../../using_starrocks/async_materialized_view/Materialized_view.md).
 
 > **CAUTION**
 >

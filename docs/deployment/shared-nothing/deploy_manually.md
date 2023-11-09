@@ -361,7 +361,7 @@ The following procedures are performed on a MySQL client. You must have MySQL cl
 
    If the field `Alive` is `true`, this CN node is properly started and added to the cluster.
 
-   After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../reference/System_variable.md#descriptions-of-variables).
+   After CNs are properly started and you want to use CNs during queries, set the system variables `SET prefer_compute_node = true;` and `SET use_compute_nodes = -1;`. For more information, see [System variables](../sql-reference/System_variable.md#descriptions-of-variables).
 
 ## Step 5: (Optional) Deploy a high-availability FE cluster
 

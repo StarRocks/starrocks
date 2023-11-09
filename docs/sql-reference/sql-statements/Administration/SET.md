@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Sets the specified system variables or user-defined variables for StarRocks. You can view the system variables of StarRocks using [SHOW VARIABLES](../Administration/SHOW_VARIABLES.md). For details about system variables, see [System Variables](../../../reference/System_variable.md). For details about user-defined variables, see [User-defined variables](../../../reference/user_defined_variables.md).
+Sets the specified system variables or user-defined variables for StarRocks. You can view the system variables of StarRocks using [SHOW VARIABLES](../Administration/SHOW_VARIABLES.md). For details about system variables, see [System Variables](../../../sql-reference/System_variable.md). For details about user-defined variables, see [User-defined variables](../../../sql-reference/user_defined_variables.md).
 
 ## Syntax
 
@@ -18,7 +18,7 @@ SET [ GLOBAL | SESSION ] <variable_name> = <value> [, <variable_name> = <value>]
 
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
-| Modifier:<ul><li>GLOBAL</li><li>SESSION</li></ul> | <ul><li>With a `GLOBAL` modifier, the statement sets the variables globally.</li><li>With a `SESSION` modifier, the statement sets the variables within the session. `LOCAL` is a synonym for `SESSION`.</li><li>If no modifier is present, the default is `SESSION`.</li></ul>For details about global and session variables, see [System Variables](../../../reference/System_variable.md).<br/>**NOTE**<br/>Only users with the ADMIN privilege can set the variables globally. |
+| Modifier:<ul><li>GLOBAL</li><li>SESSION</li></ul> | <ul><li>With a `GLOBAL` modifier, the statement sets the variables globally.</li><li>With a `SESSION` modifier, the statement sets the variables within the session. `LOCAL` is a synonym for `SESSION`.</li><li>If no modifier is present, the default is `SESSION`.</li></ul>For details about global and session variables, see [System Variables](../../../sql-reference/System_variable.md).<br/>**NOTE**<br/>Only users with the ADMIN privilege can set the variables globally. |
 | variable_name          | The name of the variable.                                    |
 | value                  | The value of the variable.                                   |
 

@@ -18,7 +18,7 @@ Currently, StarRocks supports scalar UDFs, user-defined aggregate functions (UDA
 
 - You have installed JDK 1.8 on your servers.
 
-- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/Configuration.md).
+- The Java UDF feature is enabled. You can set the FE configuration item `enable_udf` to `true` in the FE configuration file **fe/conf/fe.conf** to enable this feature, and then restart the FE nodes to make the settings take effect. For more information, see [Parameter configuration](../../administration/management/Configuration.md).
 
 ## Develop and use UDFs
 
@@ -520,7 +520,7 @@ Run the following command to query UDFs:
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
+For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/function_index/show-functions.md).
 
 ## Drop a UDF
 
@@ -530,7 +530,7 @@ Run the following command to drop a UDF:
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-For more information, see [DROP FUNCTION](../sql-statements/data-definition/drop-function.md).
+For more information, see [DROP FUNCTION](../sql-statements/data-definition/function_index/drop-function.md).
 
 ## Mapping between SQL data types and Java data types
 

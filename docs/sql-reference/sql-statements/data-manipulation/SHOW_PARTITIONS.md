@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Displays partition information, including common partitions and [temporary partitions](../../../table_design/Temporary_partition.md).
+Displays partition information, including common partitions and [temporary partitions](../../../table_design/Data_distribution/Temporary_partition.md).
 
 ## Syntax
 

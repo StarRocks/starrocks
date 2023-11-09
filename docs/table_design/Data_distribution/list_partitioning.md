@@ -112,4 +112,4 @@ DISTRIBUTED BY HASH(`id`);
 - Currently, StarRocks's [shared-data mode](../../deployment/shared_data/s3.md) does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
 - Currently you cannot [backup and restore](../../administration/Backup_and_restore.md) partitions created by the list partitioning.
-- Currently, StarRocks does not support creating [asynchronous materialized views](../../using_starrocks/Materialized_view.md) with base tables created with the list partitioning strategy.
+- Currently, StarRocks does not support creating [asynchronous materialized views](../../using_starrocks/async_materialized_view/Materialized_view.md) with base tables created with the list partitioning strategy.

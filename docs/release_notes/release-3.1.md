@@ -121,7 +121,7 @@ Release date: August 18, 2023
 
 ### Improvements
 
-Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`.
+Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../sql-reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`.
 
 ### Bug Fixes
 

@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-HLL is used for [approximate count distinct](../../../using_starrocks/Using_HLL.md).
+HLL is used for [approximate count distinct](../../../using_starrocks/distinct_values/Using_HLL.md).
 
 HLL enables the development of programmes based on the HyperLogLog algorithm. It is used to store intermediate results of the HyperLogLog calculation process. It can only be used as the value column type of the table. HLL reduces the amount of data through aggregation to speed up the query process. There may be a 1% deviation in the estimated results.
 

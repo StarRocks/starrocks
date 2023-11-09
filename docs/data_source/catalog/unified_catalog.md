@@ -28,9 +28,9 @@ One unified catalog supports integrations with only a single storage system and 
 
 - See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md) to understand the file formats and data types supported.
 
-- Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
+- Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/data-definition/table/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/data-definition/table/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/table/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
 
-  When you create a table within a unified catalog by using the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement, use the `ENGINE` parameter to specify the table format (Hive or Iceberg).
+  When you create a table within a unified catalog by using the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/table/CREATE_TABLE.md) statement, use the `ENGINE` parameter to specify the table format (Hive or Iceberg).
 
 ## Integration preparations
 
@@ -38,7 +38,7 @@ Before you create a unified catalog, make sure your StarRocks cluster can integr
 
 ### AWS IAM
 
-If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Authenticate to AWS resources - Preparations](../../integrations/authenticate_to_aws_resources.md#preparations).
+If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Authenticate to AWS resources - Preparations](../../integrations/cloud_authentication/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
@@ -159,7 +159,7 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/cloud_authentication/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 #### StorageCredentialParams
 
@@ -207,7 +207,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/cloud_authentication/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -866,7 +866,7 @@ The `prefix` varies based on the storage system you use:
 
 ## Drop a database from a unified catalog
 
-Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/catalog/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
 
 > **NOTE**
 >

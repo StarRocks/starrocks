@@ -9,7 +9,7 @@ displayed_sidebar: "English"
 Updates Hive and Hudi metadata cached in StarRocks. This statement is used in one of the following scenarios:
 
 - **External table**: When using a Hive external table or Hudi external table to query data in Apache Hive™ or Apache Hudi, you can execute this statement to update the metadata of a Hive table or Hudi table cached in StarRocks.
-- **External catalog**: When using a [Hive catalog](../../../data_source/catalog/hive_catalog.md) or [Hudi catalog](../../../data_source/catalog/hudi_catalog.md) to query data in Hive or Hudi, you can execute this statement to update the metadata of a Hive table or Hudi table cached in StarRocks.
+- **External catalog**: When using a [Hive catalog](../../../../data_source/catalog/hive_catalog.md) or [Hudi catalog](../../../../data_source/catalog/hudi_catalog.md) to query data in Hive or Hudi, you can execute this statement to update the metadata of a Hive table or Hudi table cached in StarRocks.
 
 ## Basic concepts
 

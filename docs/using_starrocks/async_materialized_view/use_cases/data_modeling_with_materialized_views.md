@@ -18,7 +18,7 @@ Using materialized views for data modeling can effectively address these problem
 - **Ease the data modeling experience**: Any data analyst with only basic SQL knowledge is capable of data modeling with StarRocks. Data modeling is no longer the exclusive province of experienced data engineers.
 - **Reduce maintenance complexity**: StarRocks' asynchronous materialized views can automatically manage the lineage relationships and dependencies across data layers, eliminating the need for an entire data platform to handle this task.
 
-![Modeling-1](../assets/Modeling-1.png)
+![Modeling-1](../../../assets/Modeling-1.png)
 
 In real-world situations, you can perform data modeling by combining the usage of StarRocks' views (logical views) and asynchronous materialized views as follows:
 
@@ -156,7 +156,7 @@ Partitioned modeling is an essential aspect of data modeling, complementing laye
 
 Different ways of associating data give rise to various modeling approaches, such as star schemas and snowflake schemas. These models have something in common - they all use fact tables and dimension tables. Some business scenarios require multiple large fact tables, while others deal with complex dimension tables and the relationships among them. StarRocks' materialized views support partition association for fact tables, meaning that the fact table is partitioned, and the materialized view's join results are partitioned in the same way.
 
-![Modeling-2](../assets/Modeling-2.png)
+![Modeling-2](../../../assets/Modeling-2.png)
 
 As the above figure shows, a materialized view associates a fact table with multiple dimension tables:
 
@@ -178,7 +178,7 @@ Several parameters can be used to control refresh behavior:
 - `excluded_trigger_tables`: the table whose data changes can be ignored to avoid triggering the automatic refresh.
 - `auto_refresh_partitions_limit`: the number of partitions to refresh in each automatic refresh operation.
 
-For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/data-definition/view/CREATE_MATERIALIZED_VIEW.md).
 
 Currently, partitioned materialized views have the following limitations:
 

@@ -17,7 +17,7 @@ Configuring appropriate partitioning and bucketing at table creation can help to
 
 Modern distributed database systems generally use the following basic distribution methods: Round-Robin, Range, List, and Hash.
 
-![Data distribution method](../assets/3.3.2-1.png)
+![Data distribution method](../../assets/3.3.2-1.png)
 
 - **Round-Robin**: distributes data across different nodes in a cyclic.
 - **Range**: distributes data across different nodes based on the ranges of partitioning column values. As shown in the diagram, the ranges [1-3] and [4-6] correspond to different nodes.
@@ -187,7 +187,7 @@ The number of buckets: By default, StarRocks automatically sets the number of bu
 
 > **NOTICE**
 >
-> Since v3.1,  StarRocks's [shared-data mode](../deployment/shared_data/s3.md) supports the time function expression and does not support the column expression.
+> Since v3.1,  StarRocks's [shared-data mode](../../deployment/shared_data/s3.md) supports the time function expression and does not support the column expression.
 
 Since v3.0, StarRocks supports [expression partitioning](./expression_partitioning.md) (previously known as automatic partitioning) which is more flexible and easy-to-use. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous date ranges or enum values.
 
@@ -382,7 +382,7 @@ The following statement deletes partition `p1` from table `site_access`.
 
 > **NOTE**
 >
-> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command to restore the partition and its data.
+> This operation does not immediately delete data in a partition. Data is retained in the Trash for a period of time (one day by default). If a partition is mistakenly deleted, you can use the [RECOVER](../../sql-reference/sql-statements/data-definition/RECOVER.md) command to restore the partition and its data.
 
 ```SQL
 ALTER TABLE site_access
@@ -416,8 +416,8 @@ However, note that if you query massive amounts of data and frequently use certa
 #### Limits
 
 - You can only use random bucketing to create a Duplicate Key table.
-- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../using_starrocks/Colocate_join.md).
-- [Spark Load](../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
+- You cannot specify a table bucketed randomly to belong to a [Colocation Group](../../using_starrocks/Colocate_join.md).
+- [Spark Load](../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
 
 In the following CREATE TABLE example, the `DISTRIBUTED BY xxx` statement is not used, so StarRocks uses random bucketing by default, and automatically sets the number of buckets.
 
@@ -575,7 +575,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       ;-- Do not need to set the number of bucket and the bucketing key
       ```
 
-    After creating a table, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. As for a table configured with hash bucketing, the number of buckets for each partitions is **fixed**.
+    After creating a table, you can execute [SHOW PARTITIONS](../../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for each partition. As for a table configured with hash bucketing, the number of buckets for each partitions is **fixed**.
 
     As for a table configured with random bucketing, the number of buckets for each partition can be **dynamically changed**. So the returned result displays the **current** number of buckets for each partition.
     > **NOTICE**
@@ -617,7 +617,7 @@ Buckets reflect how data files are actually organized in StarRocks.
       >
       > The bucket size is `1024 * 1024 * 1024 B` (1 GB) by default. When adding a partition, you can specify the bucket size in `PROPERTIES ("bucket_size"="xxx")`. The maximum bucket size is 4 GB.
 
-    After adding a partition, you can execute [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for the new partition. As for a table configured with hash bucketing, the number of buckets for the new partition is **fixed**.
+    After adding a partition, you can execute [SHOW PARTITIONS](../../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) to view the number of buckets set by StarRocks for the new partition. As for a table configured with hash bucketing, the number of buckets for the new partition is **fixed**.
     As for a table configured with random bucketing, the number of buckets for the new partition can be **dynamically changed**. So the returned result displays the **current** number of buckets for the new partition.
     > **NOTICE**
     >

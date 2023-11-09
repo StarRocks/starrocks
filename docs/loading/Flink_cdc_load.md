@@ -274,7 +274,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     > **NOTICE**
     >
-    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+    > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution/Data_distribution.md#determine-the-number-of-buckets).
 
 ## Synchronize data
 

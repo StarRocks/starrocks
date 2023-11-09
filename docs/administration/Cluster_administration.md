@@ -85,7 +85,7 @@ After you set up the FEs, BEs, and CNs of a cluster, you need to check their sta
 
 - Run `http://cn_host:cn_http_port/api/health` to check the statuses of Compute Nodes. If `{"status": "OK", "msg": "To Be Added"}` is returned, the Compute Nodes are properly started.
 
-After the Compute Nodes are started properly, you need to set the system variables `prefer_compute_node`, and `use_compute_nodes` to allow them to scale the computing resources out during queries. See [System Variables](../reference/System_variable.md) for more information.
+After the Compute Nodes are started properly, you need to set the system variables `prefer_compute_node`, and `use_compute_nodes` to allow them to scale the computing resources out during queries. See [System Variables](../sql-reference/System_variable.md) for more information.
 
 ### Stop a cluster
 

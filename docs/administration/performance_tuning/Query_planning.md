@@ -195,7 +195,7 @@ Fragment 1 uses the `BROADCAST` method to perform `Order/Aggregation/Join` opera
 
 By removing the specific expressions (only keep the operators), the query plan can be presented in a more macroscopic view, as shown in the following figure.
 
-![8-5](../assets/8-5.png)
+![8-5](../../assets/8-5.png)
 
 ## Query hint
 
@@ -203,7 +203,7 @@ Query hints are directives or comments that explicitly suggest the query optimiz
 
 ### Variable-Setting hint
 
-You can set one or more [system variables](../reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can set one or more [system variables](../../sql-reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
 #### Syntax
 
@@ -239,7 +239,7 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### Join hint
 
-For multi-table join queries, the optimizer usually selects the optimal join execution method. In special cases, you can use a join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, a join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a join execution method. When a join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
+For multi-table join queries, the optimizer usually selects the optimal join execution method. In special cases, you can use a join hint to explicitly suggest the join execution method to the optimizer or disable Join Reorder. Currently, a join hint supports suggesting Shuffle Join, Broadcast Join, Bucket Shuffle Join, or Colocate Join as a join execution method. When a join hint is used, the optimizer does not perform Join Reorder. So you need to select the smaller table as the right table. Additionally, when suggesting [Colocate Join](../../using_starrocks/Colocate_join.md) or Bucket Shuffle Join as the join execution method, make sure that the data distribution of the joined table meets the requirements of these join execution methods. Otherwise, the suggested join execution method cannot take effect.
 
 #### Syntax
 
@@ -293,7 +293,7 @@ Use the `EXPLAIN` command to view the actual join execution method. If the retur
 EXPLAIN select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
 ~~~
 
-![8-9](../assets/8-9.png)
+![8-9](../../assets/8-9.png)
 
 ## SQL fingerprint
 

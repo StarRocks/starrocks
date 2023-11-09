@@ -22,7 +22,7 @@ This topic introduces the other tools and systems with which StarRocks can integ
 
 [Apache Spark Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
-[Apache Kafka](../../loading/RoutineLoad.md)
+[Apache Kafka](../../loading/kafka/RoutineLoad.md)
 
 ## Cluster management
 

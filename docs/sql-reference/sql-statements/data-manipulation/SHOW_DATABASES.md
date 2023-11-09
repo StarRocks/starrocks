@@ -62,8 +62,8 @@ SHOW DATABASES FROM hive1;
 
 ## References
 
-- [CREATE DATABASE](../data-definition/CREATE_DATABASE.md)
+- [CREATE DATABASE](../data-definition/catalog/CREATE_DATABASE.md)
 - [SHOW CREATE DATABASE](SHOW_CREATE_DATABASE.md)
-- [USE](../data-definition/USE.md)
+- [USE](../Utility/USE.md)
 - [DESC](../Utility/DESCRIBE.md)
-- [DROP DATABASE](../data-definition/DROP_DATABASE.md)
+- [DROP DATABASE](../data-definition/catalog/DROP_DATABASE.md)

@@ -60,7 +60,7 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   > **NOTE**
   >
-  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](Memory_management.md).
+  > The amount of memory that can be used for queries is indicated by the `query_pool` parameter. For more information about the parameter, see [Memory management](./Memory_management.md).
 
 - `concurrency_limit`
 
@@ -289,7 +289,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ## Monitor resource group
 
-You can set [monitor and alert](Monitor_and_Alert.md) for your resource groups.
+You can set [monitor and alert](../Monitor_and_Alert.md) for your resource groups.
 
 Metrics you can monitor regarding resource groups include:
 
@@ -307,6 +307,6 @@ Metrics you can monitor regarding resource groups include:
 
 After you configure resource groups, you can manage memory resources and queries. For more information, see the following topics:
 
-- [Memory management](../administration/Memory_management.md)
+- [Memory management](./Memory_management.md)
 
-- [Query management](../administration/Query_management.md)
+- [Query management](./Query_management.md)

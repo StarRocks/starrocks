@@ -50,7 +50,7 @@ Release date: September 12, 2023
 
 ### Improvements
 
-- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../sql-reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - Unifies the logic between FEs and BEs in converting strings to integers. [#29969](https://github.com/StarRocks/starrocks/pull/29969)
 
 ### Bug Fixes
@@ -112,7 +112,7 @@ Queries can be rewritten even when the queries contain a different type of join 
 
 - Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25910](https://github.com/StarRocks/starrocks/pull/25910)
 - If the queried fields are not included in the output columns of a materialized view but are included in the predicate of the materialized view, the query can still be rewritten to benefit from the materialized view. [#23028](https://github.com/StarRocks/starrocks/issues/23028)
-- [When the SQL dialect (`sql_dialect`) is set to `trino`](../reference/System_variable.md), table aliases are not case-sensitive. [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
+- [When the SQL dialect (`sql_dialect`) is set to `trino`](../sql-reference/System_variable.md), table aliases are not case-sensitive. [#26094](https://github.com/StarRocks/starrocks/pull/26094) [#25282](https://github.com/StarRocks/starrocks/pull/25282)
 - Added a new field `table_id` to the table `Information_schema.tables_config`. You can join the table `tables_config` with the table `be_tablets` on the column `table_id` in the database `Information_schema` to query the names of the database and table to which a tablet belongs. [#24061](https://github.com/StarRocks/starrocks/pull/24061)
 
 ### Bug Fixes
@@ -219,7 +219,7 @@ Release date: April 28, 2023
 
 #### Data Lake Analytics
 
-- [Preview] Supports Presto/Trino compatible dialect. Presto/Trino's SQL can be automatically rewritten into StarRocks' SQL pattern. For more information, see [the system variable](../reference/System_variable.md) `sql_dialect`.
+- [Preview] Supports Presto/Trino compatible dialect. Presto/Trino's SQL can be automatically rewritten into StarRocks' SQL pattern. For more information, see [the system variable](../sql-reference/System_variable.md) `sql_dialect`.
 - [Preview] Supports [JDBC catalogs](../data_source/catalog/jdbc_catalog.md).
 - Supports using [SET CATALOG](../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to manually switch between catalogs in the current session.
 

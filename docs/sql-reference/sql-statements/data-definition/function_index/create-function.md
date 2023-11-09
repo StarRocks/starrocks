@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Creates a user-defined function (UDF). Currently, you can only create Java UDFs, including Scalar functions, user-defined aggregate functions (UDAFs), user-defined window functions (UDWFs), and user-defined table functions (UDTFs).
 
-**For details about how to compile, create, and use a Java UDF, see [Java UDF](../../sql-functions/JAVA_UDF.md).**
+**For details about how to compile, create, and use a Java UDF, see [Java UDF](../../../sql-functions/JAVA_UDF.md).**
 
 > **NOTE**
 >

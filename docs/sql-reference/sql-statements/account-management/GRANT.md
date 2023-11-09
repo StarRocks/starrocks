@@ -10,7 +10,7 @@ Grants one or more privileges on specific objects to a user or a role.
 
 Grants roles to users or other roles.
 
-For more information about the privileges that can be granted, see [Privilege items](../../../administration/privilege_item.md).
+For more information about the privileges that can be granted, see [Privilege items](../../../administration/user_auth/privilege_item.md).
 
 After a GRANT operation is performed, you can run [SHOW GRANTS](./SHOW_GRANTS.md) to view detailed privilege information or run [REVOKE](REVOKE.md) to revoke a privilege or role.
 
@@ -388,4 +388,4 @@ You can only write data into Iceberg tables (since v3.1).
      GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
 
-For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).
+For the best practices of multi-service access control, see [Multi-service access control](../../../administration/user_auth/User_privilege.md#multi-service-access-control).

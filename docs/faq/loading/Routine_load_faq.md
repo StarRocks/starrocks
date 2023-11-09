@@ -25,7 +25,7 @@ Parameter description:
 - `desired_concurrent_number`: the desired load task parallelism for a Routine Load job. The default value is `3`. You can set a higher value for this parameter to increase the actual load task parallelism.
   - If you have not created a Routine Load job, you need to set this parameter when using [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) to create a Routine Load job.
   - If you have already created a Routine Load job, you need to use [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/alter-routine-load.md) to modify this parameter.
-- `max_routine_load_task_concurrent_num`: the default maximum task parallelism for a Routine Load job. The default value is `5`. This parameter is a an FE dynamic parameter. For more information and the configuration method, see [Parameter configuration](../../administration/Configuration.md#loading-and-unloading).
+- `max_routine_load_task_concurrent_num`: the default maximum task parallelism for a Routine Load job. The default value is `5`. This parameter is a an FE dynamic parameter. For more information and the configuration method, see [Parameter configuration](../../administration/management/Configuration.md#loading-and-unloading).
 
 Therefore, when the number of partitions to be consumed and the number of BE nodes alive are greater than the other two parameters, you can increase the values of `desired_concurrent_number` and `max_routine_load_task_concurrent_num` parameters to increase the actual load task parallelism.
 

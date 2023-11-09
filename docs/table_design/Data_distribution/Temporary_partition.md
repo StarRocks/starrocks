@@ -12,7 +12,7 @@ You can use the temporary partition feature in the following scenarios:
 
 - Atomic overwrite operation
   
-  If you need to rewrite the data in a partition while ensuring that the data can be queried during the rewriting process, you can first create a temporary partition based on the original formal partition, and load the new data into the temporary partition. Then you can use the replace operation to atomically replace the original formal partition with the temporary partition. For atomic overwrite operations on non-partitioned tables, see [ALTER TABLE - SWAP](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#swap).
+  If you need to rewrite the data in a partition while ensuring that the data can be queried during the rewriting process, you can first create a temporary partition based on the original formal partition, and load the new data into the temporary partition. Then you can use the replace operation to atomically replace the original formal partition with the temporary partition. For atomic overwrite operations on non-partitioned tables, see [ALTER TABLE - SWAP](../../sql-reference/sql-statements/data-definition/table/ALTER_TABLE.md#swap).
 
 - Adjust partition data query concurrency
 

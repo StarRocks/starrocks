@@ -27,7 +27,7 @@ SUBMIT TASK [task_name] AS <etl_statement>
 
 ## Usage notes
 
-This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata table `tasks` in [Information Schema](../../../administration/information_schema.md).
+This statement creates a Task, which is a template for storing a task that executes the ETL statement. You can check the information of the Task by querying the metadata table `tasks` in [Information Schema](../../../administration/management/information_schema.md).
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;

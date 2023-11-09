@@ -54,7 +54,7 @@ Release date: August 28, 2023
 
 ### Improvements
 
-- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/en-us/3.1/sql-reference/System_variable) `enable_strict_type`. The default value is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
 - Optimized the prompt returned if users do not specify `hive.metastore.uri` when they create an Iceberg Catalog. The error prompt is more accurate. [#16543](https://github.com/StarRocks/starrocks/issues/16543)
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be `year`. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
@@ -374,7 +374,7 @@ Release date: January 22, 2023
 - Supports [query queues](../administration/query_queues.md). [#12594](https://github.com/StarRocks/starrocks/pull/12594)
 - Supports isolating compute resources occupied by data loading, thereby limiting the resource consumption of data loading tasks. For more information, see [Resource group](../administration/resource_group.md). [#12606](https://github.com/StarRocks/starrocks/pull/12606)
 - Supports specifying the following data compression algorithms for StarRocks native tables: LZ4, Zstd, Snappy, and Zlib. For more information, see [Data compression](../table_design/data_compression.md). [#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
-- Supports [user-defined variables](../reference/user_defined_variables.md). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
+- Supports [user-defined variables](../sql-reference/user_defined_variables.md). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
 - Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
 - Provides the QUALIFY clause that filters the results of [window functions](../sql-reference/sql-functions/Window_function.md). [#13239](https://github.com/StarRocks/starrocks/pull/13239)
 - Supports using the result returned by the uuid() and uuid_numeric() functions as the default value of a column when you create a table. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md). [#11155](https://github.com/StarRocks/starrocks/pull/11155)

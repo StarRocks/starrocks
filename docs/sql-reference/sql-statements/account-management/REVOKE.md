@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/privilege_item.md).
+Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/user_auth/privilege_item.md).
 
 > NOTE: Only the `user_admin` role can perform this operation.
 

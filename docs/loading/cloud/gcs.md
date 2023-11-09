@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from GCS
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides two options for loading data from GCS:
 
@@ -44,7 +44,7 @@ An asynchronous Broker Load process handles making the connection to GCS, pullin
 
 ### Data flow
 
-![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
+![Workflow of Broker Load](../../assets/broker_load_how-to-work_en.png)
 
 1. The user creates a load job.
 2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE).
@@ -332,8 +332,8 @@ INSERT INTO user_behavior_declared
 
 ## More information
 
-- This document only covered service account key authentication. For other options please see [authenticate to GCS resources](../integrations/authenticate_to_gcs.md).
-- For more details on synchronous and asynchronous data loading please see the [overview of data loading](../loading/Loading_intro.md) documentation.
-- Learn about how Broker Load supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
-- Learn more about [table design](../table_design/StarRocks_table_design.md).
-- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+- This document only covered service account key authentication. For other options please see [authenticate to GCS resources](../../integrations/cloud_authentication/authenticate_to_gcs.md).
+- For more details on synchronous and asynchronous data loading please see the [overview of data loading](../../loading/Loading_intro.md) documentation.
+- Learn about how Broker Load supports data transformation during loading at [Transform data at loading](../../loading/Etl_in_loading.md) and [Change data through loading](../../loading/Load_to_Primary_Key_tables.md).
+- Learn more about [table design](../../table_design/StarRocks_table_design.md).
+- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)

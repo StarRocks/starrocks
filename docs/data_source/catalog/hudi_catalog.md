@@ -774,7 +774,7 @@ SHOW CREATE CATALOG hudi_catalog_glue;
 
 You can use one of the following methods to switch to a Hudi catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/Utility/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -783,7 +783,7 @@ You can use one of the following methods to switch to a Hudi catalog and a datab
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hudi catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/Utility/USE.md) to switch to a Hudi catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -791,7 +791,7 @@ You can use one of the following methods to switch to a Hudi catalog and a datab
 
 ## Drop a Hudi catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Hudi catalog named `hudi_catalog_glue`:
 

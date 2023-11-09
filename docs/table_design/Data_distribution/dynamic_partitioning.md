@@ -8,7 +8,7 @@ StarRocks supports dynamic partitioning, which can automatically manage the time
 
 ## Enable dynamic partitioning
 
-Take table `site_access` as an example. To enable dynamic partitioning, you need to configure the PROPERTIES parameter. For information about the configuration items, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
+Take table `site_access` as an example. To enable dynamic partitioning, you need to configure the PROPERTIES parameter. For information about the configuration items, see [CREATE TABLE](../../../sql-reference/sql-statements/data-definition/table/CREATE_TABLE.md).
 
 ```SQL
 CREATE TABLE site_access(
@@ -75,7 +75,7 @@ SHOW PARTITIONS FROM site_access;
 
 ## Modify properties of dynamic partitioning
 
-You can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement to modify properties of dynamic partitioning, such as disabling dynamic partitioning. Take the following statement as an example.
+You can use the [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) statement to modify properties of dynamic partitioning, such as disabling dynamic partitioning. Take the following statement as an example.
 
 ```SQL
 ALTER TABLE site_access 
@@ -84,5 +84,5 @@ SET("dynamic_partition.enable"="false");
 
 > Note:
 >
-> - To check the properties of dynamic partitioning of a table, execute the [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) statement.
+> - To check the properties of dynamic partitioning of a table, execute the [SHOW CREATE TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE.md) statement.
 > - You can also use the ALTER TABLE statement to modify other properties of a table.
