@@ -49,20 +49,16 @@ protected:
     void SetUp() override {
         _fs = FileSystem::CreateSharedFromString("posix://").value();
         ASSERT_OK(_fs->create_dir_recursive(kSegmentDir));
-
-        _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
     void TearDown() override {
         ASSERT_TRUE(fs::remove_all(kSegmentDir).ok());
-        StoragePageCache::release_global_cache();
+        StoragePageCache::instance()->prune();
     }
 
     const std::string kSegmentDir = "./ut_dir/segment_rewriter_test";
 
     std::shared_ptr<FileSystem> _fs;
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker;
 };
 
 TEST_F(SegmentRewriterTest, rewrite_test) {

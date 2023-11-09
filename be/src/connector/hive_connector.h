@@ -60,6 +60,7 @@ public:
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
         return _provider->_scan_node->get_lazy_column_coalesce_counter();
     }
+    int32_t scan_range_indicate_const_column_index(SlotId id) const;
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;

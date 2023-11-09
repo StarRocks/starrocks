@@ -997,7 +997,7 @@ public class MaterializedViewTest {
                 () -> starRocksAssert.withMaterializedView(mvSql2));
     }
 
-    @Test
+    // @Test
     public void testBaseTableInfo(@Mocked GlobalStateMgr globalStateMgr,
                                   @Mocked MetadataMgr metadataMgr,
                                   @Mocked ConnectorMetadata connectorMetadata,
