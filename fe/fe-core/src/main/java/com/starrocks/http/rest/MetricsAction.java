@@ -71,6 +71,44 @@ public class MetricsAction extends RestBaseAction {
         super(controller);
     }
 
+<<<<<<< HEAD
+=======
+    public static final class RequestParams {
+        // Whether to collect per table metrics
+        private final boolean collectTableMetrics;
+        // Whether to collect per table metrics in minified mode, Ignore some heavy metrics if true
+        private final boolean minifyTableMetrics;
+        // Whether to collect per materialized view metrics
+        private final boolean collectMVMetrics;
+        // Whether to collect per materialized view metrics in minified mode, Ignore some heavy metrics if true
+        private final boolean minifyMVMetrics;
+
+        public RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
+                      boolean collectMVMetrics, boolean minifyMVMetrics) {
+            this.collectTableMetrics = collectTableMetrics;
+            this.minifyTableMetrics = minifyTableMetrics;
+            this.collectMVMetrics = collectMVMetrics;
+            this.minifyMVMetrics = minifyMVMetrics;
+        }
+
+        public boolean isCollectTableMetrics() {
+            return collectTableMetrics;
+        }
+
+        public boolean isMinifyTableMetrics() {
+            return minifyTableMetrics;
+        }
+
+        public boolean isCollectMVMetrics() {
+            return collectMVMetrics;
+        }
+
+        public boolean isMinifyMVMetrics() {
+            return minifyMVMetrics;
+        }
+    }
+
+>>>>>>> 96e287c149 ([Enhancement] remove db lock in MetricRepo (#34558))
     public static void registerAction(ActionController controller) throws IllegalArgException {
         controller.registerHandler(HttpMethod.GET, API_PATH, new MetricsAction(controller));
     }
