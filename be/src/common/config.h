@@ -834,6 +834,7 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
 
+<<<<<<< HEAD
 // Whether to enable segment overflow read
 // If true, segment will scan max(remaning rows of chunk, chunk_capacity / 4) rows each time, the final chunk
 // after filtering may be larger than the capacity, we will save these rows in _overflow_read_chunk.
@@ -841,6 +842,9 @@ CONF_Bool(enable_schema_change_v2, "true");
 // must be less than of equal to the capacity
 // default: true
 CONF_Bool(enable_segment_overflow_read_chunk, "true");
+=======
+CONF_Int64(rpc_connect_timeout_ms, "30000");
+>>>>>>> 0f6253172c ([BugFix] reuse http brpc stub and config rpc_connect_timeout_ms (#33494))
 
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
