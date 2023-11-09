@@ -342,7 +342,6 @@ public class StarRocksAssert {
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
             String mvName = createMaterializedViewStatement.getTableName().getTbl();
-            refreshMvByName(mvName);
         }
         return this;
     }
