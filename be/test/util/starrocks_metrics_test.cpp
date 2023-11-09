@@ -53,10 +53,11 @@ protected:
         auto _page_cache_mem_tracker = std::make_unique<MemTracker>();
         static const int kNumShardBits = 5;
         static const int kNumShards = 1 << kNumShardBits;
+        StoragePageCache::release_global_cache();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), kNumShards * 100000);
     }
 
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
