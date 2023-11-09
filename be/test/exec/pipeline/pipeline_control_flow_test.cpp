@@ -149,28 +149,9 @@ using CounterPtr = std::shared_ptr<Counter>;
 class TestOperator : public Operator {
 public:
     TestOperator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-<<<<<<< HEAD
-                 int32_t driver_sequence)
-            : Operator(factory, id, name, plan_node_id, false, driver_sequence) {}
-    ~TestOperator() override {
-        if (!_is_prepared) {
-            ++lifecycle_error_num;
-        }
-        if (!_is_finishing) {
-            ++lifecycle_error_num;
-        }
-        if (!_is_finished) {
-            ++lifecycle_error_num;
-        }
-        if (!_is_closed) {
-            ++lifecycle_error_num;
-        }
-    }
-=======
                  int32_t driver_sequence, CounterPtr counter)
-            : Operator(factory, id, name, plan_node_id, driver_sequence), _counter(std::move(counter)) {}
+            : Operator(factory, id, name, plan_node_id, false, driver_sequence), _counter(std::move(counter)) {}
     ~TestOperator() override = default;
->>>>>>> 21271dc6a7 ([UT] Fix wrong pipeline test uts when using gtest-parallel (#29048))
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(Operator::prepare(state));
