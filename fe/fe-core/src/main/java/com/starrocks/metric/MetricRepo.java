@@ -73,6 +73,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -909,6 +910,9 @@ public final class MetricRepo {
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
         }
+
+        // collect starmgr related metrics as well
+        StarMgrServer.getCurrentState().visitMetrics(visitor);
 
         // node info
         visitor.getNodeInfo();
