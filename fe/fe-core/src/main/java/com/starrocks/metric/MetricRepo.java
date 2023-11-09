@@ -394,32 +394,6 @@ public final class MetricRepo {
                 "total error rows of routine load");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ERROR_ROWS);
 
-<<<<<<< HEAD
-=======
-        COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", MetricUnit.REQUESTS,
-                "current unfinished backup job");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_BACKUP_JOB);
-        COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
-                "current unfinished restore job");
-        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
-        List<Database> dbs = Lists.newArrayList();
-        if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
-                dbs.add(entry.getValue());
-            }
-
-            for (Database db : dbs) {
-                AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (jobI instanceof BackupJob && !((BackupJob) jobI).isDone()) {
-                    COUNTER_UNFINISHED_BACKUP_JOB.increase(1L);
-                } else if (jobI instanceof RestoreJob && !((RestoreJob) jobI).isDone()) {
-                    COUNTER_UNFINISHED_RESTORE_JOB.increase(1L);
-                }
-
-            }
-        }
-
->>>>>>> 96e287c149 ([Enhancement] remove db lock in MetricRepo (#34558))
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
