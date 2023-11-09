@@ -74,6 +74,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
@@ -221,6 +222,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -235,7 +237,10 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1719,8 +1724,13 @@ public class ShowExecutor {
                     Pair<Double, String> tableSizePair = DebugUtil.getByteUint(tableSize);
                     String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(tableSizePair.first) + " "
                             + tableSizePair.second;
+                    Instant instant = Instant.ofEpochMilli(olapTable.lastVersionUpdateEndTime.get());
+                    ZoneId zoneId = ZoneId.of(connectContext.sessionVariable.getTimeZone());
+                    LocalDateTime localDateTime = instant.atZone(zoneId).toLocalDateTime();
+                    String formattedDate = localDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
 
-                    List<String> row = Arrays.asList(table.getName(), readableSize, String.valueOf(replicaCount));
+                    List<String> row = Arrays.asList(table.getName(),
+                            readableSize, String.valueOf(replicaCount), formattedDate);
                     totalRows.add(row);
 
                     totalSize += tableSize;
@@ -1730,7 +1740,10 @@ public class ShowExecutor {
                 Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
                 String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
                         + totalSizePair.second;
-                List<String> total = Arrays.asList("Total", readableSize, String.valueOf(totalReplicaCount));
+                List<String> total = Arrays.asList("Total",
+                                                    readableSize,
+                                                    String.valueOf(totalReplicaCount),
+                                                    ConstantOperator.createNull(Type.VARCHAR).getVarchar());
                 totalRows.add(total);
 
                 // quota
@@ -1740,7 +1753,10 @@ public class ShowExecutor {
                 String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaPair.first) + " "
                         + quotaPair.second;
 
-                List<String> quotaRow = Arrays.asList("Quota", readableQuota, String.valueOf(replicaQuota));
+                List<String> quotaRow = Arrays.asList("Quota",
+                                                      readableQuota,
+                                                      String.valueOf(replicaQuota),
+                                                      ConstantOperator.createNull(Type.VARCHAR).getVarchar());
                 totalRows.add(quotaRow);
 
                 // left
@@ -1749,7 +1765,10 @@ public class ShowExecutor {
                 Pair<Double, String> leftPair = DebugUtil.getByteUint(left);
                 String readableLeft = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftPair.first) + " "
                         + leftPair.second;
-                List<String> leftRow = Arrays.asList("Left", readableLeft, String.valueOf(replicaCountLeft));
+                List<String> leftRow = Arrays.asList("Left",
+                                                      readableLeft,
+                                                      String.valueOf(replicaCountLeft),
+                                                      ConstantOperator.createNull(Type.VARCHAR).getVarchar());
                 totalRows.add(leftRow);
             } else {
                 try {
@@ -1796,16 +1815,23 @@ public class ShowExecutor {
                             + indexSizePair.second;
 
                     List<String> row = null;
+                    Instant instant = Instant.ofEpochMilli(olapTable.lastVersionUpdateEndTime.get());
+                    ZoneId zoneId = ZoneId.of(connectContext.sessionVariable.getTimeZone());
+                    LocalDateTime localDateTime = instant.atZone(zoneId).toLocalDateTime();
+                    String formattedDate = localDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));
                     if (i == 0) {
                         row = Arrays.asList(tableName,
+                                formattedDate,
                                 olapTable.getIndexNameById(indexId),
                                 readableSize, String.valueOf(indexReplicaCount),
                                 String.valueOf(indexRowCount));
                     } else {
                         row = Arrays.asList("",
+                                ConstantOperator.createNull(Type.VARCHAR).getVarchar(),
                                 olapTable.getIndexNameById(indexId),
                                 readableSize, String.valueOf(indexReplicaCount),
-                                String.valueOf(indexRowCount));
+                                String.valueOf(indexRowCount)
+                                );
                     }
 
                     totalSize += indexSize;
@@ -1818,7 +1844,11 @@ public class ShowExecutor {
                 Pair<Double, String> totalSizePair = DebugUtil.getByteUint(totalSize);
                 String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(totalSizePair.first) + " "
                         + totalSizePair.second;
-                List<String> row = Arrays.asList("", "Total", readableSize, String.valueOf(totalReplicaCount), "");
+                List<String> row = Arrays.asList("",
+                        ConstantOperator.createNull(Type.VARCHAR).getVarchar(),
+                        "Total",
+                        readableSize,
+                        String.valueOf(totalReplicaCount), "");
                 totalRows.add(row);
             }
         } catch (AnalysisException e) {
