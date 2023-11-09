@@ -34,10 +34,13 @@
 
 package com.starrocks.leader;
 
+import com.sleepycat.je.EnvironmentConfig;
+import com.sleepycat.je.config.EnvironmentParams;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -164,7 +167,13 @@ public class MetaHelper {
             }
         }
 
-
+        long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());
+        File finalMetaFile = new File(Config.meta_dir);
+        if (finalMetaFile.getFreeSpace() < lowerFreeDiskSize) {
+            LOG.error("Free size on meta dir: {} is less than {}",
+                    Config.meta_dir, new ByteSizeValue(lowerFreeDiskSize));
+            throw new InvalidMetaDirException();
+        }
 
         Path imageDir = Paths.get(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);
         Path bdbDir = Paths.get(BDBEnvironment.getBdbDir());
