@@ -17,8 +17,6 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
@@ -61,7 +59,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
-    private static final Logger LOG = LogManager.getLogger(IcebergAwsClientFactory.class);
+    public static final String HTTPS_SCHEME = "https://";
 
     private AwsProperties awsProperties;
 
@@ -155,15 +153,13 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         }
 
         // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
-        // 'scheme', it is considered invalid, we will not set 'endpointOverride' property.
+        // 'scheme', we will add https scheme.
         if (!s3Endpoint.isEmpty()) {
             URI uri = URI.create(s3Endpoint);
-            if (uri.getScheme() != null) {
-                s3ClientBuilder.endpointOverride(uri);
-            } else {
-                LOG.warn("s3Endpoint: {} is missing the scheme information, skipping" +
-                        "setting the client endpointOverride.", s3Endpoint);
+            if (uri.getScheme() == null) {
+                uri = URI.create(HTTPS_SCHEME + s3Endpoint);
             }
+            s3ClientBuilder.endpointOverride(uri);
         }
 
         return s3ClientBuilder.build();
@@ -187,15 +183,13 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         }
 
         // To prevent the 'glueClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
-        // 'scheme', it is considered invalid, we will not set 'endpointOverride' property.
+        // 'scheme', we will add https scheme.
         if (!glueEndpoint.isEmpty()) {
             URI uri = URI.create(glueEndpoint);
-            if (uri.getScheme() != null) {
-                glueClientBuilder.endpointOverride(uri);
-            } else {
-                LOG.warn("glueEndpoint: {} is missing the scheme information, skipping" +
-                        "setting the client endpointOverride.", glueEndpoint);
+            if (uri.getScheme() == null) {
+                uri = URI.create(HTTPS_SCHEME + glueEndpoint);
             }
+            glueClientBuilder.endpointOverride(uri);
         }
 
         return glueClientBuilder.build();
