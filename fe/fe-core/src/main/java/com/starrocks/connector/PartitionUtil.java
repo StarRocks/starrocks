@@ -508,8 +508,11 @@ public class PartitionUtil {
             newPartitionKey.pushColumn(dateLiteral, PrimitiveType.DATE);
             return newPartitionKey;
         } catch (SemanticException e) {
-            throw new SemanticException("convert string {} to date partition key failed:",
-                    partitionKey.getKeys().get(0).getStringValue(), e);
+            SemanticException semanticException =
+                    new SemanticException("convert string %s to date partition key failed:",
+                            partitionKey.getKeys().get(0).getStringValue(), e);
+            semanticException.addSuppressed(e);
+            throw semanticException;
         }
     }
 
