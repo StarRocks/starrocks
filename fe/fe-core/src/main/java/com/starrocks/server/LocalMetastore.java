@@ -1254,7 +1254,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void addListPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
+    @VisibleForTesting
+    public void addListPartitionLog(Database db, OlapTable olapTable, List<PartitionDesc> partitionDescs,
                                      AddPartitionClause addPartitionClause, PartitionInfo partitionInfo,
                                      List<Partition> partitionList, Set<String> existPartitionNameSet)
             throws DdlException {
@@ -1270,7 +1271,7 @@ public class LocalMetastore implements ConnectorMetadata {
             boolean isTempPartition = addPartitionClause.isTempPartition();
             if (existPartitionNameSet.contains(partition.getName())) {
                 LOG.info("add partition[{}] which already exists", partition.getName());
-                return;
+                continue;
             }
             long partitionId = partition.getId();
             PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
