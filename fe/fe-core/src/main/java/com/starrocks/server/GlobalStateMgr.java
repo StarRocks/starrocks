@@ -2291,6 +2291,7 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
+            boolean readSucc = false;
             try {
                 entity = cursor.next();
 
@@ -2298,6 +2299,8 @@ public class GlobalStateMgr {
                 if (entity == null) {
                     break;
                 }
+
+                readSucc = true;
 
                 // apply
                 EditLog.loadJournal(this, entity);
@@ -2307,7 +2310,9 @@ public class GlobalStateMgr {
                             replayedJournalId.incrementAndGet(),
                             entity == null ? null : entity.getData(),
                             e);
-                    cursor.skipNext();
+                    if (!readSucc) {
+                        cursor.skipNext();
+                    }
                     continue;
                 }
                 // handled in outer loop
