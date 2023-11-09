@@ -571,7 +571,14 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
-        bool full = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+        auto res = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+        if (!res.ok()) {
+            std::string msg = strings::Substitute("$0 failed to insert mem table: $1", alter_msg_header(),
+                                                  res.status().to_string());
+            LOG(WARNING) << msg;
+            return res.status();
+        }
+        auto full = res.value();
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");

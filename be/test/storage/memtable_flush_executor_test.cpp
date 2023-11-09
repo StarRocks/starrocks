@@ -289,7 +289,8 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(mem_table->finalize().ok());
 
     ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
@@ -318,7 +319,8 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(mem_table->finalize().ok());
 
     size_t ret_num_rows = 0;
