@@ -2600,10 +2600,13 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayAddReplica(ReplicaPersistInfo info) {
         Database db = getDbIncludeRecycleBin(info.getDbId());
+<<<<<<< HEAD
         if (db == null) {
             LOG.warn("replay add replica failed, db is null, info: {}", info);
             return;
         }
+=======
+>>>>>>> ff44a94186... recover
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
@@ -2687,10 +2690,13 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayDeleteReplica(ReplicaPersistInfo info) {
         Database db = getDbIncludeRecycleBin(info.getDbId());
+<<<<<<< HEAD
         if (db == null) {
             LOG.warn("replay delete replica failed, db is null, info: {}", info);
             return;
         }
+=======
+>>>>>>> ff44a94186... recover
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
