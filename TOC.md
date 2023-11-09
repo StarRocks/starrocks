@@ -448,7 +448,7 @@
       + [starts_with](/sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](/sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](/sql-reference/sql-functions/string-functions/strright.md)
-      + [substring](/sql-reference/sql-functions/string-functions/substr.md)
+      + [substring](/sql-reference/sql-functions/string-functions/substring.md)
       + [trim](/sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](/sql-reference/sql-functions/string-functions/ucase.md)
       + [unhex](/sql-reference/sql-functions/string-functions/unhex.md)
