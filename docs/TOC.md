@@ -122,6 +122,7 @@
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
     + [Dataphin](./integrations/IDE_integrations/Dataphin.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
+    + [Jupyter](./integrations/IDE_integrations/jupysql.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Management
