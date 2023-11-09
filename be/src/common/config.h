@@ -830,6 +830,8 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // enable optimized implementation of schema change
 CONF_Bool(enable_schema_change_v2, "true");
 
+CONF_Int64(rpc_connect_timeout_ms, "30000");
+
 CONF_Int32(max_batch_publish_latency_ms, "100");
 
 // Config for opentelemetry tracing.
