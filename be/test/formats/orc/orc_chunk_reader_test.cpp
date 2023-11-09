@@ -2096,6 +2096,44 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     }
 }
 
+TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    SlotDesc c0{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)};
+
+    SlotDesc slot_descs[] = {c0, {""}};
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    // Read all fields
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+    reader.set_use_orc_column_names(true);
+    auto input_stream = orc::readLocalFile(input_orc_file);
+    Status st = reader.init(std::move(input_stream));
+    DCHECK(st.ok()) << st.get_error_msg();
+
+    st = reader.read_next();
+    DCHECK(st.ok()) << st.get_error_msg();
+    ChunkPtr ckptr = reader.create_chunk();
+    DCHECK(ckptr != nullptr);
+    st = reader.fill_chunk(&ckptr);
+    DCHECK(st.ok()) << st.get_error_msg();
+    ChunkPtr result = reader.cast_chunk(&ckptr);
+    DCHECK(result != nullptr);
+
+    EXPECT_EQ(result->num_rows(), 4);
+    EXPECT_EQ(result->num_columns(), 1);
+
+    // we should ignore row_id = 4
+    std::set<int64_t> rows_to_delete{3, 4};
+    ColumnPtr row_delete_filter = reader.get_row_delete_filter(rows_to_delete);
+
+    EXPECT_EQ(4, row_delete_filter->size());
+    BooleanColumn* binary_column = down_cast<BooleanColumn*>(row_delete_filter.get());
+    EXPECT_EQ("[1, 1, 1, 0]", binary_column->debug_string());
+}
+
 TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/map_type_mismatched.orc";
 
