@@ -1,0 +1,11 @@
+
+{
+    "position": 10,
+    "label": "Preparation",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "preparation"
+    }
+  }

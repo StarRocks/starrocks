@@ -1,0 +1,11 @@
+
+{
+    "position": 20,
+    "label": "Shared-nothing deployment",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "shared-nothing"
+    }
+  }

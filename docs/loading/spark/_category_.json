@@ -1,0 +1,11 @@
+
+{
+    "position": 90,
+    "label": "Apache Spark",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "Spark-connector-starrocks"
+    }
+  }

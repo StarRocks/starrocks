@@ -1,0 +1,11 @@
+
+{
+    "position": 10,
+    "label": "BI Integrations",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "BI_integrations"
+    }
+  }

@@ -1,0 +1,11 @@
+
+{
+    "position": 20,
+    "label": "IDE Integrations",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "IDE_integrations"
+    }
+  }
