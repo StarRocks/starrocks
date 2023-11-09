@@ -946,8 +946,6 @@ class StarrocksSQLApiLib(object):
         """
         assert mv_name is hit in query
         """
-        time.sleep(1)
-        print(res)
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
     def check_hit_materialized_view(self, query, mv_name):
