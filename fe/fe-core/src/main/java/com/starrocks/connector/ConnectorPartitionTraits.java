@@ -37,6 +37,7 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -48,6 +49,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -119,11 +121,17 @@ public abstract class ConnectorPartitionTraits {
 
     /**
      * Get the list-map with specified partition column and expression
+     *
      * @apiNote it must be a list-partitioned table
      */
     abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
     abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+
+    /**
+     * The max of refresh ts for all partitions
+     */
+    public abstract Optional<Long> maxPartitionRefreshTs();
 
     // ========================================= Implementations ==============================================
 
@@ -202,6 +210,11 @@ public abstract class ConnectorPartitionTraits {
             throw new NotImplementedException("Only support hive/jdbc");
         }
 
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            throw new NotImplementedException("Not support maxPartitionRefreshTs");
+        }
+
     }
 
     // ========================================= Specific Implementations ======================================
@@ -230,6 +243,11 @@ public abstract class ConnectorPartitionTraits {
             return ((OlapTable) table).getListPartitionMap();
         }
 
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            OlapTable olapTable = (OlapTable) table;
+            return olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+        }
     }
 
     static class HivePartitionTraits extends DefaultTraits {
@@ -249,6 +267,16 @@ public abstract class ConnectorPartitionTraits {
             HiveTable hiveTable = (HiveTable) table;
             return GlobalStateMgr.getCurrentState().getMetadataMgr().
                     getPartitions(hiveTable.getCatalogName(), table, partitionNames);
+        }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                    getPartitionNameWithPartitionInfo();
+            return
+                    partitionNameWithPartition.values().stream()
+                            .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                            .max(Long::compareTo);
         }
     }
 
@@ -281,6 +309,12 @@ public abstract class ConnectorPartitionTraits {
         PartitionKey createEmptyKey() {
             return new IcebergPartitionKey();
         }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            IcebergTable icebergTable = (IcebergTable) table;
+            return Optional.of(icebergTable.getRefreshSnapshotTime());
+        }
     }
 
     static class PaimonPartitionTraits extends DefaultTraits {
@@ -294,6 +328,7 @@ public abstract class ConnectorPartitionTraits {
         PartitionKey createEmptyKey() {
             return new PaimonPartitionKey();
         }
+
     }
 
     static class JDBCPartitionTraits extends DefaultTraits {
@@ -317,6 +352,15 @@ public abstract class ConnectorPartitionTraits {
         @Override
         PartitionKey createEmptyKey() {
             return new JDBCPartitionKey();
+        }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                    getPartitionNameWithPartitionInfo();
+            return partitionNameWithPartition.values().stream()
+                    .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                    .max(Long::compareTo);
         }
     }
 

@@ -43,6 +43,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
@@ -663,41 +664,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         long maxRefreshTimestamp = -1;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Table baseTable = baseTableInfo.getTable();
-            if (baseTable instanceof MaterializedView) {
+
+            if (baseTable instanceof View) {
+                continue;
+            } else if (baseTable instanceof MaterializedView) {
                 MaterializedView mv = (MaterializedView) baseTable;
                 if (!mv.isStalenessSatisfied()) {
                     return Optional.empty();
                 }
-                Optional<Long> maxPartitionRefreshTimestamp =
-                        mv.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
-                if (!maxPartitionRefreshTimestamp.isPresent()) {
-                    return Optional.empty();
-                }
-                maxRefreshTimestamp = Math.max(maxPartitionRefreshTimestamp.get(), maxRefreshTimestamp);
-            } else if (baseTable instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) baseTable;
-                Optional<Long> maxPartitionRefreshTimestamp =
-                        olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
-                if (!maxPartitionRefreshTimestamp.isPresent()) {
-                    return Optional.empty();
-                }
-                maxRefreshTimestamp = Math.max(maxPartitionRefreshTimestamp.get(), maxRefreshTimestamp);
-            } else if (baseTable instanceof HiveTable) {
-                HiveTable hiveTable = (HiveTable) baseTable;
-                Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
-                        PartitionUtil.getPartitionNameWithPartitionInfo(hiveTable);
-                Optional<Long> maxPartitionRefreshTimestamp =
-                        partitionNameWithPartition.values().stream().map(com.starrocks.connector.PartitionInfo::getModifiedTime)
-                                .max(Long::compareTo);
-                if (!maxPartitionRefreshTimestamp.isPresent()) {
-                    return Optional.empty();
-                }
-                maxRefreshTimestamp = Math.max(maxPartitionRefreshTimestamp.get(), maxRefreshTimestamp);
-            } else if (baseTable instanceof View) {
-                // continue
-            } else {
+            }
+            Optional<Long> baseTableTs = ConnectorPartitionTraits.build(baseTable).maxPartitionRefreshTs();
+            if (!baseTableTs.isPresent()) {
                 return Optional.empty();
             }
+            maxRefreshTimestamp = Math.max(maxRefreshTimestamp, baseTableTs.get());
         }
         return Optional.of(maxRefreshTimestamp);
     }
