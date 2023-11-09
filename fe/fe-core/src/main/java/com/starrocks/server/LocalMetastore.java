@@ -1301,7 +1301,7 @@ public class LocalMetastore implements ConnectorMetadata {
             boolean isTempPartition = addPartitionClause.isTempPartition();
             if (existPartitionNameSet.contains(partition.getName())) {
                 LOG.info("add partition[{}] which already exists", partition.getName());
-                return;
+                continue;
             }
             long partitionId = partition.getId();
             PartitionPersistInfoV2 info = new ListPartitionPersistInfo(db.getId(), olapTable.getId(), partition,
