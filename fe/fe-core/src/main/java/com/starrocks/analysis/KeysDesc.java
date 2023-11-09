@@ -48,8 +48,10 @@ import com.starrocks.sql.parser.NodePosition;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -207,10 +209,15 @@ public class KeysDesc implements ParseNode, Writable {
         }
 
         List<Integer> keyColIdxes = Lists.newArrayList();
-        List<String> columnNames = cols.stream().map(ColumnDef::getName).collect(Collectors.toList());
+        Map<String, Integer> columnNameToIndex = new HashMap<>();
+        int columnIdx = 0;
+        for (ColumnDef col : cols) {
+            columnNameToIndex.put(col.getName().toLowerCase(), columnIdx);
+            columnIdx++;
+        }
         for (String column : keysColumnNames) {
-            int idx = columnNames.indexOf(column);
-            if (idx == -1) {
+            Integer idx = columnNameToIndex.get(column.toLowerCase());
+            if (idx == null) {
                 throw new SemanticException("Unknown column '%s' does not exist", column);
             } 
             keyColIdxes.add(idx);
