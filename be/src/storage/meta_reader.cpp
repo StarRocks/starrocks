@@ -173,7 +173,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
     ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
 
-    auto max_cid = _params->cids.empty() ? 0 : *std::max(_params->cids.begin(), _params->cids.end());
+    auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
     _column_iterators.resize(max_cid + 1);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
