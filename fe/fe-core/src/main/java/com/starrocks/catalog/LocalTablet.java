@@ -205,12 +205,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public List<String> getBackends() {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-<<<<<<< HEAD
-        for (Replica replica : replicas) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
-            if (backend == null) {
-                continue;
-=======
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 Backend backend = infoService.getBackend(replica.getBackendId());
@@ -218,7 +212,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     continue;
                 }
                 backends.add(backend.getHost());
->>>>>>> 895dfc17fd ([BugFix] Remove the db lock when releasing schedule resource (#34237))
             }
         }
         return backends;
@@ -245,22 +238,13 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     // return map of (BE id -> path hash) of normal replicas
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
-<<<<<<< HEAD
         Multimap<Replica, Long> map = HashMultimap.create();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
-        for (Replica replica : replicas) {
-            if (replica.isBad()) {
-                continue;
-            }
-=======
-        Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
                 }
->>>>>>> 895dfc17fd ([BugFix] Remove the db lock when releasing schedule resource (#34237))
 
                 ReplicaState state = replica.getState();
                 if (infoService.checkBackendAlive(replica.getBackendId())
@@ -841,19 +825,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
-<<<<<<< HEAD
-        for (Replica replica : replicas) {
-            sb.append(String.format("%d:%d/%d/%d/%d:%s,", replica.getBackendId(), replica.getVersion(),
-                    replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
-                    replica.getState()));
-=======
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                sb.append(String.format("%d:%d/%d/%d/%d:%s:%s,", replica.getBackendId(), replica.getVersion(),
+                sb.append(String.format("%d:%d/%d/%d/%d:%s", replica.getBackendId(), replica.getVersion(),
                         replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
-                        replica.getState(), getReplicaBackendState(replica.getBackendId())));
+                        replica.getState()));
             }
->>>>>>> 895dfc17fd ([BugFix] Remove the db lock when releasing schedule resource (#34237))
         }
         return sb.toString();
     }
