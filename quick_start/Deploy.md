@@ -299,7 +299,7 @@ Alive 为 true 代表状态正常。
 
 ### FE 的高可用集群部署
 
-StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](/administration/Deployment.md#fe高可用部署)。
+StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](/administration/Deployment.md)。
 
 ### 集群升级
 
