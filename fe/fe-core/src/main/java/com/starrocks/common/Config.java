@@ -2503,6 +2503,12 @@ public class Config extends ConfigBase {
     public static boolean enable_mv_automatic_active_check = true;
 
     /**
+     * Whether analyze the mv after refresh in async mode.
+     */
+    @ConfField(mutable = true)
+    public static boolean mv_auto_analyze_async = true;
+
+    /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
