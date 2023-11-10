@@ -22,12 +22,12 @@ public class HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(HadoopExt.class);
     private static final HadoopExt INSTANCE = new HadoopExt();
-    public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
-    public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
-    public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
-    public static final String HDFS_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
-    public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
     public static final String LOGGER_MESSAGE_PREFIX = "[hadoop-ext]";
+
+    public static final String HADOOP_CONFIG_RESOURCES = "hadoop.config.resources";
+    public static final String HADOOP_RUNTIME_JARS = "hadoop.runtime.jars";
+    public static final String HADOOP_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
+    public static final String HADOOP_USERNAME = "hadoop.username";
 
     public static HadoopExt getInstance() {
         return INSTANCE;
@@ -37,6 +37,6 @@ public class HadoopExt {
     }
 
     public String getCloudConfString(Configuration conf) {
-        return conf.get(HDFS_CLOUD_CONFIGURATION_STRING, "");
+        return conf.get(HADOOP_CLOUD_CONFIGURATION_STRING, "");
     }
 }
