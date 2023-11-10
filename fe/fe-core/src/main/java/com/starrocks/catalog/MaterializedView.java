@@ -1492,7 +1492,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return : The materialized view's referred base table and its partition column.
      */
     public Pair<Table, Column> getBaseTableAndPartitionColumn() {
-        if (!(partitionInfo instanceof ExpressionRangePartitionInfo || partitionInfo instanceof ListPartitionInfo)) {
+        if (partitionRefTableExprs == null ||
+                !(partitionInfo instanceof ExpressionRangePartitionInfo || partitionInfo instanceof ListPartitionInfo)) {
             return null;
         }
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
