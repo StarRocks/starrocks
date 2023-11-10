@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,7 +37,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -1227,6 +1228,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
     @Test
     public void testJoinPredicatePushdown() throws Exception {
+        List<String> tables = ImmutableList.of("pushdown_t1", "pushdown_t2");
         cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
                 "    `c0` string,\n" +
                 "    `c1` string,\n" +
@@ -1287,11 +1289,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "   ;";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv1");
+        starRocksAssert.dropTables(tables);
     }
 
-    @Ignore("outer join and pushdown predicate does not work")
     @Test
     public void testJoinPredicatePushdown1() throws Exception {
+        List<String> tables = ImmutableList.of("pushdown_t1", "pushdown_t2");
         cluster.runSql("test", "CREATE TABLE pushdown_t1 (\n" +
                 "    `c0` string,\n" +
                 "    `c1` string,\n" +
@@ -1351,6 +1354,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "_pushdown_predicate_join_mv2");
+        starRocksAssert.dropTables(tables);
     }
 
     @Test
@@ -1953,7 +1957,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
 
         {
-            for (int i = 0; i < 1010; i++) {
+            long testSize = Config.mv_plan_cache_max_size + 1;
+            for (int i = 0; i < testSize; i++) {
                 String mvName = "plan_cache_mv_" + i;
                 String mvSql = String.format("create materialized view %s" +
                         " distributed by hash(v1) as SELECT t0.v1 as v1," +
@@ -1967,7 +1972,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
                 Assert.assertNotNull(planContext);
             }
-            for (int i = 0; i < 1010; i++) {
+            for (int i = 0; i < testSize; i++) {
                 String mvName = "plan_cache_mv_" + i;
                 starRocksAssert.dropMaterializedView(mvName);
             }
@@ -1975,7 +1980,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore("flaky")
     public void testMVAggregateTable() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `t1_agg` (\n" +
                 "  `c_1_0` datetime NULL COMMENT \"\",\n" +

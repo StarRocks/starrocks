@@ -107,6 +107,9 @@ private:
     Status _read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_read);
 
     Status _read_and_parse_json();
+    Status _read_file_stream();
+    Status _read_file_broker();
+    Status _parse_payload();
 
     Status _construct_row(simdjson::ondemand::object* row, Chunk* chunk);
 
@@ -115,6 +118,8 @@ private:
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
+
+    Status _check_ndjson();
 
 private:
     RuntimeState* _state = nullptr;
@@ -145,13 +150,9 @@ private:
     // record the "__op" column's index
     int _op_col_index;
 
-    // only used in unit test.
-    // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
-    //       Import a json library supporting streaming parse.
-#if BE_TEST
-    size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
-    raw::RawVector<char> _buf;
-#endif
+    std::unique_ptr<char[]> _payload_buffer;
+    size_t _payload_buffer_size;
+    size_t _payload_buffer_capacity;
 };
 
 } // namespace starrocks
