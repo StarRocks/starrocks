@@ -399,25 +399,12 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
-<<<<<<< HEAD
+
     DCHECK_EQ(_delta_writers.size(), params.tablets_size());
     // In order to get sorted index for each tablet
     std::sort(tablet_ids.begin(), tablet_ids.end());
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
-        _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
-=======
-    if (!tablet_ids.empty()) { // has new tablets added, need rebuild the sorted index
-        tablet_ids.reserve(tablet_ids.size() + _tablet_id_to_sorted_indexes.size());
-        for (auto& iter : _tablet_id_to_sorted_indexes) {
-            tablet_ids.emplace_back(iter.first);
-        }
-        // In order to get sorted index for each tablet
-        std::sort(tablet_ids.begin(), tablet_ids.end());
-        DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
-        for (size_t i = 0; i < tablet_ids.size(); ++i) {
-            _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
-        }
->>>>>>> 2095a85b42 ([BugFix] Fix automatic partition write data into wrong partition when many partition created concurrency (#34731))
+        _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
     }
     return Status::OK();
 }
