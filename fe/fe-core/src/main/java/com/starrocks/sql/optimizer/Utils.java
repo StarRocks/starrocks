@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
@@ -638,4 +639,77 @@ public class Utils {
         }
         return eqColumnRefs;
     }
+<<<<<<< HEAD
+=======
+
+    public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
+                                                           Operator inputOp, Operator childOp) {
+        // 1. Must do one stage aggregate If the child contains limit,
+        //    the aggregation must be a single node to ensure correctness.
+        //    eg. select count(*) from (select * table limit 2) t
+        if (childOp.hasLimit()) {
+            return false;
+        }
+
+        // 2. check if must generate multi stage aggregate.
+        if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
+            return true;
+        }
+
+        // 3. Respect user hint
+        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        if (aggStage == ONE_STAGE.ordinal() ||
+                (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static boolean mustGenerateMultiStageAggregate(Operator inputOp, Operator childOp) {
+        // Must do two stage aggregate if child operator is RepeatOperator
+        // If the repeat node is used as the input node of the Exchange node.
+        // Will cause the node to be unable to confirm whether it is const during serialization
+        // (BE does this for efficiency reasons).
+        // Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
+        // on top of the repeat node.
+        if (OperatorType.LOGICAL_REPEAT.equals(childOp.getOpType()) || OperatorType.PHYSICAL_REPEAT.equals(childOp.getOpType())) {
+            return true;
+        }
+
+        Map<ColumnRefOperator, CallOperator> aggs = Maps.newHashMap();
+        if (OperatorType.LOGICAL_AGGR.equals(inputOp.getOpType())) {
+            aggs = ((LogicalAggregationOperator) inputOp).getAggregations();
+        } else if (OperatorType.PHYSICAL_HASH_AGG.equals(inputOp.getOpType())) {
+            aggs = ((PhysicalHashAggregateOperator) inputOp).getAggregations();
+        }
+
+        if (MapUtils.isEmpty(aggs)) {
+            return false;
+        } else {
+            // Must do multiple stage aggregate when aggregate distinct function has array type
+            // Must generate three, four phase aggregate for distinct aggregate with multi columns
+            return aggs.values().stream().anyMatch(callOperator -> callOperator.isDistinct()
+                    && (callOperator.getChildren().size() > 1 ||
+                    callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
+        }
+    }
+
+    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
+        for (ScalarOperator child : operator.getChildren()) {
+            if (child instanceof CallOperator) {
+                CallOperator call = (CallOperator) child;
+                String fnName = call.getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+>>>>>>> 3a016cb365 ([BugFix] do not remove non deterministic func in group by keys (#34680))
 }
