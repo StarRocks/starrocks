@@ -19,9 +19,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakePartitionKey;
 import com.starrocks.catalog.DeltaLakeTable;
@@ -33,20 +35,34 @@ import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PaimonPartitionKey;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Partition;
+>>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
+
+import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 
 /**
  * Abstract the partition-related interfaces for different connectors, including Iceberg/Hive/....
@@ -114,7 +130,28 @@ public abstract class ConnectorPartitionTraits {
     abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
+<<<<<<< HEAD
+=======
+    /**
+     * Get the list-map with specified partition column and expression
+     *
+     * @apiNote it must be a list-partitioned table
+     */
+    abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
+
+>>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+
+    /**
+     * The max of refresh ts for all partitions
+     */
+    public abstract Optional<Long> maxPartitionRefreshTs();
+
+    /**
+     * Get updated partitions based on current snapshot, to implement incremental refresh
+     */
+    public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                         MaterializedView.AsyncRefreshContext context);
 
     // ========================================= Implementations ==============================================
 
@@ -188,6 +225,49 @@ public abstract class ConnectorPartitionTraits {
             throw new NotImplementedException("Only support hive/jdbc");
         }
 
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            throw new NotImplementedException("Not support maxPartitionRefreshTs");
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            Table baseTable = table;
+            Set<String> result = Sets.newHashSet();
+            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
+                    getPartitionNameWithPartitionInfo();
+
+            for (BaseTableInfo baseTableInfo : baseTables) {
+                if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
+                    continue;
+                }
+                Map<String, MaterializedView.BasePartitionInfo> versionMap =
+                        context.getBaseTableRefreshInfo(baseTableInfo);
+
+                // check whether there are partitions added
+                for (Map.Entry<String, com.starrocks.connector.PartitionInfo> entry : latestPartitionInfo.entrySet()) {
+                    if (!versionMap.containsKey(entry.getKey())) {
+                        result.add(entry.getKey());
+                    }
+                }
+
+                for (Map.Entry<String, MaterializedView.BasePartitionInfo> versionEntry : versionMap.entrySet()) {
+                    String basePartitionName = versionEntry.getKey();
+                    if (!latestPartitionInfo.containsKey(basePartitionName)) {
+                        // partitions deleted
+                        return latestPartitionInfo.keySet();
+                    }
+                    long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
+
+                    MaterializedView.BasePartitionInfo basePartitionInfo = versionEntry.getValue();
+                    if (basePartitionInfo == null || basePartitionVersion != basePartitionInfo.getVersion()) {
+                        result.add(basePartitionName);
+                    }
+                }
+            }
+            return result;
+        }
     }
 
     // ========================================= Specific Implementations ======================================
@@ -210,6 +290,65 @@ public abstract class ConnectorPartitionTraits {
             return ((OlapTable) table).getRangePartitionMap();
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
+            // TODO: check partition type
+            return ((OlapTable) table).getListPartitionMap();
+        }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            OlapTable olapTable = (OlapTable) table;
+            return olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            OlapTable baseTable = (OlapTable) table;
+            Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap =
+                    context.getBaseTableVisibleVersionMap()
+                            .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
+            Set<String> result = Sets.newHashSet();
+
+            // If there are new added partitions, add it into refresh result.
+            for (String partitionName : baseTable.getVisiblePartitionNames()) {
+                if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
+                    Partition partition = baseTable.getPartition(partitionName);
+                    // TODO: use `mvBaseTableVisibleVersionMap` to check whether base table has been refreshed or not instead of
+                    //  checking its version, remove this later.
+                    if (partition.getVisibleVersion() != 1) {
+                        result.add(partitionName);
+                    }
+                }
+            }
+
+            for (Map.Entry<String, MaterializedView.BasePartitionInfo> versionEntry : mvBaseTableVisibleVersionMap.entrySet()) {
+                String basePartitionName = versionEntry.getKey();
+                Partition basePartition = baseTable.getPartition(basePartitionName);
+                if (basePartition == null) {
+                    // Once there is a partition deleted, refresh all partitions.
+                    return baseTable.getVisiblePartitionNames();
+                }
+                MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();
+                if (mvRefreshedPartitionInfo == null) {
+                    result.add(basePartitionName);
+                } else {
+                    // Ignore partitions if mv's partition is the same with the basic table.
+                    if (mvRefreshedPartitionInfo.getId() == basePartition.getId()
+                            && basePartition.getVisibleVersion() == mvRefreshedPartitionInfo.getVersion()) {
+                        continue;
+                    }
+
+                    // others will add into the result.
+                    result.add(basePartitionName);
+                }
+            }
+            return result;
+        }
+>>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     }
 
     static class HivePartitionTraits extends DefaultTraits {
@@ -230,6 +369,16 @@ public abstract class ConnectorPartitionTraits {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().
                     getPartitions(hiveTable.getCatalogName(), table, partitionNames);
         }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                    getPartitionNameWithPartitionInfo();
+            return
+                    partitionNameWithPartition.values().stream()
+                            .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                            .max(Long::compareTo);
+        }
     }
 
     static class HudiPartitionTraits extends DefaultTraits {
@@ -242,6 +391,13 @@ public abstract class ConnectorPartitionTraits {
         @Override
         PartitionKey createEmptyKey() {
             return new HudiPartitionKey();
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            // TODO: implement
+            return null;
         }
     }
 
@@ -261,8 +417,80 @@ public abstract class ConnectorPartitionTraits {
         PartitionKey createEmptyKey() {
             return new IcebergPartitionKey();
         }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            IcebergTable icebergTable = (IcebergTable) table;
+            return Optional.of(icebergTable.getRefreshSnapshotTime());
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            IcebergTable baseTable = (IcebergTable) table;
+
+            Set<String> result = Sets.newHashSet();
+            for (BaseTableInfo baseTableInfo : baseTables) {
+                if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
+                    continue;
+                }
+                List<String> partitionNames = PartitionUtil.getPartitionNames(baseTable);
+                Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
+                long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
+
+                Map<String, MaterializedView.BasePartitionInfo> baseTableInfoVisibleVersionMap =
+                        context.getBaseTableRefreshInfo(baseTableInfo);
+                MaterializedView.BasePartitionInfo basePartitionInfo =
+                        baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
+                if (basePartitionInfo == null) {
+                    baseTable.setRefreshSnapshotTime(currentVersion);
+                    return new HashSet<>(partitionNames);
+                }
+                // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
+                for (String partitionName : partitionNames) {
+                    if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
+                        result.add(partitionName);
+                    }
+                }
+
+                if (!result.isEmpty()) {
+                    baseTable.setRefreshSnapshotTime(currentVersion);
+                }
+
+                long basePartitionVersion = basePartitionInfo.getVersion();
+                if (basePartitionVersion < currentVersion) {
+                    baseTable.setRefreshSnapshotTime(currentVersion);
+                    result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
+                            basePartitionVersion));
+                }
+            }
+            return result;
+        }
     }
 
+<<<<<<< HEAD
+=======
+    static class PaimonPartitionTraits extends DefaultTraits {
+
+        @Override
+        public String getDbName() {
+            return ((PaimonTable) table).getDbName();
+        }
+
+        @Override
+        PartitionKey createEmptyKey() {
+            return new PaimonPartitionKey();
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            // TODO: implement
+            return null;
+        }
+    }
+
+>>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     static class JDBCPartitionTraits extends DefaultTraits {
         @Override
         public String getDbName() {
@@ -285,6 +513,15 @@ public abstract class ConnectorPartitionTraits {
         PartitionKey createEmptyKey() {
             return new JDBCPartitionKey();
         }
+
+        @Override
+        public Optional<Long> maxPartitionRefreshTs() {
+            Map<String, com.starrocks.connector.PartitionInfo> partitionNameWithPartition =
+                    getPartitionNameWithPartitionInfo();
+            return partitionNameWithPartition.values().stream()
+                    .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
+                    .max(Long::compareTo);
+        }
     }
 
     static class DeltaLakePartitionTraits extends DefaultTraits {
@@ -297,6 +534,13 @@ public abstract class ConnectorPartitionTraits {
         @Override
         String getDbName() {
             return ((DeltaLakeTable) table).getDbName();
+        }
+
+        @Override
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
+            // TODO: implement
+            return null;
         }
     }
 }
