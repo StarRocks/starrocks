@@ -79,6 +79,8 @@ public:
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache,
                                        bool fill_metadata_cache);
 
+    int64_t tablet_id() const { return _tablet.id(); }
+
 private:
     Tablet _tablet;
     RowsetMetadataPtr _rowset_metadata;

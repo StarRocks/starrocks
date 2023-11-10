@@ -77,7 +77,7 @@ public:
             RETURN_IF_ERROR(apply_write_log(log.op_write(), log.txn_id()));
         }
         if (log.has_op_compaction()) {
-            RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
+            RETURN_IF_ERROR(apply_compaction_log(log.op_compaction(), log.txn_id()));
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -118,7 +118,7 @@ private:
                                                                 &_builder, _base_version);
     }
 
-    Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction) {
+    Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id) {
         // get lock to avoid gc
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -133,8 +133,8 @@ private:
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             return Status::OK();
         }
-        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, *_metadata, _tablet, _index_entry,
-                                                                &_builder, _base_version);
+        return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
+                                                                _index_entry, &_builder, _base_version);
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {
