@@ -19,7 +19,7 @@ env:
 
 jobs:
   backport-close:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, normal]
     if: >
       github.event.pull_request.merged != true &&
       contains(github.event.pull_request.title, 'backport') &&
