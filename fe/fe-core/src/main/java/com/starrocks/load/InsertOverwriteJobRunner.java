@@ -239,6 +239,10 @@ public class InsertOverwriteJobRunner {
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             for (String partitionName : partitionNames) {
                 Partition partition = olapTable.getPartition(partitionName);
+                if (partition == null) {
+                    throw new RuntimeException("Partition '" + partitionName
+                            + "' does not exist in table '" + olapTable.getName() + "'.");
+                }
                 if (partitionInfo instanceof ListPartitionInfo) {
                     ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                     List<List<LiteralExpr>> lists = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
