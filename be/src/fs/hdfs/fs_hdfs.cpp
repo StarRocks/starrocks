@@ -508,9 +508,12 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
         int32_t dir_size;
-        if (dir[dir.size() - 1] == '/') {
-            dir_size = dir.size();
+        std::string mName(fileinfo[i].mName);
+        std::size_t found = mName.rfind('/');
+        if (found == std::string::npos) {
+            dir_size = 0;
         } else {
+<<<<<<< HEAD
             dir_size = dir.size() + 1;
         }
 
@@ -522,6 +525,8 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
                 return Status::InvalidArgument(fmt::format("parse path fail {}", dir));
             }
 
+=======
+>>>>>>> 0fec304d0d ([BugFix] Fix wrong file name in restore if the path end with slash (#34597) (#34601))
             dir_size = found + 1;
         }
 
