@@ -311,6 +311,8 @@ CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
+// This config controls the io amp ratio of delvec files.
+CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");
