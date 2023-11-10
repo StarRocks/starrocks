@@ -736,6 +736,7 @@ public class DatabaseTransactionMgr {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
                 List<Long> txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
+                        Config.lake_batch_publish_min_version_num,
                         Config.lake_batch_publish_max_version_num, txnId);
                 List<TransactionState> states = txnsWithDependency.stream().map(id -> idToRunningTransactionState.get(id))
                         .collect(Collectors.toList());
@@ -767,7 +768,8 @@ public class DatabaseTransactionMgr {
                     }
 
                 }
-                if (states.size() != 0 && states.size() >= Config.lake_batch_publish_min_version_num) {
+
+                if (states.size() != 0) {
                     TransactionStateBatch batch = new TransactionStateBatch(states);
                     result.add(batch);
                 }
@@ -1868,7 +1870,7 @@ public class DatabaseTransactionMgr {
         }
         return stateListeners;
     }
-    
+
     public TTransactionStatus getTxnStatus(long txnId) {
         TransactionState transactionState;
         readLock();

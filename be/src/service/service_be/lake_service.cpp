@@ -234,9 +234,6 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
                 LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
                              << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
                              << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
-                std::cout << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
-                          << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
-                          << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }

@@ -152,27 +152,31 @@ public class TransactionGraph {
         return nodesWithoutIns.stream().map(n -> n.txnId).collect(Collectors.toList());
     }
 
-    public List<Long> getTxnsWithTxnDependencyBatch(int batchSize, long txnId) {
+    // The size of ins of node with txnId must be zero
+    public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
         List<Long> txns = new ArrayList<>();
         if (nodes.containsKey(txnId)) {
             Node node = nodes.get(txnId);
+            if (node.writeTableIds.size() > 1) {
+                txns.add(txnId);
+                return txns;
+            }
             int count = 0;
-            while (count < batchSize && node != null) {
-                if ((node.ins == null || node.ins.size() <= 1) && (node.outs == null || node.outs.size() <= 1)) {
-                    count++;
-                    txns.add(node.txnId);
-                    // todo
-                    // for we must get the min version of outs
-                    if (node.outs != null) {
-                        node = node.outs.stream().findAny().orElse(null);
-                    } else {
-                        node = null;
-                    }
+            // can not judge by ins.size()
+            // for the ins.size of the txn with multi table can be one
+            while (count < maxBatchSize && node != null && (node.writeTableIds.size() == 1)) {
+                count++;
+                txns.add(node.txnId);
 
+                // the node which size of write table is one, their size of outs can not be greater than two
+                if (node.outs != null) {
+                    node = node.outs.stream().findAny().orElse(null);
+                } else {
+                    node = null;
                 }
             }
         }
-        return txns;
+        return txns.size() >= minBatchSize ? txns : new ArrayList<>();
     }
 
     // print the graph for debug
@@ -196,7 +200,7 @@ public class TransactionGraph {
             return;
         }
 
-        for (Node out :  node.outs) {
+        for (Node out : node.outs) {
             travelGraph(out, path, builder);
             path.remove(path.size() - 1);
         }
