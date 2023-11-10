@@ -348,7 +348,7 @@ ORDER BY (column_name1, column_name2, ...)
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-ADD col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 ```
 
 增加生成列并且指定其使用的表达式。[生成列](../generated_columns.md)用于预先计算并存储表达式的结果，可以加速包含复杂表达式的查询。自 v3.1，StarRocks 支持该功能。
