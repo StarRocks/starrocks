@@ -341,7 +341,7 @@ Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-ADD col_name data_type [NULL] AS generation_expr [COMMENT 'string']
+ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 ```
 
 You can add a generated column and specify its expression. [The generated column](../generated_columns.md) can be used to precompute and store the results of expressions, which significantly accelerates queries with the same complex expressions. Since v3.1, StarRocks supports generated columns.
