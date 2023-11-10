@@ -744,6 +744,10 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
+    if (!config::enable_zone_map_filter) {
+        return Status::OK();
+    }
+
     RETURN_IF(_scan_range.empty(), Status::OK());
 
     SCOPED_RAW_TIMER(&_opts.stats->zone_map_filter_ns);
