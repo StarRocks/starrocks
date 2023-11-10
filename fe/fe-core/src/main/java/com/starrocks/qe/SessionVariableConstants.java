@@ -31,4 +31,6 @@ public class SessionVariableConstants {
     public static final String DOUBLE = "double";
 
     public static final String DECIMAL = "decimal";
+
+    public static final String VARCHAR = "varchar";
 }
