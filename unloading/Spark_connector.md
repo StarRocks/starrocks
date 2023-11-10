@@ -15,7 +15,7 @@ Spark StarRocks Connector 可以支持通过 Spark 读取 StarRocks 中存储的
 
 ## 编译部署
 
-[Spark StarRocks Connector](https://github.com/StarRocks/spark-starrocks-connector/blob/main/docs/spark-starrocks-connector.md)
+[Spark StarRocks Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
 ## 使用示例
 
