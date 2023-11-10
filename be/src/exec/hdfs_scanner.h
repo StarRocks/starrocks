@@ -60,18 +60,27 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
+<<<<<<< HEAD
     // iceberg pos-delete filter
     int64_t build_iceberg_pos_filter_ns = 0;
 
+=======
+    // io coalesce
+    int64_t group_active_lazy_coalesce_together = 0;
+    int64_t group_active_lazy_coalesce_seperately = 0;
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
     // page statistics
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
 
     // ORC only!
-    int64_t delete_build_ns = 0;
-    int64_t delete_file_per_scan = 0;
     std::vector<int64_t> stripe_sizes;
+
+    // Iceberg v2 only!
+    int64_t iceberg_delete_file_build_ns = 0;
+    int64_t iceberg_delete_files_per_scan = 0;
+    int64_t iceberg_delete_file_build_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
@@ -324,6 +333,8 @@ public:
 
 protected:
     Status open_random_access_file();
+
+    void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 
 private:
     bool _opened = false;
