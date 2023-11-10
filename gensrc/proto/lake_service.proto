@@ -122,6 +122,12 @@ message PublishLogVersionRequest {
     optional int64 version = 3;
 }
 
+message PublishLogVersionBatchRequest {
+    repeated int64 tablet_ids = 1;
+    repeated int64 txn_ids = 2;
+    repeated int64 versions = 3;
+}
+
 message PublishLogVersionResponse {
     repeated int64 failed_tablets = 1;
 }
@@ -233,6 +239,7 @@ message VacuumFullResponse {
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
+    rpc publish_log_version_batch(PublishLogVersionBatchRequest) returns (PublishLogVersionResponse);
     rpc abort_txn(AbortTxnRequest) returns (AbortTxnResponse);
     rpc compact(CompactRequest) returns (CompactResponse);
     rpc delete_tablet(DeleteTabletRequest) returns (DeleteTabletResponse);
