@@ -259,7 +259,7 @@ Status MemTable::finalize() {
         if (_keys_type != KeysType::DUP_KEYS) {
             if (_chunk->num_rows() > 0) {
                 // merge last undo merge
-                _merge();
+                RETURN_IF_ERROR(_merge());
             }
 
             if (_merge_count > 1) {
