@@ -221,10 +221,6 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
         _total_rows += chunk.num_rows();
     }
 
-    for (auto i = 0; i < _chunk->num_rows(); i++) {
-        LOG(INFO) << "chunk row[" << i << "]:" << _chunk->debug_row(i);
-    }
-
     // if memtable is full, push it to the flush executor,
     // and create a new memtable for incoming data
     bool suggest_flush = false;

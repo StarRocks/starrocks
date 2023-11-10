@@ -384,9 +384,6 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
             chunk->get_column_by_index(2)->append_nulls(1);
         }
     }
-    for (auto i = 0; i < chunk->num_rows(); i++) {
-        LOG(INFO) << "input chunk row " << i << " : " << chunk->debug_row(i);
-    }
     vector<uint32_t> indexes;
     indexes.reserve(n);
     for (int i = 0; i < n; i++) {
