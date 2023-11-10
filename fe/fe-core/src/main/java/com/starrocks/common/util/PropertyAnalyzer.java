@@ -603,7 +603,7 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return Config.allow_default_fast_schema_evolution;
+            return Config.enable_fast_schema_evolution;
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
