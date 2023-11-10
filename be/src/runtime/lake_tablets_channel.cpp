@@ -462,7 +462,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         std::sort(tablet_ids.begin(), tablet_ids.end());
         DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
         for (size_t i = 0; i < tablet_ids.size(); ++i) {
-            _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+            _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
         }
     }
     return Status::OK();
