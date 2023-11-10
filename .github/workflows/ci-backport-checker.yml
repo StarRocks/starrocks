@@ -4,7 +4,8 @@ run-name: BACKPORT NOTIFICATION - (#${{ github.event.number }}[${{ github.head_r
 on:
   pull_request_target:
     branches:
-      - 'mergify/bp/*'
+      - 'branch-[0-9].[0-9]'
+      - 'branch-[0-9].[0-9].[0-9]'
     types:
       - closed
 
@@ -23,7 +24,9 @@ jobs:
     if: >
       github.event.pull_request.merged != true &&
       contains(github.event.pull_request.title, 'backport') &&
-      contains(github.event.pull_request.labels.*.name, 'conflicts')
+      (contains(github.event.pull_request.labels.*.name, 'conflicts') ||
+      contains(github.event.pull_request.labels.*.name, 'conflict')) &&
+      startsWith(github.head_ref, 'mergify/bp')
     env:
       STATUS: CONFLICT
 
