@@ -235,6 +235,7 @@ struct TQueryOptions {
   105: optional bool use_column_pool = true;
 
   107: optional i64 global_runtime_filter_build_max_size;
+  108: optional i64 runtime_filter_rpc_http_min_size;
   109: optional i64 big_query_profile_second_threshold;
 
   110: optional TQueryQueueOptions query_queue_options;
