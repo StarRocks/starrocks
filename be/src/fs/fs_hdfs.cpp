@@ -8,7 +8,7 @@
 #include <atomic>
 #include <utility>
 
-#include "fs/fs_util.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
@@ -100,7 +100,7 @@ void HdfsInputStream::set_size(int64_t value) {
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     // `GetReadStatistics` is not supported in juicefs hadoop sdk, and will cause the be crash
-    if (!fs::is_hdfs_uri(_file_name)) {
+    if (!is_hdfs_uri(_file_name)) {
         return nullptr;
     }
 
