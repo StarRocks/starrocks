@@ -102,6 +102,9 @@ public class CelerDataUGIManager {
 
         Subject subject = auth.getSubject();
         UserGroupInformation ugi = UserGroupInformation.getUGIFromSubject(subject);
+        LOGGER.info(
+                String.format("%s create subject. keytab = %s, principal = %s, subject = %s", HadoopExt.LOGGER_MESSAGE_PREFIX,
+                        keytab, principal, subject));
         return new Value(ugi, subject, auth);
     }
 
@@ -110,11 +113,10 @@ public class CelerDataUGIManager {
         requireNonNull(principal);
         Key k = new Key(keytab, principal);
         Value v = cache.get(k);
-        if (v != null) {
-            return v.ugi;
+        if (v == null) {
+            v = create(keytab, principal);
+            cache.putIfAbsent(k, v);
         }
-        v = create(keytab, principal);
-        cache.putIfAbsent(k, v);
         return v.ugi;
     }
 
@@ -128,11 +130,11 @@ public class CelerDataUGIManager {
                 break;
             }
         }
-        LOGGER.info("run background job quits");
+        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " run background job done");
     }
 
     public void refreshTickets() {
-        LOGGER.debug("refresh tickets");
+        LOGGER.debug(HadoopExt.LOGGER_MESSAGE_PREFIX + " refresh tickets");
         cache.forEach((key, value) -> {
             CachingKerberosAuthentication auth = value.auth;
             auth.reauthenticateIfSoonWillBeExpired();

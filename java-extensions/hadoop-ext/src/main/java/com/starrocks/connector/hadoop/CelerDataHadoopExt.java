@@ -48,7 +48,8 @@ public class CelerDataHadoopExt extends HadoopExt {
 
     public CelerDataHadoopExt() {
         if (!UserGroupInformation.isInitialized()) {
-            UserGroupInformation.setConfiguration(new Configuration());
+            Configuration conf = new Configuration();
+            UserGroupInformation.setConfiguration(conf);
         }
         globalUGIManager = new CelerDataUGIManager();
     }
@@ -62,13 +63,13 @@ public class CelerDataHadoopExt extends HadoopExt {
         }
         final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
         if (STARROCKS_HOME_DIR == null) {
-            LOGGER.warn(String.format("env '%s' is not defined", STARROCKS_HOME_ENV));
+            LOGGER.warn(String.format("%s env '%s' is not defined", LOGGER_MESSAGE_PREFIX, STARROCKS_HOME_ENV));
             return;
         }
         String[] parts = configResources.split(",");
         for (String p : parts) {
             Path path = new Path(STARROCKS_HOME_DIR + "/conf/", p);
-            LOGGER.info(String.format("add path '%s' to configuration", path.toString()));
+            LOGGER.info(String.format("%s add path '%s' to configuration", LOGGER_MESSAGE_PREFIX, path.toString()));
             conf.addResource(path);
         }
         conf.setBoolean(HADOOP_CONFIG_RESOURCES_LOADED, true);
@@ -111,17 +112,17 @@ public class CelerDataHadoopExt extends HadoopExt {
         String keytab = getHMSKerberosKeytabFile(conf);
         String principal = getHMSKerberosPrincipal(conf);
         if (keytab == null) {
-            LOGGER.warn("hms kerberos enabled, but keytab is null");
+            LOGGER.warn(LOGGER_MESSAGE_PREFIX + " hms kerberos enabled, but keytab is null");
             return null;
         }
         if (principal == null) {
-            LOGGER.warn("hms kerberos enabled, but principal is null");
+            LOGGER.warn(LOGGER_MESSAGE_PREFIX + " hms kerberos enabled, but principal is null");
             return null;
         }
         try {
             return globalUGIManager.getOrCreate(keytab, principal);
         } catch (IOException e) {
-            LOGGER.warn("create hms ugi failed", e);
+            LOGGER.warn(LOGGER_MESSAGE_PREFIX + " create hms ugi failed", e);
         }
         return null;
     }
@@ -134,17 +135,17 @@ public class CelerDataHadoopExt extends HadoopExt {
         String keytab = getHDFSKerberosKeytabFile(conf);
         String principal = getHDFSKerberosPrincipal(conf);
         if (keytab == null) {
-            LOGGER.warn("hdfs kerberos enabled, but keytab is null");
+            LOGGER.warn(LOGGER_MESSAGE_PREFIX + " hdfs kerberos enabled, but keytab is null");
             return null;
         }
         if (principal == null) {
-            LOGGER.warn("hdfs kerberos enabled, but principal is null");
+            LOGGER.warn(LOGGER_MESSAGE_PREFIX + " hdfs kerberos enabled, but principal is null");
             return null;
         }
         try {
             return globalUGIManager.getOrCreate(keytab, principal);
         } catch (IOException e) {
-            LOGGER.warn("create hdfs ugi failed", e);
+            LOGGER.warn(LOGGER_MESSAGE_PREFIX + " create hdfs ugi failed", e);
         }
         return null;
     }
