@@ -66,6 +66,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Constants.TaskType type;
 
+    /**
+     * Used to differentiate parallel TaskRuns for the same task
+     */
+    private int parallelInstanceId = 0;
+
     TaskRun() {
         future = new CompletableFuture<>();
     }
@@ -76,6 +81,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public void setTaskId(long taskId) {
         this.taskId = taskId;
+    }
+
+    public int getParallelInstanceId() {
+        return parallelInstanceId;
+    }
+
+    public void setParallelInstanceId(int parallelInstanceId) {
+        this.parallelInstanceId = parallelInstanceId;
     }
 
     public Map<String, String> getProperties() {
@@ -281,7 +294,8 @@ public class TaskRun implements Comparable<TaskRun> {
             return false;
         }
         TaskRun taskRun = (TaskRun) o;
-        return status.getDefinition().equals(taskRun.getStatus().getDefinition());
+        return status.getDefinition().equals(taskRun.getStatus().getDefinition()) &&
+                parallelInstanceId == taskRun.parallelInstanceId;
     }
 
     @Override

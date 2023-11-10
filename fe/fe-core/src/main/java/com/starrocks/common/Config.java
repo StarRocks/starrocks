@@ -2547,6 +2547,19 @@ public class Config extends ConfigBase {
     public static long mv_active_checker_interval_seconds = 60;
 
     /**
+     * TODO: change the default value to true
+     * Whether refresh the partitions in forward-order or reversed-order
+     */
+    @ConfField(mutable = true)
+    public static boolean default_mv_partition_refresh_reverse = false;
+
+    /**
+     * The default concurrency to refreshing partitions of one MV
+     */
+    @ConfField(mutable = true)
+    public static int default_mv_partition_refresh_concurrency = 1;
+
+    /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
