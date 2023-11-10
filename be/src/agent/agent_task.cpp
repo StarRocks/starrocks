@@ -74,12 +74,13 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     // Because if delete failed create rollup will failed
     TTabletId new_tablet_id;
     TSchemaHash new_schema_hash = 0;
+    Status sc_status;
     if (status == STARROCKS_SUCCESS) {
         new_tablet_id = agent_task_req.new_tablet_id;
         new_schema_hash = agent_task_req.new_schema_hash;
         EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req,
                                           signature, task_type, &error_msgs, process_name);
-        Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
+        sc_status = StorageEngine::instance()->execute_task(&engine_task);
         if (!sc_status.ok()) {
             status = STARROCKS_ERROR;
         } else {
@@ -134,6 +135,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << process_name << " failed. signature: " << signature;
         error_msgs.push_back(process_name + " failed");
         error_msgs.push_back("status: " + print_agent_status(status));
+        error_msgs.push_back(sc_status.get_error_msg());
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
