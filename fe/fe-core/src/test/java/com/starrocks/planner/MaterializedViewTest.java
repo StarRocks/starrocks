@@ -2695,6 +2695,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testCountWithRollup() {
+        String mv = "select user_id, count(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, count(tag_id) from user_tags group by user_id, time;")
+                .notContain("coalesce");
+        testRewriteOK(mv, "select user_id, count(tag_id) from user_tags group by user_id;")
+                .notContain("coalesce");
+        testRewriteOK(mv, "select count(tag_id) from user_tags;")
+                .contains("coalesce");
+    }
+
+    @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
