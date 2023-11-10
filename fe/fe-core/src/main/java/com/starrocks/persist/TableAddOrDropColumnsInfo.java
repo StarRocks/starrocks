@@ -65,14 +65,18 @@ public class TableAddOrDropColumnsInfo implements Writable {
     private List<Index> indexes;
     @SerializedName(value = "jobId")
     private long jobId;
+    @SerializedName(value = "txnId")
+    private long txnId;
 
     public TableAddOrDropColumnsInfo(long dbId, long tableId,
-            Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes, long jobId) {
+            Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes, long jobId,
+            long txnId) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.indexSchemaMap = indexSchemaMap;
         this.indexes = indexes;
         this.jobId = jobId;
+        this.txnId = txnId;
     }
 
     public long getDbId() {
@@ -93,6 +97,10 @@ public class TableAddOrDropColumnsInfo implements Writable {
 
     public long getJobId() {
         return jobId;
+    }
+
+    public long getTxnId() {
+        return txnId;
     }
 
     @Override
@@ -134,6 +142,7 @@ public class TableAddOrDropColumnsInfo implements Writable {
         sb.append(" indexSchemaMap: ").append(indexSchemaMap);
         sb.append(" indexes: ").append(indexes);
         sb.append(" jobId: ").append(jobId);
+        sb.append(" txnId: ").append(txnId);
         return sb.toString();
     }
 }
