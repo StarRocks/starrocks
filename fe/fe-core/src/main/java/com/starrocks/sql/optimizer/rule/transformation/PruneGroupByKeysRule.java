@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
@@ -99,7 +100,7 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 // if this expr contains only one column that already exists in the grouping key,
                 // it won't affect the grouping result, just remove it.
                 // Otherwise, we should reserve it.
-                if (usedColumns.size() == 1) {
+                if (usedColumns.size() == 1 && !Utils.hasNonDeterministicFunc(groupingExpr)) {
                     int columnId = usedColumns.getColumnIds()[0];
                     if (!existedColumnIds.contains(columnId)) {
                         newGroupingKeys.add(groupingKey);
