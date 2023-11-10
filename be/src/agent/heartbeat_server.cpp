@@ -79,13 +79,6 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
-#ifndef USE_STAROS
-    if (master_info.run_mode == TRunMode::SHARED_DATA) {
-        // TODO: log fatal?
-        LOG_EVERY_N(ERROR, 12)
-                << "This program is not compiled with SHARED_DATA support, but FE is running in SHARED_DATA mode!";
-    }
-#endif
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
     res.status().to_thrift(&heartbeat_result.status);
@@ -168,6 +161,14 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     if ((master_info.network_address.hostname == LOCALHOST) && (master_info.backend_ip != LOCALHOST)) {
         return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
     }
+
+#ifndef USE_STAROS
+    if (master_info.run_mode == TRunMode::SHARED_DATA) {
+        LOG_EVERY_N(ERROR, 12)
+                << "This program is not compiled with SHARED_DATA support, but FE is running in SHARED_DATA mode!";
+        return Status::InternalError("Backend service binary was not compiled with SHARED_DATA support!");
+    }
+#endif
 
     if (master_info.__isset.backend_ip) {
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
