@@ -1322,24 +1322,15 @@ public class DatabaseTransactionMgr {
         if (db == null) {
             return;
         }
-        List<TransactionStateListener> listeners = Lists.newArrayListWithCapacity(transactionState.getTableIdList().size());
-        db.readLock();
-        try {
-            for (Long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
-                if (table != null) {
-                    TransactionStateListener listener = stateListenerFactory.create(this, table);
-                    if (listener != null) {
-                        listeners.add(listener);
-                    }
-                }
+        for (Long tableId : transactionState.getTableIdList()) {
+            Table table = db.getTable(tableId);
+            if (table == null) {
+                continue;
             }
-        } finally {
-            db.readUnlock();
-        }
-
-        for (TransactionStateListener listener : listeners) {
-            listener.postAbort(transactionState, failedTablets);
+            TransactionStateListener listener = stateListenerFactory.create(this, table);
+            if (listener != null) {
+                listener.postAbort(transactionState, failedTablets);
+            }
         }
     }
 
