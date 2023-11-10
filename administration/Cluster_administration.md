@@ -115,7 +115,7 @@ sh bin/stop_be.sh
 >
 > |版本|可直接升级版本|注意事项|是否为 LTS 版本|
 > |----|------------|--------|--------------|
-> |1.18.x||更早版本需要按照 <a href="update_from_dorisdb.md">标准版 DorisDB 升级到社区版 StarRocks</a> 操作。|否|
+> |1.18.x|||否|
 > |1.19.x|必须从1.18.x升级||否|
 > |2.0.x|必须从1.19.x升级|升级过程中需要暂时关闭 Clone。|否|
 > |2.1.x|必须从2.0.x 升级|灰度升级前需要修改 <code>vector_chunk_size</code> 和 <code>batch_size</code>。|否|
