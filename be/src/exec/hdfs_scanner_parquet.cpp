@@ -22,6 +22,19 @@ namespace starrocks {
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+<<<<<<< HEAD
+=======
+    if (!scanner_params.deletes.empty()) {
+        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+        std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
+                new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
+                                         scanner_params.materialize_slots, &_need_skip_rowids));
+        for (const auto& tdelete_file : scanner_params.deletes) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(), *tdelete_file));
+        }
+        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
+    }
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
     return Status::OK();
 }
 
@@ -39,6 +52,13 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_chunk_read_timer = nullptr;
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
+<<<<<<< HEAD
+=======
+
+    // io coalesce
+    RuntimeProfile::Counter* group_active_lazy_coalesce_together = nullptr;
+    RuntimeProfile::Counter* group_active_lazy_coalesce_seperately = nullptr;
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
 
     // page statistics
     RuntimeProfile::Counter* has_page_statistics = nullptr;
@@ -59,10 +79,19 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
+<<<<<<< HEAD
+=======
+
+    group_active_lazy_coalesce_together =
+            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceTogether", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_seperately =
+            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceSeperately", TUnit::UNIT, kParquetProfileSectionPrefix);
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
 
+<<<<<<< HEAD
     COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
     COUNTER_UPDATE(level_decode_timer, _stats.level_decode_ns);
@@ -76,6 +105,29 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     int64_t page_stats = _stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _stats.page_skip);
+=======
+    COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
+    COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
+    COUNTER_UPDATE(value_decode_timer, _app_stats.value_decode_ns);
+    COUNTER_UPDATE(level_decode_timer, _app_stats.level_decode_ns);
+    COUNTER_UPDATE(page_read_timer, _app_stats.page_read_ns);
+    COUNTER_UPDATE(footer_read_timer, _app_stats.footer_read_ns);
+    COUNTER_UPDATE(footer_cache_write_counter, _app_stats.footer_cache_write_count);
+    COUNTER_UPDATE(footer_cache_write_bytes, _app_stats.footer_cache_write_bytes);
+    COUNTER_UPDATE(footer_cache_read_counter, _app_stats.footer_cache_read_count);
+    COUNTER_UPDATE(footer_cache_read_timer, _app_stats.footer_cache_read_ns);
+    COUNTER_UPDATE(column_reader_init_timer, _app_stats.column_reader_init_ns);
+    COUNTER_UPDATE(group_chunk_read_timer, _app_stats.group_chunk_read_ns);
+    COUNTER_UPDATE(group_dict_filter_timer, _app_stats.group_dict_filter_ns);
+    COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
+    COUNTER_UPDATE(group_active_lazy_coalesce_together, _app_stats.group_active_lazy_coalesce_together);
+    COUNTER_UPDATE(group_active_lazy_coalesce_seperately, _app_stats.group_active_lazy_coalesce_seperately);
+    int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
+    COUNTER_UPDATE(has_page_statistics, page_stats);
+    COUNTER_UPDATE(page_skip, _app_stats.page_skip);
+    COUNTER_UPDATE(group_min_round_cost, _app_stats.group_min_round_cost);
+    do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {

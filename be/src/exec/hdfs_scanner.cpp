@@ -250,6 +250,22 @@ Status HdfsScanner::open_random_access_file() {
     return Status::OK();
 }
 
+void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
+    const std::string ICEBERG_TIMER = "IcebergV2FormatTimer";
+    ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE, parent_name);
+
+    RuntimeProfile::Counter* delete_build_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_build_filter_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildFilterTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_per_scan_counter =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
+
+    COUNTER_UPDATE(delete_build_timer, _app_stats.iceberg_delete_file_build_ns);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.iceberg_delete_file_build_filter_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
+}
+
 int64_t HdfsScanner::estimated_mem_usage() const {
     if (_shared_buffered_input_stream == nullptr) {
         // don't read data in columnar format(such as CSV format), usually in a fixed size.

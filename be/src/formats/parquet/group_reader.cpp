@@ -87,7 +87,25 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
         SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
+<<<<<<< HEAD
         has_filter = _dict_filter_ctx.filter_chunk(&active_chunk, &chunk_filter);
+=======
+        ASSIGN_OR_RETURN(has_filter, _filter_chunk_with_dict_filter(&active_chunk, &chunk_filter));
+    }
+
+    // row id filter
+    if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
+        int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
+        {
+            SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
+            auto start_str = _need_skip_rowids->lower_bound(current_chunk_base_row);
+            auto end_str = _need_skip_rowids->upper_bound(current_chunk_base_row + count - 1);
+            for (; start_str != end_str; start_str++) {
+                chunk_filter[*start_str - current_chunk_base_row] = 0;
+                has_filter = true;
+            }
+        }
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
     }
 
     // other filter that not dict
@@ -147,6 +165,161 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     return status;
 }
 
+<<<<<<< HEAD
+=======
+Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
+    if (_is_group_filtered) {
+        *row_count = 0;
+        return Status::EndOfFile("");
+    }
+
+    _read_chunk->reset();
+
+    ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
+    // to complicity with _do_get_next will break and return even active_row is all filtered.
+    // but a better choice is don't return until really have some results.
+    while (true) {
+        if (!_range_iter.has_more()) {
+            *row_count = 0;
+            return Status::EndOfFile("");
+        }
+
+        auto r = _range_iter.next(*row_count);
+        auto count = r.span_size();
+        _param.stats->raw_rows_read += count;
+
+        active_chunk->reset();
+
+        bool has_filter = false;
+        Filter chunk_filter(count, 1);
+
+        // row id filter
+        if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
+            {
+                SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
+                auto start_str = _need_skip_rowids->lower_bound(r.begin());
+                auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
+
+                for (; start_str != end_str; start_str++) {
+                    chunk_filter[*start_str - r.begin()] = 0;
+                    has_filter = true;
+                }
+                if (SIMD::count_nonzero(chunk_filter.data(), count) == 0) {
+                    continue;
+                }
+            }
+        }
+
+        // we really have predicate to run round by round
+        if (!_dict_column_indices.empty() || !_left_no_dict_filter_conjuncts_by_slot.empty()) {
+            has_filter = true;
+            ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
+            if (hit_count == 0) {
+                _param.stats->skip_read_rows += count;
+                continue;
+            }
+            active_chunk->filter_range(chunk_filter, 0, count);
+        } else if (has_filter) {
+            RETURN_IF_ERROR(_read_range(_active_column_indices, r, &chunk_filter, &active_chunk));
+            active_chunk->filter_range(chunk_filter, 0, count);
+        } else {
+            RETURN_IF_ERROR(_read_range(_active_column_indices, r, nullptr, &active_chunk));
+        }
+
+        // deal with lazy columns
+        if (!_lazy_column_indices.empty()) {
+            _lazy_column_needed = true;
+            ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
+
+            SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
+
+            if (has_filter) {
+                RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, &chunk_filter, &lazy_chunk));
+                lazy_chunk->filter_range(chunk_filter, 0, count);
+            } else {
+                RETURN_IF_ERROR(_read_range(_lazy_column_indices, r, nullptr, &lazy_chunk));
+            }
+
+            if (lazy_chunk->num_rows() != active_chunk->num_rows()) {
+                return Status::InternalError(strings::Substitute("Unmatched row count, active_rows=$0, lazy_rows=$1",
+                                                                 active_chunk->num_rows(), lazy_chunk->num_rows()));
+            }
+            active_chunk->merge(std::move(*lazy_chunk));
+        }
+
+        _read_chunk->swap_chunk(*active_chunk);
+        *row_count = _read_chunk->num_rows();
+
+        SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
+        // convert from _read_chunk to chunk.
+        RETURN_IF_ERROR(_fill_dst_chunk(_read_chunk, chunk));
+        break;
+    }
+
+    return _range_iter.has_more() ? Status::OK() : Status::EndOfFile("");
+}
+
+Status GroupReader::_read_range(const std::vector<int>& read_columns, const Range<uint64_t>& range,
+                                const Filter* filter, ChunkPtr* chunk) {
+    if (read_columns.empty()) {
+        return Status::OK();
+    }
+
+    for (int col_idx : read_columns) {
+        auto& column = _param.read_cols[col_idx];
+        SlotId slot_id = column.slot_id;
+        RETURN_IF_ERROR(
+                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+    }
+
+    return Status::OK();
+}
+
+StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& range, Filter* filter,
+                                                         ChunkPtr* chunk) {
+    const std::vector<int>& read_order = _column_read_order_ctx->get_column_read_order();
+    size_t round_cost = 0;
+    DeferOp defer([&]() { _column_read_order_ctx->update_ctx(round_cost); });
+    size_t hit_count = 0;
+    for (int col_idx : read_order) {
+        auto& column = _param.read_cols[col_idx];
+        round_cost += _column_read_order_ctx->get_column_cost(col_idx);
+        SlotId slot_id = column.slot_id;
+        RETURN_IF_ERROR(
+                _column_readers[slot_id]->read_range(range, filter, (*chunk)->get_column_by_slot_id(slot_id).get()));
+
+        if (std::find(_dict_column_indices.begin(), _dict_column_indices.end(), col_idx) !=
+            _dict_column_indices.end()) {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
+            for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
+                RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
+                                                                             filter, sub_field_path, 0));
+                hit_count = SIMD::count_nonzero(*filter);
+                if (hit_count == 0) {
+                    return hit_count;
+                }
+            }
+        }
+
+        if (_left_no_dict_filter_conjuncts_by_slot.find(slot_id) != _left_no_dict_filter_conjuncts_by_slot.end()) {
+            SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
+            std::vector<ExprContext*> ctxs = _left_no_dict_filter_conjuncts_by_slot.at(slot_id);
+            auto temp_chunk = std::make_shared<Chunk>();
+            temp_chunk->columns().reserve(1);
+            ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_id);
+            temp_chunk->append_column(column, slot_id);
+            ASSIGN_OR_RETURN(hit_count, ExecNode::eval_conjuncts_into_filter(ctxs, temp_chunk.get(), filter));
+            if (hit_count == 0) {
+                break;
+            }
+        }
+    }
+
+    return hit_count;
+}
+
+>>>>>>> fa3981129a ([BugFix] Fix iceberg position delete bug in orc format (#34682))
 void GroupReader::close() {
     if (_param.sb_stream) {
         _param.sb_stream->release_to_offset(_end_offset);
