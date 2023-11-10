@@ -334,9 +334,12 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
     for (int i = 0; i < numEntries && fileinfo; ++i) {
         // obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size()
         int32_t dir_size;
-        if (dir[dir.size() - 1] == '/') {
-            dir_size = dir.size();
+        std::string mName(fileinfo[i].mName);
+        std::size_t found = mName.rfind('/');
+        if (found == std::string::npos) {
+            dir_size = 0;
         } else {
+<<<<<<< HEAD:be/src/fs/fs_hdfs.cpp
             dir_size = dir.size() + 1;
         }
 
@@ -348,6 +351,8 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
                 return Status::InvalidArgument("parse path fail {}"_format(dir));
             }
 
+=======
+>>>>>>> 0fec304d0d ([BugFix] Fix wrong file name in restore if the path end with slash (#34597) (#34601)):be/src/fs/hdfs/fs_hdfs.cpp
             dir_size = found + 1;
         }
 
