@@ -209,7 +209,7 @@ DISTRIBUTED BY HASH(order_id) BUCKETS 8
 
 相较更新模型，主键模型（Primary Key）可以更好地支持实时/频繁更新的功能。该类型的表要求有唯一的主键，支持对表中的行按主键进行更新和删除操作。
 
-该模型适合需要对数据进行实时更新的场景，特别适合MySQL或其他数据库同步到StarRocks的场景。虽然原有的Unique模型也可以实现对数据的更新，但Merge-on-Read的策略大大限制了查询性能。Primary模型更好地解决了行级别的更新操作，配合Flink-connector-starrocks可以完成MySQL数据库的同步。具体使用方式详见[文档](/loading/Flink-connector-starrocks.md#使用Flink-connector写入实现MySQL数据同步)。
+该模型适合需要对数据进行实时更新的场景，特别适合MySQL或其他数据库同步到StarRocks的场景。虽然原有的Unique模型也可以实现对数据的更新，但Merge-on-Read的策略大大限制了查询性能。Primary模型更好地解决了行级别的更新操作，配合Flink-connector-starrocks可以完成MySQL数据库的同步。具体使用方式详见[文档](/loading/Flink-connector-starrocks.md#使用-flink-connector-写入实现-mysql-数据同步)。
 
 需要注意的是：由于存储引擎会为主键建立索引，而在导入数据时会把主键索引加载在内存中，所以主键模型对内存的要求比较高，还不适合主键特别多的场景。目前primary主键存储在内存中，为防止滥用造成内存占满，限制主键字段长度全部加起来编码后不能超过127字节。目前比较适合的两个场景是：
 
