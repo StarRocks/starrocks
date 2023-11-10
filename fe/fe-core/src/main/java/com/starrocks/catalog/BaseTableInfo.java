@@ -139,6 +139,10 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
+    public boolean isInternal() {
+        return isInternalCatalog(catalogName);
+    }
+
     public Table getTable() {
         if (isInternalCatalog(catalogName)) {
             Table table = getTableById();
