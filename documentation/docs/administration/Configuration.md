@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Parameter configuration
 
 This topic describes FE, BE, and system parameters. It also provides suggestions on how to configure and tune these parameters.

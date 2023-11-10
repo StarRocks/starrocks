@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Authentication methods
 
 In addition to the authentication method of "username+password", StarRocks also supports LDAP.

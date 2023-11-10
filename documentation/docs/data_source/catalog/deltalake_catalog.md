@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Delta Lake catalog
 
 A Delta Lake catalog is a kind of external catalog that enables you to query data from Delta Lake without ingestion.

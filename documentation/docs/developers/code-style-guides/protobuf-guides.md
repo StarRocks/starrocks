@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Rules
 
 ## Never use required

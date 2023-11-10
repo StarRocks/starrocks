@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # AWS IAM policies
 
 A policy in AWS IAM declares a set of permissions on a specific AWS resource. After creating a policy, you need to attach it to an IAM role or user. As such, the IAM role or user is assigned the permissions declared in the policy to access the specified AWS resource.

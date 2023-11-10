@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Prepare deployment files
 
 This topic describes how to prepare StarRocks deployment files.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Metabase
 
 Metabase supports querying and visualizing both internal data and external data in StarRocks.

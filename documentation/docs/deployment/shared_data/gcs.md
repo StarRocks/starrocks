@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy StarRocks using GCS 
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Monitor and Alerting
 
 You can build your own monitoring services, or use the Prometheus + Grafana solution. StarRocks provides a Prometheus-compatible interface that directly links to the HTTP port of the BE and FE to obtain monitoring information from the cluster.

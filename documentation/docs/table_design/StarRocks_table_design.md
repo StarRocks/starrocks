@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Understand table design
 
 ## Columnar storage

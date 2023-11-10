@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Introduction
 
 You can import semi-structured data (for example, JSON) by using stream load or routine load.

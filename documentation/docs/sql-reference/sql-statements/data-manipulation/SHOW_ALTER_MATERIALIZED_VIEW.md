@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW ALTER MATERIALIZED VIEW
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Prepared statements
 
 From v3.2 onwards, StarRocks provides prepared statements for executing SQL statements multiple times with the same structure but different variables. This feature significantly improves execution efficiency and prevents SQL injection.

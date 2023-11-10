@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SQL statement template
 
 > *This template uses* `*ADMIN SET REPLICA STATUS*` *as an example to illustrate the requirements for writing SQL command topics.*
