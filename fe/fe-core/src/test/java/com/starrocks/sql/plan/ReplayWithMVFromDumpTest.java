@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -43,8 +42,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
         new MockUp<MaterializedView>() {
             @Mock
-            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
-                return Sets.newHashSet();
+            public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
+                                                           boolean isQueryRewrite) {
+                return true;
             }
         };
 
