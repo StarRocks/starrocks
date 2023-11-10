@@ -21,6 +21,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -104,8 +105,12 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
-    Status st = _tablet->put_txn_log(std::move(txn_log));
-    return st;
+    RETURN_IF_ERROR(_tablet->put_txn_log(txn_log));
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        // preload primary key table's compaction state
+        _tablet->update_mgr()->preload_compaction_state(*txn_log, _tablet.get(), *tablet_schema);
+    }
+    return Status::OK();
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
