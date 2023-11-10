@@ -399,11 +399,12 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }
+
     DCHECK_EQ(_delta_writers.size(), params.tablets_size());
     // In order to get sorted index for each tablet
     std::sort(tablet_ids.begin(), tablet_ids.end());
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
-        _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+        _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
     }
     return Status::OK();
 }
