@@ -2190,7 +2190,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void processAddIndex(CreateIndexClause alterClause, OlapTable olapTable, List<Index> newIndexes)
             throws UserException {
-        if (alterClause.getIndex() == null) {
+        Index newIndex = alterClause.getIndex();
+        if (newIndex == null) {
             return;
         }
 
@@ -2201,6 +2202,11 @@ public class SchemaChangeHandler extends AlterHandler {
         for (Index existedIdx : existedIndexes) {
             if (existedIdx.getIndexName().equalsIgnoreCase(indexDef.getIndexName())) {
                 throw new DdlException("index `" + indexDef.getIndexName() + "` already exist.");
+            }
+            if (existedIdx.getIndexId() >= newIndex.getIndexId()) {
+                throw new IllegalStateException(
+                        String.format("New index id %s should be lg than existed idx %s in OlapTable",
+                                newIndex.getIndexId(), existedIdx.getIndexId()));
             }
             Set<String> existedIdxColSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             existedIdxColSet.addAll(existedIdx.getColumns());
@@ -2219,7 +2225,9 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        newIndexes.add(alterClause.getIndex());
+        Preconditions.checkArgument(newIndex.getIndexId() >= 0,
+                "You should ensure that the indexId of the new index was assigned when the table is OlapTable");
+        newIndexes.add(newIndex);
     }
 
     private void processDropIndex(DropIndexClause alterClause, OlapTable olapTable, List<Index> indexes)

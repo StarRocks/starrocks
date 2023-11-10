@@ -225,6 +225,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxColUniqueId")
     protected int maxColUniqueId = -1;
 
+    @SerializedName(value = "maxIndexId")
+    protected long maxIndexId = 0;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -392,6 +395,18 @@ public class OlapTable extends Table {
         this.maxColUniqueId = maxColUniqueId;
     }
 
+
+    public long incAndGetMaxIndexId() {
+        return this.maxIndexId++;
+    }
+
+    public long getMaxIndexId() {
+        return this.maxIndexId;
+    }
+
+    public void setMaxIndexId(long maxIndexId) {
+        this.maxIndexId = maxIndexId;
+    }
 
     public boolean dynamicPartitionExists() {
         return tableProperty != null

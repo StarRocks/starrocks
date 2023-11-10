@@ -420,6 +420,7 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.sql.parser.StarRocksParser.IndexTypeContext;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -811,12 +812,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<Identifier> columnList = visit(context.identifierList().identifier(), Identifier.class);
             String comment =
                     context.comment() != null ? ((StringLiteral) visit(context.comment())).getStringValue() : null;
+
             final IndexDef indexDef =
                     new IndexDef(indexName, columnList.stream().map(Identifier::getValue).collect(toList()),
-                            IndexDef.IndexType.BITMAP, comment, createPos(context));
+                            getIndexType(context.indexType()), comment, getProperties(context.properties()), createPos(context));
             indexDefList.add(indexDef);
         }
         return indexDefList;
+    }
+
+    private IndexDef.IndexType getIndexType(IndexTypeContext indexTypeContext) {
+        IndexDef.IndexType index;
+        if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+            index = IndexDef.IndexType.BITMAP;
+        } else if (indexTypeContext.GIN() != null) {
+            index = IndexDef.IndexType.GIN;
+        } else {
+            throw new ParsingException("Not specify index type");
+        }
+        return index;
     }
 
     private List<ColumnDef> getColumnDefs(List<StarRocksParser.ColumnDescContext> columnDesc) {
@@ -1310,8 +1324,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
-                IndexDef.IndexType.BITMAP,
-                comment, idxPos);
+                getIndexType(context.indexType()),
+                comment, getProperties(context.properties()), idxPos);
 
         CreateIndexClause createIndexClause = new CreateIndexClause(indexDef, idxPos);
 
@@ -3520,8 +3534,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         IndexDef indexDef = new IndexDef(indexName,
                 columnList.stream().map(Identifier::getValue).collect(toList()),
-                IndexDef.IndexType.BITMAP,
-                comment, createPos(start, stop));
+                getIndexType(context.indexType()),
+                comment, getProperties(context.properties()),
+                createPos(start, stop));
 
         return new CreateIndexClause(indexDef, createPos(context));
     }

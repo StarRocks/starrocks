@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.IndexFactory;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -27,6 +28,7 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -176,7 +178,9 @@ public class OlapTableFactory implements AbstractTableFactory {
         }
         LOG.debug("create table[{}] short key column count: {}", tableName, shortKeyColumnCount);
         // indexes
-        TableIndexes indexes = new TableIndexes(stmt.getIndexes());
+        List<Index> stmtIndexes = stmt.getIndexes();
+        TableIndexes indexes = IndexFactory.createIndexesFromCreateStmt(stmtIndexes, null);
+
 
         // set base index info to table
         // this should be done before create partition.
@@ -221,6 +225,9 @@ public class OlapTableFactory implements AbstractTableFactory {
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
         }
+
+        // Index creation before table, so we should set maxIndexId to table
+        table.setMaxIndexId(stmtIndexes.size());
 
         try {
             table.setComment(stmt.getComment());

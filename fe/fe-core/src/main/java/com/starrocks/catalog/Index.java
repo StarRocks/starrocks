@@ -36,8 +36,13 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IndexDef.IndexType;
+import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
+import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
+import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
@@ -46,14 +51,23 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Internal representation of index, including index type, name, columns and comments.
  * This class will used in olaptable
  */
 public class Index implements Writable {
+    @SerializedName(value = "indexId")
+    private long indexId;
     @SerializedName(value = "indexName")
     private String indexName;
     @SerializedName(value = "columns")
@@ -62,19 +76,36 @@ public class Index implements Writable {
     private IndexDef.IndexType indexType;
     @SerializedName(value = "comment")
     private String comment;
+    @SerializedName(value = "properties")
+    private Map<String, String> properties;
 
     public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment) {
+        this(-1, indexName, columns, indexType, comment, Collections.emptyMap());
+    }
+
+    public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
+            Map<String, String> properties) {
+        this(-1, indexName, columns, indexType, comment, properties);
+    }
+
+    public Index(long indexId, String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
+            Map<String, String> properties) {
+        this.indexId = indexId;
         this.indexName = indexName;
         this.columns = columns;
         this.indexType = indexType;
         this.comment = comment;
+        this.properties = properties;
     }
 
+
     public Index() {
+        this.indexId = 0;
         this.indexName = null;
         this.columns = null;
         this.indexType = null;
         this.comment = null;
+        this.properties = null;
     }
 
     public String getIndexName() {
@@ -109,6 +140,23 @@ public class Index implements Writable {
         this.comment = comment;
     }
 
+    public long getIndexId() {
+        return indexId;
+    }
+
+    public void setIndexId(long indexId) {
+        this.indexId = indexId;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -121,7 +169,7 @@ public class Index implements Writable {
 
     @Override
     public int hashCode() {
-        return 31 * (indexName.hashCode() + columns.hashCode() + indexType.hashCode());
+        return 31 * (((int) indexId) + indexName.hashCode() + columns.hashCode() + indexType.hashCode() + properties.hashCode());
     }
 
     @Override
@@ -140,13 +188,23 @@ public class Index implements Writable {
 
     }
 
+    @Override
     public Index clone() {
-        return new Index(indexName, new ArrayList<>(columns), indexType, comment);
+        return new Index(indexId, indexName, new ArrayList<>(columns), indexType, comment, properties);
     }
 
     @Override
     public String toString() {
         return toSql();
+    }
+
+    public String getPropertiesString() {
+        if (properties == null || properties.isEmpty()) {
+            return "";
+        }
+
+        return String.format("(%s)",
+                new PrintableMap<>(properties, "=", true, false, ","));
     }
 
     public String toSql() {
@@ -164,7 +222,11 @@ public class Index implements Writable {
         }
         sb.append(")");
         if (indexType != null) {
-            sb.append(" USING ").append(indexType.toString());
+            sb.append(" USING ").append(indexType.getDisplayName());
+        }
+        if (properties != null) {
+            sb.append(" PROPERTIES ");
+            sb.append(getPropertiesString());
         }
         if (comment != null) {
             sb.append(" COMMENT '" + comment + "'");
@@ -174,11 +236,57 @@ public class Index implements Writable {
 
     public TOlapTableIndex toThrift() {
         TOlapTableIndex tIndex = new TOlapTableIndex();
+        tIndex.setIndex_id(indexId);
         tIndex.setIndex_name(indexName);
         tIndex.setColumns(columns);
         tIndex.setIndex_type(TIndexType.valueOf(indexType.toString()));
         if (columns != null) {
             tIndex.setComment(comment);
+        }
+        if (properties != null) {
+            Map<String, String> commonProperties = new HashMap<>();
+            Map<String, String> indexProperties = new HashMap<>();
+            Map<String, String> searchProperties = new HashMap<>();
+            Map<String, String> extraProperties = new HashMap<>();
+            Set<String> commonIndexParamKeySet;
+            Set<String> indexIndexParamKeySet;
+            Set<String> searchIndexParamKeySet;
+            if (indexType == IndexType.GIN) {
+                commonIndexParamKeySet = CommonIndexParamKey.KEY_SET;
+                indexIndexParamKeySet = IndexParamsKey.KEY_SET;
+                searchIndexParamKeySet = SearchParamsKey.KEY_SET;
+            } else {
+                commonIndexParamKeySet = Collections.emptySet();
+                indexIndexParamKeySet = Collections.emptySet();
+                searchIndexParamKeySet = Collections.emptySet();
+            }
+
+            for (Entry<String, String> propEntry : properties.entrySet()) {
+                String key = propEntry.getKey();
+                String value = propEntry.getValue();
+                String upperKey = key.toUpperCase(Locale.ROOT);
+                if (commonIndexParamKeySet.contains(upperKey)) {
+                    commonProperties.put(key, value);
+                } else if (indexIndexParamKeySet.contains(upperKey)) {
+                    indexProperties.put(key, value);
+                } else if (searchIndexParamKeySet.contains(upperKey)) {
+                    searchProperties.put(key, value);
+                } else {
+                    extraProperties.put(key, value);
+                }
+            }
+
+            Arrays.stream(CommonIndexParamKey.values()).filter(k -> !commonProperties.containsKey(k.name()) && k.needDefault())
+                    .forEach(k -> commonProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+            Arrays.stream(IndexParamsKey.values()).filter(k -> !indexProperties.containsKey(k.name()) && k.needDefault())
+                    .forEach(k -> indexProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+            Arrays.stream(SearchParamsKey.values()).filter(k -> !searchProperties.containsKey(k.name()) && k.needDefault())
+                    .forEach(k -> searchProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+
+            tIndex.setCommon_properties(commonProperties);
+            tIndex.setIndex_properties(indexProperties);
+            tIndex.setSearch_properties(searchProperties);
+            tIndex.setExtra_properties(extraProperties);
         }
         return tIndex;
     }
