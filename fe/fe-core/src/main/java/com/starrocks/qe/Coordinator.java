@@ -3335,7 +3335,7 @@ public class Coordinator {
                 uniqueParams.setParams(new TPlanFragmentExecParams());
             }
             uniqueParams.params.setFragment_instance_id(instanceExecParam.instanceId);
-            if (!instanceExecParam.runtimeFilterParams.isSetRuntime_filter_builder_number()) {
+            if (instanceExecParam.runtimeFilterParams.isSetRuntime_filter_builder_number()) {
                 uniqueParams.params.setRuntime_filter_params(instanceExecParam.runtimeFilterParams);
             }
 
