@@ -732,7 +732,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
         std::sort(tablet_ids.begin(), tablet_ids.end());
         for (size_t i = 0; i < tablet_ids.size(); ++i) {
-            _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+            _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
         }
     }
 
