@@ -38,12 +38,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.PaimonPartitionKey;
-import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -130,16 +125,6 @@ public abstract class ConnectorPartitionTraits {
     abstract Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
             throws AnalysisException;
 
-<<<<<<< HEAD
-=======
-    /**
-     * Get the list-map with specified partition column and expression
-     *
-     * @apiNote it must be a list-partitioned table
-     */
-    abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
-
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
     /**
@@ -290,14 +275,6 @@ public abstract class ConnectorPartitionTraits {
             return ((OlapTable) table).getRangePartitionMap();
         }
 
-<<<<<<< HEAD
-=======
-        @Override
-        public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
-            // TODO: check partition type
-            return ((OlapTable) table).getListPartitionMap();
-        }
-
         @Override
         public Optional<Long> maxPartitionRefreshTs() {
             OlapTable olapTable = (OlapTable) table;
@@ -348,7 +325,6 @@ public abstract class ConnectorPartitionTraits {
             }
             return result;
         }
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     }
 
     static class HivePartitionTraits extends DefaultTraits {
@@ -468,29 +444,6 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
-<<<<<<< HEAD
-=======
-    static class PaimonPartitionTraits extends DefaultTraits {
-
-        @Override
-        public String getDbName() {
-            return ((PaimonTable) table).getDbName();
-        }
-
-        @Override
-        PartitionKey createEmptyKey() {
-            return new PaimonPartitionKey();
-        }
-
-        @Override
-        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
-                                                    MaterializedView.AsyncRefreshContext context) {
-            // TODO: implement
-            return null;
-        }
-    }
-
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     static class JDBCPartitionTraits extends DefaultTraits {
         @Override
         public String getDbName() {
