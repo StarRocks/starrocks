@@ -26,12 +26,14 @@ static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     if (!scanner_params.deletes.empty()) {
+        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
                 new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
                                          scanner_params.materialize_slots, &_need_skip_rowids));
         for (const auto& tdelete_file : scanner_params.deletes) {
             RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(), *tdelete_file));
         }
+        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
     return Status::OK();
 }
@@ -51,7 +53,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_chunk_read_timer = nullptr;
     RuntimeProfile::Counter* group_dict_filter_timer = nullptr;
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
-    RuntimeProfile::Counter* build_iceberg_pos_filter_timer = nullptr;
 
     // page statistics
     RuntimeProfile::Counter* has_page_statistics = nullptr;
@@ -74,7 +75,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_chunk_read_timer = ADD_CHILD_TIMER(root, "GroupChunkRead", kParquetProfileSectionPrefix);
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
-    build_iceberg_pos_filter_timer = ADD_CHILD_TIMER(root, "BuildIcebergPosFilter", kParquetProfileSectionPrefix);
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
@@ -89,11 +89,11 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(group_chunk_read_timer, _app_stats.group_chunk_read_ns);
     COUNTER_UPDATE(group_dict_filter_timer, _app_stats.group_dict_filter_ns);
     COUNTER_UPDATE(group_dict_decode_timer, _app_stats.group_dict_decode_ns);
-    COUNTER_UPDATE(build_iceberg_pos_filter_timer, _app_stats.build_iceberg_pos_filter_ns);
 
     int64_t page_stats = _app_stats.has_page_statistics ? 1 : 0;
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
+    do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
