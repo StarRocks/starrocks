@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -228,21 +229,45 @@ public class InsertOverwriteJobRunner {
             return;
         }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+        List<List<String>> partitionValues = Lists.newArrayList();
         if (!olapTable.getPartitionInfo().isAutomaticPartition()) {
             return;
         }
-        List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
-        List<List<String>> partitionValues = Lists.newArrayList();
-        // Currently we only support overwriting one partition at a time
-        List<String> firstValues = Lists.newArrayList();
-        partitionValues.add(firstValues);
-        for (Expr expr : partitionColValues) {
-            if (expr instanceof LiteralExpr) {
-                firstValues.add(((LiteralExpr) expr).getStringValue());
-            } else {
-                throw new SemanticException("Only support literal value for partition column.");
+
+        if (insertStmt.isSpecifyPartitionNames())  {
+            List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            for (String partitionName : partitionNames) {
+                Partition partition = olapTable.getPartition(partitionName);
+                if (partitionInfo instanceof ListPartitionInfo) {
+                    ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+                    List<List<LiteralExpr>> lists = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
+                    for (List<LiteralExpr> list : lists) {
+                        List<String> values = Lists.newArrayList();
+                        for (LiteralExpr literalExpr : list) {
+                            values.add(literalExpr.getStringValue());
+                        }
+                        partitionValues.add(values);
+                    }
+                } else {
+                    throw new RuntimeException("Specify the partition name, and automatically create partition names. " +
+                            "Currently, only List partitions are supported.");
+                }
+            }
+        } else {
+            List<Expr> partitionColValues = insertStmt.getTargetPartitionNames().getPartitionColValues();
+            // Currently we only support overwriting one partition at a time
+            List<String> firstValues = Lists.newArrayList();
+            partitionValues.add(firstValues);
+            for (Expr expr : partitionColValues) {
+                if (expr instanceof LiteralExpr) {
+                    firstValues.add(((LiteralExpr) expr).getStringValue());
+                } else {
+                    throw new SemanticException("Only support literal value for partition column.");
+                }
             }
         }
+
         try {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
@@ -270,9 +295,10 @@ public class InsertOverwriteJobRunner {
         }
         for (String partitionColName : partitionColNames) {
             Partition partition = olapTable.getPartition(partitionColName);
-            sourcePartitionIds.add(partition.getId());
+            if (!sourcePartitionIds.contains(partition.getId())) {
+                sourcePartitionIds.add(partition.getId());
+            }
         }
-
     }
 
     private void executeInsert() throws Exception {
