@@ -410,10 +410,10 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.06.tar.gz"
-CLUCENE_NAME="starrocks-clucene-2023.11.06.tar.gz"
-CLUCENE_SOURCE="starrocks-clucene-2023.11.06"
-CLUCENE_MD5SUM="6837d64c30c2559c6c512e279856776f"
+CLUCENE_DOWNLOAD="https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2023.11.10.tar.gz"
+CLUCENE_NAME="starrocks-clucene-2023.11.10.tar.gz"
+CLUCENE_SOURCE="starrocks-clucene-2023.11.10"
+CLUCENE_MD5SUM="cb641cacf05387e2f4cc1f7fab24d018"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
