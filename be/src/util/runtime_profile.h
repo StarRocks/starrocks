@@ -74,8 +74,7 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
 #define ADD_TIMER(profile, name) \
     (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
 #define ADD_PEAK_COUNTER(profile, name, type) \
-    (profile)->AddHighWaterMarkCounter(       \
-            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::SKIP_FIRST_MERGE))
+    (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
 #define ADD_CHILD_COUNTER(profile, name, type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
