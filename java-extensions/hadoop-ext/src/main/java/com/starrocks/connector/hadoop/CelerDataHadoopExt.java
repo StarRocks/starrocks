@@ -22,9 +22,11 @@ import org.slf4j.LoggerFactory;
 public class CelerDataHadoopExt extends HadoopExt {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CelerDataHadoopExt.class);
+    public static final String HADOOP_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
+    public static final String STARROCKS_HOME_ENV = "STARROCKS_HOME";
 
     public static void addConfigResourcesToConfiguration(Configuration conf) {
-        String configResources = conf.get(HDFS_CONFIG_RESOURCES);
+        String configResources = conf.get(HADOOP_CONFIG_RESOURCES);
         addConfigResourcesToConfiguration(configResources, conf);
     }
 
@@ -32,7 +34,7 @@ public class CelerDataHadoopExt extends HadoopExt {
         if (configResources == null || configResources.isEmpty()) {
             return;
         }
-        if (conf.getBoolean(HDFS_CONFIG_RESOURCES_LOADED, false)) {
+        if (conf.getBoolean(HADOOP_CONFIG_RESOURCES_LOADED, false)) {
             return;
         }
         final String STARROCKS_HOME_DIR = System.getenv(STARROCKS_HOME_ENV);
@@ -46,7 +48,7 @@ public class CelerDataHadoopExt extends HadoopExt {
             LOGGER.info(String.format("%s Add path '%s' to configuration", LOGGER_MESSAGE_PREFIX, path.toString()));
             conf.addResource(path);
         }
-        conf.setBoolean(HDFS_CONFIG_RESOURCES_LOADED, true);
+        conf.setBoolean(HADOOP_CONFIG_RESOURCES_LOADED, true);
     }
 
     @Override
