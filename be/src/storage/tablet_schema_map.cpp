@@ -44,7 +44,7 @@ void MapShard::upsert(SchemaId id, SchemaVersion version, TabletSchemaPtr result
 }
 
 size_t MapShard::erase(SchemaId id, SchemaVersion version) {
-    _mtx.lock();
+    std::unique_lock l(_mtx);
     auto iter = _map.find(id);
     if (iter == _map.end()) {
         return 0;
@@ -53,7 +53,7 @@ size_t MapShard::erase(SchemaId id, SchemaVersion version) {
 }
 
 bool MapShard::contains(SchemaId id, SchemaVersion version) const {
-    _mtx.lock();
+    std::unique_lock l(_mtx);
     auto iter = _map.find(id);
     if (iter == _map.end()) {
         return false;
@@ -162,7 +162,7 @@ std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& 
     }
     */
     {
-        shard->obtain_lock();
+        std::unique_lock l(shard->get_lock());
         auto res = shard->get(id, version);
         if (res == nullptr) {
             result = TabletSchema::create(schema_pb, this);
@@ -216,7 +216,7 @@ std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr&
     }
     */
     {
-        shard->obtain_lock();
+        std::unique_lock l(shard->get_lock());
         auto res = shard->get(id, version);
         if (res == nullptr) {
             result = tablet_schema;
@@ -236,7 +236,6 @@ std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr&
 
 size_t TabletSchemaMap::erase(SchemaId id, SchemaVersion version) {
     MapShard* shard = get_shard(id);
-    shard->obtain_lock();
     return shard->erase(id, version);
 }
 

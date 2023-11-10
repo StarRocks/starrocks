@@ -66,7 +66,7 @@ public:
     // [thread-safe]
     void get_stats(TableSchemaMapStats& stat) const;
 
-    void obtain_lock() { _mtx.lock(); }
+    std::mutex& get_lock() { return _mtx; }
 
 private:
     mutable std::mutex _mtx;
