@@ -402,7 +402,7 @@ TabletSchema::TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* sch
 TabletSchema::~TabletSchema() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
     if (_schema_map != nullptr) {
-        _schema_map->erase(_id);
+        _schema_map->erase(_id, _schema_version);
     }
 }
 

@@ -19,12 +19,74 @@
 namespace starrocks {
 
 static void get_stats(std::ostream& os, void*) {
-    TabletSchemaMap::Stats stats = GlobalTabletSchemaMap::Instance()->stats();
+    TableSchemaMapStats stats = GlobalTabletSchemaMap::Instance()->stats();
     os << stats.num_items << "/" << stats.memory_usage << "/" << stats.saved_memory_usage;
 }
 
 // NOLINTNEXTLINE
 bvar::PassiveStatus<std::string> g_schema_map_stats("tablet_schema_map", get_stats, NULL);
+
+void MapShard::upsert(SchemaId id, SchemaVersion version, TabletSchemaPtr result) {
+    auto iter = _map.find(id);
+    if (iter == _map.end()) {
+        SchemaMapByVersion schema_map;
+        schema_map.emplace(version, result);
+        _map[id] = schema_map;
+    } else {
+        auto& schema_map = iter->second;
+        auto schema_iter = schema_map.find(version);
+        if (schema_iter == schema_map.end()) {
+            schema_map.emplace(version, result);
+        } else {
+            schema_iter->second = std::weak_ptr<const TabletSchema>(result);
+        }
+    }
+}
+
+size_t MapShard::erase(SchemaId id, SchemaVersion version) {
+    _mtx.lock();
+    auto iter = _map.find(id);
+    if (iter == _map.end()) {
+        return 0;
+    }
+    return iter->second.erase(version);
+}
+
+bool MapShard::contains(SchemaId id, SchemaVersion version) const {
+    _mtx.lock();
+    auto iter = _map.find(id);
+    if (iter == _map.end()) {
+        return false;
+    }
+    return iter->second.contains(version);
+}
+
+const TabletSchemaPtr MapShard::get(SchemaId id, SchemaVersion version) {
+    auto iter = _map.find(id);
+    if (iter == _map.end()) {
+        return nullptr;
+    }
+    auto res = iter->second.find(version);
+    if (res == iter->second.end()) {
+        return nullptr;
+    }
+    return res->second.lock();
+}
+
+void MapShard::get_stats(TableSchemaMapStats& stat) const {
+    for (const auto& [_, schema_by_version] : _map) {
+        stat.num_items += schema_by_version.size();
+        for (const auto& [_, weak_ptr] : schema_by_version) {
+            if (auto schema_ptr = weak_ptr.lock(); schema_ptr) {
+                auto use_cnt = schema_ptr.use_count();
+                auto schema_size = schema_ptr->mem_usage();
+                // The temporary variable schema_ptr took one reference, should exclude it.
+                stat.memory_usage += use_cnt >= 2 ? schema_size : 0;
+                stat.saved_memory_usage += (use_cnt >= 2) ? (use_cnt - 2) * schema_size : 0;
+            }
+        }
+    }
+}
 
 bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaPB& schema_pb, const TabletSchemaCSPtr& schema_ptr) {
     if (schema_pb.next_column_unique_id() != schema_ptr->next_column_unique_id() ||
@@ -57,8 +119,9 @@ bool TabletSchemaMap::check_schema_unique_id(const TabletSchemaCSPtr& in_schema,
     return true;
 }
 
-std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& schema_pb) {
+std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& schema_pb) {
     SchemaId id = schema_pb.id();
+    SchemaVersion version = schema_pb.has_schema_version() ? schema_pb.schema_version() : 0;
     DCHECK_NE(TabletSchema::invalid_id(), id);
     MapShard* shard = get_shard(id);
     // |result|: return value
@@ -71,8 +134,9 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
     // in map until the shard lock is release. If not, we may be deconstruct the original schema which will cause
     // a dead lock(#issue 5646)
     TabletSchemaPtr result = nullptr;
-    TabletSchemaPtr ptr = nullptr;
+    //TabletSchemaPtr ptr = nullptr;
     bool insert = false;
+    /*
     {
         std::unique_lock l(shard->mtx);
         auto it = shard->map.find(id);
@@ -96,17 +160,36 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
             }
         }
     }
+    */
+    {
+        shard->obtain_lock();
+        auto res = shard->get(id, version);
+        if (res == nullptr) {
+            result = TabletSchema::create(schema_pb, this);
+            shard->upsert(id, version, result);
+            insert = true;
+        } else {
+            if (UNLIKELY(!check_schema_unique_id(schema_pb, res))) {
+                result = TabletSchema::create(schema_pb, nullptr);
+            } else {
+                result = res;
+            }
+            insert = false;
+        }
+    }
 
     return std::make_pair(result, insert);
 }
 
-std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr& tablet_schema) {
+std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr& tablet_schema) {
     DCHECK(tablet_schema != nullptr);
     SchemaId id = tablet_schema->id();
+    SchemaVersion version = tablet_schema->schema_version();
     DCHECK_NE(id, TabletSchema::invalid_id());
     MapShard* shard = get_shard(id);
     bool insert = false;
     TabletSchemaPtr result = nullptr;
+    /*
     TabletSchemaPtr ptr = nullptr;
     {
         std::unique_lock l(shard->mtx);
@@ -131,25 +214,46 @@ std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const
             }
         }
     }
+    */
+    {
+        shard->obtain_lock();
+        auto res = shard->get(id, version);
+        if (res == nullptr) {
+            result = tablet_schema;
+            shard->upsert(id, version, result);
+            insert = true;
+        } else {
+            if (UNLIKELY(!check_schema_unique_id(tablet_schema, res))) {
+                result = res;
+            } else {
+                result = tablet_schema;
+            }
+            insert = false;
+        }
+    }
     return std::make_pair(result, insert);
 }
 
-size_t TabletSchemaMap::erase(SchemaId id) {
+size_t TabletSchemaMap::erase(SchemaId id, SchemaVersion version) {
     MapShard* shard = get_shard(id);
-    std::lock_guard l(shard->mtx);
-    return shard->map.erase(id);
+    shard->obtain_lock();
+    return shard->erase(id, version);
 }
 
-bool TabletSchemaMap::contains(SchemaId id) const {
+bool TabletSchemaMap::contains(SchemaId id, SchemaVersion version) const {
     const MapShard* shard = get_shard(id);
-    std::lock_guard l(shard->mtx);
-    return shard->map.contains(id);
+    return shard->contains(id, version);
 }
 
-TabletSchemaMap::Stats TabletSchemaMap::stats() const {
-    Stats stats;
+TableSchemaMapStats TabletSchemaMap::stats() const {
+    TableSchemaMapStats stats;
     for (const auto& shard : _map_shards) {
-        std::lock_guard l(shard.mtx);
+        TableSchemaMapStats shard_stat;
+        shard.get_stats(shard_stat);
+        stats.num_items += shard_stat.num_items;
+        stats.memory_usage += shard_stat.memory_usage;
+        stats.saved_memory_usage += shard_stat.saved_memory_usage;
+        /*
         stats.num_items += shard.map.size();
         for (const auto& [_, weak_ptr] : shard.map) {
             if (auto schema_ptr = weak_ptr.lock(); schema_ptr) {
@@ -160,6 +264,7 @@ TabletSchemaMap::Stats TabletSchemaMap::stats() const {
                 stats.saved_memory_usage += (use_cnt >= 2) ? (use_cnt - 2) * schema_size : 0;
             }
         }
+        */
     }
     return stats;
 }

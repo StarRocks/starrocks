@@ -41,7 +41,7 @@ TEST(TabletSchemaMapTest, test_all) {
     ASSERT_EQ(0, stats0.memory_usage);
     ASSERT_EQ(0, stats0.saved_memory_usage);
 
-    ASSERT_FALSE(schema_map.contains(schema_pb.id()));
+    ASSERT_FALSE(schema_map.contains(schema_pb.id(), schema_pb.schema_version()));
     auto [schema0, inserted0] = schema_map.emplace(schema_pb);
     ASSERT_TRUE(inserted0);
     ASSERT_TRUE(schema0 != nullptr);
@@ -85,7 +85,7 @@ TEST(TabletSchemaMapTest, test_all) {
     ASSERT_EQ(schema2->mem_usage(), stats5.memory_usage);
     ASSERT_EQ(0, stats5.saved_memory_usage);
 
-    ASSERT_EQ(1, schema_map.erase(schema2->id()));
+    ASSERT_EQ(1, schema_map.erase(schema2->id(), schema2->schema_version()));
     auto stats6 = schema_map.stats();
     ASSERT_EQ(0, stats6.num_items);
     ASSERT_EQ(0, stats6.memory_usage);

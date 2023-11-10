@@ -24,79 +24,54 @@ namespace starrocks {
 
 using SchemaId = TabletSchema::SchemaId;
 using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
-using SchemaVerison = int32_t;
+using SchemaVersion = int32_t;
 
+struct TableSchemaMapStats {
+    // The total number of items stored in the map.
+    size_t num_items = 0;
+    // How many bytes occupied by the items stored in this map.
+    size_t memory_usage = 0;
+    // How many bytes saved by using the TabletSchemaMap.
+    size_t saved_memory_usage = 0;
+};
 
 class MapShard {
 public:
+    using SchemaMapByVersion = phmap::flat_hash_map<SchemaVersion, std::weak_ptr<const TabletSchema>>;
 
-    using SchemaMapByVersion = phmap::flat_hash_map<SchemaVerison, std::weak_ptr<const TabletSchema>>;
-
-    // Upsert a new TabletSchema into the shard. If not exist before, insert a new TabletSchema. If exist
-    // before, replace the old value
-    // [thread safe] 
-    void upsert(SchemaId id, SchemaVerison version, TabletSchemaPtr result) {
-        std::unique_lock l(_mtx);
-        auto iter = _map.find(id);
-        if (iter == _map.end()) {
-            SchemaMapByVersion schema_map;
-            schema_map.emplace(version, result);
-            _map[id] = schema_map;
-        } else {
-            auto& schema_map = iter->second;
-            auto schema_iter = schem_map.find(version);
-            if (schema_iter == schema_map.end()) {
-                schema_map.emplace(version, result);
-            } else {
-                schema_iter->second = std::weak_ptr<const TabletSchema>(result);
-            }
-        }
-    }
+    // Insert a new TabletSchema into the Shard, insert if it doesn't exist previously, otherwise replace 
+    // the previous value.
+    // not thread safe
+    void upsert(SchemaId id, SchemaVersion version, TabletSchemaPtr result);
 
     // Removes the TabletSchema (if one exists) with the id equivalent to id.
     //
     // Returns number of elements removed (0 or 1).
+    // not thread safe
+    size_t erase(SchemaId id, SchemaVersion version);
+
+    // Checks if there is an element with unique id equivalent to id in the container.
+    //
+    // Returns true if there is such an element, otherwise false.
     // [thread-safe]
-    size_t erase(SchemaId id, SchemaVerison version) {
-        std::unique_lock l(_mtx);
-        auto iter = _map.find(id);
-        if (iter == _map.end()) {
-            return 0
-        }
-        return iter->second.erase(version);
-    }
+    bool contains(SchemaId id, SchemaVersion version) const;
 
-    bool contains(SchemaId id, SchemaVersion version) {
-        std::unique_lock l(_mtx);
-        auto iter = _map.find(id);
-        if (iter == _map.end()) {
-            return false;
-        }
-        return iter->second.contains(version);
-    }
+    // Get TabletSchema from shard based on the id and version
+    //
+    // Returns TabletSchema if find the element, otherwise return nullptr
+    // not thread safe
+    const TabletSchemaPtr get(SchemaId id, SchemaVersion version);
 
-    // return tablet schme
-    std::weak_ptr<const TabletSchema> get(SchemaId id, SchemaVersion version) {
-        std::unique_lock l(_mtx);
-        auto iter = _map.find(id);
-        if (iter == _map.end()) {
-            return nullptr;
-        }
-        auto res = iter->second.find(version);
-        if (res == iter->second.end()) {
-            return nullptr;
-        }
-        if (UNLIKELY(!res->second.lock())) {
-            return nullptr;
-        }
-        return res->second;
-    }
+    // Get memory state
+    // [thread-safe]
+    void get_stats(TableSchemaMapStats& stat) const;
 
+    void obtain_lock() { _mtx.lock(); }
 
 private:
     mutable std::mutex _mtx;
     phmap::flat_hash_map<SchemaId, SchemaMapByVersion> _map;
-}
+};
 
 // TabletSchemaMap is a map from 64 bits integer to std::shared_ptr<const TabletSchema>.
 // This class is used to share the same TabletSchema object among all tablets with the same schema to reduce
@@ -104,16 +79,6 @@ private:
 // Use `GlobalTabletSchemaMap::Instance()` to access the global object.
 class TabletSchemaMap {
 public:
-
-    struct Stats {
-        // The total number of items stored in the map.
-        size_t num_items = 0;
-        // How many bytes occupied by the items stored in this map.
-        size_t memory_usage = 0;
-        // How many bytes saved by using the TabletSchemaMap.
-        size_t saved_memory_usage = 0;
-    };
-
     TabletSchemaMap() = default;
 
     // Inserts a new TabletSchema into the container constructed with the given arg if there is no TabletSchema with
@@ -144,7 +109,7 @@ public:
 
     // NOTE: time complexity of method is high, don't call this method too often.
     // [thread-safe]
-    Stats stats() const;
+    TableSchemaMapStats stats() const;
 
 private:
     constexpr static int kShardSize = 16;
