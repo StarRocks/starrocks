@@ -18,7 +18,7 @@ SHOW PIPES [FROM <db_name>]
 
 ## Parameters
 
-### FROM <db_name>
+### FROM `<db_name>`
 
 The name of the database for which you want to query pipes. If you do not specify this parameter, the system returns the pipes for the current database in use.
 
@@ -26,7 +26,7 @@ The name of the database for which you want to query pipes. If you do not specif
 
 The criteria based on which to query pipes.
 
-### ORDER BY <field_name>
+### ORDER BY `<field_name>`
 
 The field by which you want to sort the records returned.
 
