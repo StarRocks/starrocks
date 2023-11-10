@@ -8,7 +8,7 @@ Apache Ranger provides the following core modules:
 - Agent Plugin: plugins of components embedded in the Hadoop ecosystem. These plugins pull security policies from Ranger Admin on a regular basis and store the policies in local files. When users access a component, the corresponding plugin assesses the request based on the configured security policy and sends the authentication results to the corresponding component.
 - User Sync: used to pull user and user group information, and synchronize the permission data of users and user groups to Ranger's database.
 
-In addition to the native RBAC privilege system, StarRocks also supports access control through Apache Ranger, providing a higher level of data security.
+In addition to the native RBAC privilege system, StarRocks v3.2 also supports access control through Apache Ranger, providing a higher level of data security.
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
