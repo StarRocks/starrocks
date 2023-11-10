@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # get_json_string
 
 ## 功能

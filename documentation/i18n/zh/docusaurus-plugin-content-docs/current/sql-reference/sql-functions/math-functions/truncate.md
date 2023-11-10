@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # truncate
 
 ## 功能

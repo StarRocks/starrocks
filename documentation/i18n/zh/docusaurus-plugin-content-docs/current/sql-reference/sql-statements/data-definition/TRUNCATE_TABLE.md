@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # TRUNCATE TABLE
 
 ## 功能

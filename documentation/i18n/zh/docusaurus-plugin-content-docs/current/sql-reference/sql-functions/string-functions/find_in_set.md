@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # find_in_set
 
 ## 功能

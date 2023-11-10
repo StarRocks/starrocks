@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Docker 编译 StarRocks
 
 本文介绍如何使用 Docker 编译 StarRocks。

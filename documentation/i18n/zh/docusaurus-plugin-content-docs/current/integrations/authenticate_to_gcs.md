@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 配置 GCS 认证信息
 
 ## 认证方式介绍

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN CANCEL REPAIR
 
 ## 功能

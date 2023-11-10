@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP FUNCTION
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 设置时区
 
 本文介绍了如何设置时区以及时区设置的影响。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 查询外部数据
 
 本文介绍如何通过 External Catalog 查询外部数据。External Catalog 方便您轻松访问并查询存储在各类外部源的数据，无需创建外部表。

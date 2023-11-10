@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ALTER SYSTEM
 
 ## 功能

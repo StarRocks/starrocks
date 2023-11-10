@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # weeks_sub
 
 ## 功能

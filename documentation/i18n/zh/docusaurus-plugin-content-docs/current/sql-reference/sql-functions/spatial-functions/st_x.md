@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ST_X
 
 ## 功能

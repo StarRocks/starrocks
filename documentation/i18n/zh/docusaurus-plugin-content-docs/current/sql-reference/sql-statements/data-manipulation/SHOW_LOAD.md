@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW LOAD
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP FILE
 
 DROP FILE 语句用于删除保存在数据库中的文件。使用该语句删除一个文件，那么该文件在 FE 内存和 BDBJE 中均会被删除。

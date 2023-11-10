@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 StarGo 部署管理 StarRocks
 
 本文介绍如何使用 StarGo 部署管理 StarRocks 集群。

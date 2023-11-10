@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署总览
 
 本章节介绍如何在生产环境中部署、升级和降级 StarRocks 集群。

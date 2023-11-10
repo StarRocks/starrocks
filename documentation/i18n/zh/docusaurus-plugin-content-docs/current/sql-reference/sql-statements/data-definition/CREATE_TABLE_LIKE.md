@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE TABLE LIKE
 
 ## 功能

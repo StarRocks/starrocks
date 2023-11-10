@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks version 1.19
 
 ## 1.19.0

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # BITMAP
 
 这里通过一个简单的示例来介绍 Bitmap 中的几个聚合函数的用法，具体的函数定义以及更多 Bitmap 函数请参考 [bitmap-functions](../bitmap-functions/bitmap_and.md)。

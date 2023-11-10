@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ALTER ROUTINE LOAD
 
 ## 功能

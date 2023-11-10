@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE MATERIALIZED VIEW
 
 ## 功能

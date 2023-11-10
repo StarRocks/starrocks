@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # md5sum
 
 ## 功能

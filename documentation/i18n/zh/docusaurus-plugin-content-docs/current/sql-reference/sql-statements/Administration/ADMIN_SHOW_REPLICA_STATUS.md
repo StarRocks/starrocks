@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN SHOW REPLICA STATUS
 
 ## 功能

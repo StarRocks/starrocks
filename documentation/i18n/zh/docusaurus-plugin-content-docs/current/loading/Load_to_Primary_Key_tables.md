@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过导入实现数据变更
 
 StarRocks 的[主键模型](/table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 语句对 StarRocks 表进行数据变更。

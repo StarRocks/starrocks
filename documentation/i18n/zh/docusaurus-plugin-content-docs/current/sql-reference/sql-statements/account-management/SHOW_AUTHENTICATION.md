@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW AUTHENTICATION
 
 ## 功能

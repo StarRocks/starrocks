@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ARRAY
 
 本文介绍如何使用 StarRocks 中的数组类型。

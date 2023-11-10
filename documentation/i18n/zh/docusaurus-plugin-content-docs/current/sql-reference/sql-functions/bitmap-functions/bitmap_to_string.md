@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # bitmap_to_string
 
 ## 功能

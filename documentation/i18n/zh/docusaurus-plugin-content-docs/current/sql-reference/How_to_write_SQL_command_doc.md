@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SQL命令模板
 
 > 本模板使用 `ADMIN SET REPLICA STATUS` 命令为例介绍 SQL 命令写作的统一要求。

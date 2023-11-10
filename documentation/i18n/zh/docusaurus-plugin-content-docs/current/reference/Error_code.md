@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 错误码
 
 本节描述查询请求常见的错误码。

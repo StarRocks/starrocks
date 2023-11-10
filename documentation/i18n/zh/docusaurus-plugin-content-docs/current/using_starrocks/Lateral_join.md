@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Lateral Join 实现列转行
 
 本文介绍如何使用 Lateral Join 功能。

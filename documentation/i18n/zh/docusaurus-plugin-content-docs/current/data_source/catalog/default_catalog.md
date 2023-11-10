@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Default catalog
 
 本文介绍什么是 Default Catalog，以及如何使用 Default Catalog 查询 StarRocks 内部数据。

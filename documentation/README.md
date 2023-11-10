@@ -4,6 +4,51 @@ Thank you very much for contributing to StarRocks documentation! Your help is im
 
 Before contributing, please read this article carefully to quickly understand the tips, writing process, and documentation templates.
 
+## News
+
+### Doc location
+
+The docs are now in `documentation`:
+
+- Chinese: `documentation/i18n/zh/docusaurus-plugin-content-docs/current/`
+- English: `documentation/docs/`
+
+### Navigation
+
+The `TOC.md` file is replaced with `documentation/sidebars.json`. As much as possible the navigation is managed through files in each directory of the docs. The two files are:
+
+- `_category_.json`
+- A file in the dir with the same name as the dir, for example in the `quick_start` directory a file named `quick_start.mdx`
+
+### Viewing the docs locally
+
+You can run the docs on your own machine and see your changes as you save your files.
+
+Requirements:
+
+- Node.js version 18, if you use a different version of Node.js for other things we recommend using [`nvm`](https://github.com/nvm-sh/nvm/blob/master/README.md) to manage Node.js.
+
+```bash
+cd documentation
+nvm use 18
+export DOCS_LOCALE=zh # or export DOCS_LOCALE=en for English
+./scripts/devmode.sh
+```
+
+### Building the docs
+
+Hopefully you are editing both the Chinese and English docs at the same time. To see both English and Chinese you have to do a build of the docs:
+
+```
+cd documentation
+nvm use 18
+./scripts/runme.sh
+```
+
+> Note:
+>
+> In dev mode you can see the docs update every time you save a file, but a full build does not update as you save, you have to rebuild. The advantage of a full build is that it builds both Chinese and English docs.
+
 ## Tips
 
 1. Language: Please use at least one language, Chinese or English. The bilingual version is highly preferred.

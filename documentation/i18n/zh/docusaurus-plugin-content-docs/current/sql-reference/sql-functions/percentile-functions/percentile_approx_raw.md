@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # percentile_approx_raw
 
 ## 功能

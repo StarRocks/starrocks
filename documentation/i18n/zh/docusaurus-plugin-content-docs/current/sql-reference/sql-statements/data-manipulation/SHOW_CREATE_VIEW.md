@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW CREATE VIEW
 
 ## 功能

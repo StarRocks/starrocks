@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP ROLE
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP RESOURCE GROUP
 
 ## 功能

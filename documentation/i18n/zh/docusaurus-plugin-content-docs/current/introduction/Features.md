@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 产品特性
 
 ## MPP 分布式执行框架

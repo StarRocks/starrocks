@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 物化视图查询改写
 
 本文描述了如何利用 StarRocks 的异步物化视图来改写并加速查询。

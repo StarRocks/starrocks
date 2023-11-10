@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CANCEL REFRESH MATERIALIZED VIEW
 
 ## 功能

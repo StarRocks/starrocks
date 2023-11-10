@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 管理副本
 
 本文介绍如何管理 StarRocks 中的数据副本 (replica)。

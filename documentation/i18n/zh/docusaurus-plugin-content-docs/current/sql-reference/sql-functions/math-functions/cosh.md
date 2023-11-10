@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # cosh
 
 ## 功能

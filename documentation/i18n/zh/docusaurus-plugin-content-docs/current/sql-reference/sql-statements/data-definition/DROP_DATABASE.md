@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP DATABASE
 
 ## 功能

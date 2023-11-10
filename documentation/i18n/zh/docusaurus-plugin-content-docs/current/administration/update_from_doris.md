@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 升级 Apache Doris 至 StarRocks
 
 本文介绍如何将 Apache Doris 升级为 StarRocks。

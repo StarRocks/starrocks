@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 系统架构
 
 StarRocks 架构简洁，整个系统的核心只有 FE（Frontend）、BE（Backend）两类进程，不依赖任何外部组件，方便部署与维护。FE 和 BE 模块都可以在线水平扩展，元数据和业务数据都有副本机制，确保整个系统无单点。StarRocks 提供 MySQL 协议接口，支持标准 SQL 语法。用户可通过 MySQL 客户端方便地查询和分析 StarRocks 中的数据。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # append_trailing_char_if_absent
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Lambda 表达式
 
 Lambda 表达式（Lambda expression）是一种匿名函数，可以作为高阶函数的传入参数，不能单独使用。Lambda 表达式可以让代码更加简洁、紧凑、可扩展。

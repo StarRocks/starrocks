@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # array_cum_sum
 
 ## 功能

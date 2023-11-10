@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 其他
 
 本文汇总了使用 StarRocks 时的其他常见问题。

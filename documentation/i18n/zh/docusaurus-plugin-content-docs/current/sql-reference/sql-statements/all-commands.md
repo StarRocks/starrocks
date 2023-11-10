@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # All commands
 
 本文罗列了所有 StarRocks 支持的 SQL 命令，并按照命令的功能进行了分类。

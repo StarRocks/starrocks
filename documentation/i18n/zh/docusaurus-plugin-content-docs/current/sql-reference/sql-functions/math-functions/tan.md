@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # tan
 
 ## 功能

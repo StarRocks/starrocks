@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE FILE
 
 CREATE FILE 语句用于创建文件。文件创建后会自动上传并持久化在 StarRocks 集群中。

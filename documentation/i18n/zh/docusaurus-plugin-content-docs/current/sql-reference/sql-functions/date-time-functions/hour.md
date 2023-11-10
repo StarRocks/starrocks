@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # hour
 
 ## 功能

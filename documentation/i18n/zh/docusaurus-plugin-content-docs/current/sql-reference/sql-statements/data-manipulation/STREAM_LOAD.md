@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # STREAM LOAD
 
 ## 功能

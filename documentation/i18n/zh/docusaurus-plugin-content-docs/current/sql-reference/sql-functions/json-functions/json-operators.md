@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # JSON 运算符
 
 StarRocks 支持使用 `<`，`<=`，`>`，`>=`，`=`，`!=` 运算符查询 JSON 数据，不支持使用 `IN` 运算符。

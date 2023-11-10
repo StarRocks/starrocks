@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # List 分区
 
 自 v3.1 起，StarRocks 支持 List 分区，数据按照您显式定义的枚举值列表进行分区，适用于按枚举值来查询和管理数据。

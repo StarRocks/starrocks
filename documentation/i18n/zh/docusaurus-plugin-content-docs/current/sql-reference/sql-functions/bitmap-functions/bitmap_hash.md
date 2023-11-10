@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # bitmap_hash
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 扩容缩容 StarRocks
 
 本文介绍如何扩容以及缩容 StarRocks 集群。

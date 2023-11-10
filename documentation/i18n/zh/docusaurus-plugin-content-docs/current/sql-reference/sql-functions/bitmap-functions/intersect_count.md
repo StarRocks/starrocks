@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # intersect_count
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # TINYINT
 
 ## 描述

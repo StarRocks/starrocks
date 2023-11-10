@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # bitand
 
 ## 功能

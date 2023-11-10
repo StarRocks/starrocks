@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 AUTO INCREMENT 列构建全局字典以加速精确去重计算和 Join
 
 ## 应用场景

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 规划 StarRocks 集群
 
 本文介绍如何为部署 StarRocks 生产集群规划资源。您需要从节点数、CPU 内核数、内存大小和存储大小的角度规划您的 StarRocks 集群。

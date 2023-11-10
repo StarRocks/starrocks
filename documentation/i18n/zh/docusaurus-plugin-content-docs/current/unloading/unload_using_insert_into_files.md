@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 INSERT INTO FILES 导出数据
 
 本文描述了如何使用 INSERT INTO FILES 将 StarRocks 数据导出至远程存储。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW CREATE DATABASE
 
 查看指定数据库的创建语句。

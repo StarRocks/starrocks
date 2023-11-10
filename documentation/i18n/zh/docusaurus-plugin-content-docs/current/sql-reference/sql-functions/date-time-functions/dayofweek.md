@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # dayofweek
 
 ## 功能

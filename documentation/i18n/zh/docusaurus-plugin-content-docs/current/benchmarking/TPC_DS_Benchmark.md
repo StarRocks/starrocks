@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # TPC-DS 性能测试
 
 TPC-DS 是美国交易处理效能委员会 TPC（Transaction Processing Performance Council）组织制定的用来模拟决策支持系统的测试集。与 TPC-H 相比，TPC-DS 是一个更加复杂和全面的基准测试集。

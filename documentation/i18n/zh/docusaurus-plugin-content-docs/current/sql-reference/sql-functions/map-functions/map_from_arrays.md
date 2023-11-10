@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # map_from_arrays
 
 ## 功能

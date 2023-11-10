@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # split_part
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # percentile_cont
 
 ## 功能

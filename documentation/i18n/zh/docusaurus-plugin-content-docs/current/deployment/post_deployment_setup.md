@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署后设置
 
 本文描述了您在部署 StarRocks 之后需要执行的任务。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # cosine_similarity_norm
 
 ## 功能

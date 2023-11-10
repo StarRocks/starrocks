@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 导入通用常见问题
 
 ## 1. 发生 "close index channel failed" 和 "too many tablet versions" 错误应该如何处理？

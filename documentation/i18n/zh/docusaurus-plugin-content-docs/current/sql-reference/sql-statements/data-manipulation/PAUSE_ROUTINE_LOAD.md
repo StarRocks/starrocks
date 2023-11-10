@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # PAUSE ROUTINE LOAD
 
 ## 功能

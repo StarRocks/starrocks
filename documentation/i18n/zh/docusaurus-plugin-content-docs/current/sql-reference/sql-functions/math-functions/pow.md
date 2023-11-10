@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # pow, power, dpow, fpow
 
 ## 功能

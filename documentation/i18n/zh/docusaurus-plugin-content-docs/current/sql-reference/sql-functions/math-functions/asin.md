@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # asin
 
 ## 功能

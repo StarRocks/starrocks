@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # TPC-H 基准测试
 
 TPC-H 是美国交易处理效能委员会 TPC（Transaction Processing Performance Council）组织制定的用来模拟决策支持类应用的测试集。它包括一整套面向业务的 ad-hoc 查询和并发数据修改。

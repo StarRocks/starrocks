@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # last_day
 
 ## 功能

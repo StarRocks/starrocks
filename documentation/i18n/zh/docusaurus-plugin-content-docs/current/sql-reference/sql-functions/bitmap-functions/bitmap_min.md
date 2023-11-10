@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # bitmap_min
 
 ## 功能

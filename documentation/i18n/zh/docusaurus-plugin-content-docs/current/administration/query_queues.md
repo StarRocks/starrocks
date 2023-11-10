@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 查询队列
 
 本文档介绍如何在 StarRocks 中管理查询队列。

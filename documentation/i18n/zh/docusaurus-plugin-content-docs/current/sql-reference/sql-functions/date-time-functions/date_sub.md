@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # date_sub
 
 ## 功能

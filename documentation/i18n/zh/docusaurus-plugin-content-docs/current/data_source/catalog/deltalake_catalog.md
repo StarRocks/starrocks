@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Delta Lake catalog
 
 Delta Lake Catalog 是一种 External Catalog。通过 Delta Lake Catalog，您不需要执行数据导入就可以直接查询 Delta Lake 里的数据。

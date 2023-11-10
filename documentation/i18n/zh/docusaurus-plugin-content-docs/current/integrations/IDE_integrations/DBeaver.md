@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DBeaver
 
 作为一款 SQL 客户端应用软件，DBeaver 提供了强大的数据库管理能力，通过 Assistant 帮助您快速连接数据库。
