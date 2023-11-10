@@ -83,6 +83,10 @@ public class MysqlAuthPacket extends MysqlPacket {
         return capability.isSSL();
     }
 
+    public Map<String, String> getConnectAttributes() {
+        return connectAttributes;
+    }
+
     @Override
     public boolean readFrom(ByteBuffer buffer) {
         // read capability four byte, which CLIENT_PROTOCOL_41 must be set
@@ -119,7 +123,7 @@ public class MysqlAuthPacket extends MysqlPacket {
         if (buffer.remaining() > 0 && capability.isPluginAuth()) {
             pluginName = new String(MysqlProto.readNulTerminateString(buffer));
         }
-        // connect attrs, no use now.
+        // connect attrs
         if (buffer.remaining() > 0 && capability.isConnectAttrs()) {
             connectAttributes = parseConnectAttrs(buffer);
         }
