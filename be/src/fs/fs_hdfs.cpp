@@ -39,7 +39,7 @@ public:
 
 private:
     bool _is_hdfs_file() const;
-        
+
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
