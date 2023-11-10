@@ -1084,6 +1084,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         ADD_RF_TO_BUILDER                                                                                     \
     }
 
+#define ADD_RF_DECIMAL128_TYPE(xtype)                                                                            \
+    case xtype: {                                                                                                \
+        auto* xrf = dynamic_cast<const RuntimeBloomFilter<xtype>*>(rf);                                          \
+        if (xrf == nullptr) return false;                                                                        \
+        auto lower = orc::Literal(orc::Int128(xrf->min_value() >> 64, xrf->min_value()), slot->type().precision, \
+                                  slot->type().scale);                                                           \
+        auto upper = orc::Literal(orc::Int128(xrf->max_value() >> 64, xrf->max_value()), slot->type().precision, \
+                                  slot->type().scale);                                                           \
+        ADD_RF_TO_BUILDER                                                                                        \
+    }
+
 bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinRuntimeFilter* rf,
                                          std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     LogicalType ltype = slot->type().type;
@@ -1106,7 +1117,7 @@ bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinR
         ADD_RF_DECIMALV2_TYPE(LogicalType::TYPE_DECIMALV2);
         ADD_RF_DECIMALV3_TYPE(LogicalType::TYPE_DECIMAL32);
         ADD_RF_DECIMALV3_TYPE(LogicalType::TYPE_DECIMAL64);
-        ADD_RF_DECIMALV3_TYPE(LogicalType::TYPE_DECIMAL128);
+        ADD_RF_DECIMAL128_TYPE(LogicalType::TYPE_DECIMAL128);
     default:;
     }
     return false;
