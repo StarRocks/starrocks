@@ -34,7 +34,6 @@
 
 package com.starrocks.leader;
 
-import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.config.EnvironmentParams;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
@@ -53,6 +52,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -168,8 +168,8 @@ public class MetaHelper {
         }
 
         long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());
-        File finalMetaFile = new File(Config.meta_dir);
-        if (finalMetaFile.getFreeSpace() < lowerFreeDiskSize) {
+        FileStore store = Files.getFileStore(Paths.get(Config.meta_dir));
+        if (store.getUsableSpace() < lowerFreeDiskSize) {
             LOG.error("Free size on meta dir: {} is less than {}",
                     Config.meta_dir, new ByteSizeValue(lowerFreeDiskSize));
             throw new InvalidMetaDirException();
