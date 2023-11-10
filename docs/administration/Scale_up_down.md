@@ -61,5 +61,3 @@ The commands of both methods are similar:
 Drop backend is a dangerous operation, so you need to confirm it twice before executing it
 
 * `alter system drop backend "be_host:be_heartbeat_service_port";`
-
-After the scale-out or scale-in, you can check the status of FE and BE by referring to [Cluster Status](Cluster_administration.md#confirm-cluster-health-status).
