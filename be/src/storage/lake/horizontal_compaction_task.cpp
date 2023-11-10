@@ -122,12 +122,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         ASSIGN_OR_RETURN(auto segments, rowset->segments(false));
-        for (auto& segment : segments) {
-            for (size_t i = 0; i < segment->num_columns(); ++i) {
-                const auto* column_reader = segment->column(i);
-                if (column_reader == nullptr) {
-                    continue;
-                }
+        for (auto&& segment : segments) {
+            for (auto&& [_, column_reader] : segment->column_readers()) {
                 total_mem_footprint += column_reader->total_mem_footprint();
             }
         }

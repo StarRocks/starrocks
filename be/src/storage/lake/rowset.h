@@ -43,8 +43,9 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
-    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
-                                                                                    OlapReaderStatistics* stats);
+    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(
+            const Schema& schema, OlapReaderStatistics* stats,
+            const std::shared_ptr<const TabletSchema>& tablet_schema);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -54,7 +55,8 @@ public:
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
-            const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats);
+            const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
+            const std::shared_ptr<const TabletSchema>& tablet_schema);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 

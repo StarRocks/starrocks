@@ -299,7 +299,7 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
                                                    OlapReaderStatistics* stats, int64_t version,
                                                    RowsetSegmentId rowset_seg_id, const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
-    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, rowset->schema());
+    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id);
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
         return segment.status();
@@ -316,6 +316,7 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
     seg_options.version = version;
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(tablet->data_dir()->get_meta());
+    seg_options.tablet_schema = rowset->schema();
     ASSIGN_OR_RETURN(auto seg_iter, (*segment)->new_iterator(schema, seg_options));
     auto source_chunk_ptr = ChunkHelper::new_chunk(schema, (*segment)->num_rows());
     auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, 1024);

@@ -459,7 +459,7 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
         if (idx.first >= 0) {
             auto column_file = dcg->column_files(parent_name(_segment->file_name()))[idx.first];
             if (_dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
+                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first));
                 _dcg_segments[column_file] = dcg_segment;
             }
             return _dcg_segments[column_file];
@@ -522,8 +522,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
-        auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
-        const auto& col = tablet_schema->column(cid);
+        const auto& col = _opts.tablet_schema->column(cid);
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
         iter_opts.read_file = rfile.get();
@@ -801,9 +800,12 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
 // or end if no such row is found.
 // |rowid| will be assigned to the id of found row or |end| if no such row is found.
 Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid) {
-    std::string index_key;
-    index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                      : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
+    if (UNLIKELY(_opts.tablet_schema == nullptr)) {
+        return Status::InternalError("tablet schema in SegmentIterator is nullptr");
+    }
+    auto short_keys = _opts.tablet_schema->num_short_key_columns();
+    std::string index_key = lower ? key.short_key_encode(short_keys, KEY_MINIMAL_MARKER)
+                                  : key.short_key_encode(short_keys, KEY_MAXIMAL_MARKER);
 
     uint32_t start_block_id;
     auto start_iter = _segment->lower_bound(index_key);

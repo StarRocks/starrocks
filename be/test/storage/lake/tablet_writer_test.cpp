@@ -133,10 +133,8 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0));
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -144,6 +142,7 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     opts.tablet_id = _tablet_metadata->id();
     opts.stats = &statistics;
     opts.chunk_size = 1024;
+    opts.tablet_schema = _tablet_schema;
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
@@ -219,10 +218,8 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0));
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -230,6 +227,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     opts.tablet_id = _tablet_metadata->id();
     opts.stats = &statistics;
     opts.chunk_size = 1024;
+    opts.tablet_schema = _tablet_schema;
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));

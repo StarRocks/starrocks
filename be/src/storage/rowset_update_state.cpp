@@ -786,7 +786,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
     // segment[segment_id] of partial rowset
     if (FileSystem::Default()->path_exists(dest_path).ok()) {
         RETURN_IF_ERROR(FileSystem::Default()->rename_file(dest_path, src_path));
-        RETURN_IF_ERROR(rowset->reload_segment_with_schema(segment_id, _tablet_schema));
+        RETURN_IF_ERROR(rowset->reload_segment(segment_id));
     }
 
     if (!txn_meta.partial_update_column_ids().empty()) {

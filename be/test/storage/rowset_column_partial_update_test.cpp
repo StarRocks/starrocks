@@ -233,7 +233,7 @@ static bool check_until_eof(const ChunkIteratorPtr& iter, int64_t check_rows_cnt
             }
             chunk->reset();
         } else {
-            LOG(WARNING) << "read error: " << st.to_string();
+            DCHECK(false) << "read error: " << st.to_string();
             return false;
         }
     }

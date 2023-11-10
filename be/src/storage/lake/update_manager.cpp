@@ -407,7 +407,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
                                          const TabletSchemaCSPtr& tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
         std::string path = tablet->segment_location(segment_name);
-        auto segment = Segment::open(fs, path, segment_id, tablet_schema);
+        auto segment = Segment::open(fs, path, segment_id);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << path << " : " << segment.status();
             return segment.status();

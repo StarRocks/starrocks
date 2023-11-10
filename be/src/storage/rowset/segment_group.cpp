@@ -99,7 +99,7 @@ void ShortKeyIndexDecoderGroup::_find_position(ssize_t ordinal, ssize_t* decoder
 }
 
 /// SegmentGroup
-SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr>&& segments)
-        : _segments(std::move(segments)), _decoder_group(_segments) {}
+SegmentGroup::SegmentGroup(std::vector<SegmentSharedPtr>&& segments, size_t num_short_keys)
+        : _segments(std::move(segments)), _decoder_group(_segments), _num_short_keys(num_short_keys) {}
 
 } // namespace starrocks

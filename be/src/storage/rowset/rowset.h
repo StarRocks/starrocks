@@ -153,7 +153,6 @@ public:
     // reload this rowset after the underlying segment file is changed
     Status reload();
     Status reload_segment(int32_t segment_id);
-    Status reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr& schema);
     int64_t total_segment_data_size();
 
     const TabletSchema& schema_ref() const { return *_schema; }

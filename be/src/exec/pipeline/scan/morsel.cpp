@@ -348,9 +348,9 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     return morsel;
 }
 
-rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(size_t short_keys, Segment* segment, const SeekTuple& key,
+                                                       bool lower) const {
+    std::string index_key = key.short_key_encode(short_keys, lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
     uint32_t start_block_id;
     auto start_iter = segment->lower_bound(index_key);
     if (start_iter.valid()) {
@@ -370,10 +370,9 @@ rowid_t PhysicalSplitMorselQueue::_lower_bound_ordinal(Segment* segment, const S
     return start_block_id * segment->num_rows_per_block();
 }
 
-rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower,
-                                                       rowid_t end) const {
-    std::string index_key =
-            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(size_t short_keys, Segment* segment, const SeekTuple& key,
+                                                       bool lower, rowid_t end) const {
+    std::string index_key = key.short_key_encode(short_keys, lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 
     auto end_iter = segment->upper_bound(index_key);
     if (end_iter.valid()) {
@@ -461,6 +460,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     _num_segment_rest_rows = 0;
     _segment_scan_range.clear();
 
+    auto short_keys = _cur_rowset()->schema()->num_short_key_columns();
     auto* segment = _cur_segment();
     // The new rowset doesn't contain any segment.
     if (segment == nullptr || segment->num_rows() == 0) {
@@ -477,11 +477,11 @@ Status PhysicalSplitMorselQueue::_init_segment() {
             rowid_t upper_rowid = segment->num_rows();
 
             if (!range.upper().empty()) {
-                upper_rowid =
-                        _upper_bound_ordinal(segment, range.upper(), !range.inclusive_upper(), segment->num_rows());
+                upper_rowid = _upper_bound_ordinal(short_keys, segment, range.upper(), !range.inclusive_upper(),
+                                                   segment->num_rows());
             }
             if (!range.lower().empty() && upper_rowid > 0) {
-                lower_rowid = _lower_bound_ordinal(segment, range.lower(), range.inclusive_lower());
+                lower_rowid = _lower_bound_ordinal(short_keys, segment, range.lower(), range.inclusive_lower());
             }
             if (lower_rowid <= upper_rowid) {
                 _segment_scan_range.add(Range{lower_rowid, upper_rowid});
@@ -753,7 +753,8 @@ StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(Rowset*
         RETURN_IF_ERROR(segment->load_index());
     }
 
-    return std::make_unique<SegmentGroup>(std::move(segments));
+    CHECK(rowset->schema() != nullptr) << "tablet schema in rowset is nullptr";
+    return std::make_unique<SegmentGroup>(std::move(segments), rowset->schema()->num_short_key_columns());
 }
 
 bool LogicalSplitMorselQueue::_next_tablet() {

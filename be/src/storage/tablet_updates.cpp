@@ -4450,19 +4450,15 @@ Status GetDeltaColumnContext::prepareGetDeltaColumnContext(std::shared_ptr<Segme
     return Status::OK();
 }
 
-static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid, int32_t* col_index,
-                                                          const TabletSchemaCSPtr& read_tablet_schema) {
+static StatusOr<std::shared_ptr<Segment>> get_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid) {
     // iterate dcg from new ver to old ver
     for (const auto& dcg : ctx.dcgs) {
         std::pair<int32_t, int32_t> idx = dcg->get_column_idx(ucid);
         if (idx.first >= 0) {
             std::string column_file = dcg->column_files(parent_name(ctx.segment->file_name()))[idx.first];
             if (ctx.dcg_segments.count(column_file) == 0) {
-                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema));
+                ASSIGN_OR_RETURN(auto dcg_segment, ctx.segment->new_dcg_segment(*dcg, idx.first));
                 ctx.dcg_segments[column_file] = dcg_segment;
-            }
-            if (col_index != nullptr) {
-                *col_index = idx.second;
             }
             return ctx.dcg_segments[column_file];
         }
@@ -4477,8 +4473,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDelt
                                                                          uint32_t ucid,
                                                                          const TabletSchemaCSPtr& read_tablet_schema) {
     // build column iter from delta column group
-    int32_t col_index = 0;
-    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid, &col_index, read_tablet_schema));
+    ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid));
     if (dcg_segment != nullptr) {
         if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
             ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_name()));
@@ -4558,7 +4553,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         }
         std::string seg_path =
                 Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
-        auto segment = Segment::open(fs, seg_path, rssid - iter->first, rowset->schema());
+        auto segment = Segment::open(fs, seg_path, rssid - iter->first);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
@@ -4619,7 +4614,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
 
         std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_path));
-        auto segment = Segment::open(fs, seg_path, segment_id, auto_increment_state->schema);
+        auto segment = Segment::open(fs, seg_path, segment_id);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();

@@ -38,6 +38,10 @@ Rowset::~Rowset() = default;
 // TODO: support
 //  1. rowid range and short key range
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
+    if (UNLIKELY(options.tablet_schema == nullptr)) {
+        DCHECK(false) << "tablet schema in RowsetReadOptions is nullptr";
+        return Status::InvalidArgument("tablet schema in RowsetReadOptions is nullptr");
+    }
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet.root_location()));
     seg_options.stats = options.stats;
@@ -137,8 +141,8 @@ StatusOr<size_t> Rowset::get_read_iterator_num() {
     }
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const Schema& schema,
-                                                                          OlapReaderStatistics* stats) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(
+        const Schema& schema, OlapReaderStatistics* stats, const std::shared_ptr<const TabletSchema>& tablet_schema) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
     std::vector<ChunkIteratorPtr> seg_iterators;
@@ -146,6 +150,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_tablet.root_location()));
     seg_options.stats = stats;
+    seg_options.tablet_schema = tablet_schema;
     for (auto& seg_ptr : segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
@@ -159,10 +164,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
     return seg_iterators;
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(const Schema& schema,
-                                                                                      int64_t version,
-                                                                                      const MetaFileBuilder* builder,
-                                                                                      OlapReaderStatistics* stats) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(
+        const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats,
+        const std::shared_ptr<const TabletSchema>& tablet_schema) {
     std::vector<SegmentPtr> segments;
     RETURN_IF_ERROR(load_segments(&segments, false));
     std::vector<ChunkIteratorPtr> seg_iterators;
@@ -175,6 +179,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.version = version;
     seg_options.tablet_id = _tablet.id();
     seg_options.rowset_id = _rowset_metadata->id();
+    seg_options.tablet_schema = tablet_schema;
     for (auto& seg_ptr : segments) {
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {

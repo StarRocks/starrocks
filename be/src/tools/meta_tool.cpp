@@ -697,7 +697,7 @@ Status SegmentDump::_init() {
 
     // open segment
     size_t footer_length = 16 * 1024 * 1024;
-    auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema, &footer_length, nullptr);
+    auto segment_res = Segment::open(_fs, _path, 0, &footer_length, nullptr);
     if (!segment_res.ok()) {
         std::cout << "open segment failed: " << segment_res.status() << std::endl;
         return Status::InternalError("");
@@ -822,6 +822,7 @@ Status SegmentDump::calc_checksum() {
     seg_opts.use_page_cache = false;
     OlapReaderStatistics stats;
     seg_opts.stats = &stats;
+    seg_opts.tablet_schema = _tablet_schema;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
     if (!seg_res.ok()) {
         std::cout << "new segment iterator failed: " << seg_res.status().message() << std::endl;
@@ -905,6 +906,7 @@ Status SegmentDump::dump_segment_data() {
     seg_opts.use_page_cache = false;
     OlapReaderStatistics stats;
     seg_opts.stats = &stats;
+    seg_opts.tablet_schema = _tablet_schema;
     auto seg_res = _segment->new_iterator(*schema, seg_opts);
     if (!seg_res.ok()) {
         std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
@@ -952,6 +954,7 @@ Status SegmentDump::dump_column_size() {
         seg_opts.use_page_cache = false;
         OlapReaderStatistics stats;
         seg_opts.stats = &stats;
+        seg_opts.tablet_schema = _tablet_schema;
         auto seg_res = _segment->new_iterator(*schema, seg_opts);
         if (!seg_res.ok()) {
             std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
