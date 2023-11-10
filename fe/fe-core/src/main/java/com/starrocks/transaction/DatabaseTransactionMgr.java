@@ -66,6 +66,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TTransactionStatus;
@@ -81,6 +82,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +123,7 @@ public class DatabaseTransactionMgr {
     private ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
     // store committed transactions' dependency relationships
     private TransactionGraph transactionGraph = new TransactionGraph();
+
     // label -> txn ids
     // this is used for checking if label already used. a label may correspond to multiple txns,
     // and only one is success.
@@ -725,6 +728,58 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
+        List<TransactionStateBatch> result = new ArrayList<>();
+        readLock();
+
+        try {
+            List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
+            for (long txnId : txnIds) {
+                List<Long> txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
+                        Config.lake_batch_publish_min_version_num,
+                        Config.lake_batch_publish_max_version_num, txnId);
+                List<TransactionState> states = txnsWithDependency.stream().map(id -> idToRunningTransactionState.get(id))
+                        .collect(Collectors.toList());
+                // check whether version is consequent
+                // for schema change will occupy a version
+                Map<Long, PartitionCommitInfo> versions = new HashMap<>();
+                long tableId = -1;
+                if (states.size() != 0) {
+                    tableId = states.get(0).getTableIdList().get(0);
+                    versions.putAll(states.get(0).getTableCommitInfo(tableId).getIdToPartitionCommitInfo());
+                }
+
+                boolean consecutive = true;
+                for (int i = 1; i < states.size() && consecutive; i++) {
+                    TransactionState state = states.get(i);
+                    for (Map.Entry<Long, PartitionCommitInfo> item :
+                            state.getTableCommitInfo(tableId).getIdToPartitionCommitInfo().entrySet()) {
+                        if (versions.containsKey(item.getKey())) {
+                            // version is not consecutive
+                            // may schema change occupy a version
+                            if (versions.get(item.getKey()).getVersion() + 1 != item.getValue().getVersion()) {
+                                states = states.subList(0, i);
+                                consecutive = false;
+                                break;
+                            }
+                        }
+
+                        versions.put(item.getKey(), item.getValue());
+                    }
+
+                }
+
+                if (states.size() != 0) {
+                    TransactionStateBatch batch = new TransactionStateBatch(states);
+                    result.add(batch);
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return result;
+    }
+
     // check whether transaction can be finished or not
     // for each tablet of load txn, if most replicas version publish successed
     // the trasaction can be treated as successful and can be finished
@@ -1127,7 +1182,8 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            if ((Config.enable_new_publish_mechanism || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) &&
+                    transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {
@@ -1143,6 +1199,30 @@ public class DatabaseTransactionMgr {
             finalStatusTransactionStateDeque.add(transactionState);
         }
         updateTxnLabels(transactionState);
+    }
+
+    // The status of stateBach is VISIBLE or ABORTED
+    public void unprotectSetTransactionStateBatch(TransactionStateBatch stateBatch, boolean isReplay) {
+        if (!isReplay) {
+            long start = System.currentTimeMillis();
+            editLog.logInsertTransactionStateBatch(stateBatch);
+            LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
+                    stateBatch.getTxnIds(), System.currentTimeMillis() - start);
+        }
+
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            if (idToRunningTransactionState.remove(transactionState.getTransactionId()) != null) {
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
+                    runningRoutineLoadTxnNums--;
+                } else {
+                    runningTxnNums--;
+                }
+            }
+            transactionGraph.remove(transactionState.getTransactionId());
+            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
+            finalStatusTransactionStateDeque.add(transactionState);
+            updateTxnLabels(transactionState);
+        }
     }
 
     private void updateTxnLabels(TransactionState transactionState) {
@@ -1473,6 +1553,18 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
+
+    // the write lock of database has been hold
+    private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
+        Table table = db.getTable(transactionStateBatch.getTableId());
+        if (table == null) {
+            return true;
+        }
+        TransactionLogApplier applier = txnLogApplierFactory.create(table);
+        ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
+        return true;
+    }
+
     public boolean isPreviousTransactionsFinished(long endTransactionId, List<Long> tableIdList) {
         readLock();
         try {
@@ -1569,6 +1661,19 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        writeLock();
+        try {
+            LOG.info("replay a transaction state batch{}", transactionStateBatch);
+            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
+            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+
+            unprotectSetTransactionStateBatch(transactionStateBatch, true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public List<List<String>> getDbTransStateInfo() {
         List<List<String>> infos = Lists.newArrayList();
         readLock();
@@ -1658,6 +1763,44 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
+    public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
+        Database db = globalStateMgr.getDb(stateBatch.getDbId());
+        if (db == null) {
+            writeLock();
+            try {
+                stateBatch.setTransactionStatus(TransactionStatus.ABORTED);
+                LOG.warn("db is dropped during transaction batch, abort transaction {}", stateBatch);
+                unprotectSetTransactionStateBatch(stateBatch, false);
+                return;
+            } finally {
+                writeUnlock();
+            }
+        }
+
+        db.writeLock();
+        try {
+            boolean txnOperated = false;
+            writeLock();
+            try {
+                stateBatch.setTransactionVisibleInfo();
+                unprotectSetTransactionStateBatch(stateBatch, false);
+                txnOperated = true;
+            } finally {
+                writeUnlock();
+                stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
+            }
+
+            updateCatalogAfterVisibleBatch(stateBatch, db);
+
+        } finally {
+            db.writeUnlock();
+        }
+
+        collectStatisticsForStreamLoadOnFirstLoadBatch(stateBatch, db);
+
+        LOG.info("finish transaction {} batch successfully", stateBatch);
+    }
+
     private void collectStatisticsForStreamLoadOnFirstLoad(TransactionState txnState, Database db) {
         TransactionState.LoadJobSourceType sourceType = txnState.getSourceType();
         if (!TransactionState.LoadJobSourceType.FRONTEND_STREAMING.equals(sourceType)
@@ -1673,6 +1816,13 @@ public class DatabaseTransactionMgr {
 
         for (Table table : tables) {
             StatisticUtils.triggerCollectionOnFirstLoad(txnState, db, table, false);
+        }
+    }
+
+
+    private void collectStatisticsForStreamLoadOnFirstLoadBatch(TransactionStateBatch txnStateBatch, Database db) {
+        for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
+            collectStatisticsForStreamLoadOnFirstLoad(txnState, db);
         }
     }
 
@@ -1720,7 +1870,7 @@ public class DatabaseTransactionMgr {
         }
         return stateListeners;
     }
-    
+
     public TTransactionStatus getTxnStatus(long txnId) {
         TransactionState transactionState;
         readLock();
