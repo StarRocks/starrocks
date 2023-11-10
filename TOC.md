@@ -159,8 +159,9 @@
     + [权限系统总览](/administration/privilege_overview.md)
     + [权限项](/administration/privilege_item.md)
     + [管理用户权限](/administration/User_privilege.md)
-    + [权限系统 FAQ](/administration/privilege_faq.md)
+    + [使用 Apache Ranger 管理权限](/administration/ranger_plugin.md)
     + [认证方式](/administration/Authentication.md)
+    + [权限系统 FAQ](/administration/privilege_faq.md)
   + 性能调优
     + [查询分析](/administration/Query_planning.md)
     + [查看分析 Query Profile](/administration/query_profile.md)
