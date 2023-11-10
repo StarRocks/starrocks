@@ -91,8 +91,18 @@ public class StarOSAgent {
     }
 
     private void prepare() {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId.equals("")) {
+        if (!serviceId.isEmpty()) {
+            return;
+        }
+
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            if (!serviceId.isEmpty()) {
+                return;
+            }
+        }
+
+        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+            if (serviceId.isEmpty()) {
                 getServiceId();
             }
         }
