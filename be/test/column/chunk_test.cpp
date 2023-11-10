@@ -18,10 +18,10 @@
 
 #include "column/binary_column.h"
 #include "column/chunk_extra_data.h"
+#include "column/column_helper.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "column/column_helper.h"
 
 namespace starrocks {
 
