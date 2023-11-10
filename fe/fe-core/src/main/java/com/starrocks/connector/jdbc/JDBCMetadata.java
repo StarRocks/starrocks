@@ -17,14 +17,18 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -160,17 +164,26 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         try (Connection connection = getConnection()) {
             List<Partition> partitions = schemaResolver.getPartitions(connection, table);
+            String maxInt = IntLiteral.createMaxValue(Type.INT).getStringValue();
+            String maxDate = DateLiteral.createMaxValue(Type.DATE).getStringValue();
+
             ImmutableList.Builder<PartitionInfo> list = ImmutableList.builder();
-            if (partitions.size() > 0) {
-                for (Partition partition : partitions) {
-                    if (partitionNames.contains(partition.getPartitionName())) {
+            if (partitions.isEmpty()) {
+                return Lists.newArrayList();
+            }
+            for (Partition partition : partitions) {
+                String partitionName = partition.getPartitionName();
+                if (partitionNames.contains(partitionName)) {
+                    list.add(partition);
+                }
+                // Determine boundary value
+                if (partitionName.equalsIgnoreCase(PartitionUtil.MYSQL_PARTITION_MAXVALUE)) {
+                    if (partitionNames.contains(maxInt) || partitionNames.contains(maxDate)) {
                         list.add(partition);
                     }
                 }
-                return list.build();
-            } else {
-                return Lists.newArrayList();
             }
+            return list.build();
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }

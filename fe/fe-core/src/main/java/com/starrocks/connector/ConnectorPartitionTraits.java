@@ -315,6 +315,13 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
+        public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr)
+                throws AnalysisException {
+            return PartitionUtil.getRangePartitionMapOfJDBCTable(
+                    table, partitionColumn, getPartitionNames(), partitionExpr);
+        }
+
+        @Override
         PartitionKey createEmptyKey() {
             return new JDBCPartitionKey();
         }
