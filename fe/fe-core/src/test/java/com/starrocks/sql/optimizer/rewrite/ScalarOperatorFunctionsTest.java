@@ -539,6 +539,21 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void convert_tz() {
+        ConstantOperator olddt = ConstantOperator.createDatetime(LocalDateTime.of(2019, 8, 1, 13, 21, 3));
+        assertEquals("2019-07-31T22:21:03",
+                ScalarOperatorFunctions.convert_tz(olddt,
+                        ConstantOperator.createVarchar("Asia/Shanghai"),
+                        ConstantOperator.createVarchar("America/Los_Angeles")).getDatetime().toString());
+
+        ConstantOperator oldd = ConstantOperator.createDate(LocalDateTime.of(2019, 8, 1, 0, 0, 0));
+        assertEquals("2019-07-31T09:00",
+                ScalarOperatorFunctions.convert_tz(oldd,
+                        ConstantOperator.createVarchar("Asia/Shanghai"),
+                        ConstantOperator.createVarchar("America/Los_Angeles")).getDatetime().toString());
+    }
+
+    @Test
     public void fromUnixTime() throws AnalysisException {
         assertEquals("1970-01-01 08:00:10",
                 ScalarOperatorFunctions.fromUnixTime(O_BI_10).getVarchar());
