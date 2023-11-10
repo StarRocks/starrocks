@@ -45,6 +45,7 @@ using Analytors = std::vector<AnalytorPtr>;
 // it contains common data struct and algorithm of analysis
 class Analytor final : public pipeline::ContextWithDependency {
     friend class ManagedFunctionStates;
+    friend class AnalyticNode;
 
     // [start, end)
     struct FrameRange {

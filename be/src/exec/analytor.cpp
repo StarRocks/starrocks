@@ -156,10 +156,17 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         if (fn.name.function_name == "ntile") {
+            if (!state->enable_pipeline_engine()) {
+                return Status::NotSupported("The NTILE window function is only supported by the pipeline engine.");
+            }
             _need_partition_materializing = true;
         }
 
         if (_require_partition_size(fn.name.function_name)) {
+            if (!state->enable_pipeline_engine()) {
+                return Status::NotSupported(strings::Substitute(
+                        "The $0 window function is only supported by the pipeline engine.", fn.name.function_name));
+            }
             _should_set_partition_size = true;
             _partition_size_required_function_index.emplace_back(i);
             _need_partition_materializing = true;

@@ -554,7 +554,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                                               int64_t frame_end) const override {
         // frame_start < peer_group_start is for lag function
         // frame_end > peer_group_end is for lead function
-        if ((frame_start < peer_group_start) | (frame_end > peer_group_end)) {
+        if ((frame_end <= frame_start) | (frame_start < peer_group_start) | (frame_end > peer_group_end)) {
             if (this->data(state).default_is_null) {
                 this->data(state).is_null = true;
             } else {
