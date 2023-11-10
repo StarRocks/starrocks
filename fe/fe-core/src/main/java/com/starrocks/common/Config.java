@@ -2536,7 +2536,7 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_fast_schema_evolution = true;
+    public static boolean enable_fast_schema_evolution = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;

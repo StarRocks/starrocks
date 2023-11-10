@@ -609,7 +609,7 @@ public class PropertyAnalyzer {
         if (null == value) {
             value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
             if (null == value) {
-                return Config.allow_default_fast_schema_evolution;
+                return Config.enable_fast_schema_evolution;
             }
         }
         properties.remove(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
