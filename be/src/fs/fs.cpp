@@ -67,6 +67,10 @@ inline bool is_hdfs_uri(std::string_view uri) {
 }
  */
 
+inline bool is_hdfs_uri(std::string_view uri) {
+    return starts_with(uri, "hdfs://");
+}
+
 inline bool is_posix_uri(std::string_view uri) {
     return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }

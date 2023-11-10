@@ -8,6 +8,7 @@
 #include <atomic>
 #include <utility>
 
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
 #include "runtime/hdfs/hdfs_fs_cache.h"
@@ -38,8 +39,6 @@ public:
     void set_size(int64_t size) override;
 
 private:
-    bool _is_jfs_file() const;
-
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
@@ -99,14 +98,9 @@ void HdfsInputStream::set_size(int64_t value) {
     _file_size = value;
 }
 
-bool HdfsInputStream::_is_jfs_file() const {
-    static const char* kFileSysPrefixJuicefs = "jfs://";
-    return strncmp(_file_name.c_str(), kFileSysPrefixJuicefs, strlen(kFileSysPrefixJuicefs)) == 0;
-}
-
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     // `GetReadStatistics` is not supported in juicefs hadoop sdk, and will cause the be crash
-    if (_is_jfs_file()) {
+    if (!fs::is_hdfs_uri(_file_name)) {
         return nullptr;
     }
 
