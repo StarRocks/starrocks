@@ -8,7 +8,7 @@ CREATE TABLE AS SELECT（简称 CTAS）可以查询原表，并基于查询结�
 
 ```SQL
 CREATE TABLE [IF NOT EXISTS] [database.]table_name
-[(column_name [, column_name2, ...]]
+[column_name [, column_name2, ...]]
 [COMMENT "table comment"]
 [partition_desc]
 [distribution_desc]
@@ -27,9 +27,9 @@ AS SELECT query
 | ---------------- | ------------------------------------------------------------ |
 | column_name      | 列名。您无需传入列类型，StarRocks 会自动选择合适的类型，并将 FLOAT 或 DOUBLE 转换为 DECIMAL(38,9)，CHAR、VARCHAR、STRING 转换为 VARCHAR(65533)。 |
 | COMMENT          | 表注释。                                                     |
-| partition_desc   | 分区方式。更多说明，请参见 [partition_desc](./CREATE_TABLE.md#syntax)。如果不填写，则默认为无分区。 |
-| distribution_desc | 分桶方式。更多说明，请参见 [distribution_desc](./CREATE_TABLE.md#syntax)。如果不填写，则默认分桶键为CBO统计信息中最高基数的列，分桶数量为10。如果CBO中没有相关统计信息，则默认分桶键为第一列。 |
-| properties       | 新表的附带属性。更多说明，请参见 [PROPERTIES](./CREATE_TABLE.md#syntax)。目前CTAS仅支持创建ENGINE类型为OLAP的表。 |
+| partition_desc   | 分区方式。更多说明，请参见 [partition_desc](./CREATE_TABLE.md#partition_desc)。如果不填写，则默认为无分区。 |
+| distribution_desc | 分桶方式。更多说明，请参见 [distribution_desc](./CREATE_TABLE.md#distribution_desc)。如果不填写，则默认分桶键为CBO统计信息中最高基数的列，分桶数量为10。如果CBO中没有相关统计信息，则默认分桶键为第一列。 |
+| properties       | 新表的附带属性。更多说明，请参见 [PROPERTIES](./CREATE_TABLE.md#properties)。目前CTAS仅支持创建ENGINE类型为OLAP的表。 |
 
 #### 查询部分
 
