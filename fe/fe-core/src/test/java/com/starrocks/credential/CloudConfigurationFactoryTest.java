@@ -219,33 +219,6 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(CloudType.HDFS, cc.getCloudType());
     }
 
-    @Test
-<<<<<<< HEAD
-=======
-    public void testTencentCloudConfiguration() {
-        Map<String, String> map = new HashMap<String, String>() {
-            {
-                put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "XX");
-                put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "YY");
-                put(CloudConfigurationConstants.TENCENT_COS_ENDPOINT, "ZZ");
-            }
-        };
-        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
-        Assert.assertNotNull(cc);
-        Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
-        TCloudConfiguration tc = new TCloudConfiguration();
-        cc.toThrift(tc);
-        Assert.assertEquals(tc.getCloud_properties_v2().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
-        Configuration conf = new Configuration();
-        cc.applyToConfiguration(conf);
-        cc.toFileStoreInfo();
-        Assert.assertEquals(cc.toConfString(),
-                "TencentCloudConfiguration{resources='', jars='', hdpuser='', cred=TencentCloudCredential{accessKey='XX', " +
-                        "secretKey='YY', endpoint='ZZ'}}");
-    }
-
-    @Test
->>>>>>> af09804909 ([Feature] support catalog to bind hadoop username (#34671))
     public void testDefaultCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>();
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
