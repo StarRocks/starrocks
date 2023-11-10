@@ -56,7 +56,7 @@ Currently, StarRocks supports:
    mkdir {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
    ```
 
-2. Download `plugin-starrocks/target/ranger-starrocks-plugin- 3.0.0 -SNAPSHOT.jar` and `mysql-connector-j`, and place them in the `starrocks `folder.
+2. Download `plugin-starrocks/target/ranger-starrocks-plugin- 3.0.0 -SNAPSHOT.jar` and `mysql-connector-j`, and place them in the `starrocks` folder.
 
    ```SQL
    cd {path-to-ranger}/ews/webapp/WEB-INF/classes/ranger-plugins/starrocks
@@ -170,8 +170,8 @@ For External Catalog, you can reuse external services (such as Hive Service) for
             "ranger.plugin.hive.service.name" = "hive_catalog_1"
         )
       ```
-      
-    - You can also add this property to an existing External Catalog.
+
+   - You can also add this property to an existing External Catalog.
   
        ```SQL
        ALTER CATALOG hive_catalog_1
