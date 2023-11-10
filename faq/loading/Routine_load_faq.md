@@ -30,7 +30,7 @@ min(alive_be_number, partition_number, desired_concurrent_number, max_routine_lo
 
 假设消费分区数量为 `7`，存活 BE 数量为 `5`， `max_routine_load_task_concurrent_num` 为默认值 `5`。此时如果需要增加实际任务并发度至上限，则需要将 `desired_concurrent_number` 设置为 `5`（默认值为 `3`），则计算实际任务并行度 `min(5,7,5,5)` 为 `5`。
 
-更多参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#example)。
+更多参数说明，请参见 [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#示例)。
 
 **方式二**：**增大单个导入任务消费分区的数据量**。
 
