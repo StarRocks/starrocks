@@ -356,5 +356,41 @@ public class FileScanNodeTest {
         List<TBrokerRangeDesc> rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
         Assert.assertEquals(1, rangeDescs.size());
         Assert.assertEquals(0, rangeDescs.get(0).size);
+
+        // case 5
+        // 1 file which size is 0 in json format
+        // result: 1 range
+        // file groups
+
+        fileGroups = Lists.newArrayList();
+        files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        desc = new DataDescription("testTable", null, files, columnNames, null, null, "json", false, null);
+        brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "json");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        fileStatusesList = Lists.newArrayList();
+        fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
+        fileStatusesList.add(fileStatusList);
+
+        analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        descTable = analyzer.getDescTbl();
+        tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        scanNode.init(analyzer);
+        scanNode.finalizeStats(analyzer);
+
+        // check
+        locationsList = scanNode.getScanRangeLocations(0);
+        System.out.println(locationsList);
+        Assert.assertEquals(1, locationsList.size());
+        rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
+        Assert.assertEquals(1, rangeDescs.size());
+        Assert.assertEquals(0, rangeDescs.get(0).size);
     }
 }
