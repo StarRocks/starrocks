@@ -201,7 +201,7 @@ public class MvRewritePreprocessor {
                 preprocessMv(mv, queryTables, originQueryColumns);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), e);
+                logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), e.getMessage());
                 LOG.warn("Preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
