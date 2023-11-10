@@ -18,6 +18,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 
@@ -26,17 +27,25 @@ import java.util.concurrent.TimeUnit;
 public class CachingMvPlanContextBuilder {
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private Cache<MaterializedView, MvPlanContext> mvPlanContextCache = Caffeine.newBuilder()
-            .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.mv_plan_cache_max_size)
-            .build();
+    private Cache<MaterializedView, MvPlanContext> mvPlanContextCache = buildCache();
 
     private CachingMvPlanContextBuilder() {
-
     }
 
     public static CachingMvPlanContextBuilder getInstance() {
         return INSTANCE;
+    }
+
+    private Cache<MaterializedView, MvPlanContext> buildCache() {
+        return Caffeine.newBuilder()
+                .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
+                .maximumSize(Config.mv_plan_cache_max_size)
+                .build();
+    }
+
+    @VisibleForTesting
+    public void rebuildCache() {
+        mvPlanContextCache = buildCache();
     }
 
     public MvPlanContext getPlanContext(MaterializedView mv, boolean useCache) {
