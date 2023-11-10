@@ -144,7 +144,7 @@ TEST_F(ChunkTest, test_is_column_nullable) {
     auto c1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
     auto c2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
     chunk.append_column(c1, 1);
-    chunk.append_column(c1, 2);
+    chunk.append_column(c2, 2);
 
     ASSERT_FALSE(chunk.is_column_nullable(1));
     ASSERT_TRUE(chunk.is_column_nullable(2));
