@@ -263,6 +263,31 @@ public class StarRocksAssert {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public StarRocksAssert alterMvProperties(String sql) throws Exception {
+        AlterMaterializedViewStmt alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterMaterializedView(alterMvStmt);
+        return this;
+    }
+
+    public StarRocksAssert alterTableProperties(String sql) throws Exception {
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertFalse(alterTableStmt.getOps().isEmpty());
+        Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
+        Analyzer.analyze(alterTableStmt, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropTables(List<String> tableNames) throws Exception {
+        for (String tableName : tableNames) {
+            dropTable(tableName);
+        }
+        return this;
+    }
+
+>>>>>>> 9bdcdf8608 ([UT] refactor mv ut (#34128))
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
@@ -298,6 +323,7 @@ public class StarRocksAssert {
                 createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            String mvName = createMaterializedViewStatement.getTableName().getTbl();
         }
         checkAlterJob();
         return this;
