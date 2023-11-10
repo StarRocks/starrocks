@@ -308,7 +308,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
 
-    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
@@ -494,7 +494,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
-    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1));
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 

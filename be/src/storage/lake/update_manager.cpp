@@ -397,7 +397,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
-            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(column_ids[i]));
+            const TabletColumn& col = tablet_schema->column(column_ids[i]);
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }

@@ -51,7 +51,6 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
 Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& tablet,
                                               const LakeMetaReaderParams& read_params) {
     auto tablet_schema = tablet.get_schema();
-    _collect_context.seg_collecter_params.max_cid = 0;
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
@@ -74,7 +73,6 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
 
         // get column id
         _collect_context.seg_collecter_params.cids.emplace_back(index);
-        _collect_context.seg_collecter_params.max_cid = std::max(_collect_context.seg_collecter_params.max_cid, index);
 
         // get result slot id
         _collect_context.result_slot_ids.emplace_back(it.first);
@@ -88,6 +86,7 @@ Status LakeMetaReader::_build_collect_context(const lake::VersionedTablet& table
         }
         _has_count_agg |= (collect_field == "count");
     }
+    _collect_context.seg_collecter_params.tablet_schema = tablet_schema;
     return Status::OK();
 }
 
