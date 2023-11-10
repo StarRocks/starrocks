@@ -49,6 +49,7 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpConnectProcessor;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -145,6 +146,8 @@ public class ExecuteSqlAction extends RestBaseAction {
             } catch (Exception e) {
                 // just for safe. most Exception is handled in execute(), and set error code in context
                 throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+            } finally {
+                ConnectContext.remove();
             }
 
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
