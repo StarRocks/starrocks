@@ -354,7 +354,7 @@ public class StorageVolumeTest {
         }
 
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put(HadoopExt.HDFS_CONFIG_RESOURCES, confFile);
+        storageParams.put(HadoopExt.HADOOP_CONFIG_RESOURCES, confFile);
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
