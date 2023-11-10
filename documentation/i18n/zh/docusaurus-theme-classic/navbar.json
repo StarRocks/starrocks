@@ -1,0 +1,22 @@
+{
+  "title": {
+    "message": "StarRocks",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "StarRocks Logo",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Documentation": {
+    "message": "Documentation",
+    "description": "Navbar item with label Documentation"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Navbar item with label GitHub"
+  },
+  "item.label.Release Notes": {
+    "message": "Release Notes",
+    "description": "Navbar item with label Release Notes"
+  }
+}

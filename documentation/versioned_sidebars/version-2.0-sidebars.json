@@ -1,0 +1,385 @@
+{
+  "English": [
+    "introduction/StarRocks_intro",
+    {
+      "type": "category",
+      "label": "Release Notes",
+      "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
+      "items": [
+        {
+          "type": "category",
+          "label": "StarRocks",
+          "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "v3.1",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-3.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v3.0",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-3.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.5",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.5.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.4",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.4.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.3",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.3.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.2",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.2.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.1",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.0",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v1.19",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-1.19.md"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "StarRocks Connectors",
+          "link": { "type": "doc", "id": "cover_pages/connector_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "StarRocks Flink Connector",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/ecosystem_release/flink_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Kafka Connector",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/ecosystem_release/kafka_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Spark Connector",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/ecosystem_release/spark_connector.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Quick Start",
+      "link": {"type": "doc", "id": "quick_start/Concepts"},
+      "items": [
+        "quick_start/Architecture",
+        "quick_start/Deploy",
+        "quick_start/Data_flow_and_control_flow",
+        "quick_start/Import_and_query",
+        "quick_start/Test_faq"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Table Design",
+      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "items": [
+        "table_design/Data_model",
+        "table_design/Data_distribution",
+        "table_design/Sort_key",
+        "table_design/Materialized_view",
+        "table_design/Bitmap_index",
+        "table_design/Bloomfilter_index"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Data Loading",
+      "link": {"type": "doc", "id": "loading/Loading_intro"},
+      "items": [
+        "loading/StreamLoad",
+        "loading/BrokerLoad",
+        "loading/RoutineLoad",
+        "loading/SparkLoad",
+        "loading/InsertInto",
+        "loading/Etl_in_loading",
+        "loading/Json_loading",
+        "loading/Flink_cdc_load",
+        "loading/Flink-connector-starrocks",
+        "loading/DataX-starrocks-writer"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Data Export",
+      "items": [
+        "unloading/Export",
+        "unloading/Spark_connector"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Using StarRocks",
+      "items": [
+        "using_starrocks/Using_bitmap",
+        "using_starrocks/Using_HLL",
+        "using_starrocks/Materialized_view",
+        "using_starrocks/Colocation_join",
+        "using_starrocks/External_table",
+        "using_starrocks/Array",
+        "using_starrocks/Window_function",
+        "using_starrocks/Cost_based_optimizer",
+        "using_starrocks/Lateral_join",
+        "using_starrocks/timezone",
+        "using_starrocks/filemanager"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Administration",
+      "items": [
+        "administration/Build_in_docker",
+        "administration/Cluster_administration"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "FAQs",
+      "items": [
+        "faq/Deploy_faq",
+        {
+          "type": "category",
+          "label": "Data Ingestion",
+          "link": { "type": "generated-index" },
+          "items": [
+            "faq/loading/Loading_faq",
+            "faq/loading/Stream_load_faq",
+            "faq/loading/Routine_load_faq",
+            "faq/loading/Broker_load_faq",
+            "faq/loading/Insert_into_faq",
+            "faq/loading/Flink_connector_faq",
+            "faq/loading/DataX_faq"
+          ]
+        },
+        "faq/Exporting_faq",
+        "faq/Sql_faq",
+        "faq/Others"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Developers",
+      "link": { "type": "generated-index" },
+      "collapsed": true,
+      "collapsible": true,
+      "items": [ { "type": "autogenerated", "dirName": "developers" } ]
+    }
+  ],
+  "Chinese": [
+    "introduction/StarRocks_intro",
+    {
+      "type": "category",
+      "label": "Release Notes",
+      "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
+      "items": [
+        {
+          "type": "category",
+          "label": "StarRocks",
+          "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "v3.1",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-3.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v3.0",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-3.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.5",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.5.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.4",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.4.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.3",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.3.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.2",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.2.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.1",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.0",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v1.19",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-1.19.md"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "StarRocks Connectors",
+          "link": { "type": "doc", "id": "cover_pages/connector_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "StarRocks Flink Connector",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/ecosystem_release/flink_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Kafka Connector",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/ecosystem_release/kafka_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Spark Connector",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/ecosystem_release/spark_connector.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "快速开始",
+      "link": {"type": "doc", "id": "quick_start/Concepts"},
+      "items": [
+        "quick_start/Architecture",
+        "quick_start/Deploy",
+        "quick_start/Data_flow_and_control_flow",
+        "quick_start/Import_and_query",
+        "quick_start/Test_faq"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Table Design",
+      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "items": [
+        "table_design/Data_model",
+        "table_design/Data_distribution",
+        "table_design/Sort_key",
+        "table_design/Materialized_view",
+        "table_design/Bitmap_index",
+        "table_design/Bloomfilter_index"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "导入数据",
+      "link": {"type": "doc", "id": "loading/Loading_intro"},
+      "items": [
+        "loading/Loading_intro",
+        "loading/StreamLoad",
+        "loading/BrokerLoad",
+        "loading/RoutineLoad",
+        "loading/SparkLoad",
+        "loading/InsertInto",
+        "loading/Etl_in_loading",
+        "loading/Json_loading",
+        "loading/Flink_cdc_load",
+        "loading/Flink-connector-starrocks",
+        "loading/DataX-starrocks-writer"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "导出数据",
+      "items": [
+        "unloading/Export",
+        "unloading/Spark_connector"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "查询加速",
+      "items": [
+        "using_starrocks/Using_bitmap",
+        "using_starrocks/Using_HLL",
+        "using_starrocks/Materialized_view",
+        "using_starrocks/Colocation_join",
+        "using_starrocks/External_table",
+        "using_starrocks/Array",
+        "using_starrocks/Window_function",
+        "using_starrocks/Cost_based_optimizer",
+        "using_starrocks/Lateral_join",
+        "using_starrocks/timezone",
+        "using_starrocks/filemanager"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "管理手册",
+      "items": [
+        "administration/Build_in_docker",
+        "administration/Cluster_administration"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "常见问题解答",
+      "items": [
+        "faq/Deploy_faq",
+        {
+          "type": "category",
+          "label": "Data Ingestion",
+          "link": { "type": "generated-index" },
+          "items": [
+            "faq/loading/Loading_faq",
+            "faq/loading/Stream_load_faq",
+            "faq/loading/Routine_load_faq",
+            "faq/loading/Broker_load_faq",
+            "faq/loading/Insert_into_faq",
+            "faq/loading/Flink_connector_faq",
+            "faq/loading/DataX_faq"
+          ]
+        },
+        "faq/Exporting_faq",
+        "faq/Sql_faq",
+        "faq/Others"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "开发指南",
+      "link": { "type": "generated-index" },
+      "collapsed": true,
+      "collapsible": true,
+      "items": [ { "type": "autogenerated", "dirName": "developers" } ]
+    }
+  ]
+}

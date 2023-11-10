@@ -1,0 +1,1112 @@
+{
+  "English": [
+    "introduction/what_is_starrocks",
+    {
+      "type": "category",
+      "label": "Release Notes",
+      "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
+      "items": [
+        {
+          "type": "category",
+          "label": "StarRocks",
+          "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "v3.1",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-3.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v3.0",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-3.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.5",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.5.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.4",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.4.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.3",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.3.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.2",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.2.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.1",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.0",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-2.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v1.19",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/release_notes/release-1.19.md"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "StarRocks Connectors",
+          "link": { "type": "doc", "id": "cover_pages/connector_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "StarRocks Flink Connector",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/ecosystem_release/flink_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Kafka Connector",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/ecosystem_release/kafka_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Spark Connector",
+              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/ecosystem_release/spark_connector.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Introduction to StarRocks",
+      "link": {"type": "doc", "id": "introduction/introduction"},
+      "items": ["introduction/what_is_starrocks", "introduction/Architecture", "introduction/Features"]
+    },
+    {
+      "type": "category",
+      "label": "Quick Start",
+      "link": {"type": "doc", "id": "quick_start/quick_start"},
+      "items": ["quick_start/Deploy", "quick_start/Create_table", "quick_start/Import_and_query"]
+    },
+    {
+      "type": "category",
+      "label": "Table Design",
+      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "items": [
+        "table_design/Data_model",
+        {
+          "type": "category",
+          "label": "Data distribution",
+          "link": {"type": "doc", "id": "table_design/Data_distribution"},
+          "items": ["table_design/Temporary_partition"]
+        },
+        "table_design/Sort_key"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Data Loading",
+      "link": {"type": "doc", "id": "loading/Loading_intro"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Concepts",
+          "link": { "type": "generated-index" },
+          "items": ["loading/load_concept/strict_mode"]
+        },
+        "loading/StreamLoad",
+        "loading/BrokerLoad",
+        "loading/RoutineLoad",
+        "loading/SparkLoad",
+        "loading/InsertInto",
+        "loading/Stream_Load_transaction_interface",
+        "loading/Flink_cdc_load",
+        "loading/Flink-connector-starrocks",
+        "loading/Load_to_Primary_Key_tables",
+        "loading/Etl_in_loading"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Data Unloading",
+      "link": { "type": "generated-index" },
+      "items": [
+        "unloading/Export",
+        "unloading/Spark_connector",
+        "unloading/Flink_connector"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Query Data Sources",
+      "link": {"type": "doc", "id": "data_source/data_lakes"},
+      "items": [
+        "data_source/Manage_data",
+        "data_source/External_table"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Query Acceleration",
+      "link": { "type": "generated-index" },
+      "items": [
+        "using_starrocks/Cost_based_optimizer",
+        {
+          "type": "category",
+          "label": "Asynchronous materialized views",
+          "link": {"type": "doc", "id": "using_starrocks/Materialized_view"},
+          "items": [ 
+            {
+              "type": "category",
+              "label": "Usage",
+              "link": {"type": "doc", "id": "using_starrocks/Materialized_view"},
+              "items": [ 
+                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
+                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW"
+              ]
+            }
+          ]
+        },
+        "using_starrocks/Colocate_join",
+        "using_starrocks/Lateral_join",
+        {
+          "type": "category",
+          "label": "Index",
+          "link": { "type": "generated-index" },
+          "items": [ "using_starrocks/Bitmap_index", "using_starrocks/Bloomfilter_index" ]
+        },
+        {
+          "type": "category",
+          "label": "Computing the number of distinct values",
+          "link": { "type": "generated-index" },
+          "items": [ "using_starrocks/Using_bitmap", "using_starrocks/Using_HLL" ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Administration",
+      "link": {"type": "doc", "id": "administration/administration"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Deployment",
+          "link": { "type": "generated-index" },
+          "items": [ 
+            "administration/stargo",
+            "administration/deploy_broker",
+            "administration/deploy_with_docker",
+            "administration/Build_in_docker",
+            "administration/Deployment"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Management",
+          "link": { "type": "generated-index" },
+          "items": [ 
+            "administration/Cluster_administration",
+            "administration/Configuration",
+            "administration/Scale_up_down",
+            "administration/Backup_and_restore",
+            "administration/Monitor_and_Alert",
+            "administration/audit_loader",
+            "administration/Cluster_administration",
+            "administration/timezone",
+            {
+              "type": "category",
+              "label": "Resource Management",
+              "link": { "type": "generated-index" },
+              "items": [ 
+                "administration/resource_group",
+                "administration/Query_management",
+                "administration/Memory_management",
+                "administration/Load_balance",
+                "administration/Replica",
+                "administration/Blacklist",
+                "administration/filemanager"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Data Recovery",
+          "link": { "type": "generated-index" },
+          "items": [ "administration/Data_recovery", "administration/Metadata_recovery" ]
+        },
+        {
+          "type": "category",
+          "label": "User Privilege and Authentication",
+          "link": { "type": "generated-index" },
+          "items": [ "administration/User_privilege", "administration/Authentication" ]
+        },
+        {
+          "type": "category",
+          "label": "Performance Tuning",
+          "link": { "type": "generated-index" },
+          "items": [ "administration/Query_planning", "administration/query_profile", "administration/Profiling" ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Reference",
+      "link": {"type": "doc", "id": "reference/reference"},
+      "items": [
+        {
+          "type": "category",
+          "label": "SQL Reference",
+          "link": { "type": "generated-index" },
+          "items": [
+            {
+              "type": "category",
+              "label": "User Account Management",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/account-management"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Cluster Management",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/Administration"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "DDL",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/data-definition"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "DML",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/data-manipulation"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Auxiliary Commands",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/Utility"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Data Types",
+              "items": [
+                {
+                  "type": "category",
+                  "label": "Numeric",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-statements/data-types/TINYINT",
+                    "sql-reference/sql-statements/data-types/SMALLINT",
+                    "sql-reference/sql-statements/data-types/INT",
+                    "sql-reference/sql-statements/data-types/BIGINT",
+                    "sql-reference/sql-statements/data-types/LARGEINT",
+                    "sql-reference/sql-statements/data-types/DECIMAL",
+                    "sql-reference/sql-statements/data-types/DOUBLE",
+                    "sql-reference/sql-statements/data-types/FLOAT",
+                    "sql-reference/sql-statements/data-types/BOOLEAN"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "String",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-statements/data-types/CHAR",
+                    "sql-reference/sql-statements/data-types/STRING",
+                    "sql-reference/sql-statements/data-types/VARCHAR"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Date",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-statements/data-types/DATE",
+                    "sql-reference/sql-statements/data-types/DATETIME"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Semi-structured",
+                  "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
+                  "items": [
+                    "sql-reference/sql-statements/data-types/JSON"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Other",
+                  "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
+                  "items": [
+                    "sql-reference/sql-statements/data-types/BITMAP",
+                    "sql-reference/sql-statements/data-types/HLL"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Function Reference",
+          "items": [
+            "sql-reference/sql-functions/JAVA_UDF",
+            "sql-reference/sql-functions/Window_function",
+            {
+              "type": "category",
+              "label": "Aggregate Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/aggregate-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Array Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/array-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Bit Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/bit-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Bitmap Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/bitmap-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "JSON Functions",
+              "link": {"type": "doc", "id": "sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators"},
+              "items": [
+                "sql-reference/sql-functions/json-functions/json-operators",
+                {
+                  "type": "category",
+                  "label": "JSON constructor functions",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-functions/json-functions/json-constructor-functions/json_array",
+                    "sql-reference/sql-functions/json-functions/json-constructor-functions/json_object",
+                    "sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "JSON query and processing functions",
+                  "link": { "type": "generated-index" },
+                  "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/json-functions/json-query-and-processing-functions" } ]
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Conditional Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/condition-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Cryptographic Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/crytographic-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Date Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/date-time-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Geographic Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/spatial-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Math Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/math-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "String Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/string-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Pattern Matching Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/like_predicate-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Percentile Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/percentile-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Scalar Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/scalar-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Utility Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/utility-functions" } ]
+            },
+            "sql-reference/sql-functions/cast",
+            "sql-reference/sql-functions/hash-functions/murmur_hash3_32"
+          ]
+        },
+        "reference/System_variable",
+        "reference/Error_code",
+        "reference/System_limit"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "FAQ",
+      "link": {"type": "doc", "id": "faq/faq"},
+      "items": [
+        "faq/Deploy_faq",
+        {
+          "type": "category",
+          "label": "Data Migration",
+          "items": [
+            {
+              "type": "category",
+              "label": "Data Loading",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "faq/loading"
+                }
+              ]
+            },
+            "faq/Exporting_faq"
+          ]
+        },
+        "faq/Sql_faq",
+        "faq/Others"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Benchmarks",
+      "link": {"type": "doc", "id": "benchmarking/benchmarking"},
+      "collapsed": true,
+      "collapsible": true,
+      "items": [ "benchmarking/SSB_Benchmarking", "benchmarking/TPC-H_Benchmarking" ]
+    }
+  ],
+  "Chinese": [
+    "introduction/what_is_starrocks",
+    {
+      "type": "category",
+      "label": "Release Notes",
+      "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
+      "items": [
+        {
+          "type": "category",
+          "label": "StarRocks",
+          "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "v3.1",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-3.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v3.0",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-3.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.5",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.5.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.4",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.4.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.3",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.3.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.2",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.2.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.1",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.1.md"
+            },
+            {
+              "type": "link",
+              "label": "v2.0",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-2.0.md"
+            },
+            {
+              "type": "link",
+              "label": "v1.19",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/release_notes/release-1.19.md"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "StarRocks Connectors",
+          "link": { "type": "doc", "id": "cover_pages/connector_index" },
+          "items": [
+            {
+              "type": "link",
+              "label": "StarRocks Flink Connector",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/ecosystem_release/flink_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Kafka Connector",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/ecosystem_release/kafka_connector.md"
+            },
+            {
+              "type": "link",
+              "label": "StarRocks Spark Connector",
+              "href": "https://github.com/StarRocks/docs.zh-cn/blob/main/ecosystem_release/spark_connector.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "产品简介",
+      "link": {"type": "doc", "id": "introduction/introduction"},
+      "items": ["introduction/what_is_starrocks", "introduction/Architecture", "introduction/Features"]
+    },
+    {
+      "type": "category",
+      "label": "快速开始",
+      "link": {"type": "doc", "id": "quick_start/quick_start"},
+      "items": ["quick_start/Deploy", "quick_start/Create_table", "quick_start/Import_and_query"]
+    },
+    {
+      "type": "category",
+      "label": "表设计",
+      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "items": [
+        "table_design/Data_model",
+        {
+          "type": "category",
+          "label": "数据分布",
+          "link": {"type": "doc", "id": "table_design/Data_distribution"},
+          "items": ["table_design/Temporary_partition"]
+        },
+        "table_design/Sort_key"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "导入数据",
+      "link": {"type": "doc", "id": "loading/Loading_intro"},
+      "items": [
+        {
+          "type": "category",
+          "label": "概念介绍",
+          "link": { "type": "generated-index" },
+          "items": ["loading/load_concept/strict_mode"]
+        },
+        "loading/StreamLoad",
+        "loading/BrokerLoad",
+        "loading/RoutineLoad",
+        "loading/SparkLoad",
+        "loading/InsertInto",
+        "loading/Stream_Load_transaction_interface",
+        "loading/Flink_cdc_load",
+        "loading/Flink-connector-starrocks",
+        "loading/Load_to_Primary_Key_tables",
+        "loading/Etl_in_loading"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "导出数据",
+      "link": { "type": "generated-index" },
+      "items": [
+        "unloading/Export",
+        "unloading/Spark_connector",
+        "unloading/Flink_connector"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Query Data Sources",
+      "link": {"type": "doc", "id": "data_source/data_lakes"},
+      "items": [
+        "data_source/Manage_data",
+        "data_source/External_table"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "查询加速",
+      "link": { "type": "generated-index" },
+      "items": [
+        "using_starrocks/Cost_based_optimizer",
+        {
+          "type": "category",
+          "label": "异步物化视图",
+          "link": {"type": "doc", "id": "using_starrocks/Materialized_view"},
+          "items": [ 
+            {
+              "type": "category",
+              "label": "使用场景",
+              "link": {"type": "doc", "id": "using_starrocks/Materialized_view"},
+              "items": [ 
+                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
+                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW"
+              ]
+            }
+          ]
+        },
+        "using_starrocks/Colocate_join",
+        "using_starrocks/Lateral_join",
+        {
+          "type": "category",
+          "label": "索引",
+          "link": { "type": "generated-index" },
+          "items": [ "using_starrocks/Bitmap_index", "using_starrocks/Bloomfilter_index" ]
+        },
+        {
+          "type": "category",
+          "label": "数据去重",
+          "link": { "type": "generated-index" },
+          "items": [ "sql-reference/sql-statements/data-types/JSON", "using_starrocks/Using_bitmap", "using_starrocks/Using_HLL" ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "管理手册",
+      "link": {"type": "doc", "id": "administration/administration"},
+      "items": [
+        {
+          "type": "category",
+          "label": "Deployment",
+          "link": { "type": "generated-index" },
+          "items": [ 
+            "administration/stargo",
+            "administration/deploy_broker",
+            "administration/deploy_with_docker",
+            "administration/Build_in_docker",
+            "administration/Deployment"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "运维集群",
+          "link": { "type": "generated-index" },
+          "items": [ 
+            "administration/Cluster_administration",
+            "administration/Configuration",
+            "administration/Scale_up_down",
+            "administration/Backup_and_restore",
+            "administration/Monitor_and_Alert",
+            "administration/audit_loader",
+            "administration/Cluster_administration",
+            "administration/timezone",
+            {
+              "type": "category",
+              "label": "管理资源",
+              "link": { "type": "generated-index" },
+              "items": [ 
+                "administration/resource_group",
+                "administration/Query_management",
+                "administration/Memory_management",
+                "administration/Load_balance",
+                "administration/Replica",
+                "administration/Blacklist",
+                "administration/filemanager"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Data Recovery",
+          "link": { "type": "generated-index" },
+          "items": [ "administration/Data_recovery", "administration/Metadata_recovery" ]
+        },
+        {
+          "type": "category",
+          "label": "管理用户权限",
+          "link": { "type": "generated-index" },
+          "items": [ "administration/User_privilege", "administration/Authentication" ]
+        },
+        {
+          "type": "category",
+          "label": "性能调优",
+          "link": { "type": "generated-index" },
+          "items": [ "administration/Query_planning", "administration/query_profile", "administration/Profiling" ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "参考手册",
+      "link": {"type": "doc", "id": "reference/reference"},
+      "items": [
+        {
+          "type": "category",
+          "label": "SQL参考",
+          "link": { "type": "generated-index" },
+          "items": [
+            {
+              "type": "category",
+              "label": "用户账户管理",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/account-management"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "集群管理",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/Administration"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "DDL",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/data-definition"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "DML",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/data-manipulation"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "辅助命令",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-statements/Utility"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "数据类型",
+              "items": [
+                {
+                  "type": "category",
+                  "label": "数值类型",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-statements/data-types/TINYINT",
+                    "sql-reference/sql-statements/data-types/SMALLINT",
+                    "sql-reference/sql-statements/data-types/INT",
+                    "sql-reference/sql-statements/data-types/BIGINT",
+                    "sql-reference/sql-statements/data-types/LARGEINT",
+                    "sql-reference/sql-statements/data-types/DECIMAL",
+                    "sql-reference/sql-statements/data-types/DOUBLE",
+                    "sql-reference/sql-statements/data-types/FLOAT",
+                    "sql-reference/sql-statements/data-types/BOOLEAN"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "字符串类型",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-statements/data-types/CHAR",
+                    "sql-reference/sql-statements/data-types/STRING",
+                    "sql-reference/sql-statements/data-types/VARCHAR"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "日期类型",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-statements/data-types/DATE",
+                    "sql-reference/sql-statements/data-types/DATETIME"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Semi-structured",
+                  "link": {"type": "doc", "id": "sql-reference/overview-pages/semi_structured"},
+                  "items": [
+                    "sql-reference/sql-statements/data-types/JSON"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "其他类型",
+                  "link": {"type": "doc", "id": "sql-reference/overview-pages/other-data-types"},
+                  "items": [
+                    "sql-reference/sql-statements/data-types/BITMAP",
+                    "sql-reference/sql-statements/data-types/HLL"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "函数参考",
+          "items": [
+            "sql-reference/sql-functions/JAVA_UDF",
+            "sql-reference/sql-functions/Window_function",
+            {
+              "type": "category",
+              "label": "Aggregate Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/aggregate-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Array Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/array-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Bit Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/bit-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Bitmap Functions",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "sql-reference/sql-functions/bitmap-functions"
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "JSON Functions",
+              "link": {"type": "doc", "id": "sql-reference/sql-functions/json-functions/overview-of-json-functions-and-operators"},
+              "items": [
+                "sql-reference/sql-functions/json-functions/json-operators",
+                {
+                  "type": "category",
+                  "label": "JSON constructor functions",
+                  "link": { "type": "generated-index" },
+                  "items": [
+                    "sql-reference/sql-functions/json-functions/json-constructor-functions/json_array",
+                    "sql-reference/sql-functions/json-functions/json-constructor-functions/json_object",
+                    "sql-reference/sql-functions/json-functions/json-constructor-functions/parse_json"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "JSON query and processing functions",
+                  "link": { "type": "generated-index" },
+                  "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/json-functions/json-query-and-processing-functions" } ]
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Conditional Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/condition-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Cryptographic Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/crytographic-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Date Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/date-time-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Geographic Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/spatial-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Math Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/math-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "String Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/string-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Pattern Matching Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/like_predicate-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Percentile Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/percentile-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Scalar Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/scalar-functions" } ]
+            },
+            {
+              "type": "category",
+              "label": "Utility Functions",
+              "link": { "type": "generated-index" },
+              "items": [ { "type": "autogenerated", "dirName": "sql-reference/sql-functions/utility-functions" } ]
+            },
+            "sql-reference/sql-functions/cast",
+            "sql-reference/sql-functions/hash-functions/murmur_hash3_32"
+          ]
+        },
+        "reference/System_variable",
+        "reference/Error_code",
+        "reference/System_limit"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "常见问题解答",
+      "link": {"type": "doc", "id": "faq/faq"},
+      "items": [
+        "faq/Deploy_faq",
+        {
+          "type": "category",
+          "label": "导入导出",
+          "items": [
+            {
+              "type": "category",
+              "label": "导入",
+              "items": [
+                {
+                  "type": "autogenerated",
+                  "dirName": "faq/loading"
+                }
+              ]
+            },
+            "faq/Exporting_faq"
+          ]
+        },
+        "faq/Sql_faq",
+        "faq/Others"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "性能测试",
+      "link": {"type": "doc", "id": "benchmarking/benchmarking"},
+      "collapsed": true,
+      "collapsible": true,
+      "items": [ "benchmarking/SSB_Benchmarking", "benchmarking/TPC-H_Benchmarking" ]
+    },
+    {
+      "type": "category",
+      "label": "开发指南",
+      "link": { "type": "generated-index" },
+      "collapsed": true,
+      "collapsible": true,
+      "items": [ { "type": "autogenerated", "dirName": "developers" } ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+DirectoryPath: build/
+CheckExternal: true
+CheckInternal: true
+CheckInternalHash: false
+IgnoreAltMissing: true
+IgnoreEmptyHref: true
+IgnoreInternalEmptyHash: true
+CacheExpires: 144h
+IgnoreURLs:
+  - https://ER08SJMRY1-dsn.algolia.net
+  - https://www.googletagmanager.com
+  - http://localhost*
+  - http://127.0.0.1*
+  - https://github.com/StarRocks/docs.zh-cn/edit/*
+  - https://github.com/StarRocks/starrocks/edit/*

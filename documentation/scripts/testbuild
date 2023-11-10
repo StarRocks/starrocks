@@ -1,0 +1,89 @@
+export ORGANIZATION_NAME=danroscigno
+export PROJECT_NAME=doc
+export DEPLOYMENT_BRANCH=gh-pages
+
+export WORKINGDIR=/Users/droscign/GitHub/docs-site
+
+cd $WORKINGDIR
+mkdir -p temp-en
+mkdir -p temp-zh
+
+cd temp-en
+gh repo clone StarRocks/starrocks
+cd starrocks
+
+git checkout branch-3.1
+rm -rf ${WORKINGDIR}/versioned_docs/version-3.1
+mkdir -p ${WORKINGDIR}/versioned_docs/version-3.1
+cp -r docs/* ${WORKINGDIR}/versioned_docs/version-3.1
+mv ${WORKINGDIR}/versioned_docs/version-3.1/assets ${WORKINGDIR}/versioned_docs/version-3.1/_assets
+
+git checkout branch-3.0
+rm -rf ${WORKINGDIR}/versioned_docs/version-3.0
+mkdir -p ${WORKINGDIR}/versioned_docs/version-3.0
+cp -r docs/* ${WORKINGDIR}/versioned_docs/version-3.0
+mv ${WORKINGDIR}/versioned_docs/version-3.0/assets ${WORKINGDIR}/versioned_docs/version-3.0/_assets
+
+git checkout branch-2.5
+rm -rf ${WORKINGDIR}/versioned_docs/version-2.5
+mkdir -p ${WORKINGDIR}/versioned_docs/version-2.5
+cp -r docs/* ${WORKINGDIR}/versioned_docs/version-2.5
+mv ${WORKINGDIR}/versioned_docs/version-2.5/assets ${WORKINGDIR}/versioned_docs/version-2.5/_assets
+
+cd ${WORKINGDIR}/temp-zh
+gh repo clone StarRocks/docs.zh-cn
+cd docs.zh-cn
+
+git checkout 3.1
+rm -rf ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.1/
+mkdir -p ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.1
+cp -r * ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.1/
+mv ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.1/assets ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.1/_assets
+
+git checkout 3.0
+rm -rf ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.0/
+mkdir -p ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.0
+cp -r * ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.0/
+mv ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.0/assets ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-3.0/_assets
+
+git checkout 2.5
+rm -rf ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-2.5/
+mkdir -p ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-2.5
+cp -r * ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-2.5/
+mv ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-2.5/assets ${WORKINGDIR}/i18n/zh/docusaurus-plugin-content-docs/version-2.5/_assets
+
+echo "cleanup before running yarn build"
+cd ${WORKINGDIR}
+rm -rf temp-en
+rm -rf temp-zh
+find . -type f -name TOC.md | xargs rm
+rm i18n/zh/docusaurus-plugin-content-docs/*/README.md
+rm versioned_docs/version-*/README.md
+
+echo "replacing StarRocks intro page\n\n"
+find versioned_docs -type f -name "StarRocks_intro.md"  -print0 -exec cp _IGNORE/_StarRocks_intro_English.mdx "{}" \;
+find i18n/zh/docusaurus-plugin-content-docs -type f -name "StarRocks_intro.md"  -print0 -exec cp _IGNORE/_StarRocks_intro_Chinese.mdx "{}" \;
+
+
+echo "\nadd placeholders for pages in Chinese docs but not in English docs"
+_IGNORE/add_missing_english_files.sh
+
+echo "\nCopying in index pages\n"
+_IGNORE/cp_index_pages.sh
+
+echo "\nadding frontmatter for sidebar language"
+_IGNORE/add_chinese_sidebar.sh
+_IGNORE/add_english_sidebar.sh
+
+echo "switching assets to _assets"
+find i18n/zh/docusaurus-plugin-content-docs -type d -name _assets -prune -o \
+  -type f -name "*\.md*" -exec sed -i '' 's/\/assets\//\/_assets\//g' {} \;
+find versioned_docs -type d -name _assets -prune -o \
+  -type f -name "*\.md*" -exec sed -i '' 's/\/assets\//\/_assets\//g' {} \;
+
+echo "verifying Markdown"
+npx docusaurus-mdx-checker -c versioned_docs
+npx docusaurus-mdx-checker -c docs
+npx docusaurus-mdx-checker -c i18n
+
+yarn build
