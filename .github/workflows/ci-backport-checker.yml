@@ -1,0 +1,39 @@
+name: BACKPORT NOTIFICATION
+run-name: BACKPORT NOTIFICATION - (#${{ github.event.number }}[${{ github.head_ref }}])
+
+on:
+  pull_request_target:
+    branches:
+      - 'mergify/bp/*'
+    types:
+      - closed
+
+env:
+  PR_ID: ${{ github.event.number }}
+  BASE_REF: ${{ github.base_ref }}
+  HEAD_REF: ${{ github.head_ref }}
+  REPO: ${{ github.repository }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+  FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+
+jobs:
+  backport-close:
+    runs-on: [self-hosted, normal]
+    if: >
+      github.event.pull_request.merged != true &&
+      contains(github.event.pull_request.title, 'backport') &&
+      contains(github.event.pull_request.labels.*.name, 'conflicts')
+    env:
+      STATUS: CONFLICT
+
+    steps:
+      - name: ori pr info
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          python3 ./lib/notify_backport.py ${BASE_REF} ${HEAD_REF} ${STATUS}
+
+      - name: clean
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
