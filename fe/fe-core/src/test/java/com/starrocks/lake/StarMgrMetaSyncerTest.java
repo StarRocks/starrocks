@@ -29,7 +29,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -41,6 +43,7 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -104,6 +107,11 @@ public class StarMgrMetaSyncerTest {
                 MaterializedIndex baseIndex = new MaterializedIndex();
                 DistributionInfo distributionInfo = new HashDistributionInfo();
                 return Lists.newArrayList(new Partition(partitionId, "p1", baseIndex, distributionInfo, shardGroupId));
+            }
+
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(dbId, dbName);
             }
         };
 
@@ -192,5 +200,111 @@ public class StarMgrMetaSyncerTest {
         };
 
         Assert.assertEquals(2, starMgrMetaSyncer.deleteUnusedWorker());
+    }
+
+    @Test
+    public void testSyncTabletMetaDbNotExist() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return null;
+            }
+        };
+
+        Exception exception = Assertions.assertThrows(DdlException.class, () -> {
+            starMgrMetaSyncer.syncTableMeta("db", "table", true);
+        });
+    }
+
+    @Test
+    public void testSyncTabletMetaTableNotExist() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(100, dbName);
+            }
+        };
+
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                return null;
+            }
+        };
+
+        Exception exception = Assertions.assertThrows(DdlException.class, () -> {
+            starMgrMetaSyncer.syncTableMeta("db", "table", true);
+        });
+    }
+
+    @Test
+    public void testSyncTabletMeta() throws Exception {
+        List<Long> shards = new ArrayList<>();
+        shards.add(111L);
+        shards.add(222L);
+        shards.add(333L);
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(100, dbName);
+            }
+        };
+
+        new MockUp<Database>() {
+            @Mock
+            public Table getTable(String tableName) {
+                List<Column> baseSchema = new ArrayList<>();
+                KeysType keysType = KeysType.AGG_KEYS;
+                PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+                DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+                Table table = new LakeTable(1000, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+                return table;
+            }
+        };
+
+        new MockUp<OlapTable>() {
+            @Mock
+            public Collection<Partition> getAllPartitions() {
+                List<Partition> partitions = new ArrayList<>();
+                DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+                MaterializedIndex baseIndex = new MaterializedIndex();
+                partitions.add(new Partition(2000, "aaa", baseIndex, defaultDistributionInfo));
+                return partitions;
+            }
+        };
+
+        new MockUp<MaterializedIndex>() {
+            @Mock
+            public List<Tablet> getTablets() {
+                List<Tablet> tablets = new ArrayList<>();
+                tablets.add(new LakeTablet(111));
+                tablets.add(new LakeTablet(222));
+                tablets.add(new LakeTablet(333));
+                return tablets;
+            }
+        };
+
+        new MockUp<Partition>() {
+            @Mock
+            public long getShardGroupId() {
+                return 444;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) {
+                return shards;
+            }
+
+            @Mock
+            public void deleteShards(List<Long> shardIds) {
+                shards.removeAll(shardIds);
+            }
+        };
+
+        starMgrMetaSyncer.syncTableMeta("db", "table", true);
+        Assert.assertEquals(0, shards.size());
     }
 }
