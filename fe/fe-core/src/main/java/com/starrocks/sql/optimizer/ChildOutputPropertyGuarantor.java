@@ -470,6 +470,13 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 enforceChildSatisfyShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
                         rightChild, rightChildOutputProperty);
                 return visitOperator(node, context);
+            } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isIcebergLocal()) {
+                transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);
+                return visitOperator(node, context);
+            } else if (leftDistributionDesc.isIcebergLocal() && rightDistributionDesc.isLocal()) {
+                enforceChildSatisfyShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns,
+                        rightChild, rightChildOutputProperty);
+                return visitOperator(node, context);
             } else {
                 //noinspection ConstantConditions
                 checkState(false, "Children output property distribution error");

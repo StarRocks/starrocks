@@ -793,8 +793,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             List<Integer> hashDistributeColumns = bucketProperties.stream().map(IcebergTable.BucketProperty::getColumn).
                     map(column -> columnMetaToColRefMap.get(column).getId()).collect(Collectors.toList());
             return DistributionSpec.createHashDistributionSpec(new IcebergDistributionDesc(hashDistributeColumns,
-                    HashDistributionDesc.SourceType.ICEBERG_LOCAL, IcebergDistributionDesc.DistributionType.BUCKET,
-                    bucketProperties));
+                    HashDistributionDesc.SourceType.ICEBERG_LOCAL, bucketProperties));
         } else {
             return DistributionSpec.createAnyDistributionSpec();
         }

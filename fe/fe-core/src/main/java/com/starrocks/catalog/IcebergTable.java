@@ -540,5 +540,22 @@ public class IcebergTable extends Table {
         public Column getColumn() {
             return column;
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            BucketProperty that = (BucketProperty) o;
+            return bucketNum == that.bucketNum && java.util.Objects.equals(column.getType(), that.column.getType());
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(bucketNum);
+        }
     }
 }

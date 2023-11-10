@@ -20,28 +20,16 @@ import com.starrocks.catalog.IcebergTable;
 import java.util.List;
 
 public class IcebergDistributionDesc extends HashDistributionDesc {
-    public enum DistributionType {
-        BUCKET,
-        YEAR,
-        MONTH,
-        DAY
-    }
 
-    private DistributionType distributionType;
-    private List<IcebergTable.BucketProperty> bucketProperties;
+    private final List<IcebergTable.BucketProperty> bucketProperties;
     public IcebergDistributionDesc(List<Integer> columns, HashDistributionDesc.SourceType sourceType,
-                                   DistributionType distributionType, List<IcebergTable.BucketProperty> bucketProperties) {
+                                   List<IcebergTable.BucketProperty> bucketProperties) {
         super(columns, sourceType);
-        this.distributionType = distributionType;
         this.bucketProperties = bucketProperties;
     }
 
     public List<IcebergTable.BucketProperty> getBucketProperties() {
         return bucketProperties;
-    }
-
-    public boolean isBucket() {
-        return distributionType == DistributionType.BUCKET;
     }
 
     @Override
@@ -73,12 +61,11 @@ public class IcebergDistributionDesc extends HashDistributionDesc {
             return false;
         }
         IcebergDistributionDesc that = (IcebergDistributionDesc) o;
-        return distributionType == that.distributionType &&
-                Objects.equal(bucketProperties, that.bucketProperties);
+        return Objects.equal(bucketProperties, that.bucketProperties);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(super.hashCode(), distributionType, bucketProperties);
+        return java.util.Objects.hash(super.hashCode(), bucketProperties);
     }
 }
