@@ -53,7 +53,7 @@ protected:
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(-1, "", _parent_tracker.get())),
               _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
-              _update_mgr(std::make_unique<UpdateManager>(_lp.get())),
+              _update_mgr(std::make_unique<UpdateManager>(_lp.get(), _mem_tracker.get())),
               _tablet_mgr(std::make_unique<TabletManager>(_lp.get(), _update_mgr.get(), cache_limit)) {}
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }

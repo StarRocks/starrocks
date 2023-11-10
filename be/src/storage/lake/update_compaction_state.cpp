@@ -25,11 +25,22 @@
 
 namespace starrocks::lake {
 
-CompactionState::CompactionState(Rowset* rowset, UpdateManager* update_manager) {
-    if (rowset->num_segments() > 0) {
+CompactionState::~CompactionState() {
+    if (_update_manager != nullptr) {
+        _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
+    }
+}
+
+Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
+                                      const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
+    if (pk_cols.empty() && rowset->num_segments() > 0) {
         pk_cols.resize(rowset->num_segments());
+    } else {
+        DCHECK(pk_cols.size() == rowset->num_segments());
     }
     _update_manager = update_manager;
+<<<<<<< HEAD
 }
 
 CompactionState::~CompactionState() {
@@ -38,6 +49,9 @@ CompactionState::~CompactionState() {
 
 Status CompactionState::load_segments(Rowset* rowset, const TabletSchema& tablet_schema, uint32_t segment_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
+=======
+    _tablet_id = rowset->tablet_id();
+>>>>>>> dd4b209269 ([Enhancement] Lake pk table comaction optimization (#34261))
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
         std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
         LOG(WARNING) << msg;
@@ -61,19 +75,16 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchema& table
     CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
 
     OlapReaderStatistics stats;
-    auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
-    if (!res.ok()) {
-        return res.status();
+    if (_segment_iters.empty()) {
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &stats));
     }
-
-    auto& itrs = res.value();
-    CHECK_EQ(itrs.size(), rowset->num_segments());
+    CHECK_EQ(_segment_iters.size(), rowset->num_segments());
 
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
 
-    auto itr = itrs[segment_id].get();
+    auto itr = _segment_iters[segment_id].get();
     if (itr == nullptr) {
         return Status::OK();
     }
@@ -106,6 +117,10 @@ void CompactionState::release_segments(uint32_t segment_id) {
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
     pk_cols[segment_id]->reset_column();
+}
+
+std::string CompactionState::to_string() const {
+    return strings::Substitute("CompactionState tablet:$0", _tablet_id);
 }
 
 } // namespace starrocks::lake
