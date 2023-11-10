@@ -58,6 +58,7 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
+        params->json_file_size_limit = 1024 * 1024;
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
@@ -89,6 +90,7 @@ protected:
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
         range.format_type = TFileFormatType::FORMAT_JSON;
+        range.file_type = TFileType::FILE_LOCAL;
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
@@ -115,6 +117,7 @@ protected:
         std::vector<TBrokerRangeDesc> ranges;
         TBrokerRangeDesc range;
         range.format_type = TFileFormatType::FORMAT_JSON;
+        range.file_type = TFileType::FILE_LOCAL;
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
@@ -160,6 +163,7 @@ TEST_F(JsonScannerTest, test_array_json) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -190,6 +194,7 @@ TEST_F(JsonScannerTest, test_json_without_path) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -220,6 +225,7 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_basic) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -250,6 +256,7 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_null) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -280,6 +287,7 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_record) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -310,6 +318,7 @@ TEST_F(JsonScannerTest, test_json_path_with_asterisk_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -341,6 +350,7 @@ TEST_F(JsonScannerTest, test_json_with_path) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -376,6 +386,7 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
@@ -407,6 +418,7 @@ TEST_F(JsonScannerTest, test_two_level_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -437,6 +449,7 @@ TEST_F(JsonScannerTest, test_invalid_column_in_array) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -468,6 +481,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level1) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -499,6 +513,7 @@ TEST_F(JsonScannerTest, test_invalid_nested_level2) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -527,6 +542,7 @@ TEST_F(JsonScannerTest, test_json_with_long_string) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = false;
@@ -557,6 +573,7 @@ TEST_F(JsonScannerTest, test_ndjson) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -591,6 +608,7 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -626,6 +644,7 @@ TEST_F(JsonScannerTest, test_json_new_parser) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -668,6 +687,7 @@ TEST_F(JsonScannerTest, test_adaptive_nullable_column) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -704,6 +724,7 @@ TEST_F(JsonScannerTest, test_adaptive_nullable_column_2) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -767,6 +788,7 @@ TEST_F(JsonScannerTest, test_multi_type) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -805,6 +827,7 @@ TEST_F(JsonScannerTest, test_cast_type) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -836,6 +859,7 @@ TEST_F(JsonScannerTest, test_load_native_json) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -876,6 +900,7 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1027,6 +1052,7 @@ TEST_F(JsonScannerTest, test_expanded_with_json_root) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.jsonpaths = "";
     range.json_root = "$.data";
@@ -1064,6 +1090,7 @@ TEST_F(JsonScannerTest, test_ndjson_expanded_with_json_root) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.jsonpaths = "";
     range.json_root = "$.data";
@@ -1110,6 +1137,7 @@ TEST_F(JsonScannerTest, test_construct_row_in_object_order) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -1140,6 +1168,7 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1176,6 +1205,7 @@ TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
@@ -1212,6 +1242,7 @@ TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonp
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
@@ -1251,6 +1282,7 @@ TEST_F(JsonScannerTest, test_illegal_input) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = false;
@@ -1276,6 +1308,7 @@ TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
@@ -1305,6 +1338,7 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = true;
     range.jsonpaths = "";
     range.json_root = "$.data";
@@ -1349,6 +1383,7 @@ TEST_F(JsonScannerTest, test_null_with_jsonpath) {
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
