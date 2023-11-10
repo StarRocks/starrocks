@@ -145,7 +145,8 @@ public abstract class ConnectorPartitionTraits {
     /**
      * Get updated partitions based on current snapshot, to implement incremental refresh
      */
-    public abstract Set<String> getUpdatedPartitionNames(MaterializedView mv);
+    public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                         MaterializedView.AsyncRefreshContext context);
 
     // ========================================= Implementations ==============================================
 
@@ -230,18 +231,19 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(MaterializedView mv) {
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
             Table baseTable = table;
             Set<String> result = Sets.newHashSet();
             Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
                     getPartitionNameWithPartitionInfo();
 
-            for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+            for (BaseTableInfo baseTableInfo : baseTables) {
                 if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                     continue;
                 }
                 Map<String, MaterializedView.BasePartitionInfo> versionMap =
-                        mv.getBaseTableRefreshInfo(baseTableInfo);
+                        context.getBaseTableRefreshInfo(baseTableInfo);
 
                 // check whether there are partitions added
                 for (Map.Entry<String, com.starrocks.connector.PartitionInfo> entry : latestPartitionInfo.entrySet()) {
@@ -301,12 +303,12 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(MaterializedView mv) {
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
             OlapTable baseTable = (OlapTable) table;
-            Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap = mv.getRefreshScheme()
-                    .getAsyncRefreshContext()
-                    .getBaseTableVisibleVersionMap()
-                    .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
+            Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap =
+                    context.getBaseTableVisibleVersionMap()
+                            .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
             Set<String> result = Sets.newHashSet();
 
             // If there are new added partitions, add it into refresh result.
@@ -389,7 +391,8 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(MaterializedView mv) {
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
             // TODO: implement
             return null;
         }
@@ -419,12 +422,12 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(MaterializedView mv) {
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
             IcebergTable baseTable = (IcebergTable) table;
-            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
 
             Set<String> result = Sets.newHashSet();
-            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            for (BaseTableInfo baseTableInfo : baseTables) {
                 if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
                     continue;
                 }
@@ -433,7 +436,7 @@ public abstract class ConnectorPartitionTraits {
                 long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
 
                 Map<String, MaterializedView.BasePartitionInfo> baseTableInfoVisibleVersionMap =
-                        mv.getBaseTableRefreshInfo(baseTableInfo);
+                        context.getBaseTableRefreshInfo(baseTableInfo);
                 MaterializedView.BasePartitionInfo basePartitionInfo =
                         baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
                 if (basePartitionInfo == null) {
@@ -475,7 +478,8 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(MaterializedView mv) {
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
             // TODO: implement
             return null;
         }
@@ -527,7 +531,8 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(MaterializedView mv) {
+        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                    MaterializedView.AsyncRefreshContext context) {
             // TODO: implement
             return null;
         }
