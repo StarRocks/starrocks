@@ -90,7 +90,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
         int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
         {
-            SCOPED_RAW_TIMER(&_param.stats->build_iceberg_pos_filter_ns);
+            SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
             auto start_str = _need_skip_rowids->lower_bound(current_chunk_base_row);
             auto end_str = _need_skip_rowids->upper_bound(current_chunk_base_row + count - 1);
             for (; start_str != end_str; start_str++) {
