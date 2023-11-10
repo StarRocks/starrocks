@@ -79,7 +79,7 @@ public class AggregateFunctionRewriter {
         if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
             return true;
         }
-        if (aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
+        if (aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT) || aggFuncName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
             return true;
         }
         // HLL
@@ -97,7 +97,8 @@ public class AggregateFunctionRewriter {
     public CallOperator rewriteAggFunction(CallOperator aggFunc) {
         String aggFuncName = aggFunc.getFnName();
         if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) ||
-                aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
+                aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT) ||
+                aggFuncName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
             return rewriteCountDistinct(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.AVG)) {
             return rewriteAvg(aggFunc);
