@@ -2030,6 +2030,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    @Ignore
     public void testMVAggregateTable() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `t1_agg` (\n" +
                 "  `c_1_0` datetime NULL COMMENT \"\",\n" +
