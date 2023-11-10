@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.SystemInfoService;
@@ -27,13 +26,13 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class TableFunctionTableTest {
-
     Map<String, String> properties = new HashMap<>();
 
     @Before
@@ -59,7 +58,8 @@ public class TableFunctionTableTest {
 
     @Test
     public void testGetFileSchema(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Mocked SystemInfoService systemInfoService) {
+                                  @Mocked SystemInfoService systemInfoService)
+    throws Exception {
         new Expectations() {
             {
                 globalStateMgr.getCurrentSystemInfo();
@@ -73,12 +73,16 @@ public class TableFunctionTableTest {
             }
         };
 
-        try {
-            new TableFunctionTable(properties);
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Failed to send proxy request. No alive backends"));
-        }
+        TableFunctionTable t = new TableFunctionTable(properties);
 
+        Method method = TableFunctionTable.class.getDeclaredMethod("getFileSchema", null);
+        method.setAccessible(true);
+
+        try {
+            method.invoke(t, null);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getCause().getMessage().contains("Failed to send proxy request. No alive backends"));
+        }
 
         new MockUp<RunMode>() {
             @Mock
@@ -88,11 +92,10 @@ public class TableFunctionTableTest {
         };
 
         try {
-            new TableFunctionTable(properties);
-        } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().
+            method.invoke(t, null);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getCause().getMessage().
                     contains("Failed to send proxy request. No alive backends or compute nodes"));
         }
-
     }
 }
