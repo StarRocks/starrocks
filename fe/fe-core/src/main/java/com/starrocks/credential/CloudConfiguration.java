@@ -30,21 +30,29 @@ public class CloudConfiguration {
 
     private String configResources;
     private String runtimeJars;
+    private String hadoopUsername;
 
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
         tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
         Map<String, String> properties = new HashMap<>();
-        properties.put(HadoopExt.HDFS_CONFIG_RESOURCES, configResources);
-        properties.put(HadoopExt.HDFS_RUNTIME_JARS, runtimeJars);
-        properties.put(HadoopExt.HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
+        properties.put(HadoopExt.HADOOP_CONFIG_RESOURCES, configResources);
+        properties.put(HadoopExt.HADOOP_RUNTIME_JARS, runtimeJars);
+        properties.put(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
+        properties.put(HadoopExt.HADOOP_USERNAME, hadoopUsername);
         tCloudConfiguration.setCloud_properties_v2(properties);
     }
 
     public void applyToConfiguration(Configuration configuration) {
         if (configResources != null) {
-            configuration.set(HadoopExt.HDFS_CONFIG_RESOURCES, configResources);
+            configuration.set(HadoopExt.HADOOP_CONFIG_RESOURCES, configResources);
         }
-        configuration.set(HadoopExt.HDFS_CLOUD_CONFIGURATION_STRING, toConfString());
+        if (runtimeJars != null) {
+            configuration.set(HadoopExt.HADOOP_RUNTIME_JARS, runtimeJars);
+        }
+        if (hadoopUsername != null) {
+            configuration.set(HadoopExt.HADOOP_USERNAME, hadoopUsername);
+        }
+        configuration.set(HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING, toConfString());
         HadoopExt.getInstance().rewriteConfiguration(configuration);
     }
 
@@ -66,11 +74,12 @@ public class CloudConfiguration {
     }
 
     public void loadCommonFields(Map<String, String> properties) {
-        configResources = properties.getOrDefault(HadoopExt.HDFS_CONFIG_RESOURCES, "");
-        runtimeJars = properties.getOrDefault(HadoopExt.HDFS_RUNTIME_JARS, "");
+        configResources = properties.getOrDefault(HadoopExt.HADOOP_CONFIG_RESOURCES, "");
+        runtimeJars = properties.getOrDefault(HadoopExt.HADOOP_RUNTIME_JARS, "");
+        hadoopUsername = properties.getOrDefault(HadoopExt.HADOOP_USERNAME, "");
     }
 
     public String getCommonFieldsString() {
-        return String.format("resources='%s', jars='%s'", configResources, runtimeJars);
+        return String.format("resources='%s', jars='%s', hdpuser='%s'", configResources, runtimeJars, hadoopUsername);
     }
 }
