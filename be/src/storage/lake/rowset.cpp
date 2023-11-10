@@ -232,4 +232,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     return Status::OK();
 }
 
+int64_t Rowset::tablet_id() const {
+    return _tablet->id();
+}
+
 } // namespace starrocks::lake

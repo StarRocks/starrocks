@@ -200,7 +200,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     writer->close();
 
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
-    EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(_tablet_metadata->id(), txn_id));
+    EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(_tablet_metadata->id(), txn_id));
 
     // read at version 2
     ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
@@ -232,7 +232,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
@@ -266,7 +266,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // write failed
@@ -306,7 +306,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     ASSERT_EQ(kChunkSize * 5, read_rows(tablet_id, version));
@@ -332,7 +332,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
         txns.push_back(txn_id);
     }
@@ -417,7 +417,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
     // publish in order
     for (int64_t txn_id : txn_ids) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // check result
@@ -455,7 +455,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
             w->close();
             // Publish version
             ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-            EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+            EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         }
         version++;
     }
@@ -486,7 +486,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_noexist(tablet_id, txn_id));
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     ASSERT_EQ(kChunkSize * N, read_rows(tablet_id, version));

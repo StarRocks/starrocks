@@ -437,11 +437,11 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
             }
         }
     }
+    RETURN_IF_ERROR(tablet.put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload update state here to minimaze the cost when publishing.
         tablet.update_mgr()->preload_update_state(*txn_log, &tablet);
     }
-    RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }
 
