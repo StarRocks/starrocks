@@ -113,18 +113,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         UNKNOWN
     }
 
-<<<<<<< HEAD
-=======
-    @Override
-    public Boolean getUseLightSchemaChange() {
-        return false;
-    }
-
-    @Override
-    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
-    }
-
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     public static class BasePartitionInfo {
 
         @SerializedName(value = "id")
@@ -450,12 +438,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.indexIdToMeta.put(indexId, indexMeta);
 
         this.baseTableInfos = Lists.newArrayList();
-<<<<<<< HEAD
         this.baseTableInfos.add(new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getId()));
-=======
-        this.baseTableInfos.add(
-                new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getName(), baseTable.getId()));
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
 
         Map<Long, Partition> idToPartitions = new HashMap<>(baseTable.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -1152,13 +1135,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return false;
     }
 
-<<<<<<< HEAD
     private boolean supportPartialPartitionQueryRewriteForExternalTable(Table table) {
         return table.isHiveTable() || table.isIcebergTable();
     }
 
-=======
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
     /**
      * Once the materialized view's base tables have updated, we need to check correspond materialized views' partitions
      * to be refreshed.
@@ -1221,15 +1201,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
             // skip check external table if the external does not support rewrite.
             if (!table.isNativeTableOrMaterializedView()) {
-<<<<<<< HEAD
                 if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
                     return true;
                 }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-=======
-                if (tableProperty.getForceExternalTableQueryRewrite() ==
-                        TableProperty.QueryRewriteConsistencyMode.DISABLE) {
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
                     toRefreshPartitions.addAll(getVisiblePartitionNames());
                     return false;
                 }
@@ -1289,15 +1264,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // skip external table that is not supported for query rewrite, return all partition ?
             // skip check external table if the external does not support rewrite.
             if (!baseTable.isNativeTableOrMaterializedView()) {
-<<<<<<< HEAD
                 if (!supportPartialPartitionQueryRewriteForExternalTable(baseTable)) {
                     return true;
                 }
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-=======
-                if (tableProperty.getForceExternalTableQueryRewrite() ==
-                        TableProperty.QueryRewriteConsistencyMode.DISABLE) {
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
                     toRefreshedPartitioins.addAll(getVisiblePartitionNames());
                     return false;
                 }
@@ -1469,44 +1439,4 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public String inspectMeta() {
         return GsonUtils.GSON.toJson(this);
     }
-<<<<<<< HEAD
-=======
-
-    @Override
-    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum) {
-        // change db_id to new restore id
-        this.dbId = db.getId();
-        return super.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
-    }
-
-    /**
-     * Post actions after restore. Rebuild the materialized view by using table name instead of table ids
-     * because the table ids have changed since the restore.
-     *
-     * @param db : the new database after restore.
-     * @return : rebuild status, ok if success other error status.
-     */
-    public Status doAfterRestore(Database db) throws DdlException {
-        if (baseTableInfos == null) {
-            setInactiveAndReason("base mv is not active: base info is null");
-            return new Status(Status.ErrCode.NOT_FOUND,
-                    "Materialized view's base info is not found");
-        }
-
-        // reset its status to active
-        GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .alterMaterializedViewStatus(this, AlterMaterializedViewStatusClause.ACTIVE, false);
-        LOG.info("active materialized view {} succeed", getName());
-
-        // rebuild mv task
-        TaskBuilder.rebuildMVTask(db.getFullName(), this);
-
-        // clear baseTable ids if it exists
-        if (this.baseTableIds != null) {
-            this.baseTableIds.clear();
-        }
-        LOG.info("rebuild materialized view success, {}", this.getName());
-        return Status.OK;
-    }
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
 }
