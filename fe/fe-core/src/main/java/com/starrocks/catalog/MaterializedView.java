@@ -212,18 +212,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return baseTableInfoVisibleVersionMap;
         }
 
-<<<<<<< HEAD
-=======
         public Map<String, BasePartitionInfo> getBaseTableRefreshInfo(BaseTableInfo info) {
             return getBaseTableInfoVisibleVersionMap()
                     .computeIfAbsent(info, k -> Maps.newHashMap());
         }
 
-        public Map<String, Set<String>> getMvPartitionNameRefBaseTablePartitionMap() {
-            return mvPartitionNameRefBaseTablePartitionMap;
-        }
-
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
         public void clearVisibleVersionMap() {
             this.baseTableInfoVisibleVersionMap.clear();
             this.baseTableVisibleVersionMap.clear();
@@ -1221,15 +1214,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
             // skip check external table if the external does not support rewrite.
             if (!table.isNativeTableOrMaterializedView()) {
-<<<<<<< HEAD
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     return getVisiblePartitionNames();
-=======
-                if (tableProperty.getForceExternalTableQueryRewrite() ==
-                        TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    toRefreshPartitions.addAll(getVisiblePartitionNames());
-                    return false;
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
                 }
             }
 
@@ -1284,15 +1270,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // skip external table that is not supported for query rewrite, return all partition ?
             // skip check external table if the external does not support rewrite.
             if (!baseTable.isNativeTableOrMaterializedView()) {
-<<<<<<< HEAD
                 if (tableProperty.getForceExternalTableQueryRewrite() == TableProperty.QueryRewriteConsistencyMode.DISABLE) {
                     return getVisiblePartitionNames();
-=======
-                if (tableProperty.getForceExternalTableQueryRewrite() ==
-                        TableProperty.QueryRewriteConsistencyMode.DISABLE) {
-                    toRefreshedPartitioins.addAll(getVisiblePartitionNames());
-                    return false;
->>>>>>> 4374a6c8d6 ([Refactor] refactor connector specific interfaces in mv (#34681))
                 }
             }
             if (baseTable.getTableIdentifier().equals(refBaseTable.getTableIdentifier())) {
