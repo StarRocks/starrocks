@@ -58,8 +58,7 @@ public class TableFunctionTableTest {
 
     @Test
     public void testGetFileSchema(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Mocked SystemInfoService systemInfoService)
-    throws Exception {
+                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         new Expectations() {
             {
                 globalStateMgr.getCurrentSystemInfo();
