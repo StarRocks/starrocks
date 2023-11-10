@@ -243,6 +243,32 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
         }
     }
     EXPECT_EQ(count, num_rows);
+
+    // Test new_column_iterator
+    {
+        auto r = segment->new_column_iterator(5 /* nonexist column id*/, nullptr);
+        ASSERT_FALSE(r.ok());
+        ASSERT_TRUE(r.status().is_not_found()) << r.status();
+    }
+    // Test new_column_iterator_or_default
+    {
+        TabletColumn column;
+        column.set_unique_id(5);
+        column.set_type(LogicalType::TYPE_BIGINT);
+        column.set_is_nullable(false);
+
+        auto r = segment->new_column_iterator_or_default(column, nullptr);
+        ASSERT_FALSE(r.ok());
+
+        column.set_is_nullable(true);
+        r = segment->new_column_iterator_or_default(column, nullptr);
+        ASSERT_TRUE(r.ok()) << r.status();
+
+        column.set_is_nullable(false);
+        column.set_default_value("10");
+        r = segment->new_column_iterator_or_default(column, nullptr);
+        ASSERT_TRUE(r.ok()) << r.status();
+    }
 }
 
 // NOLINTNEXTLINE

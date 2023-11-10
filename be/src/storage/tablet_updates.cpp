@@ -4318,7 +4318,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDelt
             ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
         }
         iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
-        return dcg_segment->new_column_iterator(col_index);
+        return dcg_segment->new_column_iterator(ucid, nullptr);
     }
     return nullptr;
 }
@@ -4412,8 +4412,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         if (full_row_column) {
             full_row_column->reset_column();
             full_row_column->reserve(rowids.size());
-            ASSIGN_OR_RETURN(auto col_iter,
-                             (*segment)->new_column_iterator(_tablet.tablet_schema()->num_columns() - 1));
+            const auto& column = _tablet.tablet_schema()->column(_tablet.tablet_schema()->num_columns() - 1);
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), full_row_column.get()));
             auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
@@ -4426,8 +4426,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                                  new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
                 if (col_iter == nullptr) {
                     // not found in delta column file, build iterator from main segment
-                    ASSIGN_OR_RETURN(col_iter,
-                                     (*segment)->new_column_iterator(column_ids[i], nullptr, read_tablet_schema));
+                    const auto& column = read_tablet_schema->column(column_ids[i]);
+                    ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
                     iter_opts.read_file = read_file.get();
                 }
                 RETURN_IF_ERROR(col_iter->init(iter_opts));
@@ -4473,7 +4473,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                              new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
-                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(auto_increment_column_idx));
+                const TabletColumn& col = auto_increment_state->schema->column(auto_increment_column_idx);
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
                 iter_opts.read_file = read_file.get();
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));
