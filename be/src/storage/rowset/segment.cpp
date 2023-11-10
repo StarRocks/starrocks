@@ -341,32 +341,38 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t cid, ColumnAccessPath* path,
-                                                                       const TabletSchemaCSPtr& read_tablet_schema) {
-    auto const& current_tablet_schema = !read_tablet_schema ? _tablet_schema.schema() : read_tablet_schema;
-    const TabletColumn& tablet_column = current_tablet_schema->column(cid);
-    auto column_unique_id = tablet_column.unique_id();
-    if ((_column_readers.count(column_unique_id) < 1)) {
-        if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
-            return Status::InternalError(
-                    fmt::format("invalid nonexistent column({}) without default value.", tablet_column.name()));
-        }
-        const TypeInfoPtr& type_info = get_type_info(tablet_column);
-        std::unique_ptr<DefaultValueColumnIterator> default_value_iter(new DefaultValueColumnIterator(
-                tablet_column.has_default_value(), tablet_column.default_value(), tablet_column.is_nullable(),
-                type_info, tablet_column.length(), num_rows()));
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_default(const TabletColumn& column,
+                                                                                  ColumnAccessPath* path) {
+    auto id = column.unique_id();
+    if (_column_readers.contains(id)) {
+        return _column_readers.at(id)->new_iterator(path);
+    } else if (!column.has_default_value() && !column.is_nullable()) {
+        return Status::InternalError(
+                fmt::format("invalid nonexistent column({}) without default value.", column.name()));
+    } else {
+        const TypeInfoPtr& type_info = get_type_info(column);
+        auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                column.has_default_value(), column.default_value(), column.is_nullable(), type_info, column.length(),
+                num_rows());
         ColumnIteratorOptions iter_opts;
         RETURN_IF_ERROR(default_value_iter->init(iter_opts));
         return default_value_iter;
     }
-    return _column_readers.at(column_unique_id)->new_iterator(path);
 }
 
-Status Segment::new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter,
-                                          const TabletSchemaCSPtr& tablet_schema) {
-    auto column_id = tablet_schema->column(cid).unique_id();
-    if (_column_readers.count(column_id) > 0 && _column_readers.at(column_id)->has_bitmap_index()) {
-        return _column_readers.at(column_id)->new_bitmap_index_iterator(options, iter);
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
+    auto iter = _column_readers.find(id);
+    if (iter != _column_readers.end()) {
+        return iter->second->new_iterator(path);
+    } else {
+        return Status::NotFound(fmt::format("{} does not contain column of id {}", _fname, id));
+    }
+}
+
+Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** res) {
+    auto iter = _column_readers.find(id);
+    if (iter != _column_readers.end() && iter->second->has_bitmap_index()) {
+        return iter->second->new_bitmap_index_iterator(options, res);
     }
     return Status::OK();
 }
