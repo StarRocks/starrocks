@@ -41,6 +41,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -66,6 +67,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +86,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private Executor lakeTaskExecutor;
     private Set<Long> publishingLakeTransactions;
 
+    private Set<Long> publishingLakeTransactionsBatchTableId;
+
+
     public PublishVersionDaemon() {
         super("PUBLISH_VERSION", Config.publish_version_interval_ms);
     }
@@ -92,6 +97,17 @@ public class PublishVersionDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            if (Config.lake_enable_batch_publish_version && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                // batch publish
+                List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
+                        getReadyPublishTransactionsBatch();
+                if (readyTransactionStatesBatch.size() != 0) {
+                    publishVersionForLakeTableBatch(readyTransactionStatesBatch);
+                }
+                return;
+
+            }
+
             List<TransactionState> readyTransactionStates =
                     globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
@@ -152,6 +168,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
             publishingLakeTransactions = Sets.newConcurrentHashSet();
         }
         return publishingLakeTransactions;
+    }
+
+    // Only one table in all transactionStates in transactionStateBatch
+    // so we can judge whether the transactionStateBatch is publishing by tableId
+    // we can not judge whether one transactionBatch is publishing by the transactionStateBatch itself,
+    // for maybe there are only 3 transactions in transactionGraph at first,sush as
+    // 1->2->3, so the transactionStateBatch contains the three transactions.
+    // But if another transaction is submitted at this time, then the next batch will contain the the new transaction,
+    // such as 1->2->3->4-5,
+    // the transactons will be published repeatedlly.
+    private @NotNull Set<Long> getPublishingLakeTransactionsBatchTableId() {
+        if (publishingLakeTransactionsBatchTableId == null) {
+            publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
+        }
+        return publishingLakeTransactionsBatchTableId;
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
@@ -287,8 +318,28 @@ public class PublishVersionDaemon extends FrontendDaemon {
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
             if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element
+                Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
+                // When the `enable_lake_batch_publish_version` switch is just set to false,
+                // it is possible that the result of publish task has not been returned,
+                // we need to wait for the result to return if the same table is involved.
+                if (!txnState.getTableIdList().stream().allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
+                    LOG.info("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
+                            txnState.getTransactionId());
+                    continue;
+                }
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
                 future.thenRun(() -> publishingTransactions.remove(txnId));
+            }
+        }
+    }
+
+    void publishVersionForLakeTableBatch(List<TransactionStateBatch> readyTransactionStatesBatch) {
+        Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
+        for (TransactionStateBatch txnStateBatch : readyTransactionStatesBatch) {
+            long tableId = txnStateBatch.getTableId();
+            if (publishingLakeTransactionsBatchTableId.add(tableId)) {
+                CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
+                future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
             }
         }
     }
@@ -336,6 +387,208 @@ public class PublishVersionDaemon extends FrontendDaemon {
             LOG.error("Fail to finish transaction " + txnId, ex);
             return null;
         });
+    }
+
+
+    public boolean publishPartitionBatch(Database db, long tableId, long partitionId, List<Long> txnIds,
+                                         List<Long> versions, List<TransactionState> transactionStates,
+                                         TransactionStateBatch stateBatch) {
+        db.readLock();
+        // version -> shadowTablets
+        Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
+        Set<Tablet> normalTablets = null;
+        try {
+            OlapTable table = (OlapTable) db.getTable(tableId);
+            if (table == null) {
+                // table has been dropped
+                return true;
+            }
+
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                LOG.info("partition is null in publish partition batch");
+                return true;
+            }
+            if (partition.getVisibleVersion() + 1 != versions.get(0)) {
+                LOG.info("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
+                        + partition.getId() + " " + partition.getVisibleVersion() + " " + versions.get(0));
+                return false;
+            }
+
+            for (int i = 0; i < transactionStates.size(); i++) {
+                TransactionState txnState = transactionStates.get(i);
+                List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+                for (MaterializedIndex index : indexes) {
+                    if (!index.visibleForTransaction(txnState.getTransactionId())) {
+                        LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()),
+                                txnState.getTransactionId());
+                        continue;
+                    }
+                    if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
+                        if (shadowTabletsMap.containsKey(versions.get(i))) {
+                            shadowTabletsMap.get(versions.get(i)).addAll(index.getTablets());
+                        } else {
+                            Set<Tablet> tabletsNew = new HashSet<>(index.getTablets());
+                            shadowTabletsMap.put(versions.get(i), tabletsNew);
+                        }
+
+                    } else {
+                        normalTablets = (normalTablets == null) ? Sets.newHashSet() : normalTablets;
+                        normalTablets.addAll(index.getTablets());
+                    }
+                }
+
+            }
+
+        } finally {
+            db.readUnlock();
+        }
+
+        long startVersion = versions.get(0);
+        long endVersion = versions.get(versions.size() - 1);
+
+        try {
+            for (Map.Entry<Long, Set<Tablet>> item : shadowTabletsMap.entrySet()) {
+                int index = versions.indexOf(item.getKey());
+                List<Tablet> publishShdowTablets = new ArrayList<>(item.getValue());
+                Utils.publishLogVersionBatch(publishShdowTablets, txnIds.subList(index, txnIds.size()),
+                        versions.subList(index, versions.size()));
+            }
+            if (CollectionUtils.isNotEmpty(normalTablets)) {
+                Map<Long, Double> compactionScores = new HashMap<>();
+                List<Tablet> publishTablets = new ArrayList<>();
+                publishTablets.addAll(normalTablets);
+
+                // commit time of last transactionState as commitTime
+                long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
+                Utils.publishVersionBatch(publishTablets, txnIds,
+                        startVersion - 1, endVersion, commitTime, compactionScores);
+
+                Quantiles quantiles = Quantiles.compute(compactionScores.values());
+                stateBatch.setCompactionScore(tableId, partitionId, quantiles);
+            }
+        } catch (Throwable e) {
+            LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
+                    txnIds, e.getMessage());
+            return false;
+        }
+
+        return true;
+    }
+
+    private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        if (txnStateBatch.size() > 1) {
+            // pick up all tableCommitInfo
+            // only one table,if batch has multi transactionState for now,
+            // the batch only has one transactionState for multi table.
+            long dbId = txnStateBatch.getDbId();
+            long tableId = txnStateBatch.getTableId();
+            List<TransactionState> states = txnStateBatch.getTransactionStates();
+            // partitionId -> txnIdList
+            Map<Long, List<Long>> dirtyPartitons = new HashMap<>();
+            // partitionId -> versionList
+            Map<Long, List<Long>> partitionVersions = new HashMap<>();
+            // partitionId -> transactionState
+            Map<Long, List<TransactionState>> partitionStates = new HashMap<>();
+
+
+            for (TransactionState state : states) {
+                Map<Long, PartitionCommitInfo> partitionCommitInfoMap = state.getTableCommitInfo(tableId)
+                        .getIdToPartitionCommitInfo();
+                for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
+
+                    if (!dirtyPartitons.containsKey(item.getKey())) {
+                        dirtyPartitons.put(item.getKey(), new ArrayList<>());
+                    }
+                    List<Long> partitionCommitInfo = dirtyPartitons.get(item.getKey());
+                    partitionCommitInfo.add(state.getTransactionId());
+
+                    if (!partitionVersions.containsKey(item.getKey())) {
+                        partitionVersions.put(item.getKey(), new ArrayList<>());
+                    }
+                    List<Long> versions = partitionVersions.get(item.getKey());
+                    versions.add(item.getValue().getVersion());
+
+                    if (!partitionStates.containsKey(item.getKey())) {
+                        partitionStates.put(item.getKey(), new ArrayList<>());
+                    }
+                    List<TransactionState> partitionState = partitionStates.get(item.getKey());
+                    partitionState.add(state);
+                }
+            }
+
+            // TODO
+            // make sure the txnIdList is correspond to versions
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+
+            if (db == null) {
+                LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
+                try {
+                    for (TransactionState state : txnStateBatch.getTransactionStates()) {
+                        globalTransactionMgr.finishTransaction(state.getDbId(), state.getTransactionId(), Sets.newHashSet());
+                    }
+                } catch (UserException ex) {
+                    LOG.warn("Fail to finish txn Batch " + txnStateBatch, ex);
+                }
+                return CompletableFuture.completedFuture(null);
+            }
+
+            List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
+
+            for (Map.Entry<Long, List<Long>> item : dirtyPartitons.entrySet()) {
+                Long partitionId = item.getKey();
+
+                CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
+                    boolean success = publishPartitionBatch(db, tableId, partitionId, item.getValue(),
+                            partitionVersions.get(partitionId), partitionStates.get(partitionId), txnStateBatch);
+                    partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(tableId).
+                            getIdToPartitionCommitInfo().get(partitionId).setVersionTime(
+                                    success ? System.currentTimeMillis() : -System.currentTimeMillis()));
+                    return success;
+                }, getLakeTaskExecutor()).exceptionally(ex -> {
+                    LOG.error("Fail to publish txn batch ");
+                    partitionStates.get(partitionId).stream().forEach(state -> state.getTableCommitInfo(tableId).
+                            getIdToPartitionCommitInfo().get(partitionId).setVersionTime(-System.currentTimeMillis()));
+                    return false;
+                });
+                futureList.add(future);
+            }
+
+            CompletableFuture<Boolean> publishFuture = CompletableFuture.allOf(
+                            futureList.toArray(new CompletableFuture[0])).
+                    thenApply(v -> futureList.stream().allMatch(CompletableFuture::join));
+
+            return publishFuture.thenAccept(success -> {
+                if (success) {
+                    try {
+                        globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
+                        //
+                        for (TransactionState state : txnStateBatch.getTransactionStates()) {
+                            refreshMvIfNecessary(state);
+                        }
+
+                    } catch (UserException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }).exceptionally(ex -> {
+                LOG.error("Fail to finish transaction batch");
+                return null;
+            });
+
+        }
+
+        // batch size == 1
+        // degenerate into normal mode
+        TransactionState txnState = null;
+        try {
+            txnState = txnStateBatch.index(0);
+        } catch (UserException e) {
+            throw new RuntimeException(e);
+        }
+
+        return publishLakeTransactionAsync(txnState);
     }
 
     private CompletableFuture<Boolean> publishLakeTableAsync(Database db, TransactionState txnState,

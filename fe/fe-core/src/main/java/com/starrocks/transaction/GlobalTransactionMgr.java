@@ -602,6 +602,17 @@ public class GlobalTransactionMgr implements Writable {
         return transactionStateList;
     }
 
+    public List<TransactionStateBatch> getReadyPublishTransactionsBatch() {
+        List<TransactionStateBatch> transactionStateList = Lists.newArrayList();
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            List<TransactionStateBatch> dbTransactionStatesBatch = dbTransactionMgr.getReadyToPublishTxnListBatch();
+            if (dbTransactionStatesBatch.size() != 0) {
+                transactionStateList.addAll(dbTransactionStatesBatch);
+            }
+        }
+        return transactionStateList;
+    }
+
     public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
         if (tableId == null && partitionId == null) {
@@ -630,6 +641,12 @@ public class GlobalTransactionMgr implements Writable {
     public void finishTransaction(long dbId, long transactionId, Set<Long> errorReplicaIds) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
         dbTransactionMgr.finishTransaction(transactionId, errorReplicaIds);
+    }
+
+    public void finishTransactionBatch(long dbId, TransactionStateBatch stateBatch, Set<Long> errorReplicaIds)
+            throws UserException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+        dbTransactionMgr.finishTransactionBatch(stateBatch, errorReplicaIds);
     }
 
     public void finishTransactionNew(TransactionState txnState, Set<Long> publishErrorReplicas) throws UserException {
@@ -750,6 +767,15 @@ public class GlobalTransactionMgr implements Writable {
             dbTransactionMgr.replayUpsertTransactionState(transactionState);
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction [" + transactionState.getTransactionId() + "] failed", e);
+        }
+    }
+
+    public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionStateBatch.getDbId());
+            dbTransactionMgr.replayUpsertTransactionStateBatch(transactionStateBatch);
+        } catch (AnalysisException e) {
+            LOG.warn("replay upsert transaction batch[" + transactionStateBatch + "] failed", e);
         }
     }
 
