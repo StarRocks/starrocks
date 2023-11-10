@@ -1161,7 +1161,7 @@ ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted
     ColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
     auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
     auto iter = deleted_pos.lower_bound(start_pos);
-    auto end = deleted_pos.upper_bound(start_pos + num_rows);
+    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
     for (; iter != end; iter++) {
         const int64_t file_pos = *iter - start_pos;
         filter[file_pos] = 0;

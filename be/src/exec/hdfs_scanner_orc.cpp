@@ -426,7 +426,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
-            row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
+            {
+                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_filter_ns);
+                row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
+            }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
             RETURN_IF_ERROR(_orc_reader->apply_dict_filter_eval_cache(_orc_row_reader_filter->_dict_filter_eval_cache,
@@ -527,14 +530,14 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
     if (!scanner_params.deletes.empty()) {
-        SCOPED_RAW_TIMER(&_app_stats.delete_build_ns);
+        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
         IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
                                                     scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
                                                     &_need_skip_rowids);
         for (const auto& tdelete_file : scanner_params.deletes) {
             RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
         }
-        _app_stats.delete_file_per_scan += scanner_params.deletes.size();
+        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
 
     return Status::OK();
@@ -543,18 +546,13 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
 static const std::string kORCProfileSectionPrefix = "ORC";
 
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
-    RuntimeProfile::Counter* delete_build_timer = nullptr;
-    RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
     RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
     RuntimeProfile::Counter* stripe_number_counter = nullptr;
     RuntimeProfile* root = profile->runtime_profile;
 
     ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
 
-    delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
-    delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
-    COUNTER_UPDATE(delete_build_timer, _app_stats.delete_build_ns);
-    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.delete_file_per_scan);
+    do_update_iceberg_v2_counter(root, kORCProfileSectionPrefix);
 
     // we expect to get average stripe size instead of sum.
     stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
