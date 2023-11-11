@@ -12,13 +12,13 @@ Broker nodes use the network connection to transmit data to BE nodes. When a Bro
 
 ## Before you begin
 
-Make sure you have completed the required configurations by following the instructions provided in [Deployment prerequisites](./preparation/deployment_prerequisites.md), [Check environment configurations](./preparation/environment_configurations.md), and [Prepare deployment files](../deployment/prepare_deployment_files.md).
+Make sure you have completed the required configurations by following the instructions provided in [Deployment prerequisites](./preparation/deployment_prerequisites.md), [Check environment configurations](./preparation/environment_configurations.md), and [Prepare deployment files](./preparation/prepare_deployment_files.md).
 
 ## Start Broker service
 
 The following procedures are performed on the BE instances.
 
-1. Navigate to the directory that stores the [StarRocks Broker deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the Broker configuration file **apache_hdfs_broker/conf/apache_hdfs_broker.conf**.
+1. Navigate to the directory that stores the [StarRocks Broker deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the Broker configuration file **apache_hdfs_broker/conf/apache_hdfs_broker.conf**.
 
    If the HDFS Thrift RPC port (`broker_ipc_port`, Default: `8000`) on the instance is occupied, you must assign a valid alternative in the Broker configuration file.
 

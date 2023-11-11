@@ -19,7 +19,7 @@ The following procedures are performed on an FE instance.
    mkdir -p <meta_dir>
    ```
 
-2. Navigate to the directory that stores the [StarRocks FE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the FE configuration file **fe/conf/fe.conf**.
+2. Navigate to the directory that stores the [StarRocks FE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the FE configuration file **fe/conf/fe.conf**.
 
    a. Specify the metadata directory in the configuration item `meta_dir`.
 
@@ -99,7 +99,7 @@ The following procedures are performed on the BE instances.
    mkdir -p <storage_root_path>
    ```
 
-2. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the BE configuration file **be/conf/be.conf**.
+2. Navigate to the directory that stores the [StarRocks BE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the BE configuration file **be/conf/be.conf**.
 
    a. Specify the data directory in the configuration item `storage_root_path`.
 
@@ -165,7 +165,7 @@ The following procedures are performed on the BE instances.
 
 A Compute Node (CN) is a stateless computing service that does not maintain data itself. You can optionally add CN nodes to your cluster to provide extra computing resources for queries. You can deploy CN nodes with the BE deployment files. Compute Nodes are supported since v2.4.
 
-1. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
+1. Navigate to the directory that stores the [StarRocks BE deployment files](./preparation/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
 
    a. If any of the CN ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
