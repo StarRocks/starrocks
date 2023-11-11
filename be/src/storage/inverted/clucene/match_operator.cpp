@@ -39,11 +39,10 @@ Status MatchTermOperator::_match_internal(lucene::search::HitCollector* hit_coll
 }
 
 Status MatchChineseTermOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
-    auto string_reader = std::make_unique<lucene::util::AStringReader>(_term.c_str());
-    auto reader = std::make_unique<lucene::util::SimpleInputStreamReader>(string_reader.get(),
-                                                                          lucene::util::SimpleInputStreamReader::UTF8);
+    auto reader = _CLNEW lucene::util::SimpleInputStreamReader(_CLNEW lucene::util::AStringReader(_term.c_str()),
+                                                               lucene::util::SimpleInputStreamReader::UTF8);
 
-    lucene::analysis::TokenStream* token_stream = _analyzer->tokenStream(_field_name.c_str(), reader.get());
+    lucene::analysis::TokenStream* token_stream = _analyzer->tokenStream(_field_name.c_str(), reader);
 
     lucene::analysis::Token token;
     std::vector<std::wstring> analyse_result;
@@ -55,6 +54,7 @@ Status MatchChineseTermOperator::_match_internal(lucene::search::HitCollector* h
     }
 
     token_stream->close();
+    _CLDELETE(reader)
 
     lucene::search::BooleanQuery query;
     for (const auto& t : analyse_result) {

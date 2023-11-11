@@ -202,7 +202,7 @@ TEST_F(MatchOperatorTest, test_clucene_chinese) {
 
     // tokenized by chinese field
     int field_ch_config = int(lucene::document::Field::STORE_NO) | int(lucene::document::Field::INDEX_TOKENIZED);
-    auto field_ch = std::make_unique<lucene::document::Field>(fch.c_str(), field_ch_config);
+    auto field_ch = _CLNEW lucene::document::Field(fch.c_str(), field_ch_config);
     lucene::document::Document doc;
     doc.add(*field_ch);
 
