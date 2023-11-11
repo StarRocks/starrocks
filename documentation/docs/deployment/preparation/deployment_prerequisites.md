@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Deployment prerequisites
 
-This topic describes the hardware and software requirements that your servers must meet before deploying StarRocks. For recommended hardware specifications of your StarRocks cluster, see [Plan your StarRocks cluster](../deployment/plan_cluster.md).
+This topic describes the hardware and software requirements that your servers must meet before deploying StarRocks. For recommended hardware specifications of your StarRocks cluster, see [Plan your StarRocks cluster](../plan_cluster.md).
 
 ## Hardware
 
@@ -24,7 +24,7 @@ cat /proc/cpuinfo | grep avx2
 
 ### Memory
 
-No specific requirement is imposed on memory kits used for StarRocks. See [Plan StarRocks cluster - CPU and Memory](../deployment/plan_cluster.md#cpu-and-memory) for the recommended memory size.
+No specific requirement is imposed on memory kits used for StarRocks. See [Plan StarRocks cluster - CPU and Memory](../plan_cluster.md#cpu-and-memory) for the recommended memory size.
 
 ### Storage
 
@@ -32,7 +32,7 @@ StarRocks supports both HDD and SSD as storage medium.
 
 If your applications require real-time data analytics, intensive data scans, or random disk access, we strongly recommend you use SSD storage.
 
-If your applications involve [Primary Key tables](../table_design/table_types/primary_key_table.md) with the persistent index, you must use SSD storage.
+If your applications involve [Primary Key tables](../../table_design/table_types/primary_key_table.md) with the persistent index, you must use SSD storage.
 
 ### Network
 

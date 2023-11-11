@@ -12,7 +12,7 @@ A summary of the deployment procedure is as follows and later topics provide the
 
 The deployment of StarRocks generally follows the steps outlined here:
 
-1. Confirm the [hardware and software requirements](../deployment/deployment_prerequisites.md) for your StarRocks deployment.
+1. Confirm the [hardware and software requirements](./preparation/deployment_prerequisites.md) for your StarRocks deployment.
 
    Check the prerequisites that your servers must meet before deploying StarRocks, including CPU, memory, storage, network, operating system, and dependencies.
 
