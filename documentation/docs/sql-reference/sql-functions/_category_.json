@@ -1,0 +1,10 @@
+{
+    "position": 20,
+    "label": "SQL Functions",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "function-list"
+    }
+}

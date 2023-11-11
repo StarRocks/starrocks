@@ -1,0 +1,10 @@
+{
+    "position": 30,
+    "label": "Development Environment",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "development-environment"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "position": 40,
+    "label": "Tracing Tools",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "Trace"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "position": 10,
+    "label": "Build StarRocks",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "handbook"
+    }
+}

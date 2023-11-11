@@ -1,0 +1,10 @@
+{
+    "position": 110,
+    "label": "SQL Reference",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "sql-reference"
+    }
+}

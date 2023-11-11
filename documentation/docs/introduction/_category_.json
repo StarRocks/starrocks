@@ -1,0 +1,10 @@
+{
+    "position": 10,
+    "label": "Introduction",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "what_is_starrocks"
+    }
+}

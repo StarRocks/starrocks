@@ -1,0 +1,10 @@
+{
+    "position": 150,
+    "label": "Developers",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "developers"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "position": 50,
+    "label": "Data Loading",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "Loading_intro"
+    }
+}

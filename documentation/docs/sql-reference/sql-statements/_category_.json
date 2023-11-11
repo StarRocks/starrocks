@@ -1,0 +1,10 @@
+{
+    "position": 10,
+    "label": "SQL Commands",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "all-commands"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "position": 80,
+    "label": "Query Acceleration",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "using_starrocks"
+    }
+}

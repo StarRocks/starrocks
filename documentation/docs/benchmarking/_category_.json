@@ -1,0 +1,10 @@
+{
+    "position": 140,
+    "label": "Benchmarks",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "benchmarking"
+    }
+}

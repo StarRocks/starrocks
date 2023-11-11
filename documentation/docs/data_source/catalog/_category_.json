@@ -1,0 +1,10 @@
+{
+    "position": 1,
+    "label": "Catalogs",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "catalog_overview"
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "position": 90,
+    "label": "Other integrations",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "other_integrations"
+    }
+}

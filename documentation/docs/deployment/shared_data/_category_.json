@@ -1,0 +1,10 @@
+{
+    "position": 30,
+    "label": "Separate Storage and Compute",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "shared_data"
+    }
+}

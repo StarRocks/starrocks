@@ -1,0 +1,10 @@
+{
+    "position": 70,
+    "label": "Query Data Lakes",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "data_source"
+    }
+}
