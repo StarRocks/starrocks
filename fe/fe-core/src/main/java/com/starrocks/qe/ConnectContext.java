@@ -207,6 +207,8 @@ public class ConnectContext {
 
     private boolean relationAliasCaseInsensitive = false;
 
+    private boolean isShortCircuit = false;
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     public StmtExecutor getExecutor() {
@@ -792,6 +794,14 @@ public class ConnectContext {
             LOG.warn("construct SSLChannelImp class failed");
             throw new IOException("construct SSLChannelImp class failed");
         }
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
     }
 
     public StmtExecutor executeSql(String sql) throws Exception {

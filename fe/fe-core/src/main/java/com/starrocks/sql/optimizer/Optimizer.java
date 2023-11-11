@@ -285,6 +285,12 @@ public class Optimizer {
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+
+        if (connectContext.isShortCircuit()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.SHORT_CIRCUIT_SET);
+            return tree.getInputs().get(0);
+        }
+
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
 

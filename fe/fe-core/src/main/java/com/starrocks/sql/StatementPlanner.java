@@ -141,10 +141,6 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
         }
 
-        if (ShortCircuitPlanner.supportShortCircuitRead(logicalPlan.getRoot(), session)) {
-            return new ShortCircuitPlanner().planSelect(logicalPlan, query, session);
-        }
-
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
@@ -205,9 +201,9 @@ public class StatementPlanner {
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
             }
-            if (ShortCircuitPlanner.supportShortCircuitRead(logicalPlan.getRoot(), session)) {
-                return new ShortCircuitPlanner().planSelect(logicalPlan, query, session);
-            }
+
+            boolean supportShortCircuit = ShortCircuitPlanner.supportShortCircuitRead(logicalPlan.getRoot(), session);
+            session.setShortCircuit(supportShortCircuit);
 
             OptExpression optimizedPlan;
             try (Timer ignored = Tracers.watchScope("Optimizer")) {

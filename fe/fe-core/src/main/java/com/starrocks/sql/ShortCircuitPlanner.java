@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -107,7 +108,8 @@ public class ShortCircuitPlanner {
         return root.getOp().accept(new LogicalPlanChecker(), root, null);
     }
 
-    public ExecPlan planSelect(LogicalPlan logicalPlan, QueryRelation relation, ConnectContext connectContext) {
+    public ExecPlan planSelect(LogicalPlan logicalPlan, QueryRelation relation, ConnectContext connectContext,
+                               ColumnRefFactory columnRefFactory) {
         OptExpression root = logicalPlan.getRoot();
         ExecPlan execPlan = new ExecPlan(connectContext, relation.getColumnOutputNames(), root,
                 logicalPlan.getOutputColumn());

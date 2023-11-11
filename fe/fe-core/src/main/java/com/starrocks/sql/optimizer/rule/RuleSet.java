@@ -401,6 +401,14 @@ public class RuleSet {
                 new PruneEmptyExceptRule(),
                 new PruneEmptyWindowRule()
         ));
+
+        REWRITE_RULES.put(RuleSetType.SHORT_CIRCUIT_SET, ImmutableList.of(
+                PruneEmptyScanRule.OLAP_SCAN,
+                new CastToEmptyRule(),
+                new PruneTrueFilterRule(),
+                new PartitionPruneRule(),
+                new DistributionPruneRule()
+        ));
     }
 
     public RuleSet() {
