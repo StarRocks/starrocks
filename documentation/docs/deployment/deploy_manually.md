@@ -28,7 +28,7 @@ The following procedures are performed on an FE instance.
       meta_dir = <meta_dir>
       ```
 
-   b. If any of the FE ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md#fe-ports) are occupied, you must assign valid alternatives in the FE configuration file.
+   b. If any of the FE ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md#fe-ports) are occupied, you must assign valid alternatives in the FE configuration file.
 
       ```YAML
       http_port = aaaa        # Default: 8030
@@ -78,7 +78,7 @@ The following procedures are performed on an FE instance.
 
      > **CAUTION**
      >
-     > Before starting the FE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+     > Before starting the FE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
 
 4. Check the FE logs to verify if the FE node is started successfully.
 
@@ -108,7 +108,7 @@ The following procedures are performed on the BE instances.
       storage_root_path = <storage_root_path>
       ```
 
-   b. If any of the BE ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md#be-ports) are occupied, you must assign valid alternatives in the BE configuration file.
+   b. If any of the BE ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md#be-ports) are occupied, you must assign valid alternatives in the BE configuration file.
 
       ```YAML
       be_port = vvvv                   # Default: 9060
@@ -144,7 +144,7 @@ The following procedures are performed on the BE instances.
 
       > **CAUTION**
       >
-      > - Before starting the BE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+      > - Before starting the BE node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
       > - You do not need to specify the parameter `--host_type` when you start BE nodes.
 
 4. Check the BE logs to verify if the BE node is started successfully.
@@ -167,7 +167,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
 1. Navigate to the directory that stores the [StarRocks BE deployment files](../deployment/prepare_deployment_files.md) you prepared earlier, and modify the CN configuration file **be/conf/cn.conf**.
 
-   a. If any of the CN ports mentioned in the [Environment Configuration Checklist](../deployment/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
+   a. If any of the CN ports mentioned in the [Environment Configuration Checklist](./preparation/environment_configurations.md) are occupied, you must assign valid alternatives in the CN configuration file.
 
       ```YAML
       be_port = vvvv                   # Default: 9060
@@ -203,7 +203,7 @@ A Compute Node (CN) is a stateless computing service that does not maintain data
 
    > **CAUTION**
    >
-   > - Before starting the CN node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](../deployment/environment_configurations.md#hostnames) for more information.
+   > - Before starting the CN node with FQDN access enabled, make sure you have assigned hostnames for all instances in **/etc/hosts**. See [Environment Configuration Checklist - Hostnames](./preparation/environment_configurations.md#hostnames) for more information.
    > - You do not need to specify the parameter `--host_type` when you start CN nodes.
 
 3. Check the CN logs to verify if the CN node is started successfully.

@@ -16,11 +16,11 @@ The deployment of StarRocks generally follows the steps outlined here:
 
    Check the prerequisites that your servers must meet before deploying StarRocks, including CPU, memory, storage, network, operating system, and dependencies.
 
-2. [Plan your cluster size](../deployment/plan_cluster.md).
+2. [Plan your cluster size](./preparation/plan_cluster.md).
 
    Plan the number of FE nodes and BE nodes in your cluster, and the hardware specifications of the servers.
 
-3. [Check environment configurations](../deployment/environment_configurations.md).
+3. [Check environment configurations](./preparation/environment_configurations.md).
 
    When your servers are ready, you need to check and modify some environment configurations before deploying StarRocks on them.
 

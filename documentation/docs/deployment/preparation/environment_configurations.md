@@ -28,7 +28,7 @@ netstat -tunlp | grep 9030
 netstat -tunlp | grep 9010
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy FE nodes. For detailed instructions, see [Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy FE nodes. For detailed instructions, see [Deploy StarRocks - Start the Leader FE node](../deploy_manually.md#step-1-start-the-leader-fe-node).
 
 ### BE ports
 
@@ -48,7 +48,7 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy BE nodes. For detailed instructions, see [Deploy StarRocks - Start the BE service](../deployment/deploy_manually.md#step-2-start-the-be-service).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy BE nodes. For detailed instructions, see [Deploy StarRocks - Start the BE service](../deploy_manually.md#step-2-start-the-be-service).
 
 ### CN ports
 
@@ -68,11 +68,11 @@ netstat -tunlp | grep 9050
 netstat -tunlp | grep 8060
 ```
 
-If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-3-optional-start-the-cn-service).
+If any of the above ports are occupied, you must find alternatives and specify them later when you deploy CN nodes. For detailed instructions, see [Deploy StarRocks - Start the CN service](../deploy_manually.md#step-3-optional-start-the-cn-service).
 
 ## Hostnames
 
-If you want to [enable FQDN access](../administration/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
+If you want to [enable FQDN access](../../administration/enable_fqdn.md) for your StarRocks cluster, you must assign a hostname to each instance.
 
 In the file **/etc/hosts** on each instance, you must specify the IP addresses and corresponding hostnames of all the other instances in the cluster.
 
