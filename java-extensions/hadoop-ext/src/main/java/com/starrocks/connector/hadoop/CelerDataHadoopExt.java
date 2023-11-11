@@ -28,11 +28,8 @@ public class CelerDataHadoopExt extends HadoopExt {
     public static final String HIVE_METASTORE_CLIENT_KERBEROS_PRINCIPAL = "hive.metastore.client.kerberos.principal";
 
     public static final String HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
-    public static final String DFS_NAMENODE_KEYTAB_FILE = "dfs.namenode.keytab.file";
-    public static final String DFS_DATANODE_KEYTAB_FILE = "dfs.datanode.keytab.file";
-
-    public static final String DFS_NAMENODE_KERBEROS_PRINCIPAL = "dfs.namenode.kerberos.principal";
-    public static final String DFS_DATANODE_KERBEROS_PRINCIPAL = "dfs.daranode.kerberos.principal";
+    public static final String HADOOP_HDFS_KERBEROS_KEYTAB_FILE = "hadoop.hdfs.keytab.file";
+    public static final String HADOOP_HDFS_CLIENT_KERBEROS_PRINCIPAL = "hadoop.hdfs.client.kerberos.principal";
 
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CelerDataHadoopExt.class);
@@ -92,11 +89,11 @@ public class CelerDataHadoopExt extends HadoopExt {
     }
 
     public static String getHDFSKerberosKeytabFile(Configuration conf) {
-        return conf.get(DFS_NAMENODE_KEYTAB_FILE, conf.get(DFS_DATANODE_KEYTAB_FILE));
+        return conf.get(HADOOP_HDFS_KERBEROS_KEYTAB_FILE);
     }
 
     public static String getHDFSKerberosPrincipal(Configuration conf) {
-        return conf.get(DFS_NAMENODE_KERBEROS_PRINCIPAL, conf.get(DFS_DATANODE_KERBEROS_PRINCIPAL));
+        return conf.get(HADOOP_HDFS_CLIENT_KERBEROS_PRINCIPAL);
     }
 
     @Override
