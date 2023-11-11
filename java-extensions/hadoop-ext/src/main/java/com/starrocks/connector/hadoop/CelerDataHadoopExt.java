@@ -28,7 +28,7 @@ public class CelerDataHadoopExt extends HadoopExt {
     public static final String HIVE_METASTORE_CLIENT_KERBEROS_PRINCIPAL = "hive.metastore.client.kerberos.principal";
 
     public static final String HADOOP_SECURITY_AUTHENTICATION = "hadoop.security.authentication";
-    public static final String HADOOP_HDFS_KERBEROS_KEYTAB_FILE = "hadoop.hdfs.keytab.file";
+    public static final String HADOOP_HDFS_KERBEROS_KEYTAB_FILE = "hadoop.hdfs.kerberos.keytab.file";
     public static final String HADOOP_HDFS_CLIENT_KERBEROS_PRINCIPAL = "hadoop.hdfs.client.kerberos.principal";
 
     private static final Logger LOGGER =
