@@ -38,7 +38,7 @@ Follow these steps to prepare deployment files for the x86-based CentOS 7.9 plat
    | **LICENSE.txt**        | The StarRocks license file.                                  |
    | **NOTICE.txt**         | The StarRocks notice file.                                   |
 
-3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../deploy_manually.md).
+3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../shared_nothing/deploy_manually.md).
 
 ## For ARM-based CPU or Ubuntu 22.04
 
@@ -90,4 +90,4 @@ You must have [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 
    | **broker_artifacts** | This directory includes the Broker deployment directory **apache_hdfs_broker**. From StarRocks 2.5 onwards, you do not need to deploy Broker nodes in general scenarios. If you need to deploy Broker nodes in your StarRocks cluster, see [Deploy Broker](../deploy_broker.md) for detailed instructions. |
    | **fe_artifacts**     | This directory includes the FE deployment directory **fe**, StarRocks license file **LICENSE.txt**, and StarRocks notice file **NOTICE.txt**. |
 
-3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../deploy_manually.md).
+3. Dispatch the directory **fe** to all the FE instances and the directory **be** to all the BE or CN instances for [manual deployment](../shared_nothing/deploy_manually.md).

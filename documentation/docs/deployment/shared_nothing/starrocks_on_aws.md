@@ -80,7 +80,7 @@ All resources in a stack are defined by a template. Suppose you have created a t
 
 9. Select the following two check boxes and click **Create stack**.
 
-    ![StarRocks_on_AWS_1](../assets/StarRocks_on_AWS_1.png)
+    ![StarRocks_on_AWS_1](../../assets/StarRocks_on_AWS_1.png)
 
     **Note that you are responsible for the cost of the AWS services and any third-party licenses** used while running this Partner Solution. For cost estimates, refer to the pricing pages for each AWS service you use.
 
@@ -91,10 +91,10 @@ Because the StarRocks cluster is deployed into a private subnet, you need to fir
 1. Connect to the EC2 Bastion Host that is used to access the StarRocks cluster.
 
    1. From the AWS CloudFormation console, on the **Outputs** tab for `BastionStack`, note the value for `EIP1` down.
-   ![StarRocks_on_AWS_2](../assets/StarRocks_on_AWS_2.png)
+   ![StarRocks_on_AWS_2](../../assets/StarRocks_on_AWS_2.png)
 
    2. From the EC2 console, choose the EC2 Bastion Host.
-   ![StarRocks_on_AWS_3](../assets/StarRocks_on_AWS_3.png)
+   ![StarRocks_on_AWS_3](../../assets/StarRocks_on_AWS_3.png)
 
    3. Edit the inbound rule for the security group associated with the EC2 Bastion Host, to allow traffic from your machine to the EC2 Bastion Host.
 
@@ -114,9 +114,9 @@ Because the StarRocks cluster is deployed into a private subnet, you need to fir
         You can find the FE's private IP address according to the following steps:
 
         1. From the AWS CloudFormation console, on the **Outputs** tab for `StarRocksClusterStack`, click the value for `FeLeaderInstance`.
-        ![StarRocks_on_AWS_4](../assets/StarRocks_on_AWS_4.png)
+        ![StarRocks_on_AWS_4](../../assets/StarRocks_on_AWS_4.png)
 
         2. From the instance summary page, find the FE's private IP address.
-        ![StarRocks_on_AWS_5](../assets/StarRocks_on_AWS_5.png)
+        ![StarRocks_on_AWS_5](../../assets/StarRocks_on_AWS_5.png)
 
       - password: enter the password you configure in step 5.

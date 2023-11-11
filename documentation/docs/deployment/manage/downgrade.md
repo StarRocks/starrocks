@@ -31,7 +31,7 @@ Review the information in this section before downgrading. Perform any recommend
 
 ### Downgrade procedure
 
-StarRocks' downgrade procedure is the reverse order of the [upgrade procedure](../deployment/upgrade.md#upgrade-procedure). Therefore, you need to **downgrade** **FEs** **first and then BEs and CNs**. Downgrading them in the wrong order may lead to incompatibility between FEs and BEs/CNs, and thereby cause the service to crash. For FE nodes, you must first downgrade all Follower FE nodes before downgrading the Leader FE node.
+StarRocks' downgrade procedure is the reverse order of the [upgrade procedure](./upgrade.md#upgrade-procedure). Therefore, you need to **downgrade** **FEs** **first and then BEs and CNs**. Downgrading them in the wrong order may lead to incompatibility between FEs and BEs/CNs, and thereby cause the service to crash. For FE nodes, you must first downgrade all Follower FE nodes before downgrading the Leader FE node.
 
 ## Before you begin
 
@@ -67,7 +67,7 @@ Set the FE configuration item `ignore_unknown_log_id` to `true`. Because it is a
 
 - **If you have enabled FQDN access**
 
-If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../administration/enable_fqdn.md#rollback) for detailed instructions.
+If you have enabled FQDN access (supported from v2.4 onwards) and need to downgrade to versions earlier than v2.4, you must switch to IP address access before downgrading. See [Rollback FQDN](../../administration/enable_fqdn.md#rollback) for detailed instructions.
 
 ## Downgrade FE
 
@@ -117,7 +117,7 @@ After the compatibility configuration and the availability test, you can downgra
    >
    > If you are downgrading StarRocks v3.0 to v2.5, you must follow these steps after the downgrade:
    >
-   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
+   > 1. Run [ALTER SYSTEM CREATE IMAGE](../../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
    > 2. Wait for the new image to be synchronized to all Follower FEs.
    >
    > If you do not run this command, some of the downgrade operations may fail. ALTER SYSTEM CREATE IMAGE is supported from v2.5.3 and later.

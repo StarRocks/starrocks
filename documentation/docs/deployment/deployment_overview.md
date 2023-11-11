@@ -35,17 +35,17 @@ The deployment of StarRocks generally follows the steps outlined here:
    - If you want to deploy a shared-data StarRocks cluster, which features a disaggregated storage and compute architecture, see [Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md) for instructions.
    - If you want to deploy a shared-nothing StarRocks cluster, which uses local storage, you have the following options:
 
-     - [Deploy StarRocks manually](../deployment/deploy_manually.md).
-     - [Deploy StarRocks on Kubernetes with operator](../deployment/sr_operator.md).
-     - [Deploy StarRocks on Kubernetes with Helm](../deployment/helm.md).
-     - [Deploy StarRocks on AWS](../deployment/starrocks_on_aws.md).
+     - [Deploy StarRocks manually](./shared_nothing/deploy_manually.md).
+     - [Deploy StarRocks on Kubernetes with operator](./shared_nothing/sr_operator.md).
+     - [Deploy StarRocks on Kubernetes with Helm](./shared_nothing/helm.md).
+     - [Deploy StarRocks on AWS](./shared_nothing/starrocks_on_aws.md).
 
-6. Perform necessary [post-deployment setup](../deployment/post_deployment_setup.md) measures.
+6. Perform necessary [post-deployment setup](./manage/post_deployment_setup.md) measures.
 
    Further setup measures are needed before your StarRocks cluster is put into production. These measures include securing the initial account and setting some performance-related system variables.
 
 ## Upgrade and downgrade
 
-If you plan to upgrade an existing StarRocks cluster to a later version rather than install StarRocks for the first time, see [Upgrade StarRocks](../deployment/upgrade.md) for information about upgrade procedures and issues that you should consider before upgrading.
+If you plan to upgrade an existing StarRocks cluster to a later version rather than install StarRocks for the first time, see [Upgrade StarRocks](./manage/upgrade.md) for information about upgrade procedures and issues that you should consider before upgrading.
 
-For instructions to downgrade your StarRocks cluster, see [Downgrade StarRocks](../deployment/downgrade.md).
+For instructions to downgrade your StarRocks cluster, see [Downgrade StarRocks](./manage/downgrade.md).
