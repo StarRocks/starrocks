@@ -49,6 +49,27 @@ class PageBuilder;
 class PageDecoder;
 class PageBuilderOptions;
 
+inline bool is_default_dict_encoding(LogicalType type) {
+    switch (type)
+    {
+        case TYPE_TINYINT:
+        case TYPE_SMALLINT:
+        case TYPE_INT:
+        case TYPE_BIGINT:
+        case TYPE_LARGEINT:
+        case TYPE_FLOAT:
+        case TYPE_DOUBLE:
+        case TYPE_CHAR:
+        case TYPE_VARCHAR:
+        case TYPE_DATE:
+        case TYPE_DATETIME:
+        case TYPE_DECIMALV2:
+            return true;
+        default:
+            return false;
+    }
+}
+
 class EncodingInfo {
 public:
     // Get EncodingInfo for TypeInfo and EncodingTypePB

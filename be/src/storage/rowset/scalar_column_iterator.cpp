@@ -36,6 +36,8 @@
 
 #include "storage/column_predicate.h"
 #include "storage/rowset/binary_dict_page.h"
+#include "storage/rowset/dict_page.h"
+#include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/encoding_info.h"
 #include "util/bitmap.h"
@@ -61,21 +63,64 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
     }
-
-    if (_reader->column_type() == TYPE_CHAR) {
+    DCHECK(is_default_dict_encoding(_reader->column_type()));
+    switch (_reader->column_type())
+    {
+    case TYPE_CHAR:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_CHAR>;
-    } else if (_reader->column_type() == TYPE_VARCHAR) {
+        break;
+    case TYPE_VARCHAR:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_VARCHAR>;
-    } else {
+        break;
+    case TYPE_TINYINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_TINYINT>;
+        break;
+    case TYPE_SMALLINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_SMALLINT>;
+        break;
+    case TYPE_INT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_INT>;
+        break;
+    case TYPE_BIGINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_BIGINT>;
+        break;
+    case TYPE_LARGEINT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_LARGEINT>;
+        break;
+    case TYPE_FLOAT:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_FLOAT>;
+        break;
+    case TYPE_DOUBLE:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DOUBLE>;
+        break;
+    case TYPE_DATE:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DATE>;
+        break;
+    case TYPE_DATETIME:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DATETIME>;
+        break;
+    case TYPE_DECIMALV2:
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;  
+        break;
+    default:
         return Status::NotSupported("dict encoding with unsupported field type");
     }
 
+    // TODO: The following logic is primarily used for optimizing queries for VARCHAR/CHAR types during
+    // dictionary encoding. Can we also optimize queries for non-TYPE_VARCHAR types?
+    if (_reader->column_type() != TYPE_VARCHAR && _reader->column_type() != TYPE_CHAR) {
+        return Status::OK();
+    }
     if (opts.check_dict_encoding) {
         if (_reader->has_all_dict_encoded()) {
             _all_dict_encoded = _reader->all_dict_encoded();
             // if _all_dict_encoded is true, load dictionary page into memory for `dict_lookup`.
             RETURN_IF(!_all_dict_encoded, Status::OK());
-            RETURN_IF_ERROR(_load_dict_page());
+            if (_reader->column_type() == TYPE_VARCHAR) {
+                RETURN_IF_ERROR(_load_dict_page<TYPE_VARCHAR>());
+            } else {
+                RETURN_IF_ERROR(_load_dict_page<TYPE_CHAR>());
+            }
         } else if (_reader->num_rows() > 0) {
             // old version segment file dost not have `all_dict_encoded`, in order to check
             // whether all data pages are using dict encoding, must load the last data page
@@ -255,6 +300,7 @@ Status ScalarColumnIterator::_load_next_page(bool* eos) {
     return Status::OK();
 }
 
+template <LogicalType Type>
 Status ScalarColumnIterator::_load_dict_page() {
     DCHECK(_dict_decoder == nullptr);
     // read dictionary page
@@ -264,23 +310,32 @@ Status ScalarColumnIterator::_load_dict_page() {
             _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
-    if (_reader->column_type() == TYPE_CHAR) {
-        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_CHAR>>(dict_data);
+    if (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<Type>>(dict_data);
     } else {
-        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_data);
+        _dict_decoder = std::make_unique<BitShufflePageDecoder<Type>>(dict_data);
     }
     return _dict_decoder->init();
 }
 
 template <LogicalType Type>
 Status ScalarColumnIterator::_do_init_dict_decoder() {
-    static_assert(Type == TYPE_CHAR || Type == TYPE_VARCHAR);
-    auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
-    if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
-        if (_dict_decoder == nullptr) {
-            RETURN_IF_ERROR(_load_dict_page());
+    if (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+        auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
+        if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
+            if (_dict_decoder == nullptr) {
+                RETURN_IF_ERROR(_load_dict_page<Type>());
+            }
+            dict_page_decoder->set_dict_decoder(_dict_decoder.get());
         }
-        dict_page_decoder->set_dict_decoder(_dict_decoder.get());
+    } else {
+        auto dict_page_decoder = down_cast<DictPageDecoder<Type>*>(_page->data_decoder());
+        if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
+            if (_dict_decoder == nullptr) {
+                RETURN_IF_ERROR(_load_dict_page<Type>());
+            }
+            dict_page_decoder->set_dict_decoder(_dict_decoder.get());
+        }
     }
     return Status::OK();
 }

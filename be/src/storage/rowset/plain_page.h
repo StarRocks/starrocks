@@ -60,6 +60,11 @@ public:
         reset();
     }
 
+    void reserve_head(uint8_t head_size) override {
+        CHECK(_reserved_head_size == 0);
+        _reserved_head_size = head_size;
+    }
+
     bool is_page_full() override { return _buffer.size() > _options.data_page_size; }
 
     uint32_t add(const uint8_t* vals, uint32_t count) override {
@@ -80,7 +85,13 @@ public:
             _first_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE], SIZE_OF_TYPE);
             _last_value.assign_copy(&_buffer[PLAIN_PAGE_HEADER_SIZE + (_count - 1) * SIZE_OF_TYPE], SIZE_OF_TYPE);
         }
-        return &_buffer;
+        if (_reserved_head_size == 0) {
+            return &_buffer;
+        } else {
+            _plus_header_buffer.resize(_reserved_head_size + _buffer.size());
+            memcpy(&_plus_header_buffer[_reserved_head_size], _buffer.data(), _buffer.size());
+            return &_plus_header_buffer;
+        }
     }
 
     void reset() override {
@@ -119,10 +130,13 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
     faststring _first_value;
     faststring _last_value;
+    uint8_t _reserved_head_size{0};
+    faststring _plus_header_buffer;
 };
 
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
+    using ValueType = typename CppTypeTraits<Type>::CppType;
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 
@@ -241,6 +255,10 @@ public:
     uint32_t current_index() const override {
         DCHECK(_parsed);
         return _cur_idx;
+    }
+
+    void at_index(uint32_t idx, ValueType* out) const {
+        memcpy(out, &_data[PLAIN_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
     }
 
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }

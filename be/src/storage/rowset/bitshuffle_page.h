@@ -36,6 +36,7 @@
 
 #include <glog/logging.h>
 #include <sys/types.h>
+#include "common/logging.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -60,6 +61,8 @@
 namespace starrocks {
 
 std::string bitshuffle_error_msg(int64_t err);
+
+// 从bitshuffle的实现来看，真正的encoding也是在一个page写满以后做的
 
 // BitshufflePageBuilder bitshuffles and compresses the bits of fixed
 // size type blocks with lz4.
@@ -126,7 +129,7 @@ public:
             return 0;
         }
         size_t old_sz = _data.size();
-        _data.resize(old_sz + sizeof(SIZE_OF_TYPE));
+        _data.resize(old_sz + SIZE_OF_TYPE);
         _count += 1;
         if constexpr (SIZE_OF_TYPE == 1) {
             *reinterpret_cast<uint8_t*>(&_data[old_sz]) = *elem;
@@ -238,6 +241,7 @@ private:
 
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
+    typedef typename TypeTraits<Type>::CppType CppType;
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
 
@@ -343,6 +347,14 @@ public:
         return Status::OK();
     }
 
+    void at_index(uint32_t idx, CppType* out) const {
+        memcpy(out, &_data[BITSHUFFLE_PAGE_HEADER_SIZE + idx * SIZE_OF_TYPE], SIZE_OF_TYPE);
+    }
+
+    inline const void* get_data(size_t pos) {
+        return static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE]);
+    }
+
     [[nodiscard]] Status next_batch(size_t* count, Column* dst) override;
 
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
@@ -354,15 +366,9 @@ public:
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }
 
 private:
-    inline const void* get_data(size_t pos) {
-        return static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE]);
-    }
-
     void _copy_next_values(size_t n, void* data) {
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
-
-    typedef typename TypeTraits<Type>::CppType CppType;
 
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 

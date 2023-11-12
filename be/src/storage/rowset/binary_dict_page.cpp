@@ -49,6 +49,21 @@ namespace starrocks {
 
 using strings::Substitute;
 
+// 已知：
+// 1. binary字典编码一般情况下有两个编码器，data-page-builder和dict-builder
+// 2. dict-builder用于编码字典，data-page-builder用于编码字典的索引
+// 3. 一般情况下data-page-builder使用BitshufflePageBuilder编码，而dict-builder
+//    使用BinaryPlainPageBuilder编码
+// 4. 对于binary字典编码来说，按照目前的实现data-page-builder需要提前reserve一段内存，用于存储header
+//    data-page-builder在字典页没有满的时候，用的是BitshufflePageBuilder，字典页满了以后，用的是
+//    BinaryPlainPageBuilder，所以这要求BitshufflePageBuilder和BinaryPlainPageBuilder都需要有
+//    reserve header的能力
+// 5. 对于BitshufflePageBuilder reserve header操作。它的过程是保留一个空白区域在编码段的最前面，这个空白
+//    区域最后会存储数据页的entry个数。
+// 6. 而BitshufflePageBuilder的reserve header操作也是保留一个空白区域在编码段的最前面，但是这个空白区域
+//    没有填充任何数据
+// 7. 当BinaryDictPageBuilder finsh时，会将数据页变成faststring流返回，在返回之前会将所有的编码方式写入到
+//    这个流的前4个字节，所以这就是在data-page-builder前面reverve header的原因
 BinaryDictPageBuilder::BinaryDictPageBuilder(const PageBuilderOptions& options)
         : _options(options),
           _finished(false),
@@ -175,6 +190,14 @@ bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dic
     return true;
 }
 
+// 解码：
+// 1. BinaryDictPageDecoder初始时持有一段内存，从这段内存的header可以知道使用的编码方式DICT_ENCODING/PLAIN_ENCODING
+//    如果是DICT_ENCODING，那么将data-page-decoder初始化为BitShufflePageDecoder，如果是PLAIN_ENCODING，将
+//    data-page-decoder初始化为BinaryPlainPageDecoder
+// 2. 在初始化BinaryDictPageDecoder时并不会load字典页，字典页额外提供了一个函数set_dict_decoder load，这个函数会设置
+//    dict-decoder为BinaryPlainPageDecoder
+// 3. 在读数据的时候，如果说编码方式为PLAIN_ENCODING，那么直接从data-page-decoder加载数据即可，如果不是PLAIN_ENCODING，
+//    那说明data-page存储的不是实际的数据，而是数据的index，此时需要从字典里加载数据
 template <LogicalType Type>
 BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data)
         : _data(data), _data_page_decoder(nullptr), _parsed(false), _encoding_type(UNKNOWN_ENCODING) {}

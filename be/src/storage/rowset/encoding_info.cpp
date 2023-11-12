@@ -39,6 +39,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/binary_dict_page.h"
+#include "storage/rowset/dict_page.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/binary_prefix_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -118,6 +119,18 @@ struct TypeEncodingTraits<type, DICT_ENCODING, Slice> {
     }
 };
 
+template <LogicalType type, typename CppType>
+struct TypeEncodingTraits<type, DICT_ENCODING, CppType> {
+    static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
+        *builder = new DictPageBuilder<type>(opts);
+        return Status::OK();
+    }
+    static Status create_page_decoder(const Slice& data, PageDecoder** decoder) {
+        *decoder = new DictPageDecoder<type>(data);
+        return Status::OK();
+    }
+};
+
 template <>
 struct TypeEncodingTraits<TYPE_DATE_V1, FOR_ENCODING, typename CppTypeTraits<TYPE_DATE_V1>::CppType> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
@@ -184,47 +197,61 @@ private:
         auto key = std::make_pair(type, encoding_type);
         DCHECK(_encoding_map.count(key) == 0);
 
+        // 对于相同的LogicType, 第一次调用_add_map函数，会被加入到_default_encoding_type_map
         if (_default_encoding_type_map.find(type) == _default_encoding_type_map.end()) {
             _default_encoding_type_map[type] = encoding_type;
         }
+        // optimize_value_seek看起来是查询加速用的
         if (optimize_value_seek && _value_seek_encoding_map.find(type) == _value_seek_encoding_map.end()) {
             _value_seek_encoding_map[type] = encoding_type;
         }
         _encoding_map.emplace(key, new EncodingInfo(EncodingTraits<type, encoding_type>()));
     }
 
+    // 获取LogicType的默认encoding
     std::unordered_map<LogicalType, EncodingTypePB, std::hash<int>> _default_encoding_type_map;
 
     // default encoding for each type which optimizes value seek
     std::unordered_map<LogicalType, EncodingTypePB, std::hash<int>> _value_seek_encoding_map;
 
+    // 根据LogicType和encoding，获取EncodingInfo
+    // TODO：EncodingInfo是什么？
     std::unordered_map<std::pair<LogicalType, EncodingTypePB>, EncodingInfo*, EncodingMapHash> _encoding_map;
 };
 
+// 我们将一些scalar类型的默认编码调整为dict encoding，由于TYPE_DATE_V1/TYPE_DATETIME_V1/TYPE_DECIMAL是legacy类型，
+// 此处不再做改动
 EncodingInfoResolver::EncodingInfoResolver() {
+    _add_map<TYPE_TINYINT, DICT_ENCODING>();
     _add_map<TYPE_TINYINT, BIT_SHUFFLE>();
     _add_map<TYPE_TINYINT, FOR_ENCODING, true>();
     _add_map<TYPE_TINYINT, PLAIN_ENCODING>();
 
+    _add_map<TYPE_SMALLINT, DICT_ENCODING>();
     _add_map<TYPE_SMALLINT, BIT_SHUFFLE>();
     _add_map<TYPE_SMALLINT, FOR_ENCODING, true>();
     _add_map<TYPE_SMALLINT, PLAIN_ENCODING>();
 
+    _add_map<TYPE_INT, DICT_ENCODING>();
     _add_map<TYPE_INT, BIT_SHUFFLE>();
     _add_map<TYPE_INT, FOR_ENCODING, true>();
     _add_map<TYPE_INT, PLAIN_ENCODING>();
 
+    _add_map<TYPE_BIGINT, DICT_ENCODING>();
     _add_map<TYPE_BIGINT, BIT_SHUFFLE>();
     _add_map<TYPE_BIGINT, FOR_ENCODING, true>();
     _add_map<TYPE_BIGINT, PLAIN_ENCODING>();
 
+    _add_map<TYPE_LARGEINT, DICT_ENCODING>();
     _add_map<TYPE_LARGEINT, BIT_SHUFFLE>();
     _add_map<TYPE_LARGEINT, PLAIN_ENCODING>();
     _add_map<TYPE_LARGEINT, FOR_ENCODING, true>();
 
+    _add_map<TYPE_FLOAT, DICT_ENCODING>();
     _add_map<TYPE_FLOAT, BIT_SHUFFLE>();
     _add_map<TYPE_FLOAT, PLAIN_ENCODING>();
 
+    _add_map<TYPE_DOUBLE, DICT_ENCODING>();
     _add_map<TYPE_DOUBLE, BIT_SHUFFLE>();
     _add_map<TYPE_DOUBLE, PLAIN_ENCODING>();
 
@@ -244,6 +271,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DATE_V1, PLAIN_ENCODING>();
     _add_map<TYPE_DATE_V1, FOR_ENCODING, true>();
 
+    _add_map<TYPE_DATE, DICT_ENCODING>();
     _add_map<TYPE_DATE, BIT_SHUFFLE>();
     _add_map<TYPE_DATE, PLAIN_ENCODING>();
     _add_map<TYPE_DATE, FOR_ENCODING, true>();
@@ -252,6 +280,7 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DATETIME_V1, PLAIN_ENCODING>();
     _add_map<TYPE_DATETIME_V1, FOR_ENCODING, true>();
 
+    _add_map<TYPE_DATETIME, DICT_ENCODING>();
     _add_map<TYPE_DATETIME, BIT_SHUFFLE>();
     _add_map<TYPE_DATETIME, PLAIN_ENCODING>();
     _add_map<TYPE_DATETIME, FOR_ENCODING, true>();
@@ -259,6 +288,9 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DECIMAL, BIT_SHUFFLE, true>();
     _add_map<TYPE_DECIMAL, PLAIN_ENCODING>();
 
+    // 对于TYPE_DECIMALV2类型，BIT_SHUFFLE用于optimizes value seek，所以我们仅仅
+    // 将默认编码调整为DICT_ENCODING，BIT_SHUFFLE仍然作为optimizes value seek的编码
+    _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
     _add_map<TYPE_DECIMALV2, BIT_SHUFFLE, true>();
     _add_map<TYPE_DECIMALV2, PLAIN_ENCODING>();
 

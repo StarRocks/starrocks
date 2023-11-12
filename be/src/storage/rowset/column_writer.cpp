@@ -209,7 +209,8 @@ private:
     faststring _encode_buf;
     NullEncodingPB _null_encoding;
 };
-
+// 一个列是如何确定自己该用哪种编码方式的
+// 参考StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create
 class StringColumnWriter final : public ColumnWriter {
 public:
     StringColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
@@ -254,6 +255,50 @@ private:
     ColumnPtr _buf_column = nullptr;
 };
 
+
+class DictColumnWriter final : public ColumnWriter {
+public:
+    DictColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
+                       std::unique_ptr<ScalarColumnWriter> column_writer);
+
+    ~DictColumnWriter() override = default;
+
+    Status init() override { return _scalar_column_writer->init(); };
+
+    Status append(const Column& column) override;
+
+    // Speculate char/varchar encoding and reset encoding
+    Status speculate_column_and_set_encoding(const Column& column);
+
+    // Speculate encoding
+    template <LogicalType Type>
+    inline EncodingTypePB speculate_encoding(const Column& column);
+
+    Status finish_current_page() override { return _scalar_column_writer->finish_current_page(); };
+
+    uint64_t estimate_buffer_size() override { return _scalar_column_writer->estimate_buffer_size(); };
+
+    // finish append data
+    Status finish() override;
+
+    Status write_data() override { return _scalar_column_writer->write_data(); };
+    Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
+    Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
+    Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
+
+    ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
+
+    bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
+
+    uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
+
+private:
+    std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
+    bool _is_speculated = false;
+    ColumnPtr _buf_column = nullptr;
+};
+
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
                                                              const TabletColumn* column, WritableFile* wfile) {
     TypeInfoPtr type_info = get_type_info(*column);
@@ -263,6 +308,13 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         str_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, type_info, wfile);
         return std::make_unique<StringColumnWriter>(str_opts, std::move(type_info), std::move(column_writer));
+    } else if (is_default_dict_encoding(column->type())) {
+        DCHECK(column->type() != TYPE_VARCHAR);
+        DCHECK(column->type() != TYPE_CHAR);
+        ColumnWriterOptions dict_opts = opts;
+        dict_opts.need_speculate_encoding = true;
+        auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
+        return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         return std::make_unique<ScalarColumnWriter>(opts, std::move(type_info), wfile);
     } else {
@@ -388,7 +440,11 @@ Status ScalarColumnWriter::write_data() {
         PageFooterPB footer;
         footer.set_type(DICTIONARY_PAGE);
         footer.set_uncompressed_size(dict_body->size());
-        footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+        if (_encoding_info->type() == TYPE_CHAR || _encoding_info->type() == TYPE_VARCHAR) {
+            footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+        } else {
+            footer.mutable_dict_page_footer()->set_encoding(BIT_SHUFFLE);
+        }
 
         PagePointer dict_pp;
         std::vector<Slice> body{Slice(*dict_body)};
@@ -747,6 +803,8 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
     CHECK(st.ok()) << st;
 }
 
+// 这里的检测逻辑是用一个set记录一个Sample Column的不同值，当不同值的个数大于row_count*ratio时，不再采用字典编码
+// 其中row_count是sample column的元素个数，ration由用户设置
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
     const size_t dictionary_min_rowcount = 256;
 
@@ -814,6 +872,133 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
         }
     }
     return Status::OK();
+}
+
+
+DictColumnWriter::DictColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
+                                       std::unique_ptr<ScalarColumnWriter> column_writer)
+        : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
+          _scalar_column_writer(std::move(column_writer)) {}
+
+Status DictColumnWriter::append(const Column& column) {
+    if (_is_speculated) {
+        return _scalar_column_writer->append(column);
+    }
+
+    if (_buf_column == nullptr) {
+        // first column size is greater than speculate size
+        if (column.size() >= config::dictionary_speculate_min_chunk_size) {
+            _is_speculated = true;
+            RETURN_IF_ERROR(speculate_column_and_set_encoding(column));
+            return _scalar_column_writer->append(column);
+        } else {
+            _buf_column = column.clone_empty();
+            _buf_column->append(column, 0, column.size());
+            return Status::OK();
+        }
+    }
+    _buf_column->append(column, 0, column.size());
+    if (_buf_column->size() < config::dictionary_speculate_min_chunk_size) {
+        return Status::OK();
+    } else {
+        _is_speculated = true;
+        RETURN_IF_ERROR(speculate_column_and_set_encoding(*_buf_column));
+        Status st = _scalar_column_writer->append(*_buf_column);
+        _buf_column.reset();
+        return st;
+    }
+}
+
+inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& column) {
+    Status st;
+    EncodingTypePB detect_encoding;
+    LogicalType logicalType = type_info()->type();
+    switch (logicalType) {
+        case TYPE_TINYINT:
+            detect_encoding = speculate_encoding<TYPE_TINYINT>(column);
+            break;
+        case TYPE_SMALLINT:
+            detect_encoding = speculate_encoding<TYPE_SMALLINT>(column);
+            break;
+        case TYPE_INT:
+            detect_encoding = speculate_encoding<TYPE_INT>(column);
+            break;
+        case TYPE_BIGINT:
+            detect_encoding = speculate_encoding<TYPE_BIGINT>(column);
+            break;
+        case TYPE_LARGEINT:
+            detect_encoding = speculate_encoding<TYPE_LARGEINT>(column);
+            break;
+        case TYPE_FLOAT:
+            detect_encoding = speculate_encoding<TYPE_FLOAT>(column);
+            break;
+        case TYPE_DOUBLE:
+            detect_encoding = speculate_encoding<TYPE_DOUBLE>(column);
+            break;
+        case TYPE_DATE:
+            detect_encoding = speculate_encoding<TYPE_DATE>(column);
+            break;
+        case TYPE_DATETIME:
+            detect_encoding = speculate_encoding<TYPE_DATETIME>(column);
+            break;
+        case TYPE_DECIMALV2:
+            detect_encoding = speculate_encoding<TYPE_DECIMALV2>(column);
+            break;
+        default:
+            return Status::InternalError(strings::Substitute("$0 type should not use dictionary encoding", logicalType));
+    }
+    st = _scalar_column_writer->set_encoding(detect_encoding);
+    CHECK(st.ok()) << st;
+    return st;
+}
+
+template <LogicalType Type>
+inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column) {
+    using ColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
+    const ColumnType* bin_col;
+    if (column.is_nullable()) {
+        const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
+        bin_col = &down_cast<ColumnType&>(*data_col);
+    } else {
+        bin_col = &down_cast<const ColumnType&>(column);
+    }
+    const size_t dictionary_min_rowcount = 256;
+
+    auto row_count = bin_col->size();
+    auto ratio = config::dictionary_encoding_ratio;
+    auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
+
+    if (row_count > dictionary_min_rowcount) {
+        using CppType = typename RunTimeTypeTraits<Type>::CppType;
+        phmap::flat_hash_set<CppType> hash_set;
+        for (size_t i = 0; i < row_count; i++) {
+            CppType value = bin_col->get_data()[i];
+            hash_set.insert(value);
+            if (hash_set.size() > max_card) {
+                return BIT_SHUFFLE;
+            }
+        }
+    }
+
+    return DICT_ENCODING;
+}
+
+Status DictColumnWriter::finish() {
+    if (_is_speculated) {
+        return _scalar_column_writer->finish();
+    }
+
+    _is_speculated = true;
+    if (_buf_column != nullptr) {
+        RETURN_IF_ERROR(speculate_column_and_set_encoding(*_buf_column));
+        Status st = _scalar_column_writer->append(*_buf_column);
+        _buf_column.reset();
+        if (!st.ok()) {
+            return st;
+        }
+    }
+
+    return _scalar_column_writer->finish();
 }
 
 } // namespace starrocks

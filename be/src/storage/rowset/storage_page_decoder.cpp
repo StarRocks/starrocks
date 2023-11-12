@@ -17,13 +17,24 @@
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
 #include "util/coding.h"
+#include "gen_cpp/segment.pb.h"
 
 namespace starrocks {
 
 class BitShuffleDataDecoder : public DataDecoder {
 public:
-    BitShuffleDataDecoder() = default;
+    BitShuffleDataDecoder(PageTypePB page_type): _page_type(page_type) {}
     ~BitShuffleDataDecoder() override = default;
+
+
+    size_t get_null_size(PageFooterPB* footer) {
+        if (_page_type == DICTIONARY_PAGE) {
+            return 0;
+        } else {
+            const DataPageFooterPB& data_footer = footer->data_page_footer();
+            return data_footer.nullmap_size();
+        }
+    }
 
     void reserve_head(uint8_t head_size) override {
         DCHECK(_reserve_head_size == 0);
@@ -31,8 +42,6 @@ public:
     }
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
-        const DataPageFooterPB& data_footer = footer->data_page_footer();
-
         size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
         size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
         size_t num_element_after_padding = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 8);
@@ -41,7 +50,6 @@ public:
 
         size_t header_size = _reserve_head_size + BITSHUFFLE_PAGE_HEADER_SIZE;
         size_t data_size = num_element_after_padding * size_of_element;
-        auto null_size = data_footer.nullmap_size();
 
         // data_size is size of decoded_data
         // compressed_size contains encoded_data size and BITSHUFFLE_PAGE_HEADER_SIZE
@@ -59,6 +67,7 @@ public:
                                         compressed_body.size, bytes));
         }
 
+        auto null_size = get_null_size(footer);
         memcpy(decompressed_body.data + decompressed_body.size,
                page_slice->data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
                null_size + footer_size);
@@ -70,21 +79,39 @@ public:
     }
 
 private:
+    PageTypePB _page_type;
     uint8_t _reserve_head_size = 0;
+};
+
+class DictDictDecoder : public DataDecoder {
+public:
+    DictDictDecoder() {
+        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(DICTIONARY_PAGE);
+    }
+    ~DictDictDecoder() override = default;
+
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                            std::unique_ptr<char[]>* page, Slice* page_slice) override {
+        return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
+    }
+private:
+    std::unique_ptr<BitShuffleDataDecoder> _bit_shuffle_decoder;
 };
 
 class BinaryDictDataDecoder : public DataDecoder {
 public:
     BinaryDictDataDecoder() {
-        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
+        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(DATA_PAGE);
         _bit_shuffle_decoder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
     }
     ~BinaryDictDataDecoder() override = default;
 
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
+        // 字典页没有写满时，binary dict的数据页的header是DICT_ENCODING，此时需要用bitshuffle decode
+        // 字典页写满时，binary dict的数据页的header是PLAIN_ENCODING，新引入的dict数据页的header是BIT_SHUFFLE
         size_t type = decode_fixed32_le((const uint8_t*)&(page_slice->data[0]));
-        if (type == DICT_ENCODING) {
+        if (type == DICT_ENCODING || type == BIT_SHUFFLE) {
             return _bit_shuffle_decoder->decode_page_data(footer, footer_size, encoding, page, page_slice);
         } else if (type == PLAIN_ENCODING) {
             return Status::OK();
@@ -99,8 +126,9 @@ private:
 };
 
 static DataDecoder g_base_decoder;
-static BitShuffleDataDecoder g_bit_shuffle_decoder;
+static BitShuffleDataDecoder g_bit_shuffle_decoder(DATA_PAGE);
 static BinaryDictDataDecoder g_binary_dict_decoder;
+static DictDictDecoder g_dict_dict_decoder;
 
 DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     switch (encoding) {
@@ -122,15 +150,26 @@ DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     }
 }
 
+
+// 对于字典类型的数据页，它有两种情况，一种是PLAIN编码，PALIN编码我们不要做任何额外的解压。另一种是BITSHUFFLE，此时需要page数据的预解压
+// 对于字典类型的字典页，之前只有一种用PLAIN编码的页，此时不需要做额外操作，但是这个PR我们将字典数据页也用BITSHUFFLE编码，所以此时需要预解压
+// 字典类型的字典页和字典类型的数据页的BITSHUFFLE编码页有所不同，数据页的BITSHUFFLE编码页预留了一个header用于记录编码类型，但是字典页的
+// BITSHUFFLE编码页没有预留header
 Status StoragePageDecoder::decode_page(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                                        std::unique_ptr<char[]>* page, Slice* page_slice) {
     DCHECK(footer->has_type()) << "type must be set";
     switch (footer->type()) {
     case INDEX_PAGE:
-    case DICTIONARY_PAGE:
     case SHORT_KEY_PAGE: {
         return Status::OK();
     }
+    case DICTIONARY_PAGE:
+        DCHECK(footer->has_dict_page_footer());
+        if (footer->dict_page_footer().encoding() == PLAIN_ENCODING) {
+            return Status::OK();
+        }
+        DCHECK(footer->dict_page_footer().encoding() == BIT_SHUFFLE);
+        return g_dict_dict_decoder.decode_page_data(footer, footer_size, encoding, page, page_slice);
     case DATA_PAGE: {
         DataDecoder* decoder = DataDecoder::get_data_decoder(encoding);
         if (decoder == nullptr) {

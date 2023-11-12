@@ -95,6 +95,12 @@ public:
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
+        for (int i = 0; i < size; i++) {
+            CppType index_value;
+            page_decoder.at_index(src[i], &index_value);
+            ASSERT_EQ(src[i], index_value);
+        }
+
         ASSERT_EQ(0, page_decoder.current_index());
 
         auto column = ChunkHelper::column_from_field_type(Type, false);
