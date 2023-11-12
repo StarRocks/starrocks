@@ -91,23 +91,23 @@ Currently, StarRocks supports:
 
 3. Access `http://<ranger-ip>:<ranger-host>/login.jsp` to log in to the Apache Ranger page. The StarRocks Service appears on the page.
 
-   ![home](../assets/ranger_home.png)
+   ![home](../_assets/ranger_home.png)
 
 4. Click the plus sign (`+`) after **STARROKCS** to configure StarRocks Service.
 
-   ![service detail](../assets/ranger_service_details.png)
-   ![property](../assets/ranger_properties.png)
+   ![service detail](../_assets/ranger_service_details.png)
+   ![property](../_assets/ranger_properties.png)
 
    - `Username` and `Password`: used to auto-complete object names when creating policies. The two parameters do not affect the connectivity between StarRocks and Ranger. If you want to use auto-completion, configure at least one user with the `db_admin` role activated.
    - `jdbc.url`: Enter the StarRocks cluster IP and port.
 
    The following figure shows a configuration example.
 
-   ![example](../assets/ranger_show_config.png)
+   ![example](../_assets/ranger_show_config.png)
 
    The following figure shows the added service.
 
-   ![added service](../assets/ranger_added_service.png)
+   ![added service](../_assets/ranger_added_service.png)
 
 5. Click **Test connection** to test the connectivity, and save it after the connection is successful.
 6. On each FE machine of the StarRocks cluster, create `ranger-starrocks-security.xml` in the `fe/conf` folder and copy the content. You must modify the following two parameters and save the modifications:

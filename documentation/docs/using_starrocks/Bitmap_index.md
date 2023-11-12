@@ -103,7 +103,7 @@ CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
 
 After you execute the preceding statement, the bitmap index is generated as shown in the following figure.
 
-![figure](../assets/3.6.1-2.png)
+![figure](../_assets/3.6.1-2.png)
 
 1. Build a dictionary: StarRocks builds a dictionary for the `Gender` column and maps `female` and `male` to coded values of the INT type: `0` and `1`.
 2. Generate bitmaps: StarRocks generates bitmaps for `female` and `male` based on the coded values. The bitmap of `female` is `1110` because `female` displays in the first three rows. The bitmap of `male` is `0001` because `male` only displays in the fourth row.
@@ -134,7 +134,7 @@ For example, if you want to improve the query performance on the `Gender` and `I
 
 After you execute the preceding two statements, the bitmap indexes are generated as shown in the following figure.
 
-![figure](../assets/3.6.1-3.png)
+![figure](../_assets/3.6.1-3.png)
 
 StarRocks respectively builds a dictionary for the `Gender` and `Income_level` columns and then generates bitmaps for the distinct values in these two columns.
 

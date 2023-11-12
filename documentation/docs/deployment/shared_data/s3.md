@@ -13,7 +13,7 @@ import SharedDataUse from '../../assets/commonMarkdown/sharedDataUse.md'
 
 ## Architecture
 
-![Shared-data Architecture](../../assets/share_data_arch.png)
+![Shared-data Architecture](../../_assets/share_data_arch.png)
 
 ## Deploy a shared-data StarRocks cluster
 

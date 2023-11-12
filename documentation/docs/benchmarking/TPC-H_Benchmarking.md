@@ -10,7 +10,7 @@ TPC-H can be used to build models based on real production environments to simul
 ## 1. Test Conclusion
 
 We perform a test on 22 queries against a TPC-H 100 GB dataset. The following figure shows the test result.
-![comparison](../assets/7.2-1.png)
+![comparison](../_assets/7.2-1.png)
 
 In the test, StarRocks queries data from both its native storage and Hive external tables. StarRocks and Trino query the same copy of data from Hive external tables. Data is ZLIB-compressed and stored in the ORC format.
 

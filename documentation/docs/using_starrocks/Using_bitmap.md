@@ -25,7 +25,7 @@ The following scenario calculates UVs based on detailed data in table (dt, page,
 
 StarRocks computes data according to the following figure. It first groups data by the `page` and `user_id` columns, and then counts the processed result.
 
-![alter](../assets/6.1.2-2.png)
+![alter](../_assets/6.1.2-2.png)
 
 * Note: The figure shows a schematic of 6 rows of data computed on two BE nodes.
 

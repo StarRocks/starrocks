@@ -61,11 +61,11 @@ When the query cache is enabled, each BE splits the local aggregation of a query
 
    The BE gathers the intermediate results from all tablets involved in the query and merges them into a final result.
 
-   ![Query cache - How it works - 1](../assets/query_cache_principle-1.png)
+   ![Query cache - How it works - 1](../_assets/query_cache_principle-1.png)
 
 When a similar query is issued in the future, it can reuse the cached result for the previous query. For example, the query shown in the following figure involves three tablets (Tablets 0 through 2), and the intermediate result for the first tablet (Tablet 0) is already in the query cache. For this example, the BE can directly fetch the result for Tablet 0 from the query cache instead of accessing the data on disk. If the query cache is fully warmed up, it can contain the intermediate results for all three tablets and thus the BE does not need to access any data on disk.
 
-![Query cache - How it works - 2](../assets/query_cache_principle-2.png)
+![Query cache - How it works - 2](../_assets/query_cache_principle-2.png)
 
 To free up extra memory, the query cache adopts a Least Recently Used (LRU)-based eviction policy to manage the cache entries in it. According to this eviction policy, when the amount of memory occupied by the query cache exceeds its predefined size (`query_cache_capacity`), the least recently used cache entries are evicted out of the query cache.
 
@@ -683,7 +683,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 1 - Metrics](../assets/query_cache_stage1_agg_with_cache_en.png)
+![Query Cache - Stage 1 - Metrics](../_assets/query_cache_stage1_agg_with_cache_en.png)
 
 #### Query cache does not work for remote aggregations at stage 1
 
@@ -735,7 +735,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 2 - Metrics](../assets/query_cache_stage2_agg_with_cache_en.png)
+![Query Cache - Stage 2 - Metrics](../_assets/query_cache_stage2_agg_with_cache_en.png)
 
 #### Query cache works for local aggregations at stage 3
 
@@ -766,7 +766,7 @@ GROUP BY
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 3 - Metrics](../assets/query_cache_stage3_agg_with_cache_en.png)
+![Query Cache - Stage 3 - Metrics](../_assets/query_cache_stage3_agg_with_cache_en.png)
 
 #### Query cache works for local aggregations at stage 4
 
@@ -786,7 +786,7 @@ WHERE
 
 The following figure shows the query cache-related metrics in the query profile.
 
-![Query Cache - Stage 4 - Metrics](../assets/query_cache_stage4_agg_with_cache_en.png)
+![Query Cache - Stage 4 - Metrics](../_assets/query_cache_stage4_agg_with_cache_en.png)
 
 #### Cached results are reused for two queries whose first aggregations are semantically equivalent
 
@@ -835,11 +835,11 @@ Use the following two queries, Q1 and Q2, as an example. Q1 and Q2 both include 
 
 The following figure shows the `CachePopulate` metrics for Q1.
 
-![Query Cache - Q1 - Metrics](../assets/query_cache_reuse_Q1_en.png)
+![Query Cache - Q1 - Metrics](../_assets/query_cache_reuse_Q1_en.png)
 
 The following figure shows the `CacheProbe` metrics for Q2.
 
-![Query Cache - Q2 - Metrics](../assets/query_cache_reuse_Q2_en.png)
+![Query Cache - Q2 - Metrics](../_assets/query_cache_reuse_Q2_en.png)
 
 #### Query cache does not work for DISTINCT queries for which CTE optimizations are enabled
 
@@ -857,7 +857,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 1](../assets/query_cache_distinct_with_cte_Q1_en.png)
+![Query Cache - CTE - 1](../_assets/query_cache_distinct_with_cte_Q1_en.png)
 
 - The query contains multiple DISTINCT aggregate functions that reference the same column:
 
@@ -873,7 +873,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 2](../assets/query_cache_distinct_with_cte_Q2_en.png)
+![Query Cache - CTE - 2](../_assets/query_cache_distinct_with_cte_Q2_en.png)
 
 - The query contains multiple DISTINCT aggregate functions that each reference a different column:
 
@@ -888,7 +888,7 @@ After you run `set cbo_cte_reuse = true` to enable CTE optimizations, the comput
       and '2022-01-03 23:59:59';
   ```
 
-![Query Cache - CTE - 3](../assets/query_cache_distinct_with_cte_Q3_en.png)
+![Query Cache - CTE - 3](../_assets/query_cache_distinct_with_cte_Q3_en.png)
 
 ## Best practices
 

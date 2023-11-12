@@ -29,7 +29,7 @@ Routine Load now supports consuming CSV, JSON, and Avro (supported since v3.0.1)
 
 ## Basic concepts
 
-![routine load](../assets/4.5.2-1.png)
+![routine load](../_assets/4.5.2-1.png)
 
 ### Terminology
 

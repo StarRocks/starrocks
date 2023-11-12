@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Columnar storage
 
-![Columnar Storage](../assets/3.1-1.png)
+![Columnar Storage](../_assets/3.1-1.png)
 
 Like in other relational databases, tables in StarRocks consist of rows and columns. Each row holds a record of user data, and data in each column has the same type. All rows in a table have the same number of columns. You can dynamically add columns to or delete columns from a table. The columns of a table can be categorized as dimension columns and metric columns. Dimension columns are also called key columns, and metric columns are also called value columns. Values in dimension columns are used to group and sort data, and values in metric columns can be accumulated by using functions such as sum, count, min, max, hll_union_agg, and bitmap_union.
 
@@ -20,7 +20,7 @@ StarRocks uses prefix indexes and per-column indexes to quickly locate the start
 
 The following figure shows how the StarRocks table design works to accelerate queries on a table in StarRocks.
 
-![Indexing Overview](../assets/3.1-2.png)
+![Indexing Overview](../_assets/3.1-2.png)
 
 The data of a table in StarRocks is organized into the following three parts:
 

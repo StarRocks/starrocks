@@ -13,7 +13,7 @@ This benchmark tests a total of 99 complex SQL queries against 24 tables whose d
 ## 1. Test Conclusion
 
 We perform a test on 99 queries against a TPC-DS 100 GB dataset. The following figure shows the test result.
-![tpc-ds](../assets/tpc-ds.png)
+![tpc-ds](../_assets/tpc-ds.png)
 
 In the test, StarRocks queries data from both its native storage and Hive external tables. StarRocks and Trino query the same copy of data from Hive external tables. Data is LZ4-compressed and stored in the Parquet format.
 
