@@ -19,6 +19,7 @@
 #include <cassert>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <tuple>
 #include <utility>
 
@@ -80,6 +81,7 @@ Status JITEngine::init() {
     _pass_manager_builder.populateModulePassManager(_pass_manager);
 
     _initialized = true;
+    _support_jit = true;
     return Status::OK();
 }
 
@@ -159,6 +161,7 @@ void JITEngine::optimize_module(llvm::Module* module) {
 void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
                                 const std::string& expr_name) {
     // print_module(*module);
+    std::lock_guard<std::mutex> lock(_mutex);
 
     // Create a resource tracker for the module, which will be used to remove the module from the JIT engine.
     auto resource_tracker = _jit->getMainJITDylib().createResourceTracker();
@@ -184,6 +187,8 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
 }
 
 Status JITEngine::remove_module(const std::string& expr_name) {
+    std::lock_guard<std::mutex> lock(_mutex);
+
     auto it = _resource_tracker_map.find(expr_name);
     if (it == _resource_tracker_map.end()) {
         return Status::OK();

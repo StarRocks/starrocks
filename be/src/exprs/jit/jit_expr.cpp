@@ -63,12 +63,12 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     auto start = MonotonicNanos();
 
     // Compile the expression into native code and retrieve the function pointer.
-    auto* jit_wapper = JITEngine::get_instance();
-    if (!jit_wapper->initialized()) {
+    auto* jit_engine = JITEngine::get_instance();
+    if (!jit_engine->initialized()) {
         return Status::JitCompileError("JIT is not supported");
     }
 
-    auto function = jit_wapper->compile_scalar_function(context, _expr);
+    auto function = jit_engine->compile_scalar_function(context, _expr);
 
     auto elapsed = MonotonicNanos() - start;
     if (!function.ok()) {
@@ -128,16 +128,16 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     return result_column;
 }
 
-void JITExpr::close() {
-    auto* jit_wapper = JITEngine::get_instance();
-    if (jit_wapper->initialized()) {
-        auto status = jit_wapper->remove_function(_expr->debug_string());
+void JITExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
+    auto* jit_engine = JITEngine::get_instance();
+    if (jit_engine->initialized()) {
+        auto status = jit_engine->remove_function(_expr->debug_string());
         if (!status.ok()) {
             LOG(WARNING) << "JIT: remove function failed, reason: " << status;
         }
     }
 
-    Expr::close();
+    Expr::close(state, context, scope);
 }
 
 } // namespace starrocks

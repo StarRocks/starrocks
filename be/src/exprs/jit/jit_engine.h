@@ -52,30 +52,17 @@ public:
         return instance;
     }
 
+    Status init();
+
+    /**
+     * @brief Returns whether the JIT engine is initialized.
+     */
     inline bool initialized() const { return _initialized; }
 
     /**
      * @brief Returns whether the JIT engine is supported.
-     * if the JIT engine is not initialized, initialize it first.
-     * if the JIT engine can't be initialized, return false.
      */
-    bool support_jit() {
-        if (!_support_jit) {
-            return false;
-        }
-
-        if (!_initialized) {
-            std::lock_guard<std::mutex> l(_mutex);
-
-            if (!_support_jit) {
-                return false;
-            }
-
-            _support_jit = init().ok();
-        }
-
-        return _support_jit;
-    }
+    inline bool support_jit() { return _support_jit; }
 
     /**
      * @brief Compile the expr into LLVM IR and return the function pointer.
@@ -90,8 +77,6 @@ public:
     static Status remove_function(const std::string& expr_name);
 
 private:
-    Status init();
-
     /**
      * @brief Sets up an LLVM module by specifying its data layout and target triple.
      * The data layout guides the compiler on how to arrange data.
@@ -128,7 +113,7 @@ private:
     std::mutex _mutex;
 
     bool _initialized = false;
-    bool _support_jit = true;
+    bool _support_jit = false;
 
     std::unique_ptr<llvm::TargetMachine> _target_machine;
     std::unique_ptr<const llvm::DataLayout> _data_layout;

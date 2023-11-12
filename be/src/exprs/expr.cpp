@@ -215,13 +215,13 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
 
     // Enable JIT based on the "enable_jit" parameters.
-    if (state == nullptr || !state->query_options().__isset.enable_jit || !state->query_options().enable_jit) {
+    if (state == nullptr || !state->is_jit_enabled()) {
         return status;
     }
 
     // Check if JIT compilation is feasible on this platform.
-    auto* jit_wrapper = JITEngine::get_instance();
-    if (!jit_wrapper->support_jit()) {
+    auto* jit_engine = JITEngine::get_instance();
+    if (!jit_engine->support_jit()) {
         return status;
     }
 
@@ -731,12 +731,19 @@ void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
     exprs.emplace_back(this);
 }
 
+// This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
+// This method searches from top to bottom for compilable expressions.
+// Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
     std::vector<Expr*> next_exprs;
     if ((*expr)->should_compile()) {
+        // If the current expression is compilable, we will replace it with a JITExpr.
+        // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
+        // Skip over the compilable subexpressions.
         (*expr)->get_uncompilable_exprs(next_exprs);
     } else {
+        // Search for compilable expressions in the subexpressions.
         next_exprs = _children;
     }
 
