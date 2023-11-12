@@ -49,16 +49,10 @@ public class PartitionUtils {
 
     public static void createAndAddTempPartitionsForTable(Database db, OlapTable targetTable,
                                                           String postfix, List<Long> sourcePartitionIds,
-<<<<<<< HEAD
-                                                          List<Long> tmpPartitionIds) throws DdlException {
-        List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
-                db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds);
-=======
                                                           List<Long> tmpPartitionIds,
-                                                          DistributionDesc distributionDesc)throws DdlException {
+                                                          DistributionDesc distributionDesc) throws DdlException {
         List<Partition> newTempPartitions = GlobalStateMgr.getCurrentState().createTempPartitionsFromPartitions(
                 db, targetTable, postfix, sourcePartitionIds, tmpPartitionIds, distributionDesc);
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
         if (!db.writeLockAndCheckExist()) {
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
