@@ -11,8 +11,8 @@ insert into t values(1),(2),(3);
 -- !result
 select * from t;
 -- result:
-2
 3
+2
 1
 -- !result
 alter table t distributed by hash(k);
