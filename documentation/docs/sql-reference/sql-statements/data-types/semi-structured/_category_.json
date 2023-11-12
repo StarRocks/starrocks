@@ -1,10 +1,10 @@
 {
-    "position": 120,
-    "label": "System Reference",
+    "position": 20,
+    "label": "Semi-structured",
     "collapsible": true,
     "collapsed": true,
     "link": {
         "type": "doc",
-        "id": "reference"
+        "id": "semi-structured"
     }
 }

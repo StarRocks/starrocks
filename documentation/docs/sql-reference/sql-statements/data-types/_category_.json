@@ -1,0 +1,10 @@
+{
+    "position": 120,
+    "label": "Data Types",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "data-type-list"
+    }
+}

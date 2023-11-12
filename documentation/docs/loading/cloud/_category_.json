@@ -1,0 +1,10 @@
+{
+    "position": 50,
+    "label": "Loading from Cloud Object Storage",
+    "collapsible": true,
+    "collapsed": true,
+    "link": {
+        "type": "doc",
+        "id": "cloud"
+    }
+}

@@ -60,7 +60,7 @@ select to_json(named_struct("k1", cast(null as string), "k2", "v2"));
 
 ## See also
 
-- [Map data type](../../../sql-statements/data-types/Map.md)
-- [Struct data type](../../../sql-statements/data-types/STRUCT.md)
+- [Map data type](../../../sql-statements/data-types/semi-structured/Map.md)
+- [Struct data type](../../../sql-statements/data-types/semi-structured/STRUCT.md)
 - [Map functions](../../function-list.md#map-functions)
 - [Struct functions](../../function-list.md#struct-functions)

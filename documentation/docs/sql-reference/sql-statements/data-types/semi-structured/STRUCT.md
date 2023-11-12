@@ -14,7 +14,7 @@ A field within a struct can also be another STRUCT, ARRAY, or MAP, which allows 
 
 The STRUCT data type is supported from v3.1 onwards. In v3.1, you can define STRUCT columns when you create a StarRocks table, load STRUCT data into that table, and query MAP data.
 
-From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT from data lakes. You can use external catalogs provided by StarRocks to query MAP and STRUCT data from Apache Hive™, Apache Hudi, and Apache Iceberg. You can only query data from ORC and Parquet files. For more information about how to use external catalogs to query external data sources, see [Overview of catalogs](../../../data_source/catalog/catalog_overview.md) and topics related to the required catalog type.
+From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT from data lakes. You can use external catalogs provided by StarRocks to query MAP and STRUCT data from Apache Hive™, Apache Hudi, and Apache Iceberg. You can only query data from ORC and Parquet files. For more information about how to use external catalogs to query external data sources, see [Overview of catalogs](../../../../data_source/catalog/catalog_overview.md) and topics related to the required catalog type.
 
 ## Syntax
 
@@ -57,11 +57,11 @@ Columns with the STRUCT type have the following restrictions:
 - Cannot be used as key columns in a table. They can only be used as value columns.
 - Cannot be used as partition key columns (following PARTITION BY) in a table.
 - Cannot be used as bucketing columns (following DISTRIBUTED BY) in a table.
-- Only supports the replace() function when used as a value column in an [Aggregate table](../../../table_design/table_types/aggregate_table.md).
+- Only supports the replace() function when used as a value column in an [Aggregate table](../../../../table_design/table_types/aggregate_table.md).
 
 ## Construct structs in SQL
 
-STRUCT can be constructed in SQL using the following functions: [row, struct](../../sql-functions/struct-functions/row.md), and [named_struct](../../sql-functions/struct-functions/named_struct.md). struct() is the alias of row().
+STRUCT can be constructed in SQL using the following functions: [row, struct](../../../sql-functions/struct-functions/row.md), and [named_struct](../../../sql-functions/struct-functions/named_struct.md). struct() is the alias of row().
 
 - `row` and `struct` support unnamed struct. You do not need to specify the field names. StarRocks automatically generates column names, like `col1`, `col2`...
 - `named_struct` supports named struct. The expressions of names and values must be in pairs.
@@ -78,7 +78,7 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- Return {"a":1
 
 ## Load STRUCT data
 
-You can load STRUCT data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../data-manipulation/BROKER_LOAD.md).
+You can load STRUCT data into StarRocks using two methods: [INSERT INTO](../../../../loading/InsertInto.md), and [ORC/Parquet loading](../../data-manipulation/BROKER_LOAD.md).
 
 Note that StarRocks automatically casts the data type into the corresponding STRUCT type.
 
@@ -103,7 +103,7 @@ SELECT * FROM t0;
 
 ### Load STRUCT data from ORC/Parquet files
 
-The STRUCT data type in StarRocks corresponds to the nested columns structure in ORC or Parquet format. No additional specification is needed. You can load STRUCT data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../data-manipulation/BROKER_LOAD.md).
+The STRUCT data type in StarRocks corresponds to the nested columns structure in ORC or Parquet format. No additional specification is needed. You can load STRUCT data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../../data-manipulation/BROKER_LOAD.md).
 
 ## Access STRUCT fields
 

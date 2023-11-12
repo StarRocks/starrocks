@@ -42,7 +42,7 @@ When you load a data file into a StarRocks table, the data of the data file may 
 
 ### Broker Load
 
-See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
+See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](./cloud/cloud_storage_load.md).
 
 ### Routine load
 

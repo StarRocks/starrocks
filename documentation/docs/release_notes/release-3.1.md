@@ -121,7 +121,7 @@ Release date: August 18, 2023
 
 ### Improvements
 
-Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`.
+Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](../sql-reference/System_variable.md) `enable_strict_type`. The default value of this session variable is `false`.
 
 ### Bug Fixes
 
@@ -163,7 +163,7 @@ Release date: August 7, 2023
 - Supports using the table function FILES() in [INSERT INTO](../loading/InsertInto.md) to directly load the data of Parquet- or ORC-formatted data files stored in AWS S3. The FILES() function can automatically infer the table schema, which relieves the need to create external catalogs or file external tables before data loading and therefore greatly simplifies the data loading process.
 - Supports [generated columns](../sql-reference/sql-statements/generated_columns.md). With the generated column feature, StarRocks can automatically generate and store the values of column expressions and automatically rewrite queries to improve query performance.
 - Supports loading data from Spark to StarRocks by using [Spark connector](../loading/Spark-connector-starrocks.md). Compared to [Spark Load](../loading/SparkLoad.md), the Spark connector provides more comprehensive capabilities. Users can define a Spark job to perform ETL operations on the data, and the Spark connector serves as the sink in the Spark job.
-- Supports loading data into columns of the [MAP](../sql-reference/sql-statements/data-types/Map.md) and [STRUCT](../sql-reference/sql-statements/data-types/STRUCT.md) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
+- Supports loading data into columns of the [MAP](../sql-reference/sql-statements/data-types/semi-structured/Map.md) and [STRUCT](../sql-reference/sql-statements/data-types/semi-structured/STRUCT.md) data types, and supports nesting Fast Decimal values in ARRAY, MAP, and STRUCT.
 
 #### SQL reference
 

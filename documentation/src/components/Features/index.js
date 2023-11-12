@@ -7,7 +7,7 @@ import Link from '@docusaurus/Link';
 const ChineseFeatureList = [
   {
     title: '产品简介',
-    url: '../../introduction/',
+    url: '../introduction/what_is_starrocks',
     description: (
       <>
         OLAP、特性、系统架构
@@ -16,7 +16,7 @@ const ChineseFeatureList = [
   },
   {
     title: '快速入门信息',
-    url: '../../quick_start/',
+    url: '../quick_start/',
     description: (
       <>
         快速部署、导入、查询
@@ -25,7 +25,7 @@ const ChineseFeatureList = [
   },
   {
     title: '导入数据',
-    url: '../../loading/Loading_intro/',
+    url: '../loading/Loading_intro/',
     description: (
       <>
         数据清洗、转换、导入
@@ -34,7 +34,7 @@ const ChineseFeatureList = [
   },
   {
     title: '表设计',
-    url: '../../table_design/StarRocks_table_design/',
+    url: '../table_design/StarRocks_table_design/',
     description: (
       <>
         表、索引、分区、加速
@@ -43,7 +43,7 @@ const ChineseFeatureList = [
   },
   {
     title: '查询数据湖',
-    url: '../../data_source/data_lakes/',
+    url: '../data_source/',
     description: (
       <>
         Iceberg, Hive, Delta Lake, …
@@ -52,7 +52,7 @@ const ChineseFeatureList = [
   },
   {
     title: '半结构化类型',
-    url: '../../sql-reference/overview-pages/semi_structured/',
+    url: '../sql-reference/sql-statements/data-types/semi-structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -61,7 +61,7 @@ const ChineseFeatureList = [
   },
   {
     title: '外部系统集成',
-    url: '../../integrations/',
+    url: '../integrations/',
     description: (
       <>
         BI、IDE、认证信息
@@ -70,7 +70,7 @@ const ChineseFeatureList = [
   },
   {
     title: '管理手册',
-    url: '../../administration/',
+    url: '../administration/',
     description: (
       <>
         扩缩容、备份恢复、权限、性能调优
@@ -79,7 +79,7 @@ const ChineseFeatureList = [
   },
   {
     title: '参考手册',
-    url: '../../reference/',
+    url: '../sql-reference/',
     description: (
       <>
         SQL 语法、命令、函数、变量
@@ -88,7 +88,7 @@ const ChineseFeatureList = [
   },
   {
     title: '常见问题解答',
-    url: '../../faq/',
+    url: '../faq/',
     description: (
       <>
         部署、导入、查询、权限常见问题
@@ -97,7 +97,7 @@ const ChineseFeatureList = [
   },
   {
     title: '性能测试',
-    url: '../../benchmarking/',
+    url: '../benchmarking/',
     description: (
       <>
         性能测试：数据库性能对比
@@ -109,7 +109,7 @@ const ChineseFeatureList = [
 const EnglishFeatureList = [
   {
     title: 'Introduction',
-    url: '../../introduction/',
+    url: '../introduction/what_is_starrocks',
     description: (
       <>
         OLAP, features, architecture
@@ -118,7 +118,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Quick Start',
-    url: '../../quick_start/',
+    url: '../quick_start/',
     description: (
       <>
         Get up and running quickly.
@@ -127,7 +127,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Data Loading',
-    url: '../../loading/Loading_intro/',
+    url: '../loading/Loading_intro/',
     description: (
       <>
         Clean, transform, and load
@@ -136,7 +136,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Table Design',
-    url: '../../table_design/StarRocks_table_design/',
+    url: '../table_design/StarRocks_table_design/',
     description: (
       <>
         Tables, indexing, acceleration
@@ -145,7 +145,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Data Lakes',
-    url: '../../data_source/data_lakes/',
+    url: '../data_source/',
     description: (
       <>
         Iceberg, Hive, Delta Lake, …
@@ -154,7 +154,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Work with semi-structured data',
-    url: '../../sql-reference/overview-pages/semi_structured/',
+    url: '../sql-reference/sql-statements/data-types/semi-structured/',
     description: (
       <>
         JSON, map, struct, array
@@ -163,7 +163,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Integrations',
-    url: '../../integrations/',
+    url: '../integrations/',
     description: (
       <>
         BI tools, IDEs, Cloud authentication, …
@@ -172,7 +172,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Administration',
-    url: '../../administration/',
+    url: '../administration/',
     description: (
       <>
         Scale, backups, roles and privileges, …
@@ -181,7 +181,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Reference',
-    url: '../../reference/',
+    url: '../sql-reference/',
     description: (
       <>
         SQL, functions, error codes, …
@@ -190,7 +190,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'FAQs',
-    url: '../../faq/',
+    url: '../faq/',
     description: (
       <>
         Frequently asked questions.
@@ -199,7 +199,7 @@ const EnglishFeatureList = [
   },
   {
     title: 'Benchmarks',
-    url: '../../benchmarking/',
+    url: '../benchmarking/',
     description: (
       <>
         DB performance comparison benchmarks.

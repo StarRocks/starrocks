@@ -8,7 +8,7 @@ import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.md'
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud/cloud_storage_load.md).
 
 <InsertPrivNote />
 
@@ -42,7 +42,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 Each load job has a label that is unique across the entire database. You can use the label of a load job to view the execution status of the load job and prevent repeatedly loading the same data. When a load job enters the **FINISHED** state, its label cannot be reused. Only the label of a load job that has entered the **CANCELLED** state can be reused. In most cases, the label of a load job is reused to retry that load job and load the same data, thereby implementing Exactly-Once semantics.
 
-For label naming conventions, see [System limits](../../../reference/System_limit.md).
+For label naming conventions, see [System limits](../../System_limit.md).
 
 ### data_desc
 
@@ -201,7 +201,7 @@ INTO TABLE <table_name>
 
 ### WITH BROKER
 
-In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see the "Background information" section in [Load data from HDFS](../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see the "Background information" section in [Load data from HDFS](../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../loading/cloud/cloud_storage_load.md).
 
 ### StorageCredentialParams
 

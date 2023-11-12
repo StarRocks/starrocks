@@ -47,14 +47,14 @@ INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
 INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false)); 
 ```
 
-> The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON file. For more information, see [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md).
+> The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON file. For more information, see [parse_json](../../../sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](../../../sql-functions/json-functions/json-constructor-functions/json_object.md).
 
-- Method 2: Use Stream Load to load a JSON file and store the file as JSON data. For more information, see [Load JSON data](../../../loading/StreamLoad.md#load-json-data).
+- Method 2: Use Stream Load to load a JSON file and store the file as JSON data. For more information, see [Load JSON data](../../../../loading/StreamLoad.md#load-json-data).
 
   - If you want to load a root JSON object, set `jsonpaths` to `$`.
-  - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
+  - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
 
-- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../data-manipulation/BROKER_LOAD.md).
+- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../data-manipulation/BROKER_LOAD.md).
 
 StarRocks supports the following data type conversions at Parquet file loading.
 
@@ -168,13 +168,13 @@ mysql> select * from tj
 
 ## JSON functions and operators
 
-You can use JSON functions and operators to construct and process JSON data. For more information, see [Overview of JSON functions and operators](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md).
+You can use JSON functions and operators to construct and process JSON data. For more information, see [Overview of JSON functions and operators](../../../sql-functions/json-functions/overview-of-json-functions-and-operators.md).
 
 ## Limits and usage notes
 
 - The maximum length of a JSON value is 16 MB.
 
-- The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
+- The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 
 - JSON columns are supported in Duplicate Key, Primary Key, and Unique Key tables. They are not supported in Aggregate tables.
 

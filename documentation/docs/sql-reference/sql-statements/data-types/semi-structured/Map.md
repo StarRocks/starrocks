@@ -10,7 +10,7 @@ MAP is a complex data type that stores a set of key-value pairs, for example, `{
 
 The MAP data type is supported from v3.1 onwards. In v3.1, you can define MAP columns when you create a StarRocks table, load MAP data into that table, and query MAP data.
 
-From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT from data lakes. You can use external catalogs provided by StarRocks to query MAP and STRUCT data from Apache Hive™, Apache Hudi, and Apache Iceberg. You can only query data from ORC and Parquet files. For more information about how to use external catalogs to query external data sources, see [Overview of catalogs](../../../data_source/catalog/catalog_overview.md) and topics related to the required catalog type.
+From v2.5 onwards, StarRocks supports querying complex data types MAP and STRUCT from data lakes. You can use external catalogs provided by StarRocks to query MAP and STRUCT data from Apache Hive™, Apache Hudi, and Apache Iceberg. You can only query data from ORC and Parquet files. For more information about how to use external catalogs to query external data sources, see [Overview of catalogs](../../../../data_source/catalog/catalog_overview.md) and topics related to the required catalog type.
 
 ## Syntax
 
@@ -104,7 +104,7 @@ select map() as empty_map; -- Return {}.
 
 ## Load MAP data into StarRocks
 
-You can load map data into StarRocks using two methods: [INSERT INTO](../../../loading/InsertInto.md), and [ORC/Parquet loading](../data-manipulation/BROKER_LOAD.md).
+You can load map data into StarRocks using two methods: [INSERT INTO](../../../../loading/InsertInto.md), and [ORC/Parquet loading](../../data-manipulation/BROKER_LOAD.md).
 
 Note that StarRocks will remove duplicate keys of each map when loading MAP data.
 
@@ -122,7 +122,7 @@ Note that StarRocks will remove duplicate keys of each map when loading MAP data
 
 ### Load MAP data from ORC and Parquet files
 
-The MAP data type in StarRocks corresponds to the map structure in ORC or Parquet format. No additional specification is needed. You can load MAP data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../data-manipulation/BROKER_LOAD.md).
+The MAP data type in StarRocks corresponds to the map structure in ORC or Parquet format. No additional specification is needed. You can load MAP data from ORC or Parquet files by following the instructions in [ORC/Parquet loading](../../data-manipulation/BROKER_LOAD.md).
 
 ## Access MAP data
 
@@ -186,5 +186,5 @@ mysql> select map{1:map{2:1},3:NULL}[1][2];
 
 ## References
 
-- [Map functions](../../sql-functions/map-functions/map_values.md)
-- [element_at](../../sql-functions/array-functions/element_at.md)
+- [Map functions](../../../sql-functions/map-functions/map_values.md)
+- [element_at](../../../sql-functions/array-functions/element_at.md)

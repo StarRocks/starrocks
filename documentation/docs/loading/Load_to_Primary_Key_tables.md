@@ -54,7 +54,7 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 ### Broker Load
 
-See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](../loading/cloud_storage_load.md).
+See the "Background information" section in [Load data from HDFS](../loading/hdfs_load.md) or [Load data from cloud storage](./cloud/cloud_storage_load.md).
 
 ### Routine load
 

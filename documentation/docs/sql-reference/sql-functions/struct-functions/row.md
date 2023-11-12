@@ -55,5 +55,5 @@ select struct(1,2,3);
 
 ## References
 
-- [STRUCT data type](../../sql-statements/data-types/STRUCT.md)
+- [STRUCT data type](../../sql-statements/data-types/semi-structured/STRUCT.md)
 - [named_struct](named_struct.md)

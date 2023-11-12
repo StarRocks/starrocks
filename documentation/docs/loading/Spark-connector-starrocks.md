@@ -663,7 +663,7 @@ Here we take the counting of UV as an example to show how to load data into colu
 
 ### Load data into columns of ARRAY type
 
-The following example explains how to load data into columns of the [`ARRAY`](../sql-reference/sql-statements/data-types/Array.md) type.
+The following example explains how to load data into columns of the [`ARRAY`](../sql-reference/sql-statements/data-types/semi-structured/Array.md) type.
 
 1. Create a StarRocks table.
 
