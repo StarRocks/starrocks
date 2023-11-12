@@ -17,12 +17,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TExprOpcode;
@@ -34,25 +32,97 @@ import java.util.Objects;
 /**
  * Fulltext match predicate
  */
-public class MatchPredicate extends Predicate {
+public abstract class MatchPredicate extends Predicate {
+
     private static final Logger LOG = LogManager.getLogger(MatchPredicate.class);
 
+    // MATCH_TERM/MATCH_ALL/MATCH_WILDCARD
+    public static class MatchBinaryPredicate extends MatchPredicate {
+
+        protected MatchBinaryPredicate(MatchBinaryPredicate other) {
+            super(other);
+        }
+
+        public MatchBinaryPredicate(Expr e1, Expr e2, Operator op) {
+            super(op);
+            Preconditions.checkNotNull(e1);
+            children.add(e1);
+            Preconditions.checkNotNull(e2);
+            children.add(e2);
+        }
+
+        @Override
+        public Expr clone() {
+            return new MatchBinaryPredicate(this);
+        }
+    }
+
+    // MATCH_PHRASE/MATCH_FUZZY
+    public static class MatchTriplePredicate extends MatchPredicate {
+
+        protected MatchTriplePredicate(MatchTriplePredicate other) {
+            super(other);
+        }
+
+        public MatchTriplePredicate(Expr column, Expr e2, Expr e3, Operator op) {
+            super(op);
+            Preconditions.checkNotNull(column);
+            children.add(column);
+            Preconditions.checkNotNull(e2);
+            children.add(e2);
+            Preconditions.checkNotNull(e3);
+            children.add(e3);
+
+        }
+
+        @Override
+        public Expr clone() {
+            return new MatchTriplePredicate(this);
+        }
+    }
+
+    // MATCH_RANGE
+    public static class MatchRangePredicate extends MatchPredicate {
+
+        protected MatchRangePredicate(MatchRangePredicate other) {
+            super(other);
+        }
+
+        public MatchRangePredicate(Expr column, Expr start, Expr end, Expr startInclude, Expr endInclude) {
+            super(Operator.MATCH_RANGE);
+            Preconditions.checkNotNull(column);
+            children.add(column);
+            Preconditions.checkNotNull(start);
+            children.add(start);
+            Preconditions.checkNotNull(end);
+            children.add(end);
+            Preconditions.checkNotNull(startInclude);
+            children.add(startInclude);
+            Preconditions.checkNotNull(endInclude);
+            children.add(endInclude);
+        }
+
+        @Override
+        public Expr clone() {
+            return new MatchRangePredicate(this);
+        }
+    }
+
     public enum Operator {
-        MATCH_TERMS("MATCH_TERM", "match_term", TExprOpcode.MATCH_TERM),
+        MATCH_TERM("MATCH_TERM", "match_term", TExprOpcode.MATCH_TERM),
         MATCH_ALL("MATCH_ALL", "match_all", TExprOpcode.MATCH_ALL),
         MATCH_PHRASE("MATCH_PHRASE", "match_phrase", TExprOpcode.MATCH_PHRASE),
         MATCH_FUZZY("MATCH_FUZZY", "match_fuzzy", TExprOpcode.MATCH_FUZZY),
         MATCH_WILDCARD("MATCH_WILDCARD", "match_wildcard", TExprOpcode.MATCH_WILDCARD),
         MATCH_RANGE("MATCH_RANGE", "match_range", TExprOpcode.MATCH_RANGE);
 
-
         private final String description;
         private final String name;
         private final TExprOpcode opcode;
 
         Operator(String description,
-                 String name,
-                 TExprOpcode opcode) {
+                String name,
+                TExprOpcode opcode) {
             this.description = description;
             this.name = name;
             this.opcode = opcode;
@@ -83,9 +153,16 @@ public class MatchPredicate extends Predicate {
                     Lists.<Type>newArrayList(t, t, t, Type.BOOLEAN, Type.BOOLEAN),
                     Type.BOOLEAN));
         }
+        // match_range(column, start, end, include_start, include_end)
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.MATCH_RANGE.getName(),
+                symbolNotUsed,
+                Lists.<Type>newArrayList(Type.VARCHAR, Type.VARCHAR, Type.VARCHAR, Type.BOOLEAN, Type.BOOLEAN),
+                Type.BOOLEAN));
+
         // match_term(column, term)
         functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
-                Operator.MATCH_TERMS.getName(),
+                Operator.MATCH_TERM.getName(),
                 symbolNotUsed,
                 Lists.<Type>newArrayList(Type.VARCHAR, Type.VARCHAR),
                 Type.BOOLEAN));
@@ -117,29 +194,23 @@ public class MatchPredicate extends Predicate {
 
     private final Operator op;
 
-    public MatchPredicate(Operator op, Expr e1, Expr e2) {
-        super();
-        this.op = op;
-        Preconditions.checkNotNull(e1);
-        children.add(e1);
-        Preconditions.checkNotNull(e2);
-        children.add(e2);
-        // TODO: Calculate selectivity
-        selectivity = Expr.DEFAULT_SELECTIVITY;
+    public Boolean isMatchElement(Operator op) {
+        return Objects.equals(op.getName(), Operator.MATCH_TERM.getName())
+                || Objects.equals(op.getName(), Operator.MATCH_ALL.getName())
+                || Objects.equals(op.getName(), Operator.MATCH_PHRASE.getName())
+                || Objects.equals(op.getName(), Operator.MATCH_FUZZY.getName())
+                || Objects.equals(op.getName(), Operator.MATCH_WILDCARD.getName())
+                || Objects.equals(op.getName(), Operator.MATCH_RANGE.getName());
     }
 
-    public Boolean isMatchElement(Operator op) {
-        return Objects.equals(op.getName(), Operator.MATCH_RANGE.getName());
+    protected MatchPredicate(Operator op) {
+        super();
+        this.op = op;
     }
 
     protected MatchPredicate(MatchPredicate other) {
         super(other);
-        op = other.op;
-    }
-
-    @Override
-    public Expr clone() {
-        return new MatchPredicate(this);
+        this.op = other.op;
     }
 
     public Operator getOp() {
@@ -147,16 +218,8 @@ public class MatchPredicate extends Predicate {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
-            return false;
-        }
-        return ((MatchPredicate) obj).op == op;
-    }
-
-    @Override
     public String toSqlImpl() {
-        return getChild(0).toSql() + " " + op.toString() + " " + getChild(1).toSql();
+        return String.format("%s(%s)", op.toString(), String.join(",", childrenToSql()));
     }
 
     @Override
@@ -167,48 +230,12 @@ public class MatchPredicate extends Predicate {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-        super.analyzeImpl(analyzer);
-        if (isMatchElement(op) && !getChild(0).getType().isArrayType()) {
-            throw new AnalysisException(
-                    "left operand of " + op + " must be Array: " + toSql());
-        }
-        if (getChild(0).getType().isHllType()) {
-            throw new AnalysisException(
-                    "left operand of " + op + " must not be Bitmap or HLL: " + toSql());
-        }
-        if (!isMatchElement(op) && !getChild(1).getType().isStringType() && !getChild(1).getType().isNull()) {
-            throw new AnalysisException("right operand of " + op + " must be of type STRING: " + toSql());
-        }
-
-        if (!getChild(0).getType().isStringType() && !getChild(0).getType().isArrayType()) {
-            throw new AnalysisException(
-                    "left operand of " + op + " must be of type STRING or ARRAY: " + toSql());
-        }
-
-        fn = getBuiltinFunction(op.toString(),
-                collectChildReturnTypes(), Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        if (fn == null) {
-            throw new AnalysisException(
-                    "no function found for " + op + " " + toSql());
-        }
-        Expr e1 = getChild(0);
-        Expr e2 = getChild(1);
-        // Here we cast match_element_xxx value type from string to array item type.
-        // Because be need to know the actual TExprNodeType when doing Expr Literal transform
-        if (isMatchElement(op) && e1.type.isArrayType() && (e2 instanceof StringLiteral)) {
-            Type itemType = ((ArrayType) e1.type).getItemType();
-            try {
-                setChild(1, e2.castTo(itemType));
-            } catch (NumberFormatException nfe) {
-                throw new AnalysisException("Invalid number format literal: " + ((StringLiteral) e2).getStringValue());
-            }
-        }
-    }
-
-    @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);
     }
 
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitMatchPredicate(this, context);
+    }
 }
