@@ -229,6 +229,9 @@ static inline bool is_multilane(pipeline::OperatorPtr& op) {
 
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
+    if (_schedule_counter->value() == 1) {
+        LOG(INFO) << "start to run " << to_readable_string();
+    }
     SCOPED_TIMER(_active_timer);
     QUERY_TRACE_SCOPED("process", _driver_name);
     set_driver_state(DriverState::RUNNING);
@@ -649,6 +652,7 @@ std::string PipelineDriver::to_readable_string() const {
         }
     }
     ss << "]";
+    ss << " active counter = " << (_schedule_counter == nullptr ? -1 : _schedule_counter->value());
     return ss.str();
 }
 

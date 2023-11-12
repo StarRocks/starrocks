@@ -650,6 +650,8 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
     for (auto& [_, channel] : _instance_id2channel) {
         auto tmp_status = channel->close(state, _fragment_ctx);
         if (!tmp_status.ok()) {
+            LOG(WARNING) << print_id(_fragment_ctx->fragment_instance_id()) << " close channel to "
+                         << print_id(channel->get_fragment_instance_id()) << " error: " << tmp_status.to_string();
             status = tmp_status;
         }
     }

@@ -83,6 +83,9 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
+    if (_num_running_io_tasks > 0) {
+        LOG(WARNING) << "close scan but remain IO tasks " << _num_running_io_tasks;
+    }
     set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
@@ -196,7 +199,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any shared chunk source from other ScanOperator
-    if (has_shared_chunk_source()) {
+    if (has_shared_chunk_source()) { /// here always return false
         return false;
     }
 
