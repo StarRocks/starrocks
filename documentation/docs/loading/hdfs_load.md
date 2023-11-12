@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from HDFS
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks supports using the [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) to load large amounts of data from HDFS into StarRocks.
 

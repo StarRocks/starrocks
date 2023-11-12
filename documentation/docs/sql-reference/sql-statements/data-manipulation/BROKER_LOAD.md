@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # BROKER LOAD
 
-import InsertPrivNote from '../../../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.md'
 
 ## Description
 

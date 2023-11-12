@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from a local file system or a streaming data source using HTTP PUT
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source.
 

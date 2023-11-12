@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Load data from GCS
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides two options for loading data from GCS:
 
