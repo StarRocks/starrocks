@@ -176,6 +176,8 @@ private:
     void _abort_replica_tablets(const PTabletWriterAddChunkRequest& request, const std::string& abort_reason,
                                 const std::unordered_map<int64_t, std::vector<int64_t>>& node_id_to_abort_tablets);
 
+    void _flush_stale_memtables();
+
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
@@ -215,6 +217,8 @@ private:
 
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
+
+    std::set<int64_t> _immutable_partition_ids;
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
