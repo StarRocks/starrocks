@@ -38,7 +38,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.util.IndexUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.lang3.StringUtils;
@@ -197,7 +196,7 @@ public class IndexDef implements ParseNode {
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
             }
         } else if (indexType == IndexType.GIN) {
-            IndexUtil.checkInvertedIndexValid(column, properties, keysType);
+            InvertedIndexUtil.checkInvertedIndexValid(column, properties, keysType);
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
         }

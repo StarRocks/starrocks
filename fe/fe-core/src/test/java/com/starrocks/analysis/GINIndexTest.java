@@ -31,7 +31,6 @@ import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
-import com.starrocks.common.util.IndexUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -82,25 +81,25 @@ public class GINIndexTest extends PlanTestBase {
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexUtil.checkInvertedIndexValid(c1, null, KeysType.PRIMARY_KEYS),
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.PRIMARY_KEYS),
                 "The inverted index can only be build on DUPLICATE table.");
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexUtil.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c1, null, KeysType.DUP_KEYS),
                 "The inverted index can only be build on column with type of scalar type.");
 
         Column c2 = new Column("f2", Type.STRING, true);
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), "???");
                 }}, KeysType.DUP_KEYS),
                 "Only support clucene implement for now");
 
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, "french");
                 }}, KeysType.DUP_KEYS));
@@ -108,13 +107,13 @@ public class GINIndexTest extends PlanTestBase {
         Column c3 = new Column("f3", Type.FLOAT, true);
         Assertions.assertThrows(
                 SemanticException.class,
-                () -> IndexUtil.checkInvertedIndexValid(c3, new HashMap<String, String>() {{
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c3, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
                 }}, KeysType.DUP_KEYS));
 
         Assertions.assertDoesNotThrow(
-                () -> IndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
+                () -> InvertedIndexUtil.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name());
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
                     put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
