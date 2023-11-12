@@ -84,7 +84,9 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
 void ScanOperator::close(RuntimeState* state) {
     if (_num_running_io_tasks > 0) {
-        LOG(WARNING) << "close scan but remain IO tasks " << _num_running_io_tasks;
+        LOG(WARNING) << print_id(CurrentThread::current().fragment_instance_id())
+                     << " fragment close scan but remain IO tasks " << _num_running_io_tasks << " from submit tasks "
+                     << _submit_task_counter->value();
     }
     set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
