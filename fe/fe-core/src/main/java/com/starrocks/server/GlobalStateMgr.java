@@ -3854,15 +3854,9 @@ public class GlobalStateMgr {
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-<<<<<<< HEAD
-                                                              List<Long> tmpPartitionIds) {
-        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds);
-=======
                                                               List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
                 tmpPartitionIds, distributionDesc);
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
