@@ -53,7 +53,7 @@ protected:
     /**
      * @brief Evaluate the expression, remove the compiled function.
      */
-    void close() override;
+    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
 
 private:
     ObjectPool* _pool;
