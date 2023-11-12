@@ -15,30 +15,24 @@
 package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.ScannerFactory;
-import com.starrocks.utils.loader.ChildFirstClassLoader;
+import com.starrocks.jni.connector.ScannerHelper;
 
 import java.io.File;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.Arrays;
-import java.util.Objects;
+import java.util.ArrayList;
+import java.util.List;
 
 public class PaimonSplitScannerFactory implements ScannerFactory {
-    static ChildFirstClassLoader classLoader;
+    static ClassLoader classLoader;
 
     static {
         String basePath = System.getenv("STARROCKS_HOME");
+        List<File> preloadFiles = new ArrayList();
+        preloadFiles.add(new File(basePath + "/lib/jni-packages/starrocks-hadoop-ext.jar"));
         File dir = new File(basePath + "/lib/paimon-reader-lib");
-        URL[] jars = Arrays.stream(Objects.requireNonNull(dir.listFiles()))
-                .map(f -> {
-                    try {
-                        return f.toURI().toURL();
-                    } catch (MalformedURLException e) {
-                        e.printStackTrace();
-                        throw new RuntimeException("Cannot init paimon scanner classloader.", e);
-                    }
-                }).toArray(URL[]::new);
-        classLoader = new ChildFirstClassLoader(jars, ClassLoader.getSystemClassLoader());
+        for (File f : dir.listFiles()) {
+            preloadFiles.add(f);
+        }
+        classLoader = ScannerHelper.createChildFirstClassLoader(preloadFiles, "paimon scanner");
     }
 
     /**

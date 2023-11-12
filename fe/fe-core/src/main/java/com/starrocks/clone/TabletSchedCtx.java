@@ -62,11 +62,11 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTaskType;
@@ -521,7 +521,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public List<Replica> getHealthyReplicas() {
         List<Replica> candidates = Lists.newArrayList();
         for (Replica replica : tablet.getImmutableReplicas()) {
-            if (replica.isBad() || replica.getState() == ReplicaState.DECOMMISSION) {
+            if (replica.isBad()
+                    || replica.getState() == ReplicaState.DECOMMISSION
+                    || replica.getState() == ReplicaState.RECOVER) {
                 continue;
             }
 
@@ -705,22 +707,12 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (cloneTask != null) {
             AgentTaskQueue.removeTask(cloneTask.getBackendId(), TTaskType.CLONE, cloneTask.getSignature());
 
-            // clear all CLONE replicas
-            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
-            if (db != null) {
-                db.writeLock();
-                try {
-                    List<Replica> cloneReplicas = Lists.newArrayList();
-                    tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
-                            cloneReplicas::add);
+            List<Replica> cloneReplicas = Lists.newArrayList();
+            tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
+                    cloneReplicas::add);
 
-                    for (Replica cloneReplica : cloneReplicas) {
-                        tablet.deleteReplica(cloneReplica);
-                    }
-
-                } finally {
-                    db.writeUnlock();
-                }
+            for (Replica cloneReplica : cloneReplicas) {
+                tablet.deleteReplica(cloneReplica);
             }
         }
 
@@ -898,7 +890,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
                     indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), visibleVersion,
                     indexMeta.getKeysType(),
-                    TStorageType.COLUMN,
+                    indexMeta.getStorageType(),
                     TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
                     olapTable.getCopiedIndexes(),
                     olapTable.isInMemory(),
@@ -907,11 +899,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     olapTable.getPartitionInfo().getTabletType(partitionId),
                     olapTable.getCompressionType(), indexMeta.getSortKeyIdxes(),
                     indexMeta.getSortKeyUniqueIds());
-            createReplicaTask.setIsRecoverTask(true);
+            createReplicaTask.setRecoverySource(RecoverySource.SCHEDULER);
             taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
             Replica emptyReplica =
-                    new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.NORMAL, visibleVersion,
+                    new Replica(tablet.getSingleReplica().getId(), destBackendId, ReplicaState.RECOVER, visibleVersion,
                             indexMeta.getSchemaHash());
             // addReplica() method will add this replica to tablet inverted index too.
             tablet.addReplica(emptyReplica);

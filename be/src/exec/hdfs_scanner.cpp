@@ -243,6 +243,7 @@ Status HdfsScanner::open_random_access_file() {
             _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename,
                                                                          file_size, _scanner_params.modification_time);
             _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
+            _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
             _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
             input_stream = _cache_input_stream;
         }
@@ -255,6 +256,22 @@ Status HdfsScanner::open_random_access_file() {
     _file = std::make_unique<RandomAccessFile>(input_stream, filename);
     _file->set_size(file_size);
     return Status::OK();
+}
+
+void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
+    const std::string ICEBERG_TIMER = "IcebergV2FormatTimer";
+    ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE, parent_name);
+
+    RuntimeProfile::Counter* delete_build_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_build_filter_timer =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFileBuildFilterTime", TUnit::TIME_NS, ICEBERG_TIMER);
+    RuntimeProfile::Counter* delete_file_per_scan_counter =
+            ADD_CHILD_COUNTER(parent_profile, "DeleteFilesPerScan", TUnit::UNIT, ICEBERG_TIMER);
+
+    COUNTER_UPDATE(delete_build_timer, _app_stats.iceberg_delete_file_build_ns);
+    COUNTER_UPDATE(delete_file_build_filter_timer, _app_stats.iceberg_delete_file_build_filter_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _app_stats.iceberg_delete_files_per_scan);
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
@@ -416,28 +433,8 @@ StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots()
     return !(chunk->has_rows());
 }
 
-void HdfsScannerContext::update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.empty() || row_count <= 0) return;
-
-    ChunkPtr& ck = (*chunk);
-    for (size_t i = 0; i < partition_columns.size(); i++) {
-        SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
-        DCHECK(partition_values[i]->is_constant());
-        auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
-        ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ck->get_column_by_slot_id(slot_desc->id());
-
-        if (data_column->is_nullable()) {
-            chunk_part_column->append_nulls(1);
-        } else {
-            chunk_part_column->append(*data_column, 0, 1);
-        }
-        chunk_part_column->assign(row_count, 0);
-    }
-}
-
-void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
-    if (partition_columns.size() == 0) return;
+void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count) {
+    if (partition_columns.size() == 0 || row_count <= 0) return;
 
     ChunkPtr& ck = (*chunk);
     ck->set_num_rows(row_count);
@@ -457,7 +454,12 @@ void HdfsScannerContext::append_partition_column_to_chunk(ChunkPtr* chunk, size_
             }
             chunk_part_column->assign(row_count, 0);
         }
-        ck->append_column(std::move(chunk_part_column), slot_desc->id());
+
+        if (ck->is_slot_exist(slot_desc->id())) {
+            ck->update_column(std::move(chunk_part_column), slot_desc->id());
+        } else {
+            ck->append_column(std::move(chunk_part_column), slot_desc->id());
+        }
     }
 }
 

@@ -30,7 +30,7 @@ public final class TableMetricsRegistry {
     private static final TableMetricsRegistry INSTANCE = new TableMetricsRegistry();
 
     private TableMetricsRegistry() {
-        idToTableMetrics = Maps.newHashMap();
+        idToTableMetrics = Maps.newConcurrentMap();
         // clear all metrics everyday
         timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "Table-Metrics-Cleaner", true);
         timer.scheduleAtFixedRate(new MetricsCleaner(), 0, 1L, TimeUnit.DAYS);
@@ -40,7 +40,7 @@ public final class TableMetricsRegistry {
         return INSTANCE;
     }
 
-    public synchronized TableMetricsEntity getMetricsEntity(long tableId) {
+    public TableMetricsEntity getMetricsEntity(long tableId) {
         return idToTableMetrics.computeIfAbsent(tableId, k -> new TableMetricsEntity());
     }
 

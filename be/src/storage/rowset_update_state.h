@@ -29,6 +29,7 @@ struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::vector<std::unique_ptr<Column>> write_columns;
     std::vector<uint32_t> write_columns_uid;
+    ChunkPtr partial_update_value_columns; // only used for column_with_row store
     bool inited = false;
     EditVersion read_version;
     int64_t byte_size = 0;
@@ -53,6 +54,9 @@ struct PartialUpdateState {
         write_columns_uid.clear();
         schema_version = -1;
         byte_size = 0;
+        if (partial_update_value_columns != nullptr) {
+            partial_update_value_columns->reset();
+        }
         inited = false;
     }
 };
@@ -137,6 +141,9 @@ private:
 
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
+    Status _prepare_partial_update_value_columns(Tablet* tablet, Rowset* rowset, uint32_t idx,
+                                                 const std::vector<uint32_t>& update_column_ids);
+
     // `need_lock` means whether the `_index_lock` in TabletUpdates needs to held.
     // `index_lock` is used to avoid access the PrimaryIndex at the same time as the apply thread.
     // This function will be called in two places, one is the commit phase and the other is the apply phase.
@@ -169,6 +176,13 @@ private:
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     TabletSchemaCSPtr _tablet_schema = nullptr;
+
+    // column_with_row partial update states
+    std::vector<uint32_t> _partial_update_value_column_ids;
+    // only column added by reading rowset
+    Schema _partial_update_value_columns_schema;
+    std::vector<ChunkIteratorPtr> _partial_update_value_column_iterators;
+    OlapReaderStatistics _partial_update_value_column_read_stats;
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;

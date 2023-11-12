@@ -465,13 +465,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            long orgIndexId = indexIdMap.get(shadowIdxId);
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes,
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
                     sortKeyUniqueIds);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         tbl.rebuildFullSchema();

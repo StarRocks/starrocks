@@ -34,6 +34,7 @@ import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.FunctionPEntryObject;
 import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeType;
@@ -389,6 +390,10 @@ public class GrantsTo {
                         String storageVolumeName = storageVolumeMgr.getStorageVolumeName(storageVolumeId);
                         objects.add(Lists.newArrayList(null, null, storageVolumeName));
                     }
+
+                } else if (ObjectType.PIPE.equals(privEntry.getKey())) {
+                    PipePEntryObject pipePEntryObject = (PipePEntryObject) privilegeEntry.getObject();
+                    objects.addAll(pipePEntryObject.expandObjectNames());
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();

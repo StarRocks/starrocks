@@ -94,19 +94,4 @@ private:
     std::vector<const FieldConverter*> _converters;
 };
 
-class ChunkConverter {
-public:
-    ChunkConverter() = default;
-
-    Status init(const Schema& in_schema, const Schema& out_schema);
-
-    std::unique_ptr<Chunk> copy_convert(const Chunk& from) const;
-
-    std::unique_ptr<Chunk> move_convert(Chunk* from) const;
-
-private:
-    std::shared_ptr<Schema> _out_schema;
-    std::vector<const FieldConverter*> _converters;
-};
-
 } // namespace starrocks

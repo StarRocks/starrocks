@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,5 +30,20 @@ public class IcebergAwsClientFactoryTest {
         factory.initialize(properties);
         Assert.assertThrows(IllegalArgumentException.class, factory::s3);
         Assert.assertThrows(IllegalArgumentException.class, factory::glue);
+    }
+
+    @Test
+    public void testEnsureSchemeInEndpoint() {
+        // test endpoint without scheme
+        URI uriWithoutScheme = IcebergAwsClientFactory.ensureSchemeInEndpoint("s3.aa-bbbbb-3.amazonaws.com.cn");
+        Assert.assertEquals("https://s3.aa-bbbbb-3.amazonaws.com.cn", uriWithoutScheme.toString());
+
+        // test endpoint with scheme HTTPS
+        URI uriWithHttps = IcebergAwsClientFactory.ensureSchemeInEndpoint("https://s3.aa-bbbbb-3.amazonaws.com.cn");
+        Assert.assertEquals("https://s3.aa-bbbbb-3.amazonaws.com.cn", uriWithHttps.toString());
+
+        // test endpoint with scheme HTTP
+        URI uriWithHttp = IcebergAwsClientFactory.ensureSchemeInEndpoint("http://s3.aa-bbbbb-3.amazonaws.com.cn");
+        Assert.assertEquals("http://s3.aa-bbbbb-3.amazonaws.com.cn", uriWithHttp.toString());
     }
 }

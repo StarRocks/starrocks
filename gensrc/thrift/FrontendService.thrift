@@ -412,6 +412,7 @@ struct TListPipesInfo {
 
     // schema info
     10: optional string database_name
+    11: optional string table_name
 
     // pipe status and statistics
     20: optional string state
@@ -420,6 +421,9 @@ struct TListPipesInfo {
     30: optional i64 loaded_files
     31: optional i64 loaded_rows
     32: optional i64 loaded_bytes
+    33: optional string load_status
+    34: optional string last_error
+    35: optional i64 created_time
 }
 
 struct TListPipesResult {

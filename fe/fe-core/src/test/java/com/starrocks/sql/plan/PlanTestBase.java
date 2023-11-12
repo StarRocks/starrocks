@@ -1074,6 +1074,8 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                             }
                         }
                     }
+                } else {
+                    return;
                 }
             }
         };

@@ -36,6 +36,7 @@
 
 #include <cctz/civil_time.h>
 #include <cctz/time_zone.h>
+#include <fmt/format.h>
 
 #include <cctype>
 #include <cstring>

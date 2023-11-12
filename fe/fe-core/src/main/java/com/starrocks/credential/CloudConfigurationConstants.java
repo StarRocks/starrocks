@@ -98,6 +98,7 @@ public class CloudConfigurationConstants {
     public static final String HDFS_PASSWORD = "hadoop.password";
     public static final String HDFS_KERBEROS_PRINCIPAL_DEPRECATED = "kerberos_principal";
     public static final String HDFS_KERBEROS_PRINCIPAL = "hadoop.kerberos.principal";
+    public static final String HDFS_KERBEROS_TICKET_CACHE_PATH = "hadoop.security.kerberos.ticket.cache.path";
     @Deprecated
     public static final String HDFS_KERBEROS_KEYTAB_DEPRECATED = "kerberos_keytab";
     public static final String HADOOP_KERBEROS_KEYTAB = "hadoop.kerberos.keytab";
@@ -105,11 +106,6 @@ public class CloudConfigurationConstants {
     @Deprecated
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED = "kerberos_keytab_content";
     public static final String HADOOP_KERBEROS_KEYTAB_CONTENT = "hadoop.kerberos.keytab_content";
-    public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
-    public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
-
-    public static final String HDFS_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
-    public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";

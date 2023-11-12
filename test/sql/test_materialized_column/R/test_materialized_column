@@ -431,7 +431,7 @@ CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc 
 -- !result
 ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Can not add column after Generated Column.')
+E: (1064, 'Unexpected exception: Can not add column after Generated Column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT;
 -- result:
@@ -912,5 +912,129 @@ DROP TABLE t;
 -- result:
 -- !result
 DROP DATABASE test_schema_change_for_constant_expression;
+-- result:
+-- !result
+-- name: test_schema_change_for_after
+CREATE DATABASE test_schema_change_for_after;
+-- result:
+-- !result
+USE test_schema_change_for_after;
+-- result:
+-- !result
+CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after testcol1;
+-- result:
+E: (1064, 'Unexpected exception: Column[xxx] does not found')
+-- !result
+alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;
+-- result:
+E: (1064, 'Unexpected exception: Column[xxx] does not found')
+-- !result
+alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after xxx;
+-- result:
+E: (1064, 'Unexpected exception: Column[xxx] does not found')
+-- !result
+alter table t0 add column testcol1 BIGINT as v1 + 10 after xxx, add column testcol2 BIGINT after xxx;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Detail message: AFTER can not be set when ADD GENERATED COLUMN.')
+-- !result
+alter table t0 add column testcol1 BIGINT as v1 + 10 after v1, add column testcol2 BIGINT after v1;
+-- result:
+E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Detail message: AFTER can not be set when ADD GENERATED COLUMN.')
+-- !result
+alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
+-- result:
+E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+-- !result
+alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after testcol1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t0;
+-- result:
+t0	CREATE TABLE `t0` (
+  `v1` bigint(20) NOT NULL COMMENT "",
+  `testcol1` bigint(20) NULL COMMENT "",
+  `testcol2` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NOT NULL COMMENT "",
+  `v3` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t0 add column testcol3 BIGINT after v1, add column testcol4 BIGINT after v1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t0;
+-- result:
+t0	CREATE TABLE `t0` (
+  `v1` bigint(20) NOT NULL COMMENT "",
+  `testcol4` bigint(20) NULL COMMENT "",
+  `testcol3` bigint(20) NULL COMMENT "",
+  `testcol1` bigint(20) NULL COMMENT "",
+  `testcol2` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NOT NULL COMMENT "",
+  `v3` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t0 add column testcol5 BIGINT, add column testcol6 BIGINT as v1 * 10;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t0;
+-- result:
+t0	CREATE TABLE `t0` (
+  `v1` bigint(20) NOT NULL COMMENT "",
+  `testcol4` bigint(20) NULL COMMENT "",
+  `testcol3` bigint(20) NULL COMMENT "",
+  `testcol1` bigint(20) NULL COMMENT "",
+  `testcol2` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NOT NULL COMMENT "",
+  `v3` bigint(20) NOT NULL COMMENT "",
+  `testcol5` bigint(20) NULL COMMENT "",
+  `testcol6` bigint(20) NULL AS v1 * 10 COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- !result
+DROP DATABASE test_schema_change_for_after;
 -- result:
 -- !result

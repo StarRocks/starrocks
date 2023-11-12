@@ -147,4 +147,15 @@ public class AnalyzeAlterTableStatementTest {
         analyzeFail("alter table t0 add column testcol TIME");
         analyzeFail("alter table t0 modify column v0 TIME");
     }
+
+    @Test
+    public void testColumnWithRowUpdate() {
+        String sql = "alter table tmcwr add column testcol TIME";
+        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        sql = "alter table tmcwr drop column name";
+        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        sql = "alter table tmcwr modify column name TIME";
+        analyzeFail(sql, "row store table tmcwr can't do schema change");
+    }
+
 }

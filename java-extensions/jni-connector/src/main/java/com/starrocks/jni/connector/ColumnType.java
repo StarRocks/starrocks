@@ -58,14 +58,22 @@ public class ColumnType {
     List<String> childNames;
     List<ColumnType> childTypes;
     List<Integer> fieldIndex;
+    String rawTypeValue;
+
+    int precision = -1;
     int scale = -1;
     private static final Map<String, TypeValue> PRIMITIVE_TYPE_VALUE_MAPPING = new HashMap<>();
     private static final Map<TypeValue, Integer> PRIMITIVE_TYPE_VALUE_SIZE = new HashMap<>();
+    private static final Map<TypeValue, String> PRIMITIVE_TYPE_VALUE_STRING_MAPPING = new HashMap<>();
+
+    private static final int MAX_DECIMAL32_PRECISION = 9;
+    private static final int MAX_DECIMAL64_PRECISION = 18;
 
     static {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("smallint", TypeValue.SHORT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
@@ -81,6 +89,18 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal64", TypeValue.DECIMAL64);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal128", TypeValue.DECIMAL128);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("tinyint", TypeValue.TINYINT);
+
+        for (String k : PRIMITIVE_TYPE_VALUE_MAPPING.keySet()) {
+            PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(PRIMITIVE_TYPE_VALUE_MAPPING.get(k), k);
+        }
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.STRUCT, "struct");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
+        PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
+
+        // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
+        // so it won't trouble hudi reader to map hudi type to hive type
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
@@ -170,14 +190,15 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p;
-        if (scanner.s.startsWith("decimal")) {
-            p = scanner.s.length();
-        } else {
-            p = scanner.indexOf('<', ',', '>');
-        }
+        int p = scanner.indexOf('<', ',', '>', '(', ')');
+        int end = scanner.indexOf(')') + 1;
         String t = scanner.substr(p);
-        scanner.moveTo(p);
+        if (t.startsWith("decimal")) {
+            t = scanner.substr(end);
+            scanner.moveTo(end);
+        } else {
+            scanner.moveTo(p);
+        }
         // assume there is no blank char in `type`.
         typeValue = null;
         switch (t) {
@@ -206,7 +227,11 @@ public class ColumnType {
             }
             break;
             default: {
-                typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+                if (t.startsWith("decimal")) {
+                    typeValue = parseDecimal(t);
+                } else {
+                    typeValue = PRIMITIVE_TYPE_VALUE_MAPPING.getOrDefault(t, null);
+                }
             }
         }
 
@@ -260,6 +285,12 @@ public class ColumnType {
         return childNames.indexOf(FIELD_1_NAME) != -1;
     }
 
+    public boolean isDecimal() {
+        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 ||
+                typeValue == TypeValue.DECIMAL64 ||
+                typeValue == TypeValue.DECIMAL128;
+    }
+
     public int computeColumnSize() {
         switch (typeValue) {
             case UNKNOWN:
@@ -304,6 +335,10 @@ public class ColumnType {
 
     public int getPrimitiveTypeValueSize() {
         return PRIMITIVE_TYPE_VALUE_SIZE.getOrDefault(typeValue, -1);
+    }
+
+    public String getTypeValueString() {
+        return PRIMITIVE_TYPE_VALUE_STRING_MAPPING.get(typeValue);
     }
 
     public List<String> getChildNames() {
@@ -391,5 +426,34 @@ public class ColumnType {
 
     public int getScale() {
         return scale;
+    }
+
+    public String getRawTypeValue() {
+        return rawTypeValue;
+    }
+
+    // convert decimal(x,y) to decimal
+    private TypeValue parseDecimal(String rawType) {
+        String type = rawType;
+        int precision = -1;
+        int scale = -1;
+        int s = type.indexOf('(');
+        int e = type.indexOf(')');
+        if (s != -1 && e != -1) {
+            String[] ps = type.substring(s + 1, e).split(",");
+            precision = Integer.parseInt(ps[0].trim());
+            scale = Integer.parseInt(ps[1].trim());
+            if (precision <= MAX_DECIMAL32_PRECISION) {
+                type = "decimal32";
+            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+                type = "decimal64";
+            } else {
+                type = "decimal128";
+            }
+        }
+        TypeValue value = PRIMITIVE_TYPE_VALUE_MAPPING.get(type);
+        rawTypeValue = rawType;
+        setScale(scale);
+        return value;
     }
 }

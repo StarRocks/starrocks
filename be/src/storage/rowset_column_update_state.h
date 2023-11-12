@@ -169,7 +169,7 @@ private:
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
 
     StatusOr<std::unique_ptr<SegmentWriter>> _prepare_delta_column_group_writer(
-            Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver);
+            Rowset* rowset, const std::shared_ptr<TabletSchema>& tschema, uint32_t rssid, int64_t ver, int idx);
 
     // to build `_partial_update_states`
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t start_idx, uint32_t end_idx,

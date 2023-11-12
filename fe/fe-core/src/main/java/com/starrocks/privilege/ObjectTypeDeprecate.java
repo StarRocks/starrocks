@@ -28,7 +28,8 @@ public enum ObjectTypeDeprecate {
     FUNCTION(9),
     RESOURCE_GROUP(10),
     GLOBAL_FUNCTION(11),
-    STORAGE_VOLUME(12);
+    STORAGE_VOLUME(12),
+    PIPE(13);
 
     @SerializedName("id")
     private final int id;
@@ -66,6 +67,8 @@ public enum ObjectTypeDeprecate {
             return ObjectType.GLOBAL_FUNCTION;
         } else if (this.equals(STORAGE_VOLUME)) {
             return ObjectType.STORAGE_VOLUME;
+        } else if (this.equals(PIPE)) {
+            return ObjectType.PIPE;
         }
         return null;
     }
@@ -95,6 +98,8 @@ public enum ObjectTypeDeprecate {
             return GLOBAL_FUNCTION;
         } else if (objectType.equals(ObjectType.STORAGE_VOLUME)) {
             return STORAGE_VOLUME;
+        } else if (objectType.equals(ObjectType.PIPE)) {
+            return PIPE;
         }
         return null;
     }

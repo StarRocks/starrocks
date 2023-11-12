@@ -122,6 +122,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
         error_msgs.emplace_back("alter failed");
         error_msgs.emplace_back("status: " + print_agent_status(status));
+        error_msgs.emplace_back(sc_status.get_error_msg());
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -790,7 +791,7 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 // But it will be remove from index cache after apply is finished
                 update_manager->index_cache().try_remove_by_key(tablet->tablet_id());
                 break;
-            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC:
+            case TTabletMetaType::PRIMARY_INDEX_CACHE_EXPIRE_SEC: {
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " primary_index_cache_expire_sec:" << tablet_meta_info.primary_index_cache_expire_sec;
                 tablet->tablet_meta()->set_primary_index_cache_expire_sec(
@@ -802,6 +803,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                                                     update_manager->get_index_cache_expire_ms(*tablet));
                     update_manager->index_cache().release(index_entry);
                 }
+            } break;
+            case TTabletMetaType::STORAGE_TYPE:
+                LOG(INFO) << "change storage_type not supported";
+                break;
+            default:
                 break;
             }
         }

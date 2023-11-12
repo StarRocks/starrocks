@@ -53,29 +53,29 @@ select t.map0, s.map0 from map_test t join map_test s on s.map0 < t.map0 order b
 select t.map0, s.map0 from map_test t join map_test s on s.map0 <= t.map0 order by t.pk;
 select t.map3, s.map4 from map_test t join map_test s where s.map3 <= t.map4 order by t.pk;
 
-select map0 from map_test t where exists (select 1 from map_test s where t.map0 = s.map3);
-select map1 from map_test t where exists (select 1 from map_test s where t.map1 = s.map3);
-select map2 from map_test t where exists (select 1 from map_test s where t.map2 = s.map3);
-select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3);
-select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3);
+select map0 from map_test t where exists (select 1 from map_test s where t.map0 = s.map3) order by t.pk;
+select map1 from map_test t where exists (select 1 from map_test s where t.map1 = s.map3) order by t.pk;
+select map2 from map_test t where exists (select 1 from map_test s where t.map2 = s.map3) order by t.pk;
+select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3) order by t.pk;
+select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3) order by t.pk;
 
-select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map0);
-select map1 from map_test t where not exists (select 1 from map_test s where t.map1 = s.map0);
-select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5);
-select map5 from map_test t where not exists (select 1 from map_test s where t.map5 < s.map5);
+select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map0) order by t.pk;
+select map1 from map_test t where not exists (select 1 from map_test s where t.map1 = s.map0) order by t.pk;
+select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5) order by t.pk;
+select map5 from map_test t where not exists (select 1 from map_test s where t.map5 < s.map5) order by t.pk;
 
-select map3 from map_test t where map3 in (select map3 from map_test s);
-select map4 from map_test t where map4 in (select map5 from map_test s);
-select map5 from map_test t where map5 in (select map5 from map_test s);
-select map3 from map_test t where map3 not in (select map2 from map_test s);
-select map5 from map_test t where map5 not in (select map5 from map_test s);
-select map0 in (select map0 from map_test s) from map_test;
-select map3 in (select map5 from map_test s) from map_test;
-select map5 in (select map5 from map_test s) from map_test;
-select map0 not in (select map0 from map_test s) from map_test;
-select map1 not in (select map0 from map_test s) from map_test;
-select map4 not in (select map5 from map_test s) from map_test;
-select map5 not in (select map5 from map_test s) from map_test;
+select map3 from map_test t where map3 in (select map3 from map_test s) order by t.pk;
+select map4 from map_test t where map4 in (select map5 from map_test s) order by t.pk;
+select map5 from map_test t where map5 in (select map5 from map_test s) order by t.pk;
+select map3 from map_test t where map3 not in (select map2 from map_test s) order by t.pk;
+select map5 from map_test t where map5 not in (select map5 from map_test s) order by t.pk;
+select map0 in (select map0 from map_test s) from map_test order by 1;
+select map3 in (select map5 from map_test s) from map_test order by 1;
+select map5 in (select map5 from map_test s) from map_test order by 1;
+select map0 not in (select map0 from map_test s) from map_test order by 1;
+select map1 not in (select map0 from map_test s) from map_test order by 1;
+select map4 not in (select map5 from map_test s) from map_test order by 1;
+select map5 not in (select map5 from map_test s) from map_test order by 1;
 
 select t.map4, s.map4 from map_test t left join map_test s on s.map4 = t.map4 order by t.pk;
 select t.map2, s.map4 from map_test t left join map_test s where s.map2 = t.map4 order by t.pk;
@@ -97,3 +97,6 @@ select t.map2, s.map5 from map_test t full join map_test s on s.map2 = t.map5 or
 select t.map3, s.map4 from map_test t full join map_test s on s.map3 <=> t.map4 order by t.pk;
 select t.map3, s.map5 from map_test t full join map_test s where s.map3 => t.map5 order by t.pk;
 select t.map5, s.map5 from map_test t full join map_test s where s.map5 = t.map5 order by t.pk;
+
+select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,array_length(v)),s.map2) = map_apply((k,v)->(k+1,array_length(v)),t.map2) order by t.pk;
+select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,v),s.map2) = map_apply((k,v)->(k+1,v),t.map2) order by t.pk;

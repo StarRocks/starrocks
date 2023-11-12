@@ -25,6 +25,7 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+        MvRewriteTestBase.prepareDefaultDatas();
         prepareDatas();
     }
 
@@ -35,6 +36,8 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             starRocksAssert.dropTable("test_partition_tbl2");
             starRocksAssert.dropTable("test_partition_tbl_not_null1");
             starRocksAssert.dropTable("test_partition_tbl_not_null2");
+            starRocksAssert.dropTable("table_with_day_partition1");
+            starRocksAssert.dropTable("table_with_day_partition2");
         } catch (Exception e) {
             // ignore exceptions.
         }
@@ -114,6 +117,44 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                 "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
                 "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
                 "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
+
+
+        starRocksAssert.withTable("CREATE TABLE table_with_day_partition1 (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`,`id_date`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`id_date`)\n" +
+                "(PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31')),\n" +
+                "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01')),\n" +
+                "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02')),\n" +
+                "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE table_with_day_partition2 (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`,`id_date`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`id_date`)\n" +
+                "(PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31')),\n" +
+                "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01')),\n" +
+                "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02')),\n" +
+                "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Test
@@ -134,7 +175,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
             String pr = Tracers.printLogs();
-            System.out.println(pr);
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "PREDICATES: 5: k1 >= '2020-02-11'\n" +
@@ -144,7 +184,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-01' group by k1;";
             String plan = getFragmentPlan(query);
             String pr = Tracers.printLogs();
-            System.out.println(pr);
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
             PlanTestBase.assertContains(plan, "partitions=4/5\n" +
@@ -176,7 +215,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
             String plan = getFragmentPlan(query);
 
             String pr = Tracers.printLogs();
-            System.out.println(pr);
             Tracers.close();
             PlanTestBase.assertContains(plan, "test_partition_tbl_mv1");
         }
@@ -499,5 +537,67 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                     "     rollup: test_partition_tbl_mv2");
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv2");
+    }
+
+
+    @Test
+    public void testMVPartitionPruneWithMultiLeftOuterJoin() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW if not exists test_mv1\n" +
+                "PARTITION BY date_trunc('day', id_date) \n" +
+                "DISTRIBUTED BY hash(t1a) BUCKETS 4  \n" +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ") " +
+                "AS " +
+                "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) " +
+                "from table_with_day_partition a" +
+                " left join table_with_day_partition1 b on a.id_date=b.id_date " +
+                " left join table_with_day_partition2 c on a.id_date=c.id_date " +
+                "group by a.t1a,a.id_date;");
+        cluster.runSql("test", "refresh materialized view test_mv1 partition " +
+                "start('1991-03-30') end('1991-03-31') with sync mode; ");
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " where a.id_date='1991-03-30' " +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " where a.id_date>='1991-03-30' " +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=4/4");
+        }
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=4/4");
+        }
     }
 }

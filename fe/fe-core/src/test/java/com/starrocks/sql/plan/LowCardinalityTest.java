@@ -1119,10 +1119,6 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
                 "query_global_dicts:[TGlobalDict(columnId:28"));
-        Assert.assertTrue(
-                plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]), is_merge:false, dest_dop:0)), " +
-                        "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                        "query_global_dicts:[TGlobalDict(columnId:28"));
     }
 
     @Test

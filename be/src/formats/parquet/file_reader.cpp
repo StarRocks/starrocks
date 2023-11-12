@@ -217,6 +217,7 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
                 ColumnPtr& chunk_part_column = min_chunk->columns()[0];
                 JoinRuntimeFilter::RunningContext ctx;
                 ctx.use_merged_selection = false;
+                ctx.compatibility = false;
                 auto& selection = ctx.selection;
                 selection.assign(chunk_part_column->size(), 1);
                 filter->compute_hash({chunk_part_column.get()}, &ctx);
@@ -466,7 +467,14 @@ Status FileReader::_init_group_readers() {
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
-            _total_row_count += _file_metadata->t_metadata().row_groups[i].num_rows;
+            int64_t num_rows = _file_metadata->t_metadata().row_groups[i].num_rows;
+            // for iceberg v2 pos delete
+            if (_need_skip_rowids != nullptr && !_need_skip_rowids->empty()) {
+                auto start_iter = _need_skip_rowids->lower_bound(row_group_first_row);
+                auto end_iter = _need_skip_rowids->upper_bound(row_group_first_row + num_rows - 1);
+                num_rows -= std::distance(start_iter, end_iter);
+            }
+            _total_row_count += num_rows;
         } else {
             continue;
         }
@@ -529,7 +537,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
         if (status.ok() || status.is_end_of_file()) {
             if (row_count > 0) {
                 _scanner_ctx->update_not_existed_columns_of_chunk(chunk, row_count);
-                _scanner_ctx->update_partition_column_of_chunk(chunk, row_count);
+                _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
             if (status.is_end_of_file()) {
@@ -558,7 +566,7 @@ Status FileReader::_exec_no_materialized_column_scan(ChunkPtr* chunk) {
     if (_scan_row_count < _total_row_count) {
         size_t read_size = std::min(static_cast<size_t>(_chunk_size), _total_row_count - _scan_row_count);
         _scanner_ctx->update_not_existed_columns_of_chunk(chunk, read_size);
-        _scanner_ctx->update_partition_column_of_chunk(chunk, read_size);
+        _scanner_ctx->append_or_update_partition_column_to_chunk(chunk, read_size);
         _scan_row_count += read_size;
         return Status::OK();
     }

@@ -39,7 +39,8 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --module                       module to run uts
-     --use-staros                   enable to build with staros
+     --enable-shared-data           enable to build with shared-data feature support
+     --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      -j                             build parallel
 
   Eg.
@@ -95,7 +96,7 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-        --use-staros) USE_STAROS=ON; shift ;;
+        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;

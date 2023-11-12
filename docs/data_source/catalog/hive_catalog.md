@@ -18,7 +18,7 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
 
 ## Usage notes
 
-- The file formats of Hive that StarRocks supports are Parquet, ORC, and CSV:
+- The file formats of Hive that StarRocks supports are Parquet, ORC, CSV, Avro, RCFile, and SequenceFile:
 
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.

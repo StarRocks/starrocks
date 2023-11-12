@@ -17,6 +17,8 @@
 
 package com.starrocks.rpc;
 
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
@@ -32,8 +34,7 @@ public class AttachmentRequest {
     protected byte[] serializedRequest;
     protected byte[] serializedResult;
 
-    public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request, String protocol)
-            throws TException {
+    public static TSerializer getSerializer(String protocol) {
         TSerializer serializer;
         if (StringUtils.equalsIgnoreCase(protocol, "compact")) {
             serializer = new TSerializer(TCompactProtocol::new);
@@ -43,8 +44,15 @@ public class AttachmentRequest {
             // default bianry
             serializer = new TSerializer(TBinaryProtocol::new);
         }
+        return serializer;
+    }
 
-        serializedRequest = serializer.serialize(request);
+    public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request, String protocol)
+            throws TException {
+        TSerializer serializer = getSerializer(protocol);
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeTime")) {
+            serializedRequest = serializer.serialize(request);
+        }
     }
 
     public <T extends TBase<T, F>, F extends TFieldIdEnum> void setRequest(TBase<T, F> request)
@@ -52,6 +60,10 @@ public class AttachmentRequest {
         TSerializer serializer = new TSerializer(TBinaryProtocol::new);
 
         serializedRequest = serializer.serialize(request);
+    }
+
+    public void setRequest(byte[] request) {
+        serializedRequest = request;
     }
 
     public byte[] getSerializedRequest() {

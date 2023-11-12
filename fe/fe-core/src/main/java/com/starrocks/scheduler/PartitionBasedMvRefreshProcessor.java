@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -22,12 +21,12 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -36,7 +35,6 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
@@ -64,6 +62,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
@@ -1167,13 +1166,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             return null;
         }
 
-        Pair<Table, Column> partitionInfo = materializedView.getBaseTableAndPartitionColumn();
-        boolean isConvertToDate =
-                PartitionUtil.isConvertToDate(materializedView.getFirstPartitionRefTableExpr(), partitionInfo.second);
-        if (isConvertToDate) {
-            outputPartitionSlot = new CastExpr(Type.DATE, outputPartitionSlot);
-        }
-
         if (mvPartitionInfo.isRangePartition()) {
             List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
             Map<String, Range<PartitionKey>> refBaseTableRangePartitionMap = mvContext.getRefBaseTableRangePartitionMap();
@@ -1181,6 +1173,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 sourceTablePartitionRange.add(refBaseTableRangePartitionMap.get(partitionName));
             }
             sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
+            // for nested mv, the base table may be another mv, which is partition by str2date(dt, '%Y%m%d')
+            // here we should convert date into '%Y%m%d' format
+            Expr partitionExpr = materializedView.getFirstPartitionRefTableExpr();
+            Pair<Table, Column> partitionTableAndColumn = materializedView.getBaseTableAndPartitionColumn();
+            boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
+            if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
+                    && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
+                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+                Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
+                String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
+                List<Range<PartitionKey>> converted = Lists.newArrayList();
+                for (Range<PartitionKey> range : sourceTablePartitionRange) {
+                    Range<PartitionKey> varcharPartitionKey = MvUtils.convertToVarcharRange(range, dateFormat);
+                    converted.add(varcharPartitionKey);
+                }
+                sourceTablePartitionRange = converted;
+            }
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
             // range contains the min value could be null value
@@ -1255,10 +1264,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
-                } else if (snapshotTable.isHiveTable() || snapshotTable.isHudiTable()) {
-                    HiveMetaStoreTable snapShotHMSTable = (HiveMetaStoreTable) snapshotTable;
-                    if (snapShotHMSTable.isUnPartitioned()) {
-                        if (!((HiveMetaStoreTable) table).isUnPartitioned()) {
+                } else if (ConnectorPartitionTraits.isSupported(snapshotTable.getType())) {
+                    if (snapshotTable.isUnPartitioned()) {
+                        if (!table.isUnPartitioned()) {
                             return true;
                         }
                     } else {
@@ -1285,66 +1293,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             return true;
                         }
                     }
-                } else if (snapshotTable.isIcebergTable()) {
-                    IcebergTable snapShotIcebergTable = (IcebergTable) snapshotTable;
-                    if (snapShotIcebergTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // TODO: Support list partition later.
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotIcebergTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
-                            return true;
-                        }
-                    }
-                } else if (snapshotTable.isJDBCTable()) {
-                    JDBCTable snapShotJDBCTable = (JDBCTable) snapshotTable;
-                    if (snapShotJDBCTable.isUnPartitioned()) {
-                        if (!table.isUnPartitioned()) {
-                            return true;
-                        }
-                    } else {
-                        PartitionInfo mvPartitionInfo = materializedView.getPartitionInfo();
-                        // TODO: Support list partition later.
-                        // do not need to check base partition table changed when mv is not partitioned
-                        if  (!(mvPartitionInfo instanceof ExpressionRangePartitionInfo)) {
-                            return false;
-                        }
-
-                        Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-                        Column partitionColumn = partitionTableAndColumn.second;
-                        // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.equals(partitionTableAndColumn.first)
-                                || !snapShotJDBCTable.containColumn(partitionColumn.getName())) {
-                            continue;
-                        }
-
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                snapshotTable, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                                table, partitionColumn, MaterializedView.getPartitionExpr(materializedView));
-                        if (SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap)) {
-                            return true;
-                        }
-                    }
                 }
             } catch (UserException e) {
                 LOG.warn("Materialized view compute partition change failed", e);
@@ -1359,7 +1307,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     @VisibleForTesting
     public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan, InsertStmt insertStmt)
             throws Exception {
-        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         Preconditions.checkNotNull(execPlan);
         Preconditions.checkNotNull(insertStmt);
         ConnectContext ctx = mvContext.getCtx();
@@ -1371,8 +1318,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         ctx.setStmtId(new AtomicInteger().incrementAndGet());
         ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        ctx.getSessionVariable().setEnableInsertStrict(false);
         try {
-            executor.handleDMLStmtWithProfile(execPlan, insertStmt, beginTimeInNanoSecond);
+            executor.handleDMLStmtWithProfile(execPlan, insertStmt);
         } catch (Exception e) {
             LOG.warn("refresh materialized view {} failed: {}", materializedView.getName(), e);
             throw e;

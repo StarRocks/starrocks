@@ -135,6 +135,7 @@
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
     + [Dataphin](./integrations/IDE_integrations/Dataphin.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
+    + [Jupyter](./integrations/IDE_integrations/jupysql.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Management
@@ -162,15 +163,16 @@
     + [Overview of privileges](./administration/privilege_overview.md)
     + [Privileges](./administration/privilege_item.md)
     + [Manage user privileges](./administration/User_privilege.md)
-    + [Privilege FAQ](./administration/privilege_faq.md)
+    + [Manage permissions with Apache Ranger](./administration/range_plugin.md)
     + [Authentication](./administration/Authentication.md)
+    + [Privilege FAQ](./administration/privilege_faq.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
     + [Analyze query profile](./administration/query_profile.md)
     + [Profiling](./administration/Profiling.md)
-+ Reference
-  + SQL Reference
-    + [All commands](./sql-reference/sql-statements/all-commands.md)
++ SQL Reference
+  + SQL Statements
+    + [All statements](./sql-reference/sql-statements/all-commands.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER_USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE_ROLE.md)
@@ -370,7 +372,7 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
-  + Function Reference
+  + SQL Functions
     + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -737,6 +739,7 @@
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
+      + [is_role_in_session](./sql-reference/sql-functions/utility-functions/is_role_in_session.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
@@ -748,6 +751,7 @@
   + [Generated columns](./sql-reference/sql-statements/generated_columns.md)
   + [System variables](./reference/System_variable.md)
   + [User-defined variables](./reference/user_defined_variables.md)
+  + [Prepared statements](./sql-reference/sql-statements/prepared_statement.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
   + [AWS IAM policies](./reference/aws_iam_policies.md)

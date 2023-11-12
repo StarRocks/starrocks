@@ -57,7 +57,6 @@ public:
 
 protected:
     void SetUp() override {
-        StoragePageCache::create_global_cache(&_tracker, 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
 
@@ -66,7 +65,7 @@ protected:
         _opts.skip_fill_data_cache = false;
         _opts.stats = &_stats;
     }
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
     void get_bitmap_reader_iter(RandomAccessFile* rfile, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
@@ -95,7 +94,6 @@ protected:
     }
 
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
-    MemTracker _tracker;
     MemPool _pool;
     IndexReadOptions _opts;
     OlapReaderStatistics _stats;

@@ -20,12 +20,17 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+
     @BeforeClass
     public static void beforeClass() throws Exception {
-        ConnectorPlanTestBase.beforeClass();
+        ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");

@@ -65,6 +65,8 @@ public:
 
     void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
+    void set_enable_block_buffer(bool v) { _enable_block_buffer = v; }
+
     int64_t get_align_size() const;
 
     StatusOr<std::string_view> peek(int64_t count) override;
@@ -92,6 +94,7 @@ private:
     Stats _stats;
     int64_t _size;
     bool _enable_populate_cache = false;
+    bool _enable_block_buffer = false;
     BlockCache* _cache = nullptr;
     int64_t _block_size = 0;
     std::unordered_map<int64_t, BlockBuffer> _block_map;

@@ -37,6 +37,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/vacuum.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -191,8 +192,9 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
-                                                      UniqueId::gen_uid(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel =
+                std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
+                                              next_id(), string(), 1000, std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
         _tablets_channel =
                 new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
@@ -201,14 +203,6 @@ protected:
     void TearDown() override {
         _tablets_channel.reset();
         _load_channel.reset();
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(10086));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
-        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10087));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
-        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10088));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
-        ASSIGN_OR_ABORT(tablet, _tablet_manager->get_tablet(10089));
-        ASSERT_OK(tablet.delete_txn_log(kTxnId));
         (void)fs::remove_all(kTestGroupPath);
         _tablet_manager->prune_metacache();
     }
@@ -577,16 +571,23 @@ TEST_F(LakeTabletsChannelTest, test_write_failed) {
     ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
     add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
 
-    ASSERT_OK(_tablet_manager->delete_tablet(10089));
+    {
+        lake::DeleteTabletRequest request;
+        lake::DeleteTabletResponse response;
+        request.add_tablet_ids(10089);
+        lake::delete_tablets(_tablet_manager.get(), request, &response);
+
+        _tablet_manager->prune_metacache();
+    }
 
     _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
     ASSERT_NE(TStatusCode::OK, add_chunk_response.status().status_code());
 
     _tablets_channel->cancel();
 
-    ASSERT_TRUE(_tablet_manager->get_tablet(10086)->get_txn_log(kTxnId).status().is_not_found());
-    ASSERT_TRUE(_tablet_manager->get_tablet(10087)->get_txn_log(kTxnId).status().is_not_found());
-    ASSERT_TRUE(_tablet_manager->get_tablet(10088)->get_txn_log(kTxnId).status().is_not_found());
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10086, kTxnId)));
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10087, kTxnId)));
+    ASSERT_FALSE(fs::path_exist(_tablet_manager->txn_log_location(10088, kTxnId)));
 }
 
 TEST_F(LakeTabletsChannelTest, test_empty_tablet) {

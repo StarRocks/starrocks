@@ -15,11 +15,15 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.Range;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -145,5 +149,58 @@ public class MvUtilsTest {
         Assert.assertEquals(alwaysFalse, MvUtils.getCompensationPredicateForDisjunctive(alwaysFalse, compound));
         Assert.assertEquals(null, MvUtils.getCompensationPredicateForDisjunctive(compound, alwaysFalse));
         Assert.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(compound, compound));
+    }
+
+    @Test
+    public void testConvertToDateRange() throws AnalysisException {
+        {
+            PartitionKey upper = PartitionKey.ofString("20231010");
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> upResult = MvUtils.convertToDateRange(upRange);
+            Assert.assertTrue(upResult.hasUpperBound());
+            Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) upResult.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            PartitionKey lower = PartitionKey.ofString("20231010");
+            Range<PartitionKey> lowRange = Range.atLeast(lower);
+            Range<PartitionKey> lowResult = MvUtils.convertToDateRange(lowRange);
+            Assert.assertTrue(lowResult.hasLowerBound());
+            Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) lowResult.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            PartitionKey lower = PartitionKey.ofString("20231010");
+            Range<PartitionKey> range = Range.atLeast(lower);
+            range = range.intersection(Range.atMost(PartitionKey.ofString("20231020")));
+            Range<PartitionKey> result = MvUtils.convertToDateRange(range);
+            Assert.assertTrue(result.hasLowerBound());
+            Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) result.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+
+            Assert.assertTrue(result.hasUpperBound());
+            Assert.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral upperDate = (DateLiteral) result.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, upperDate.getYear());
+            Assert.assertEquals(10, upperDate.getMonth());
+            Assert.assertEquals(20, upperDate.getDay());
+            Assert.assertEquals(0, upperDate.getHour());
+        }
     }
 }

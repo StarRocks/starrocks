@@ -342,6 +342,7 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
         if (ch->has_immutable_partition()) {
             has_immutable_partition = true;
             partition_ids->merge(ch->immutable_partition_ids());
+            ch->reset_immutable_partition_ids();
         }
     });
     return has_immutable_partition;

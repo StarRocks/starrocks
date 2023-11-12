@@ -163,7 +163,8 @@ public class AuthorizationMgr {
                     ObjectType.RESOURCE_GROUP,
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
-                    ObjectType.STORAGE_VOLUME)) {
+                    ObjectType.STORAGE_VOLUME,
+                    ObjectType.PIPE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
             rolePrivilegeCollection.disableMutable(); // not mutable
@@ -239,7 +240,8 @@ public class AuthorizationMgr {
             collection.grant(objectType, actionList, objects, false);
         } else if (ObjectType.VIEW.equals(objectType)
                 || ObjectType.MATERIALIZED_VIEW.equals(objectType)
-                || ObjectType.DATABASE.equals(objectType)) {
+                || ObjectType.DATABASE.equals(objectType)
+                || ObjectType.PIPE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*", "*"), globalStateMgr));
             collection.grant(objectType, actionList, objects, false);
@@ -562,7 +564,14 @@ public class AuthorizationMgr {
                 }
 
                 collection.addParentRole(parentRoleId);
-                rolePrivCollectionModified.put(parentRoleId, parentCollection);
+
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(parentRoleId)) {
+                    RolePrivilegeCollectionV2 clone = parentCollection.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    rolePrivCollectionModified.put(parentRoleId, clone);
+                } else {
+                    rolePrivCollectionModified.put(parentRoleId, parentCollection);
+                }
             }
 
             invalidateRolesInCacheRoleUnlocked(roleId);
@@ -646,7 +655,13 @@ public class AuthorizationMgr {
                 RolePrivilegeCollectionV2 parentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
                 parentRoleIdList.add(parentRoleId);
-                rolePrivCollectionModified.put(parentRoleId, parentCollection);
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(parentRoleId)) {
+                    RolePrivilegeCollectionV2 clone = parentCollection.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    rolePrivCollectionModified.put(parentRoleId, clone);
+                } else {
+                    rolePrivCollectionModified.put(parentRoleId, parentCollection);
+                }
             }
 
             // write journal to update privilege collections of both role & parent role
@@ -1204,7 +1219,13 @@ public class AuthorizationMgr {
                 if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                     provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
                 }
+
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(roleId);
+                    privilegeCollection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                }
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
+
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
                     roleNameToId.put(privilegeCollection.getName(), roleId);
                 }
@@ -1942,8 +1963,19 @@ public class AuthorizationMgr {
                     roleIdToPrivilegeCollection.entrySet().iterator();
             while (roleIter.hasNext()) {
                 Map.Entry<Long, RolePrivilegeCollectionV2> entry = roleIter.next();
+                RolePrivilegeCollectionV2 value = entry.getValue();
+                // Avoid newly added PEntryObject type corrupt forward compatibility,
+                // since built-in roles are always initialized on startup, we don't need to persist them.
+                // But to keep the correct relationship with roles inherited from them, we still need to persist
+                // an empty role for them, just for the role id.
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(entry.getKey())) {
+                    // clone to avoid race condition
+                    RolePrivilegeCollectionV2 clone = value.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    value = clone;
+                }
                 writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
+                writer.writeJson(value);
             }
             writer.close();
         } catch (SRMetaBlockException e) {

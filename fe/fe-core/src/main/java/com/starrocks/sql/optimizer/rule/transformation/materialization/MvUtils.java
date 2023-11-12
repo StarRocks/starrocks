@@ -30,6 +30,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -45,6 +46,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
@@ -93,6 +95,8 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -103,24 +107,39 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(int maxLevel, Set<Table> tablesToCheck) {
+    public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
+                                                      int maxLevel,
+                                                      Set<Table> tablesToCheck) {
+        if (tablesToCheck.isEmpty()) {
+            return Sets.newHashSet();
+        }
         Set<MaterializedView> mvs = Sets.newHashSet();
-        getRelatedMvs(maxLevel, 0, tablesToCheck, mvs);
+        getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
-    public static void getRelatedMvs(int maxLevel, int currentLevel, Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
+    public static void getRelatedMvs(ConnectContext connectContext,
+                                     int maxLevel, int currentLevel,
+                                     Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
         if (currentLevel >= maxLevel) {
+            logMVPrepare(connectContext, "Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
         }
         Set<MvId> newMvIds = Sets.newHashSet();
         for (Table table : tablesToCheck) {
             Set<MvId> mvIds = table.getRelatedMaterializedViews();
             if (mvIds != null && !mvIds.isEmpty()) {
+                logMVPrepare(connectContext, "Table/MaterializedView {} has related materialized views: {}",
+                        table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
+            } else {
+                logMVPrepare(connectContext, "Table/MaterializedView {} has no related materialized views, " +
+                                "identifier:{}", table.getName(), table.getTableIdentifier());
             }
         }
         if (newMvIds.isEmpty()) {
@@ -130,16 +149,18 @@ public class MvUtils {
         for (MvId mvId : newMvIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
             if (db == null) {
+                logMVPrepare(connectContext, "Cannot find database from mvId:{}", mvId);
                 continue;
             }
             Table table = db.getTable(mvId.getId());
             if (table == null) {
+                logMVPrepare(connectContext, "Cannot find materialized view from mvId:{}", mvId);
                 continue;
             }
             newMvs.add(table);
             mvs.add((MaterializedView) table);
         }
-        getRelatedMvs(maxLevel, currentLevel + 1, newMvs, mvs);
+        getRelatedMvs(connectContext, maxLevel, currentLevel + 1, newMvs, mvs);
     }
 
     // get all ref tables within and below root
@@ -216,7 +237,6 @@ public class MvUtils {
                         LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                        LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc = new TableScanDesc(
                                 table, id, scanOperator, optExpression, i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
@@ -399,6 +419,30 @@ public class MvUtils {
         };
         expression.getOp().accept(scanCollector, expression, null);
         return scanExprs;
+    }
+
+    public static List<OptExpression> collectJoinExpr(OptExpression expression) {
+        List<OptExpression> joinExprs = Lists.newArrayList();
+        OptExpressionVisitor joinCollector = new OptExpressionVisitor<Void, Void>() {
+            @Override
+            public Void visit(OptExpression optExpression, Void context) {
+                for (OptExpression input : optExpression.getInputs()) {
+                    input.getOp().accept(this, input, null);
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitLogicalJoin(OptExpression optExpression, Void context) {
+                joinExprs.add(optExpression);
+                for (OptExpression input : optExpression.getInputs()) {
+                    input.getOp().accept(this, input, null);
+                }
+                return null;
+            }
+        };
+        expression.getOp().accept(joinCollector, expression, null);
+        return joinExprs;
     }
 
     // get all predicates within and below root
@@ -1105,9 +1149,10 @@ public class MvUtils {
     // then this function will return predicate:
     // k1 >= "2022-01-01" and k1 < "2022-01-02"
     // NOTE: This method can be only used in query rewrite and cannot be used in insert routine.
-    public static ScalarOperator getMvPartialPartitionPredicates(MaterializedView mv,
-                                                                 OptExpression mvPlan,
-                                                                 Set<String> mvPartitionNamesToRefresh) {
+    public static ScalarOperator getMvPartialPartitionPredicates(
+            MaterializedView mv,
+            OptExpression mvPlan,
+            Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
         Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
@@ -1150,6 +1195,69 @@ public class MvUtils {
         return true;
     }
 
+    // convert varchar date to date type
+    public static Range<PartitionKey> convertToDateRange(Range<PartitionKey> from) throws AnalysisException {
+        if (from.hasLowerBound() && from.hasUpperBound()) {
+            StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
+            PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
+
+            StringLiteral upperString = (StringLiteral) from.upperEndpoint().getKeys().get(0);
+            LocalDateTime upperDateTime = DateUtils.parseDatTimeString(upperString.getStringValue());
+            PartitionKey upperPartitionKey = PartitionKey.ofDate(upperDateTime.toLocalDate());
+            return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
+        } else if (from.hasUpperBound()) {
+            StringLiteral upperString = (StringLiteral) from.upperEndpoint().getKeys().get(0);
+            LocalDateTime upperDateTime = DateUtils.parseDatTimeString(upperString.getStringValue());
+            PartitionKey upperPartitionKey = PartitionKey.ofDate(upperDateTime.toLocalDate());
+            return Range.upTo(upperPartitionKey, from.upperBoundType());
+        } else if (from.hasLowerBound()) {
+            StringLiteral lowerString = (StringLiteral) from.lowerEndpoint().getKeys().get(0);
+            LocalDateTime lowerDateTime = DateUtils.parseDatTimeString(lowerString.getStringValue());
+            PartitionKey lowerPartitionKey = PartitionKey.ofDate(lowerDateTime.toLocalDate());
+            return Range.downTo(lowerPartitionKey, from.lowerBoundType());
+        }
+        return Range.all();
+    }
+
+    public static boolean isDateRange(Range<PartitionKey> range) {
+        if (range.hasUpperBound()) {
+            PartitionKey partitionKey = range.upperEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        } else if (range.hasLowerBound()) {
+            PartitionKey partitionKey = range.lowerEndpoint();
+            return partitionKey.getKeys().get(0) instanceof DateLiteral;
+        }
+        return false;
+    }
+
+    // convert date to varchar type
+    public static Range<PartitionKey> convertToVarcharRange(
+            Range<PartitionKey> from, String dateFormat) throws AnalysisException {
+        DateTimeFormatter formatter = DateUtils.unixDatetimeFormatter(dateFormat);
+        if (from.hasLowerBound() && from.hasUpperBound()) {
+            DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
+            String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey lowerPartitionKey = PartitionKey.ofString(lowerDateString);
+
+            DateLiteral upperDate = (DateLiteral) from.upperEndpoint().getKeys().get(0);
+            String upperDateString = upperDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey upperPartitionKey = PartitionKey.ofString(upperDateString);
+            return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
+        } else if (from.hasUpperBound()) {
+            DateLiteral upperDate = (DateLiteral) from.upperEndpoint().getKeys().get(0);
+            String upperDateString = upperDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey upperPartitionKey = PartitionKey.ofString(upperDateString);
+            return Range.upTo(upperPartitionKey, from.upperBoundType());
+        } else if (from.hasLowerBound()) {
+            DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
+            String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
+            PartitionKey lowerPartitionKey = PartitionKey.ofString(lowerDateString);
+            return Range.downTo(lowerPartitionKey, from.lowerBoundType());
+        }
+        return Range.all();
+    }
+
     /**
      * Return the updated partition key ranges of the specific table.
      *
@@ -1160,16 +1268,28 @@ public class MvUtils {
      * @param mvPartitionNamesToRefresh : the updated partition names  of the materialized view
      * @return
      */
-    private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
-                                                                             Column partitionColumn,
-                                                                             MaterializedView mv,
-                                                                             Set<String> mvPartitionNamesToRefresh) {
+    private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(
+            Table partitionByTable,
+            Column partitionColumn,
+            MaterializedView mv,
+            Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
         Set<String> refBaseTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
-        // ref base table latest partition ranges except to-refresh partitions
         List<Range<PartitionKey>> refBaseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 refBaseTableUpdatedPartitionNames, MaterializedView.getPartitionExpr(mv));
-
-        // materialized view latest partition ranges except to-refresh partitions
+        // date to varchar range
+        Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
+        boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getFirstPartitionRefTableExpr(), partitionColumn);
+        if (isConvertToDate) {
+            baseRangeMapping = Maps.newHashMap();
+            // convert varchar range to date range
+            List<Range<PartitionKey>> baseTableDateRanges = Lists.newArrayList();
+            for (Range<PartitionKey> range : refBaseTableRanges) {
+                Range<PartitionKey> datePartitionRange = convertToDateRange(range);
+                baseTableDateRanges.add(datePartitionRange);
+                baseRangeMapping.put(datePartitionRange, range);
+            }
+            refBaseTableRanges = baseTableDateRanges;
+        }
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
 
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
@@ -1180,6 +1300,13 @@ public class MvUtils {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
                 latestBaseTableRanges.add(range);
             }
+        }
+        if (isConvertToDate) {
+            List<Range<PartitionKey>> tmpRangeList = Lists.newArrayList();
+            for (Range<PartitionKey> range : latestBaseTableRanges) {
+                tmpRangeList.add(baseRangeMapping.get(range));
+            }
+            latestBaseTableRanges = tmpRangeList;
         }
         latestBaseTableRanges = MvUtils.mergeRanges(latestBaseTableRanges);
         return latestBaseTableRanges;

@@ -126,6 +126,7 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.VariableMgr;
@@ -570,6 +571,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             row.setPipe_name(pipe.getName());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
+            row.setTable_name(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
+            row.setLast_error(pipe.getLastErrorInfo().toJson());
+            row.setCreated_time(pipe.getCreatedTime());
+
+            row.setLoad_status(pipe.getLoadStatus().toJson());
             row.setLoaded_files(pipe.getLoadStatus().loadedFiles);
             row.setLoaded_rows(pipe.getLoadStatus().loadRows);
             row.setLoaded_bytes(pipe.getLoadStatus().loadedBytes);
@@ -1907,7 +1913,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
             Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
-                configs.put(request.getKeys().get(i), request.getValues().get(i));
+                String key = request.getKeys().get(i);
+                String value = request.getValues().get(i);
+                configs.put(key, value);
+                if ("mysql_server_version".equalsIgnoreCase(key)) {
+                    if (!Strings.isNullOrEmpty(value)) {
+                        GlobalVariable.version = value;
+                    }
+                }
             }
 
             GlobalStateMgr.getCurrentState().setFrontendConfig(configs);
@@ -2056,12 +2069,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
+            long mutablePartitionNum = 0;
             try {
                 db.readLock();
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
                     }
+                    if (mutablePartitionNum >= 8) {
+                        continue;
+                    }
+                    ++mutablePartitionNum;
 
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
@@ -2714,13 +2732,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
             response.setPartition(
-<<<<<<< HEAD
-                    OlapTableSink.createPartition(
-                            db.getId(), dictTable, dictTable.supportedAutomaticPartition(), allPartitions));
-=======
                     OlapTableSink.createPartition(db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
                     dictTable.getAutomaticBucketSize(), allPartitions));
->>>>>>> 3b8380d0a6 ([BugFix] Fix automatic partition fail when insert column has expr on it (#33513))
             response.setLocation(OlapTableSink.createLocation(
                     dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));

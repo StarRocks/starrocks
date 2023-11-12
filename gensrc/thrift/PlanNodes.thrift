@@ -346,6 +346,9 @@ struct THdfsScanRange {
 
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
+
+    // identity partition column slots
+    18: optional list<Types.TSlotId> identity_partition_slot_ids;
 }
 
 struct TBinlogScanRange {
@@ -504,6 +507,9 @@ struct TOlapScanNode {
   30: optional bool use_pk_index
   31: optional list<Descriptors.TColumn> columns_desc
   32: optional bool output_chunk_by_bucket
+  // order by hint for scan
+  33: optional bool output_asc_hint
+  34: optional bool partition_order_hint
 }
 
 struct TJDBCScanNode {
@@ -609,6 +615,9 @@ struct THashJoinNode {
   52: optional TJoinDistributionMode distribution_mode;
   53: optional list<Exprs.TExpr> partition_exprs
   54: optional list<Types.TSlotId> output_columns
+
+  // used in pipeline engine
+  55: optional bool interpolate_passthrough = false
 }
 
 struct TMergeJoinNode {

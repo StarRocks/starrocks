@@ -62,6 +62,7 @@ int init_test_env(int argc, char** argv) {
     config::storage_flood_stage_left_capacity_bytes = 10485600;
     config::spill_local_storage_dir = spill_path.value();
 
+    FLAGS_alsologtostderr = true;
     init_glog("be_test", true);
     CpuInfo::init();
     DiskInfo::init();

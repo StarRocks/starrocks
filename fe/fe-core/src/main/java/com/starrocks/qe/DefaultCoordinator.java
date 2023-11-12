@@ -103,6 +103,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -153,7 +154,8 @@ public class DefaultCoordinator extends Coordinator {
         public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                        List<ScanNode> scanNodes,
                                                        TDescriptorTable descTable) {
-            JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
+            JobSpec jobSpec =
+                    JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.SELECT);
             return new DefaultCoordinator(context, jobSpec);
         }
 
@@ -254,7 +256,8 @@ public class DefaultCoordinator extends Coordinator {
         this.coordinatorPreprocessor = new CoordinatorPreprocessor(context, jobSpec);
         this.executionDAG = coordinatorPreprocessor.getExecutionDAG();
 
-        this.queryProfile = new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size());
+        this.queryProfile =
+                new QueryRuntimeProfile(connectContext, jobSpec, executionDAG.getFragmentsInCreatedOrder().size());
     }
 
     @Override
@@ -415,7 +418,8 @@ public class DefaultCoordinator extends Coordinator {
                     DebugUtil.printId(jobSpec.getQueryId()), jobSpec.getDescTable());
         }
 
-        if (slot != null && slot.getPipelineDop() > 0 && slot.getPipelineDop() != jobSpec.getQueryOptions().getPipeline_dop()) {
+        if (slot != null && slot.getPipelineDop() > 0 &&
+                slot.getPipelineDop() != jobSpec.getQueryOptions().getPipeline_dop()) {
             jobSpec.getFragments().forEach(fragment -> fragment.limitMaxPipelineDop(slot.getPipelineDop()));
         }
 
@@ -525,7 +529,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
         lock();
-        try {
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution);
@@ -776,10 +780,9 @@ public class DefaultCoordinator extends Coordinator {
             cancelInternal(reason);
         } finally {
             try {
-                // when enable_profile is true, it disable count down profileDoneSignal for collect all backend's profile
+                // Disable count down profileDoneSignal for collect all backend's profile
                 // but if backend has crashed, we need count down profileDoneSignal since it will not report by itself
-                if (connectContext.getSessionVariable().isEnableProfile() &&
-                        message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                if (message.equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
                     queryProfile.finishAllInstances(Status.OK);
                     LOG.info("count down profileDoneSignal since backend has crashed, query id: {}",
                             DebugUtil.printId(jobSpec.getQueryId()));
@@ -801,7 +804,7 @@ public class DefaultCoordinator extends Coordinator {
         cancelRemoteFragmentsAsync(cancelReason);
         if (cancelReason != PPlanFragmentCancelReason.LIMIT_REACH) {
             // count down to zero to notify all objects waiting for this
-            if (!connectContext.getSessionVariable().isEnableProfile()) {
+            if (!connectContext.isProfileEnabled()) {
                 queryProfile.finishAllInstances(Status.OK);
             }
         }
@@ -913,7 +916,7 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
-    public void endProfile() {
+    public void collectProfileSync() {
         if (executionDAG.getExecutions().isEmpty()) {
             return;
         }
@@ -939,6 +942,33 @@ public class DefaultCoordinator extends Coordinator {
         } finally {
             unlock();
         }
+    }
+
+    public boolean tryProcessProfileAsync(Consumer<Boolean> task) {
+        if (executionDAG.getExecutions().isEmpty()) {
+            return false;
+        }
+        if (!jobSpec.isNeedReport()) {
+            return false;
+        }
+        boolean enableAsyncProfile = true;
+        if (connectContext != null && connectContext.getSessionVariable() != null) {
+            enableAsyncProfile = connectContext.getSessionVariable().isEnableAsyncProfile();
+        }
+        TUniqueId queryId = null;
+        if (connectContext != null) {
+            queryId = connectContext.getExecutionId();
+        }
+
+        if (!enableAsyncProfile || !queryProfile.addListener(task)) {
+            if (enableAsyncProfile) {
+                LOG.info("Profile task is full, execute in sync mode, query id = {}", DebugUtil.printId(queryId));
+            }
+            collectProfileSync();
+            task.accept(false);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -982,8 +1012,8 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
-    public RuntimeProfile buildMergedQueryProfile() {
-        return queryProfile.buildMergedQueryProfile();
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        return queryProfile.buildQueryProfile(needMerge);
     }
 
     /**

@@ -22,6 +22,7 @@
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
+#include "storage/lake/update_compaction_state.h"
 #include "util/dynamic_cache.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
@@ -89,14 +90,16 @@ public:
     // get del nums from rowset, for compaction policy
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
-    Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, const TabletMetadata& metadata,
-                                      Tablet tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
-                                      int64_t base_version);
+    Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+                                      const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+                                      MetaFileBuilder* builder, int64_t base_version);
 
     // remove primary index entry from cache, called when publish version error happens.
     // Because update primary index isn't idempotent, so if primary index update success, but
     // publish failed later, need to clear primary index.
     void remove_primary_index_cache(uint32_t tablet_id);
+
+    bool try_remove_primary_index_cache(uint32_t tablet_id);
 
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
@@ -108,11 +111,13 @@ public:
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
+    void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
 
-    bool TEST_check_update_state_cache_noexist(uint32_t tablet_id, int64_t txn_id);
+    bool TEST_check_update_state_cache_absent(uint32_t tablet_id, int64_t txn_id);
+    bool TEST_check_compaction_cache_absent(uint32_t tablet_id, int64_t txn_id);
 
     Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
         int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
@@ -135,6 +140,14 @@ public:
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
+    void lock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).lock_shared(); }
+
+    void unlock_shard_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock_shared(); }
+
+    bool try_lock_pk_index_shard(int64_t tablet_id) { return _get_pk_index_shard_lock(tablet_id).try_lock(); }
+
+    void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
+
 private:
     // print memory tracker state
     void _print_memory_stats();
@@ -150,6 +163,16 @@ private:
 
     Status _handle_index_op(Tablet* tablet, int64_t base_version, const std::function<void(LakePrimaryIndex&)>& op);
 
+    std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
+
+    struct PkIndexShard {
+        mutable std::shared_mutex lock;
+    };
+
+    PkIndexShard& _get_pk_index_shard(int64_t tabletId) {
+        return _pk_index_shards[tabletId & (config::pk_index_map_shard_size - 1)];
+    }
+
     static const size_t kPrintMemoryStatsInterval = 300; // 5min
 private:
     // default 6min
@@ -159,6 +182,8 @@ private:
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
+    // compaction cache
+    DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     LocationProvider* _location_provider = nullptr;
     TabletManager* _tablet_mgr = nullptr;
@@ -168,6 +193,8 @@ private:
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
+
+    std::vector<PkIndexShard> _pk_index_shards;
 };
 
 } // namespace lake

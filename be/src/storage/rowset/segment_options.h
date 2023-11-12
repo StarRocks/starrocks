@@ -95,6 +95,8 @@ public:
 
     TabletSchemaCSPtr tablet_schema = nullptr;
 
+    bool asc_hint = true;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

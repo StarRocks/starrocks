@@ -154,7 +154,7 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    size_t mem_usage();
+    size_t mem_usage() const;
 
 private:
     const std::string& file_name() const { return _segment->file_name(); }
@@ -212,8 +212,8 @@ private:
     Segment* _segment = nullptr;
 
     uint8_t _flags = 0;
-    // counter to record all those `*_index_meta` space usage that will be used one time and will be reset after first load
-    std::atomic<size_t> _onetime_meta_bytes = 0;
+    // counter to record the reader's mem usage, sub readers excluded.
+    std::atomic<size_t> _meta_mem_usage = 0;
 };
 
 } // namespace starrocks

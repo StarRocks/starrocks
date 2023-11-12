@@ -25,6 +25,7 @@
 #include "storage/delta_column_group.h"
 #include "storage/edit_version.h"
 #include "storage/olap_common.h"
+#include "storage/row_store_encoder_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "util/blocking_queue.hpp"
 
@@ -401,6 +402,8 @@ private:
     std::string _debug_string(bool lock, bool abbr = false) const;
 
     std::string _debug_version_info(bool lock) const;
+
+    std::string _debug_compaction_stats(const std::vector<uint32_t>& input_rowsets, const uint32_t output_rowset);
 
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 

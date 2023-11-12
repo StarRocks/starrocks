@@ -22,6 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -239,6 +240,20 @@ public class NativeAccessController implements AccessController {
     public void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.RESOURCE_GROUP, Collections.singletonList(name));
+    }
+
+    @Override
+    public void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.PIPE,
+                Lists.newArrayList(name.getDbName(), name.getPipeName()));
+    }
+
+    @Override
+    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName name)
+            throws AccessDeniedException {
+        checkAnyActionOnObject(currentUser, roleIds, ObjectType.PIPE,
+                Lists.newArrayList(name.getDbName(), name.getPipeName()));
     }
 
     @Override

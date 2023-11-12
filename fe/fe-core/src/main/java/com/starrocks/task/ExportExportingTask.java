@@ -373,7 +373,7 @@ public class ExportExportingTask extends PriorityLeaderTask {
             }
 
             coord.getQueryProfile().getCounterTotalTime().setValue(TimeUtils.getEstimatedTime(job.getStartTimeMs()));
-            coord.endProfile();
+            coord.collectProfileSync();
             synchronized (fragmentProfiles) {
                 fragmentProfiles.add(coord.getQueryProfile());
             }

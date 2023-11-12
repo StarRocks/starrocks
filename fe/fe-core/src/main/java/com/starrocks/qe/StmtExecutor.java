@@ -213,6 +213,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -330,23 +331,6 @@ public class StmtExecutor {
         profile.addChild(plannerProfile);
         Tracers.toRuntimeProfile(plannerProfile);;
         return profile;
-    }
-
-    // At the end of query execution, we begin to add up profile
-    private void initProfile(long beginTimeInNanoSecond) {
-        profile = buildTopLevelProfile();
-        if (coord != null) {
-            if (coord.getQueryProfile() != null) {
-                coord.getQueryProfile().getCounterTotalTime()
-                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-                long profileCollectStartTime = System.currentTimeMillis();
-                coord.endProfile();
-                profile.getChild("Summary").addInfoString(ProfileManager.PROFILE_TIME,
-                        DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
-                profile.addChild(coord.buildMergedQueryProfile());
-            }
-        }
-        profile.computeTimeInChildProfile();
     }
 
     public boolean isForwardToLeader() {
@@ -625,15 +609,21 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
-                            writeProfile(execPlan, beginTimeInNanoSecond);
+                        boolean isAsync = false;
+                        if (!needRetry && context.isProfileEnabled()) {
+                            isAsync = tryProcessProfileAsync(execPlan);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                 handleExplainStmt(ExplainAnalyzer.analyze(
                                         ProfilingExecPlan.buildFrom(execPlan), profile, null));
                             }
                         }
-                        QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                        if (isAsync) {
+                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                                    context.getSessionVariable().getProfileTimeout() * 1000L);
+                        } else {
+                            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                        }
                     }
                 }
             } else if (parsedStmt instanceof SetStmt) {
@@ -651,7 +641,7 @@ public class StmtExecutor {
                     throw new AnalysisException("old planner does not support CTAS statement");
                 }
             } else if (parsedStmt instanceof DmlStmt) {
-                handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt, beginTimeInNanoSecond);
+                handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt);
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
@@ -747,8 +737,7 @@ public class StmtExecutor {
         try {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
-            handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt(),
-                    beginTimeInNanoSecond);
+            handleDMLStmtWithProfile(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
             if (context.getState().getStateType() == MysqlStateType.ERR) {
                 ((CreateTableAsSelectStmt) parsedStmt).dropTable(context);
             }
@@ -787,13 +776,44 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-    private void writeProfile(ExecPlan plan, long beginTimeInNanoSecond) {
-        initProfile(beginTimeInNanoSecond);
-        ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-        String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
-        if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setProfile(profileContent);
+    private boolean tryProcessProfileAsync(ExecPlan plan) {
+        if (coord == null || coord.getQueryProfile() == null) {
+            return false;
         }
+        // This process will get information from the context, so it must be executed synchronously.
+        // Otherwise, the context may be changed, for example, containing the wrong query id.
+        profile = buildTopLevelProfile();
+
+        long profileCollectStartTime = System.currentTimeMillis();
+        long startTime = context.getStartTime();
+        TUniqueId executionId = context.getExecutionId();
+        QueryDetail queryDetail = context.getQueryDetail();
+        boolean needMerge = context.needMergeProfile();
+
+        // DO NOT use context int the async task, because the context is shared among consecutive queries.
+        // profile of query1 maybe executed when query2 is under execution.
+        Consumer<Boolean> task = (Boolean isAsync) -> {
+            RuntimeProfile summaryProfile = profile.getChild("Summary");
+            summaryProfile.addInfoString(ProfileManager.PROFILE_COLLECT_TIME,
+                    DebugUtil.getPrettyStringMs(System.currentTimeMillis() - profileCollectStartTime));
+            summaryProfile.addInfoString("IsProfileAsync", String.valueOf(isAsync));
+            profile.addChild(coord.buildQueryProfile(needMerge));
+
+            // Update TotalTime to include the Profile Collect Time and the time to build the profile.
+            long now = System.currentTimeMillis();
+            long totalTimeMs = now - startTime;
+            summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
+            summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
+            String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            if (queryDetail != null) {
+                queryDetail.setProfile(profileContent);
+            }
+            QeProcessorImpl.INSTANCE.unMonitorQuery(executionId);
+            QeProcessorImpl.INSTANCE.unregisterQuery(executionId);
+        };
+        return coord.tryProcessProfileAsync(task);
     }
 
     // Analyze one statement to structure in memory.
@@ -881,7 +901,7 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killStmt.isConnectionKill(), "killed by kiil statement : " + originStmt);
+            killCtx.kill(killStmt.isConnectionKill(), "killed by kill statement : " + originStmt);
         }
         context.getState().setOk();
     }
@@ -916,8 +936,8 @@ public class StmtExecutor {
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
-            context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
@@ -1636,23 +1656,27 @@ public class StmtExecutor {
      * `handleDMLStmtWithProfile` executes DML statement and write profile at the end.
      * NOTE: `writeProfile` can only be called once, otherwise the profile detail will be lost.
      */
-    public void handleDMLStmtWithProfile(ExecPlan execPlan,
-                                         DmlStmt stmt,
-                                         long beginTimeInNanoSecond) throws Exception {
+    public void handleDMLStmtWithProfile(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
             throw t;
         } finally {
-            if (context.getSessionVariable().isEnableProfile()) {
-                writeProfile(execPlan, beginTimeInNanoSecond);
+            boolean isAsync = false;
+            if (context.isProfileEnabled()) {
+                isAsync = tryProcessProfileAsync(execPlan);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
                 }
             }
-            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            if (isAsync) {
+                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                        context.getSessionVariable().getProfileTimeout() * 1000L);
+            } else {
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
         }
     }
 
@@ -1667,8 +1691,8 @@ public class StmtExecutor {
 
         if (isExplainAnalyze) {
             context.getSessionVariable().setEnableProfile(true);
+            context.getSessionVariable().setEnableAsyncProfile(false);
             context.getSessionVariable().setPipelineProfileLevel(1);
-            context.getSessionVariable().setProfileLimitFold(false);
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (stmt.isExplain()) {
@@ -1958,7 +1982,8 @@ public class StmtExecutor {
                 GlobalTransactionMgr mgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
-                    if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
+                    if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
+                            targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
                         // schema table and iceberg table does not need txn
                         mgr.abortTransaction(database.getId(), transactionId, errorMsg);
                     }

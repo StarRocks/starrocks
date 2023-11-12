@@ -46,6 +46,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -125,6 +126,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.ICEBERG,
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
+                    Table.TableType.PAIMON,
                     Table.TableType.VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -186,6 +188,10 @@ public class MaterializedViewAnalyzer {
         } else if (table instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) table;
             String catalogName = icebergTable.getCatalogName();
+            return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+        } else if (table instanceof PaimonTable) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            String catalogName = paimonTable.getCatalogName();
             return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
         } else {
             return true;
@@ -741,6 +747,8 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
             } else if (table.isJDBCTable()) {
                 checkPartitionColumnWithBaseJDBCTable(slotRef, (JDBCTable) table);
+            } else if (table.isPaimonTable()) {
+                checkPartitionColumnWithBasePaimonTable(slotRef, (PaimonTable) table);
             } else {
                 throw new SemanticException("Materialized view with partition does not support base table type : %s",
                         table.getType());
@@ -849,6 +857,27 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+        @VisibleForTesting
+        public void checkPartitionColumnWithBasePaimonTable(SlotRef slotRef, PaimonTable table) {
+            if (table.isUnPartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                boolean found = false;
+                for (String partitionColumnName : table.getPartitionColumnNames()) {
+                    if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(table.getColumn(partitionColumnName));
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
+        }
+
         private SlotRef getSlotRef(Expr expr) {
             if (expr instanceof SlotRef) {
                 return ((SlotRef) expr);
@@ -891,8 +920,24 @@ public class MaterializedViewAnalyzer {
                                 baseTableInfo.getDbName(), table.getName()));
                         break;
                     }
+                } else if (table.isPaimonTable()) {
+                    PaimonTable paimonTable = (PaimonTable) table;
+                    if (replacePaimonTableAlias(slotRef, paimonTable, baseTableInfo)) {
+                        break;
+                    }
                 }
             }
+        }
+
+        boolean replacePaimonTableAlias(SlotRef slotRef, PaimonTable paimonTable, BaseTableInfo baseTableInfo) {
+            if (paimonTable.getCatalogName().equals(baseTableInfo.getCatalogName()) &&
+                    paimonTable.getDbName().equals(baseTableInfo.getDbName()) &&
+                    paimonTable.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
+                slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), paimonTable.getName()));
+                return true;
+            }
+            return false;
         }
 
         private void checkPartitionColumnType(Column partitionColumn) {

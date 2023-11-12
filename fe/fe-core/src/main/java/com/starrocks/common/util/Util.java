@@ -46,6 +46,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -62,6 +63,8 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
 
 public class Util {
     private static final Logger LOG = LogManager.getLogger(Util.class);
@@ -455,5 +458,14 @@ public class Util {
 
     public static String deriveAliasFromOrdinal(int ordinal) {
         return AUTO_GENERATED_EXPR_ALIAS_PREFIX + ordinal;
+    }
+
+    public static byte[] compress(byte[] input) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        Deflater deflater = new Deflater();
+        try (DeflaterOutputStream dos = new DeflaterOutputStream(outputStream, deflater)) {
+            dos.write(input);
+        }
+        return outputStream.toByteArray();
     }
 }

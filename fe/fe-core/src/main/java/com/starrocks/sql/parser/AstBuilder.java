@@ -3534,7 +3534,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             if (columnPosition != null) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.generatedColumnLimit("columnPosition", "ADD GENERATED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("AFTER", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
 

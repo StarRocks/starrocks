@@ -29,6 +29,7 @@ static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
@@ -94,7 +95,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                                         ->get_persistent_index_store(tablet->id())
                                         ->create_dir_if_path_not_exists(path));
                 _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
-                return ((LakeLocalPersistentIndex*)_persistent_index.get())
+                return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                         ->load_from_lake_tablet(tablet, metadata, base_version, builder);
             }
             default:

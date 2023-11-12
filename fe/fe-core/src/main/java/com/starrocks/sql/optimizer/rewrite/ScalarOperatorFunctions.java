@@ -121,7 +121,7 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
  * Constant Functions List
  */
 public class ScalarOperatorFunctions {
-    private static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
+    public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
             ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
 
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
@@ -367,8 +367,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "year", argTypes = {DATETIME}, returnType = SMALLINT),
-            @ConstantFunction(name = "year", argTypes = {DATE}, returnType = SMALLINT)
+            @ConstantFunction(name = "year", argTypes = {DATETIME}, returnType = SMALLINT, isMonotonic = true),
+            @ConstantFunction(name = "year", argTypes = {DATE}, returnType = SMALLINT, isMonotonic = true)
     })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());

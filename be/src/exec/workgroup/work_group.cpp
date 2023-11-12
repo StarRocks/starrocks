@@ -196,9 +196,10 @@ void WorkGroup::decr_num_running_drivers() {
     }
 }
 
-StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token() {
+StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token(bool enable_group_level_query_queue) {
     int64_t old = _num_running_queries.fetch_add(1);
-    if (_concurrency_limit != ABSENT_CONCURRENCY_LIMIT && old >= _concurrency_limit) {
+    if (!enable_group_level_query_queue && _concurrency_limit != ABSENT_CONCURRENCY_LIMIT &&
+        old >= _concurrency_limit) {
         _num_running_queries.fetch_sub(1);
         _concurrency_overflow_count++;
         return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
