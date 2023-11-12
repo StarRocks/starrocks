@@ -220,8 +220,8 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
 
     // Check if JIT compilation is feasible on this platform.
-    auto* jit_wrapper = JITEngine::get_instance();
-    if (!jit_wrapper->support_jit()) {
+    auto* jit_engine = JITEngine::get_instance();
+    if (!jit_engine->support_jit()) {
         return status;
     }
 
