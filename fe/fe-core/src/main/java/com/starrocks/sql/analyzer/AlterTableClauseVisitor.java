@@ -299,8 +299,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
-<<<<<<< HEAD
-=======
     public Void visitOptimizeClause(OptimizeClause clause, ConnectContext context) {
         if (!(table instanceof OlapTable)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, table.getName());
@@ -388,7 +386,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     }
 
     @Override
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
     public Void visitAddColumnClause(AddColumnClause clause, ConnectContext context) {
         ColumnDef columnDef = clause.getColumnDef();
         if (columnDef == null) {
