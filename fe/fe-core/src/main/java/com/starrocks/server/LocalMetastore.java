@@ -4888,11 +4888,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                                           List<Long> sourcePartitionIds,
                                                           Map<Long, String> origPartitions, OlapTable copiedTbl,
                                                           String namePostfix, Set<Long> tabletIdSet,
-<<<<<<< HEAD
-                                                          List<Long> tmpPartitionIds)
-=======
                                                           List<Long> tmpPartitionIds, DistributionDesc distributionDesc)
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
             throws DdlException {
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
         for (int i = 0; i < sourcePartitionIds.size(); ++i) {
@@ -4915,10 +4911,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataCacheInfo(newPartitionId, partitionInfo.getDataCacheInfo(sourcePartitionId));
             }
 
-<<<<<<< HEAD
-            Partition newPartition =
-                    createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
-=======
             Partition newPartition = null;
             if (distributionDesc != null) {
                 DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(olapTable.getColumns());
@@ -4932,7 +4924,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
             }
 
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
             newPartitions.add(newPartition);
         }
         return newPartitions;
@@ -4942,19 +4933,11 @@ public class LocalMetastore implements ConnectorMetadata {
     // new partitions have the same indexes as source partitions.
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-<<<<<<< HEAD
-                                                              List<Long> tmpPartitionIds) {
-        Preconditions.checkState(table instanceof OlapTable);
-        OlapTable olapTable = (OlapTable) table;
-        Map<Long, String> origPartitions = Maps.newHashMap();
-        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
-=======
                                                               List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Map<Long, String> origPartitions = Maps.newHashMap();
         OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, distributionDesc != null);
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
         copiedTbl.setDefaultDistributionInfo(olapTable.getDefaultDistributionInfo());
 
         // 2. use the copied table to create partitions
@@ -4963,11 +4946,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
             newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
-<<<<<<< HEAD
-                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds);
-=======
                     copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds, distributionDesc);
->>>>>>> 430edaa6a0 ([Enhancement] Support optimize table change distribution method (#31794))
             buildPartitions(db, copiedTbl, newPartitions.stream().map(Partition::getSubPartitions)
                     .flatMap(p -> p.stream()).collect(Collectors.toList()));
         } catch (Exception e) {
