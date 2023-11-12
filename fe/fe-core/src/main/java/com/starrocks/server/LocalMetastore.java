@@ -2010,12 +2010,9 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
                                                             MaterializedIndex index) throws DdlException {
-<<<<<<< HEAD
         boolean createSchemaFile = true;
-=======
-        LOG.info("build create replica tasks for index {} db {} table {} partition {}",
+        LOG.debug("build create replica tasks for index {} db {} table {} partition {}",
                 index, dbId, table.getId(), partition); 
->>>>>>> 7492b9c373 ([Feature] Support alter table optimize distribution (#30707))
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {

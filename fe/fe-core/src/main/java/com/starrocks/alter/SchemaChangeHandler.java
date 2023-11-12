@@ -1391,13 +1391,8 @@ public class SchemaChangeHandler extends AlterHandler {
         return schemaChangeJobInfos;
     }
 
-<<<<<<< HEAD
-    private void getAlterJobV2Infos(Database db, List<AlterJobV2> alterJobsV2,
-                                    List<List<Comparable>> schemaChangeJobInfos) {
-=======
     private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
             List<List<Comparable>> schemaChangeJobInfos) {
->>>>>>> 7492b9c373 ([Feature] Support alter table optimize distribution (#30707))
         ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
