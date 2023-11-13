@@ -83,7 +83,7 @@ public class ComplexFunctionCallTransformer {
         } else if (functionName.equalsIgnoreCase("regexp_extract")) {
             // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
             FunctionCallExpr regexpExtractFunc = new FunctionCallExpr("regexp_extract",
-                    ImmutableList.of(args[0], args[1], new IntLiteral(0L)));
+                    ImmutableList.of(args[0], args[1], args.length == 3 ? args[2] : new IntLiteral(0L)));
             BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, regexpExtractFunc, new StringLiteral(""));
             // regexp_extract -> if(regexp_extract(xxx)='', null, regexp_extract(xxx))
             return new FunctionCallExpr("if", ImmutableList.of(predicate, new NullLiteral(), regexpExtractFunc));
