@@ -80,7 +80,7 @@ public class HudiTableFactory extends ExternalTableFactory {
                 .setId(tableId)
                 .setTableName(tableName)
                 .setCatalogName(oHudiTable.getCatalogName())
-                .setResourceName(oHudiTable.getResourceName())
+                .setResourceName(properties.get(RESOURCE))
                 .setHiveDbName(oHudiTable.getDbName())
                 .setHiveTableName(oHudiTable.getTableName())
                 .setFullSchema(columns)

@@ -61,7 +61,7 @@ public class HiveTableFactory extends ExternalTableFactory {
                 .setId(tableId)
                 .setTableName(tableName)
                 .setCatalogName(oHiveTable.getCatalogName())
-                .setResourceName(oHiveTable.getResourceName())
+                .setResourceName(properties.get(RESOURCE))
                 .setHiveDbName(oHiveTable.getDbName())
                 .setHiveTableName(oHiveTable.getTableName())
                 .setPartitionColumnNames(oHiveTable.getPartitionColumnNames())

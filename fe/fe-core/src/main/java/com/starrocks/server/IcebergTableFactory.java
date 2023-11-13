@@ -64,7 +64,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
                 .setId(tableId)
                 .setSrTableName(tableName)
                 .setCatalogName(oIcebergTable.getCatalogName())
-                .setResourceName(oIcebergTable.getResourceName())
+                .setResourceName(properties.get(RESOURCE))
                 .setRemoteDbName(oIcebergTable.getRemoteDbName())
                 .setRemoteTableName(oIcebergTable.getRemoteTableName())
                 .setFullSchema(columns)
