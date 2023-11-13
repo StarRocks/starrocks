@@ -140,6 +140,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         ttlPartitionInfo.remove(new Pair<>(dbId, tableId));
     }
 
+    @VisibleForTesting
+    public Set<Pair<Long, Long>> getTtlPartitionInfo() {
+        return ttlPartitionInfo;
+    }
+
     public String getRuntimeInfo(String tableName, String key) {
         Map<String, String> tableRuntimeInfo = runtimeInfos.getOrDefault(tableName, createDefaultRuntimeInfo());
         return tableRuntimeInfo.getOrDefault(key, DEFAULT_RUNTIME_VALUE);
