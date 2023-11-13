@@ -49,6 +49,7 @@ import java.util.List;
 public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
 
     private static HttpServer beServer;
+    private static int TEST_HTTP_PORT = 0;
 
     @Override
     @Before
@@ -63,7 +64,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
         computeNode.setBePort(9300);
         computeNode.setAlive(true);
-        computeNode.setHttpPort(9737);
+        computeNode.setHttpPort(TEST_HTTP_PORT);
         GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -103,7 +104,8 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
 
     @BeforeClass
     public static void initBeServer() throws IllegalArgException, InterruptedException {
-        beServer = new HttpServer(9737);
+        TEST_HTTP_PORT = detectUsableSocketPort();
+        beServer = new HttpServer(TEST_HTTP_PORT);
         BaseAction ac = new BaseAction(beServer.getController()) {
 
             @Override
