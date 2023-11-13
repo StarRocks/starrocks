@@ -135,9 +135,6 @@ public class IndexDef implements ParseNode {
         if (indexType != null) {
             sb.append(" USING ").append(indexType);
         }
-        if (comment != null) {
-            sb.append(" COMMENT '" + comment + "'");
-        }
         if (properties != null && properties.size() > 0) {
             sb.append(" PROPERTIES(");
             first = true;
@@ -150,6 +147,9 @@ public class IndexDef implements ParseNode {
                 sb.append("\"").append(e.getKey()).append("\"=").append("\"").append(e.getValue()).append("\"");
             }
             sb.append(")");
+        }
+        if (comment != null) {
+            sb.append(" COMMENT '" + comment + "'");
         }
         return sb.toString();
     }

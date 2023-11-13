@@ -15,16 +15,26 @@
 package com.starrocks.common;
 
 import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.Locale;
+import java.util.Map;
 
 public class InvertedIndexParams {
 
+    public static void setDefaultParamsValue(Map<String, String> properties, ParamsKey[] e) {
+        Arrays.stream(e).filter(k -> !properties.containsKey(k.name()) && k.needDefault())
+                .forEach(k -> properties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
+    }
+
     public interface ParamsKey {
+
         String defaultValue();
+
         default boolean needDefault() {
             return false;
         }
+
+        // auto implemented by Enum.name()
+        String name();
     }
 
     public enum InvertedIndexImpType {
@@ -43,10 +53,7 @@ public class InvertedIndexParams {
             public boolean needDefault() {
                 return true;
             }
-        };
-        public static final Set<String> KEY_SET =
-                Arrays.stream(values())
-                        .map(CommonIndexParamKey::name).collect(Collectors.toSet());
+        }
     }
 
 
@@ -55,7 +62,7 @@ public class InvertedIndexParams {
         OMIT_TERM_FREQ_AND_POSITION("false"),
         COMPOUND_FORMAT("false");
 
-        private String defaultValue;
+        private final String defaultValue;
         private boolean needDefault = false;
 
         IndexParamsKey(String defaultValue, boolean needDefault) {
@@ -76,11 +83,6 @@ public class InvertedIndexParams {
         public boolean needDefault() {
             return needDefault;
         }
-
-
-        public static final Set<String> KEY_SET =
-                Arrays.stream(values())
-                        .map(IndexParamsKey::name).collect(Collectors.toSet());
     }
 
     public enum SearchParamsKey implements ParamsKey {
@@ -98,9 +100,5 @@ public class InvertedIndexParams {
         public String defaultValue() {
             return defaultValue;
         }
-
-        public static final Set<String> KEY_SET =
-                Arrays.stream(values())
-                        .map(SearchParamsKey::name).collect(Collectors.toSet());
     }
 }

@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
@@ -29,8 +30,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.InvertedIndexParams;
+import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
+import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -43,8 +47,6 @@ public class GINIndexTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-
         starRocksAssert.withTable("CREATE TABLE `test_index_tbl` (\n" +
                 "  `f1` int NOT NULL COMMENT \"\",\n" +
                 "  `f2` string NOT NULL COMMENT \"\"\n" +
@@ -55,8 +57,6 @@ public class GINIndexTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
-
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("test_index_tbl");
     }
 
     @Test
@@ -118,6 +118,9 @@ public class GINIndexTest extends PlanTestBase {
                     put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
                     put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
                     put(IndexParamsKey.COMPOUND_FORMAT.name().toLowerCase(Locale.ROOT), "false");
+                    put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
+                    put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
+                    put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
                 }}, KeysType.DUP_KEYS));
     }
 
@@ -139,9 +142,9 @@ public class GINIndexTest extends PlanTestBase {
                 "All status of index indexId should be consistent");
         index1.setIndexId(-1);
 
-
         TableIndexes tableIndexes =
-                Assertions.assertDoesNotThrow(() -> IndexFactory.createIndexesFromCreateStmt(Arrays.asList(index1, index2), null));
+                Assertions.assertDoesNotThrow(
+                        () -> IndexFactory.createIndexesFromCreateStmt(Arrays.asList(index1, index2), null));
         Assertions.assertTrue(tableIndexes.getIndexes().stream().allMatch(index -> index.getIndexId() >= 0));
         index1.setIndexId(-1);
         index2.setIndexId(-1);
@@ -150,6 +153,20 @@ public class GINIndexTest extends PlanTestBase {
         IndexFactory.createIndexesFromCreateStmt(Arrays.asList(index1, index2), table);
         Assertions.assertTrue(tableIndexes.getIndexes().stream().allMatch(index -> index.getIndexId() >= 10));
         table.setMaxIndexId(-1);
+    }
+
+    @Test
+    public void testIndexPropertiesWithDefault() {
+        Map<String, String> properties = new HashMap<>();
+        // empty set default
+        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
+        Assertions.assertEquals(properties.size(),
+                Arrays.stream(CommonIndexParamKey.values()).map(CommonIndexParamKey::needDefault).count());
+
+        // set values, so do not set default
+        properties.put(IMP_LIB.name(), "other");
+        InvertedIndexParams.setDefaultParamsValue(properties, CommonIndexParamKey.values());
+        Assertions.assertEquals(properties.get(IMP_LIB.name()), "other");
     }
 
 
