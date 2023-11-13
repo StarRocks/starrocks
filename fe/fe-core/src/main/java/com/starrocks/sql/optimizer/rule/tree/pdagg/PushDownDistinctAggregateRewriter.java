@@ -217,14 +217,12 @@ public class PushDownDistinctAggregateRewriter {
         private boolean canPushDownAgg(LogicalWindowOperator windowOp) {
             //TODO(by satanson): support AVG and COUNT in future
             AnalyticWindow window = windowOp.getAnalyticWindow();
-            final ColumnRefSet partitionCols = new ColumnRefSet();
-            windowOp.getPartitionExpressions().stream().forEach(e -> partitionCols.union(e.getUsedColumns()));
+
             return (window == null || window.getType().equals(AnalyticWindow.Type.RANGE))
-                    && windowOp.getWindowCall().values().stream()
-                            .allMatch(call -> isSupportedWindowCall(call, partitionCols) );
+                    && windowOp.getWindowCall().values().stream().allMatch(call -> isSupportedWindowCall(call));
         }
 
-        private boolean isSupportedWindowCall(CallOperator windowCall, ColumnRefSet partitionCols) {
+        private boolean isSupportedWindowCall(CallOperator windowCall) {
             if (windowCall.isDistinct()) {
                 return false;
             }
@@ -236,11 +234,6 @@ public class PushDownDistinctAggregateRewriter {
             if (!windowCall.getChild(0).isColumnRef()) {
                 return false;
             }
-
-            if (partitionCols.contains((ColumnRefOperator) windowCall.getChild(0))) {
-                return false;
-            }
-
             return true;
         }
 
@@ -414,7 +407,6 @@ public class PushDownDistinctAggregateRewriter {
                 newColumnRefMap.put((ColumnRefOperator) replacer.rewrite(entry.getKey()),
                         replacer.rewrite(entry.getValue()));
             }
-            projectOp.getColumnRefMap().clear();
             projectOp.getColumnRefMap().putAll(newColumnRefMap);
             rewriteInfo.setOp(optExpression);
             return rewriteInfo;
