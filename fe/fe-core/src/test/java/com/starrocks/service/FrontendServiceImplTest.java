@@ -244,7 +244,7 @@ public class FrontendServiceImplTest {
         TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
         request.setLabel("test_label");
         request.setDb("test");
-        request.setTbl("site_access_auto");
+        request.setTbl("site_access_empty");
         request.setUser("root");
         request.setPasswd("");
 
