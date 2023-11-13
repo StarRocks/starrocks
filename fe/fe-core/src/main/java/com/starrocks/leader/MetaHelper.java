@@ -170,7 +170,7 @@ public class MetaHelper {
         long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());
         FileStore store = Files.getFileStore(Paths.get(Config.meta_dir));
         if (store.getUsableSpace() < lowerFreeDiskSize) {
-            LOG.error("Free size on meta dir: {} is less than {}",
+            LOG.error("Free capacity left for meta dir: {} is less than {}",
                     Config.meta_dir, new ByteSizeValue(lowerFreeDiskSize));
             throw new InvalidMetaDirException();
         }
