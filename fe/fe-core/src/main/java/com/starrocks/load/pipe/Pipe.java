@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -98,7 +99,7 @@ public class Pipe implements GsonPostProcessable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
     @SerializedName(value = "createdTime")
-    private long createdTime = -1;
+    private long createdTime;
     @SerializedName(value = "load_status")
     private LoadStatus loadStatus = new LoadStatus();
     @SerializedName(value = "task_execution_variables")
@@ -120,7 +121,7 @@ public class Pipe implements GsonPostProcessable {
         this.state = State.RUNNING;
         this.pipeSource = sourceTable;
         this.originSql = originSql;
-        this.createdTime = System.currentTimeMillis();
+        this.createdTime = TimeUtils.getEpochSeconds();
         this.properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables.putAll(DEFAULT_TASK_EXECUTION_VARIABLES);
@@ -612,6 +613,9 @@ public class Pipe implements GsonPostProcessable {
         return lastErrorInfo;
     }
 
+    /**
+     * Unix timestamp in seconds
+     */
     public long getCreatedTime() {
         return createdTime;
     }
