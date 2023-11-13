@@ -143,9 +143,9 @@ public class MVActiveChecker extends FrontendDaemon {
 
     public static class MvActiveInfo {
         // Use 2 ** N as failure backoff, and set the max to 30 minutes
-        public final static long MAX_BACKOFF_MINUTES = 60;
-        private final static long BACKOFF_BASE = 2;
-        private final static long MAX_BACKOFF_TIMES = (long) (Math.log(MAX_BACKOFF_MINUTES) / Math.log(BACKOFF_BASE));
+        public static final long MAX_BACKOFF_MINUTES = 60;
+        private static final long BACKOFF_BASE = 2;
+        private static final long MAX_BACKOFF_TIMES = (long) (Math.log(MAX_BACKOFF_MINUTES) / Math.log(BACKOFF_BASE));
 
         private LocalDateTime nextActive;
         private int failureTimes = 0;
