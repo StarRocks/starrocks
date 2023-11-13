@@ -101,6 +101,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
@@ -214,6 +215,16 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
+
+    @ConstantFunction(name = "convert_interval", argTypes = {INT, VARCHAR, VARCHAR}, returnType = BIGINT, isMonotonic = true)
+    public static ConstantOperator convertInterval(ConstantOperator n, ConstantOperator type, ConstantOperator toType) {
+        String typeTimeUnitName = type.getVarchar();
+        String toTypeTimeUnitName = toType.getVarchar();
+        int nInt = n.getInt();
+        TimeUnit typeTimeUnit = TimeUnit.valueOf(typeTimeUnitName + "S");
+        TimeUnit toTypeTimeUnit = TimeUnit.valueOf(toTypeTimeUnitName + "S");
+        return new ConstantOperator(toTypeTimeUnit.convert(nInt, typeTimeUnit), Type.BIGINT);
+    }
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),

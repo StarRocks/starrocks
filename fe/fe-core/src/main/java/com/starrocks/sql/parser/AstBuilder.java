@@ -34,6 +34,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ConvertIntervalExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.DictQueryExpr;
@@ -5871,6 +5872,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr("floor", visit(context.expression(), Expr.class), pos);
         } else if (context.CEIL() != null) {
             return new FunctionCallExpr("ceil", visit(context.expression(), Expr.class), pos);
+        } else if (context.CONVERT_INTERVAL() != null) {
+            IntervalLiteral intervalLiteral = (IntervalLiteral) visit(context.interval());
+            UnitIdentifier unitIdentifier = (UnitIdentifier) visit(context.unitIdentifier());
+            return new ConvertIntervalExpr("convert_interval", (IntLiteral) intervalLiteral.getValue(),
+                    new StringLiteral(intervalLiteral.getUnitIdentifier().getDescription()),
+                    new StringLiteral(unitIdentifier.getDescription()), pos);
         }
 
         String functionName = context.TIMESTAMPADD() != null ? "TIMESTAMPADD" : "TIMESTAMPDIFF";

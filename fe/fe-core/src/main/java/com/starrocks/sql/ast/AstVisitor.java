@@ -25,6 +25,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ConvertIntervalExpr;
 import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -1211,6 +1212,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTimestampArithmeticExpr(TimestampArithmeticExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitConvertIntervalExpr(ConvertIntervalExpr node, C context) {
         return visitExpression(node, context);
     }
 
