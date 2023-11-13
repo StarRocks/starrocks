@@ -39,18 +39,19 @@ public class HiveTableFactory extends ExternalTableFactory {
 
     }
 
-    public static void copyFromOldTable(HiveTable.Builder tableBuilder, HiveTable oHiveTable, Map<String, String> properties) {
+    public static void copyFromCatalogTable(HiveTable.Builder tableBuilder, HiveTable catalogTable,
+                                            Map<String, String> properties) {
         tableBuilder
-                .setCatalogName(oHiveTable.getCatalogName())
+                .setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(oHiveTable.getDbName())
-                .setHiveTableName(oHiveTable.getTableName())
-                .setPartitionColumnNames(oHiveTable.getPartitionColumnNames())
-                .setDataColumnNames(oHiveTable.getDataColumnNames())
-                .setTableLocation(oHiveTable.getTableLocation())
-                .setStorageFormat(oHiveTable.getStorageFormat())
-                .setCreateTime(oHiveTable.getCreateTime())
-                .setProperties(oHiveTable.getProperties());
+                .setHiveDbName(catalogTable.getDbName())
+                .setHiveTableName(catalogTable.getTableName())
+                .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
+                .setDataColumnNames(catalogTable.getDataColumnNames())
+                .setTableLocation(catalogTable.getTableLocation())
+                .setStorageFormat(catalogTable.getStorageFormat())
+                .setCreateTime(catalogTable.getCreateTime())
+                .setProperties(catalogTable.getProperties());
     }
 
     @Override
@@ -75,7 +76,7 @@ public class HiveTableFactory extends ExternalTableFactory {
                 .setId(tableId)
                 .setTableName(tableName)
                 .setFullSchema(columns);
-        copyFromOldTable(tableBuilder, oHiveTable, properties);
+        copyFromCatalogTable(tableBuilder, oHiveTable, properties);
 
         HiveTable hiveTable = tableBuilder.build();
 

@@ -47,15 +47,15 @@ public class HudiTableFactory extends ExternalTableFactory {
 
     }
 
-    public static void copyFromOldTable(HudiTable.Builder builder, HudiTable oHudiTable, Map<String, String> properties) {
-        builder.setCatalogName(oHudiTable.getCatalogName())
+    public static void copyFromCatalogTable(HudiTable.Builder builder, HudiTable catalogTable, Map<String, String> properties) {
+        builder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(oHudiTable.getDbName())
-                .setHiveTableName(oHudiTable.getTableName())
-                .setPartitionColNames(oHudiTable.getPartitionColumnNames())
-                .setDataColNames(oHudiTable.getDataColumnNames())
-                .setHudiProperties(oHudiTable.getProperties())
-                .setCreateTime(oHudiTable.getCreateTime());
+                .setHiveDbName(catalogTable.getDbName())
+                .setHiveTableName(catalogTable.getTableName())
+                .setPartitionColNames(catalogTable.getPartitionColumnNames())
+                .setDataColNames(catalogTable.getDataColumnNames())
+                .setHudiProperties(catalogTable.getProperties())
+                .setCreateTime(catalogTable.getCreateTime());
     }
 
     @Override
@@ -91,7 +91,7 @@ public class HudiTableFactory extends ExternalTableFactory {
                 .setId(tableId)
                 .setTableName(tableName)
                 .setFullSchema(columns);
-        copyFromOldTable(tableBuilder, oHudiTable, properties);
+        copyFromCatalogTable(tableBuilder, oHudiTable, properties);
         HudiTable hudiTable = tableBuilder.build();
 
         // partition key, commented for show partition key

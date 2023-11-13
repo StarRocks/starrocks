@@ -319,7 +319,7 @@ public class HiveTableTest {
                 .setStorageFormat(null);
         HiveTable oTable = tableBuilder.build();
         HiveTable.Builder newBuilder = HiveTable.builder();
-        HiveTableFactory.copyFromOldTable(newBuilder, oTable, properties);
+        HiveTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         HiveTable table = newBuilder.build();
         Assert.assertEquals(table.getResourceName(), resourceName);
     }

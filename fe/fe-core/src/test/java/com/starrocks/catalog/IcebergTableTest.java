@@ -65,7 +65,7 @@ public class IcebergTableTest extends TableTestBase {
                 .setIcebergProperties(new HashMap<>());
         IcebergTable oTable = tableBuilder.build();
         IcebergTable.Builder newBuilder = IcebergTable.builder();
-        IcebergTableFactory.copyFromOldTable(newBuilder, oTable, properties);
+        IcebergTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         IcebergTable table = newBuilder.build();
         Assert.assertEquals(table.getResourceName(), resourceName);
     }

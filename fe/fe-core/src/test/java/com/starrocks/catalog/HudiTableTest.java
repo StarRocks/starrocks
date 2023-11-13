@@ -275,7 +275,7 @@ public class HudiTableTest {
         HudiTable oTable = tableBuilder.build();
 
         HudiTable.Builder newBuilder = HudiTable.builder();
-        HudiTableFactory.copyFromOldTable(newBuilder, oTable, properties);
+        HudiTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         HudiTable table = newBuilder.build();
         Assert.assertEquals(table.getResourceName(), resourceName);
     }

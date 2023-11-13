@@ -40,14 +40,14 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
     }
 
-    public static void copyFromOldTable(IcebergTable.Builder tableBuilder, IcebergTable oIcebergTable,
-                                        Map<String, String> properties) {
-        tableBuilder.setCatalogName(oIcebergTable.getCatalogName())
+    public static void copyFromCatalogTable(IcebergTable.Builder tableBuilder, IcebergTable catalogTable,
+                                            Map<String, String> properties) {
+        tableBuilder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setRemoteDbName(oIcebergTable.getRemoteDbName())
-                .setRemoteTableName(oIcebergTable.getRemoteTableName())
+                .setRemoteDbName(catalogTable.getRemoteDbName())
+                .setRemoteTableName(catalogTable.getRemoteTableName())
                 .setIcebergProperties(properties)
-                .setNativeTable(oIcebergTable.getNativeTable());
+                .setNativeTable(catalogTable.getNativeTable());
     }
 
     @Override
@@ -75,7 +75,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
                 .setSrTableName(tableName)
                 .setFullSchema(columns);
 
-        copyFromOldTable(tableBuilder, oIcebergTable, properties);
+        copyFromCatalogTable(tableBuilder, oIcebergTable, properties);
 
         IcebergTable icebergTable = tableBuilder.build();
 
