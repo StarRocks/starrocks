@@ -76,11 +76,11 @@ You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information fo
 
 ### Manage query concurrency
 
-When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are plcaced in the queue. The way to obtain `num_running_queries` differs between versions < v3.1.4 and ≥ v3.1.4.
+When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are plcaced in the queue. The way to obtain `num_running_queries` differs between versions &lt; v3.1.4 and &ge; v3.1.4.
 
-- In versions < v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identifiction of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit`, these incoming queries will be executed without waiting in the queue.
+- In versions &lt; v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identifiction of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
 
-- In versions ≥ v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
+- In versions &ge; v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
 
 ## Configure query queues
 
@@ -161,8 +161,8 @@ From v3.1.4 onwards, StarRocks supports the SQL statement `SHOW RUNNING QUERIES`
 - `QueryId`: The ID of the query.
 - `ResourceGroupId`: The ID of the resource group that the query hit. When there is no hit on a user-defined resource group, it will be displayed as "-".
 - `StartTime`: The start time of the query.
-- `PendingTimeout`: The time in the future when the query will time out in the queue.
-- `QueryTimeout`: The time when the query has timed out.
+- `PendingTimeout`: The time when the PENDING query will time out in the queue.
+- `QueryTimeout`: The time when the query times out.
 - `State`: The queue state of the query, where "PENDING" indicates it is in the queue, and "RUNNING" indicates it is currently executing.
 - `Slots`: The logical resource quantity requested by the query, currently fixed at `1`.
 - `Frontend`: The FE node that initiated the query.
