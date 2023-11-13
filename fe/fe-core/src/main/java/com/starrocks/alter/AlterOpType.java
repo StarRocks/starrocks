@@ -64,6 +64,9 @@ public enum AlterOpType {
     REFRESH_SCHEMA,
     ALTER_MV_STATUS,
 
+    // Optimize table
+    OPTIMIZE,
+
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.

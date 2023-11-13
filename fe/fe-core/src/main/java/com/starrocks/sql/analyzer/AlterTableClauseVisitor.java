@@ -18,12 +18,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -33,9 +35,11 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -54,13 +58,17 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
@@ -70,6 +78,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -295,6 +304,103 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         } catch (AnalysisException e) {
             throw new SemanticException("check properties error: %s", e.getMessage());
         }
+        return null;
+    }
+
+    @Override
+    public Void visitOptimizeClause(OptimizeClause clause, ConnectContext context) {
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NOT_OLAP_TABLE, table.getName());
+        }
+        OlapTable olapTable = (OlapTable) table;
+        if (olapTable.getColocateGroup() != null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
+        }
+
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
+        if (clause.getSortKeys() != null) {
+            List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
+
+            for (String column : clause.getSortKeys()) {
+                int idx = columnNames.indexOf(column);
+                if (idx == -1) {
+                    throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                }
+                sortKeyIdxes.add(idx);
+            }
+        }
+        boolean hasReplace = false;
+        Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnDef columnDef : columnDefs) {
+            if (columnDef.getAggregateType() != null && columnDef.getAggregateType().isReplaceFamily()) {
+                hasReplace = true;
+            }
+            if (!columnSet.add(columnDef.getName())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
+            }
+        }
+
+        // analyze key desc
+        KeysType originalKeysType = olapTable.getKeysType();
+        KeysDesc keysDesc = clause.getKeysDesc();
+        if (keysDesc != null) {
+            if (keysDesc.getKeysType() != KeysType.PRIMARY_KEYS || originalKeysType != KeysType.UNIQUE_KEYS) {
+                throw new SemanticException("not support optimize %s to %s keys type",
+                        originalKeysType.toSql(), keysDesc.getKeysType().toSql());
+            }
+        }
+        KeysType targetKeysType = keysDesc == null ? originalKeysType : keysDesc.getKeysType();
+
+        // analyze distribution
+        DistributionDesc distributionDesc = clause.getDistributionDesc();
+        if (distributionDesc != null) {
+            if (distributionDesc instanceof RandomDistributionDesc && targetKeysType != KeysType.DUP_KEYS
+                    && !(targetKeysType == KeysType.AGG_KEYS && !hasReplace)) {
+                throw new SemanticException(targetKeysType.toSql() + (hasReplace ? " with replace " : "")
+                        + " must use hash distribution", distributionDesc.getPos());
+            }
+            try {
+                if (olapTable.getDefaultDistributionInfo().getType()
+                        != distributionDesc.toDistributionInfo(olapTable.getColumns()).getType()) {
+                    throw new SemanticException("not support change default distribution type from " +
+                            olapTable.getDefaultDistributionInfo().getType() + " to " +
+                            distributionDesc.toDistributionInfo(olapTable.getColumns()).getType());
+                }
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            distributionDesc.analyze(columnSet);
+            clause.setDistributionDesc(distributionDesc);
+        }
+
+        // analyze partitions
+        PartitionNames partitionNames = clause.getPartitionNames();
+        if (partitionNames != null) {
+            if (clause.getSortKeys() != null || clause.getKeysDesc() != null) {
+                throw new SemanticException("not support change sort keys or keys type when specify partitions");
+            }
+            if (partitionNames.isTemp()) {
+                throw new SemanticException("not support optimize temp partition");
+            }
+            List<String> partitionNameList = partitionNames.getPartitionNames();
+            if (partitionNameList == null || partitionNameList.isEmpty()) {
+                throw new SemanticException("partition names is empty");
+            }
+
+            List<Long> partitionIds = Lists.newArrayList();
+            for (String partitionName : partitionNameList) {
+                Partition partition = olapTable.getPartition(partitionName);
+                if (partition == null) {
+                    throw new SemanticException("partition %s does not exist", partitionName);
+                }
+                partitionIds.add(partition.getId());
+            }
+        } else {
+            clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
+        }
+
+
         return null;
     }
 

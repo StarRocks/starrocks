@@ -46,6 +46,7 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
+import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -1031,6 +1032,11 @@ public class OlapTable extends Table {
                 throw new DdlException("Unknown distribution info type: " + info.getType());
             }
         }
+    }
+
+    public void optimizeDistribution(DistributionInfo info, Partition partition) throws DdlException {
+        long bucketNum = (partition.getDataSize() / (1024 * 1024 * 1024)) + 1;
+        info.setBucketNum((int) bucketNum);
     }
 
     @Override
@@ -2808,6 +2814,10 @@ public class OlapTable extends Table {
 
     public AlterJobV2Builder alterTable() {
         return new OlapTableAlterJobV2Builder(this);
+    }
+
+    public OptimizeJobV2Builder optimizeTable() {
+        return new OptimizeJobV2Builder(this);
     }
 
     private static class DeleteOlapTableTask implements Runnable {
