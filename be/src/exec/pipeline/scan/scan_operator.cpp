@@ -173,7 +173,10 @@ bool ScanOperator::has_output() const {
 
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
-        return true;
+        auto status_or_is_ready = _morsel_queue->ready_for_next();
+        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+            return true;
+        }
     }
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
