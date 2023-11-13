@@ -670,6 +670,11 @@ public class TransactionState implements Writable {
 
     // return true if txn is in final status and label is expired
     public boolean isExpired(long currentMillis) {
+        if (Config.skip_transaction_range != null && Config.skip_transaction_range.length == 2) {
+            if (Config.skip_transaction_range[0] <= transactionId && transactionId <= Config.skip_transaction_range[1]) {
+                return true;
+            }
+        }
         return transactionStatus.isFinalStatus() && (currentMillis - finishTime) / 1000 > Config.label_keep_max_second;
     }
 
