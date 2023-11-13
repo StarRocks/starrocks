@@ -1,6 +1,6 @@
-# StarRocks 3.2
+# StarRocks v3.2
 
-## 3.2.0 - rc01
+## v3.2.0-RC01
 
 Release date: November xx, 2023
 
@@ -104,7 +104,6 @@ Fixed the following issues:
 - Schema Change may fail if it takes an excessive period of time, because the specified tablet version is handled by garbage collection. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
 - Failed to access the Parquet files in MinIO or AWS S3 via file external tables. [#29873] (https://github.com/StarRocks/starrocks/pull/29873)
 - The ARRAY, MAP, and STRUCT type columns are not correctly displayed in  `information_schema.columns`. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
-- An error is reported if specific path formats are used during data loading via Broker Load: `msg:Fail to parse columnsFromPath, expected: [rec_dt]`. [#32720](https://github.com/StarRocks/starrocks/pull/32720)
 - `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)
 
 ### Upgrade Notes
