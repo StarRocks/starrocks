@@ -261,6 +261,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -3886,9 +3887,9 @@ public class GlobalStateMgr {
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds, boolean isOptimize) {
+                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds, isOptimize);
+                tmpPartitionIds, distributionDesc);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
