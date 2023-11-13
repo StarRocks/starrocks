@@ -1358,15 +1358,17 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
                 auto old_name = base_tablet_schema->column(old_col_idx).name();
                 if (old_name == column.column_name) {
-                    uint32_t old_unique_id = base_tablet->tablet_schema()->column(old_col_idx).unique_id();
-                    if (column.col_unique_id > 0) {
-                        DCHECK(column.col_unique_id == old_unique_id);
-                        if (column.col_unique_id != old_unique_id) {
-                            std::string msg = strings::Substitute(
-                                    "Tablet[$0] column[$1] has different column unique id during schema change. $2(FE) "
-                                    "vs $3(BE)",
-                                    base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
-                            return Status::InternalError(msg);
+                    uint32_t old_unique_id = base_tablet_schema->column(old_col_idx).unique_id();
+                    if (normal_request.tablet_schema.schema_version <= base_tablet_schema->schema_version()) {
+                        if (column.col_unique_id > 0) {
+                            DCHECK(column.col_unique_id == old_unique_id);
+                            if (column.col_unique_id != old_unique_id) {
+                                std::string msg = strings::Substitute(
+                                        "Tablet[$0] column[$1] has different column unique id during schema change. $2(FE) "
+                                        "vs $3(BE)",
+                                        base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
+                                return Status::InternalError(msg);
+                            }
                         }
                     }
 
