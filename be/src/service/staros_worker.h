@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
+#include "service/staros_fwd.h"
 
 namespace starrocks {
 
@@ -71,6 +72,9 @@ public:
     // the worker will try to fetch it back from starmgr.
     absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
 
+    // retrieve number of shards under no lock.
+    inline size_t approx_num_shards() const { return _approx_num_shards; }
+
 private:
     struct ShardInfoDetails {
         ShardInfo shard_info;
@@ -105,12 +109,13 @@ private:
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
+
+    // a counter to record the number of shards, caller can retrieve the number with no lock.
+    // NOTE: the number may be inaccurate due to it is retrieved under no lock.
+    size_t _approx_num_shards;
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
-void init_staros_worker();
-void shutdown_staros_worker();
-void update_staros_starcache();
 
 } // namespace starrocks
 #endif // USE_STAROS

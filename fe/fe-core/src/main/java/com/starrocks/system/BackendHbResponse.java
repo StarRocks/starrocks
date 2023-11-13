@@ -64,6 +64,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
     private boolean isSetStoragePath = false;
+    // number of tablets on the backend, Only meaningful in SHARED_DATA mode, -1 means UNKNOWN
+    private int numTablets = -1;
 
     public BackendHbResponse() {
         super(HeartbeatResponse.Type.BACKEND);
@@ -130,6 +132,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
 
     public int getCpuCores() {
         return cpuCores;
+    }
+
+    public int getNumTablets() {
+        return numTablets;
+    }
+
+    public void setNumTablets(int num) {
+        numTablets = num;
     }
 
     public boolean isSetStoragePath() {

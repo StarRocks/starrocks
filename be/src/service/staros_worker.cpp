@@ -68,7 +68,7 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
-StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024)) {}
+StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024)), _approx_num_shards(0) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
@@ -83,6 +83,8 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
         }
     }
     _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    // constant complexity
+    _approx_num_shards = _shards.size();
     return absl::OkStatus();
 }
 
@@ -104,6 +106,7 @@ absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
 absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
     _shards.erase(id);
+    _approx_num_shards = _shards.size();
     return absl::OkStatus();
 }
 
@@ -384,6 +387,14 @@ void update_staros_starcache() {
     if (fslib::FLAGS_use_star_cache != config::starlet_use_star_cache) {
         fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
         (void)fslib::star_cache_init(fslib::FLAGS_use_star_cache);
+    }
+}
+
+size_t staros_worker_approx_num_shards() {
+    if (g_worker) {
+        return g_worker->approx_num_shards();
+    } else {
+        return 0;
     }
 }
 

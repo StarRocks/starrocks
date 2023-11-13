@@ -22,7 +22,6 @@
 #include "common/logging.h"
 #include "fs/fs_starlet.h"
 #include "gutil/strings/util.h"
-#include "service/staros_worker.h"
 
 namespace starrocks::lake {
 

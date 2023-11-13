@@ -51,6 +51,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
+#include "service/staros_fwd.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -62,10 +63,6 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "util/priority_thread_pool.hpp"
-
-#ifdef USE_STAROS
-#include "service/staros_worker.h"
-#endif // USE_STAROS
 
 namespace starrocks {
 

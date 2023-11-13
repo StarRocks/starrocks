@@ -46,6 +46,7 @@
 #include "gen_cpp/HeartbeatService.h"
 #include "runtime/heartbeat_flags.h"
 #include "service/backend_options.h"
+#include "service/staros_fwd.h"
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
 #include "util/network_util.h"
@@ -122,6 +123,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         } else {
             heartbeat_result.backend_info.__set_is_set_storage_path(false);
         }
+        heartbeat_result.backend_info.__set_num_tablets(staros_worker_approx_num_shards());
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);

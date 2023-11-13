@@ -113,6 +113,8 @@ public class ComputeNode implements IComputable, Writable {
     private volatile long memUsedBytes = 0;
     private volatile int cpuUsedPermille = 0;
     private volatile long lastUpdateResourceUsageMs = 0;
+    // number of tablets on the backend/compute node, for SHARED_DATA mode only. No need persistent
+    private volatile int numTablets = -1;
     private final AtomicReference<Map<Long, ResourceGroupUsage>> groupIdToUsage = new AtomicReference<>(new HashMap<>());
 
     public ComputeNode() {
@@ -206,6 +208,10 @@ public class ComputeNode implements IComputable, Writable {
 
     public int getBrpcPort() {
         return brpcPort;
+    }
+
+    public int getNumTablets() {
+        return numTablets;
     }
 
     public TNetworkAddress getAddress() {
@@ -522,6 +528,9 @@ public class ComputeNode implements IComputable, Writable {
                 // we need notify coordinator to cancel query
                 becomeDead = true;
             }
+
+            // take whatever numbers hbResponse tells, -1 means unknown.
+            this.numTablets = hbResponse.getNumTablets();
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
                 isChanged = true;

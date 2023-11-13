@@ -43,6 +43,8 @@ struct TBackendInfo {
     7: optional Types.TPort starlet_port
     8: optional i64 reboot_time
     9: optional bool is_set_storage_path
+    // Only for shared-data mode, report the total number of tablets allocated the backend/compute node
+    10: optional i32 num_tablets
 }
 
 struct THeartbeatResult {

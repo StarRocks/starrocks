@@ -48,7 +48,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("Version")
                 .add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct").add("HasStoragePath");
         if (RunMode.allowCreateLakeTable()) {
-            builder.add("StarletPort").add("WorkerId");
+            builder.add("StarletPort").add("WorkerId").add("TabletNum");
         }
         TITLE_NAMES = builder.build();
     }
@@ -138,6 +138,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
+                computeNodeInfo.add(String.valueOf(computeNode.getNumTablets()));
             }
 
             comparableComputeNodeInfos.add(computeNodeInfo);

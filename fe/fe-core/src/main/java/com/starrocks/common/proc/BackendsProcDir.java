@@ -117,9 +117,15 @@ public class BackendsProcDir implements ProcDirInterface {
                 continue;
             }
 
+            long tabletNum = 0;
             watch.start();
-            long tabletNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+            if (RunMode.allowCreateLakeTable()) {
+                tabletNum = backend.getNumTablets();
+            } else {
+                tabletNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+            }
             watch.stop();
+
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
             backendInfo.add(backend.getHost());
