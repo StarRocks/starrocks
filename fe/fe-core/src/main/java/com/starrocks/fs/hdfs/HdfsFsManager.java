@@ -1280,7 +1280,7 @@ public class HdfsFsManager {
                 throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
             }
         } catch (IOException e) {
-            LOG.error("errors while rename path from " + srcPath + " to " + destPath);
+            LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
             throw new UserException("errors while rename " + srcPath + "to " + destPath);
         }
     }
