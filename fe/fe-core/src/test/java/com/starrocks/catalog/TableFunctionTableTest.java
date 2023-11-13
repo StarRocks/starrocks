@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -65,7 +66,6 @@ public class TableFunctionTableTest {
                 result = systemInfoService;
                 minTimes = 0;
 
-
                 systemInfoService.getBackendIds(anyBoolean);
                 result = new ArrayList<>();
                 minTimes = 0;
@@ -95,6 +95,34 @@ public class TableFunctionTableTest {
         } catch (Exception e) {
             Assert.assertTrue(e.getCause().getMessage().
                     contains("Failed to send proxy request. No alive backends or compute nodes"));
+        }
+
+        Backend backend = new Backend(1L, "192.168.1.1", 9050);
+        backend.setBrpcPort(8050);
+
+        List<Long> nodeList = new ArrayList<>();
+        nodeList.add(1L);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(anyBoolean);
+                result = nodeList;
+                minTimes = 0;
+
+                systemInfoService.getComputeNodeIds(anyBoolean);
+                result = new ArrayList<>();
+                minTimes = 0;
+
+                systemInfoService.getBackendOrComputeNode(anyLong);
+                result = backend;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            method.invoke(t, null);
+        } catch (Exception e) {
+            Assert.assertFalse(false);
         }
     }
 }
