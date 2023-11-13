@@ -79,7 +79,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
             ClusterLoadStatistic clusterStat, TStorageMedium medium) {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (!RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
             return Collections.emptyList();
         }
         List<TabletSchedCtx> alternativeTablets;
