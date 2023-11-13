@@ -156,12 +156,26 @@ public class CallOperator extends ScalarOperator {
         return true;
     }
 
+    @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet used = new ColumnRefSet();
         for (ScalarOperator child : arguments) {
             used.union(child.getUsedColumns());
         }
         return used;
+    }
+
+    @Override
+    public boolean isConstant() {
+        if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+            return false;
+        }
+        for (ScalarOperator child : getChildren()) {
+            if (!child.isConstant()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
