@@ -32,6 +32,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -55,6 +56,8 @@ import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadTxnBeginRequest;
+import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TResourceUsage;
@@ -381,6 +384,27 @@ public class FrontendServiceImplTest {
 
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testLoadTxnBegin() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label");
+        request.setDb("test");
+        request.setTbl("site_access_auto");
+        request.setUser("root");
+        request.setPasswd("");
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public boolean isEnableLoadProfile() {
+                return true;
+            }
+        };
+
+        TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+        Assert.assertEquals(result.getStatus().getStatus_code(), TStatusCode.OK);
     }
 
     @Test
