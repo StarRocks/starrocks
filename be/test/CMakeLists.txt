@@ -64,6 +64,7 @@ set(EXEC_FILES
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
+        ./exec/lake_meta_scanner_test.cpp
         ./exec/avro_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
@@ -206,6 +207,7 @@ set(EXEC_FILES
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
         ./storage/lake/schema_change_test.cpp
+        ./storage/lake/alter_tablet_meta_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/partial_update_test.cpp
         ./storage/lake/auto_increment_partial_update_test.cpp
@@ -215,6 +217,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
+        ./storage/lake/metacache_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -276,6 +279,7 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
+        ./storage/row_store_encoder_test.cpp
         ./storage/storage_engine_test.cpp
         ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp
@@ -286,6 +290,7 @@ set(EXEC_FILES
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
+        ./storage/meta_reader_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -334,6 +339,7 @@ set(EXEC_FILES
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
         ./util/bthreads/promise_test.cpp
+        ./util/bthreads/semaphore_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp

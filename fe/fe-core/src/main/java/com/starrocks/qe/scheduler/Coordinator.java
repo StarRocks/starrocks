@@ -40,6 +40,7 @@ import com.starrocks.thrift.TUniqueId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public abstract class Coordinator {
@@ -108,8 +109,8 @@ public abstract class Coordinator {
 
     public abstract void updateAuditStatistics(TReportAuditStatisticsParams params);
 
-    public void cancel() {
-        cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
+    public void cancel(String cancelledMessage) {
+        cancel(PPlanFragmentCancelReason.USER_CANCEL, cancelledMessage);
     }
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
@@ -152,13 +153,15 @@ public abstract class Coordinator {
     // Methods for profile.
     // ------------------------------------------------------------------------------------
 
-    public abstract void endProfile();
+    public abstract void collectProfileSync();
+
+    public abstract boolean tryProcessProfileAsync(Consumer<Boolean> task);
 
     public abstract void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier);
 
     public abstract void setExecPlan(ExecPlan execPlan);
 
-    public abstract RuntimeProfile buildMergedQueryProfile();
+    public abstract RuntimeProfile buildQueryProfile(boolean needMerge);
 
     public abstract RuntimeProfile getQueryProfile();
 

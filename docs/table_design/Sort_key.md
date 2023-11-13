@@ -77,7 +77,7 @@ DISTRIBUTED BY HASH(site_id);
 
 >**NOTICE**
 >
-> For an Aggregate table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
+> For an Aggregate table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
 
 ### Unique Key
 

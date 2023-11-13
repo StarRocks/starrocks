@@ -212,6 +212,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.columnFilters = scanOperator.columnFilters;
             builder.columnAccessPaths = scanOperator.columnAccessPaths;
             builder.scanOptimzeOption = scanOperator.scanOptimzeOption;
+            builder.partitionColumns = scanOperator.partitionColumns;
             return (B) this;
         }
 

@@ -128,8 +128,10 @@ Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* sta
     // (unless FE can give an estimate of the hash table size), so we currently empty all the hash tables first
     // we could build global runtime filter for this case later.
     auto merged = _partial_rf_merger->set_always_true();
+    // for spillable operator, this interface never returns error status because we skip building rf here
+    DCHECK(merged.ok());
 
-    if (merged) {
+    if (merged.value()) {
         RuntimeInFilterList in_filters;
         RuntimeBloomFilterList bloom_filters;
         // publish empty runtime bloom-filters

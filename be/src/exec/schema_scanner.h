@@ -68,6 +68,7 @@ struct SchemaScannerParam {
 
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;
+    std::vector<TFrontend> frontends;
 
     SchemaScannerParam() = default;
 };

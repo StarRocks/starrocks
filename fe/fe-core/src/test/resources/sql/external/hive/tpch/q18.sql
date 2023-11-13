@@ -100,8 +100,6 @@ OutPut Exchange Id: 20
 16:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
 |  equal join conjunct: [18: l_orderkey, INT, true] = [9: o_orderkey, INT, true]
-|  build runtime filters:
-|  - filter_id = 2, build_expr = (9: o_orderkey), remote = true
 |  output columns: 1, 2, 9, 12, 13, 22
 |  cardinality: 600036646
 |  column statistics:
@@ -131,8 +129,6 @@ OutPut Exchange Id: 20
 |    14:HASH JOIN
 |    |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE(S))
 |    |  equal join conjunct: [9: o_orderkey, INT, true] = [34: l_orderkey, INT, true]
-|    |  build runtime filters:
-|    |  - filter_id = 1, build_expr = (34: l_orderkey), remote = false
 |    |  output columns: 1, 2, 9, 12, 13
 |    |  cardinality: 149999686
 |    |  column statistics:
@@ -168,15 +164,11 @@ OutPut Exchange Id: 20
 |       distribution type: SHUFFLE
 |       partition exprs: [9: o_orderkey, INT, true]
 |       cardinality: 150000000
-|       probe runtime filters:
-|       - filter_id = 1, probe_expr = (9: o_orderkey)
 |
 1:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [18: l_orderkey, INT, true]
 cardinality: 600037902
-probe runtime filters:
-- filter_id = 2, probe_expr = (18: l_orderkey)
 
 PLAN FRAGMENT 2(F08)
 
@@ -297,8 +289,6 @@ NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
 cardinality: 600037902
-probe runtime filters:
-- filter_id = 2, probe_expr = (18: l_orderkey)
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE

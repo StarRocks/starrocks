@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -58,6 +60,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -172,8 +175,8 @@ public class Utils {
         return list;
     }
 
-    private static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
-                                                             Predicate<Operator> lambda) {
+    public static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
+                                                            Predicate<Operator> lambda) {
         if (lambda.test(root.getOp())) {
             list.add((E) root.getOp());
             return;
@@ -396,9 +399,7 @@ public class Utils {
                 }
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
-                // TODO(stephen): support `analyze table` to collect iceberg table ndv
-                // iceberg metadata doesn't have ndv, we default to unknown for all iceberg table column statistics.
-                return true;
+                return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -422,6 +423,16 @@ public class Utils {
             gid = gid * 2 + (bitSet.get(b) ? 1 : 0);
         }
         return gid;
+    }
+
+    public static ColumnRefOperator findSmallestColumnRefFromTable(Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                                   Table table) {
+        Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
+        List<ColumnRefOperator> visibleColumnRefs = colRefToColumnMetaMap.entrySet().stream()
+                .filter(e -> baseSchema.contains(e.getValue()))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        return findSmallestColumnRef(visibleColumnRefs);
     }
 
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {
@@ -628,5 +639,22 @@ public class Utils {
             eqColumnRefs.put(Objects.requireNonNull(lhsColRef), Objects.requireNonNull(rhsColRef));
         }
         return eqColumnRefs;
+    }
+
+    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
+        for (ScalarOperator child : operator.getChildren()) {
+            if (child instanceof CallOperator) {
+                CallOperator call = (CallOperator) child;
+                String fnName = call.getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

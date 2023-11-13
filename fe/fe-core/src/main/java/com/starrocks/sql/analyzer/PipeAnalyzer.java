@@ -64,7 +64,7 @@ public class PipeAnalyzer {
                     .add(PROPERTY_BATCH_FILES)
                     .build();
 
-    private static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
             if (Strings.isNullOrEmpty(context.getDatabase())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);

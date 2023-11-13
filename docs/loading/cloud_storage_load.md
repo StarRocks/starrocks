@@ -2,7 +2,7 @@
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
 
 In v3.0 and earlier, StarRocks only supports Broker Load, which runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
@@ -14,7 +14,7 @@ Additionally, Broker Load supports data transformation at data loading and suppo
 
 From v3.1 onwards, StarRocks supports directly loading the data of Parquet-formatted or ORC-formatted files from AWS S3 by using the INSERT command and the FILES keyword, saving you from the trouble of creating an external table first. For more information, see [INSERT > Insert data directly from files in an external source using FILES keyword](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files).
 
-This topic focuses on using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) to load data from cloud storage.
+This topic focuses on using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) to load data from cloud storage.
 
 ## Background information
 
@@ -24,7 +24,7 @@ From v2.5 onwards, StarRocks no longer depends on brokers to set up connections 
 
 > **NOTE**
 >
-> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
+> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -103,7 +103,7 @@ The following figure shows the workflow of a Broker Load job.
 
 Note that Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path (`DATA INFILE`).
 
-Also, note that the following examples use the CSV file format and the instance profile-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+Also, note that the following examples use the CSV file format and the instance profile-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -267,7 +267,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 Note that Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path (`DATA INFILE`).
 
-Also, note that the following examples use the CSV file format and the VM-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+Also, note that the following examples use the CSV file format and the VM-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -436,7 +436,7 @@ Note that when you load data from Azure Storage, you need to determine which pre
   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
-Also, note that the following examples use the CSV file format, Azure Blob Storage, and the shared key-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other Azure storage services and authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+Also, note that the following examples use the CSV file format, Azure Blob Storage, and the shared key-based authentication method. For information about how to load data in other formats and about the authentication parameters that you need to configure when using other Azure storage services and authentication methods, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -598,7 +598,7 @@ After you confirm that the load job is successful, you can use [SELECT](../sql-r
 
 ## Load data from an S3-compatible storage system
 
-The following examples use the CSV file format and the MinIO storage system. For information about how to load data in other formats, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+The following examples use the CSV file format and the MinIO storage system. For information about how to load data in other formats, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Load a single data file into a single table
 
@@ -873,7 +873,7 @@ For information about the fields in the return results, see [Information Schema 
 
 ## Cancel a load job
 
-When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) statement to cancel the job.
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) statement to cancel the job.
 
 For example, you can execute the following statement to cancel a load job, whose label is `label1`, in the database `test_db`:
 

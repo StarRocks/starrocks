@@ -34,8 +34,8 @@ public:
         const size_t num_elements = _children.size();
 
         size_t num_rows = 1;
-        // when num_elements == 0, we should generate right num_rows.
-        if (num_elements == 0 && chunk) {
+        // use chunk num_rows
+        if (chunk) {
             num_rows = chunk->num_rows();
         }
 

@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
@@ -723,6 +724,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             TNetworkAddress address = snapshotPath.first;
             String host = address.getHostname();
             int port = address.getPort();
+
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
             if (backend == null) {
                 continue;
@@ -755,8 +757,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
-                if (backend == null) {
+                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
                     continue;
                 }
                 try {
@@ -800,7 +802,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
             // cancel all running coordinators
             for (Coordinator coord : coordList) {
-                coord.cancel();
+                coord.cancel(msg);
             }
 
             // try to remove exported temp files

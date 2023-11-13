@@ -59,6 +59,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
+    public static final String HTTPS_SCHEME = "https://";
 
     private AwsProperties awsProperties;
 
@@ -151,8 +152,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             s3ClientBuilder.region(Region.of(s3Region));
         }
 
+        // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
+        // 'scheme', we will add https scheme.
         if (!s3Endpoint.isEmpty()) {
-            s3ClientBuilder.endpointOverride(URI.create(s3Endpoint));
+            s3ClientBuilder.endpointOverride(ensureSchemeInEndpoint(s3Endpoint));
         }
 
         return s3ClientBuilder.build();
@@ -175,8 +178,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             glueClientBuilder.region(Region.of(glueRegion));
         }
 
+        // To prevent the 'glueClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
+        // 'scheme', we will add https scheme.
         if (!glueEndpoint.isEmpty()) {
-            glueClientBuilder.endpointOverride(URI.create(glueEndpoint));
+            glueClientBuilder.endpointOverride(ensureSchemeInEndpoint(glueEndpoint));
         }
 
         return glueClientBuilder.build();
@@ -207,5 +212,19 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     @Override
     public DynamoDbClient dynamo() {
         return null;
+    }
+
+    /**
+     * Checks if the given 'endpoint' contains a scheme. If not, the default HTTPS scheme is added.
+     *
+     * @param endpoint The endpoint string to be checked
+     * @return The URI with the added scheme
+     */
+    public static URI ensureSchemeInEndpoint(String endpoint) {
+        URI uri = URI.create(endpoint);
+        if (uri.getScheme() != null) {
+            return uri;
+        }
+        return URI.create(HTTPS_SCHEME + endpoint);
     }
 }

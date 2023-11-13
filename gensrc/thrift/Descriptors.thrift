@@ -63,15 +63,17 @@ struct TTupleDescriptor {
 }
 
 enum THdfsFileFormat {
-  TEXT,
-  LZO_TEXT,
-  RC_FILE,
-  SEQUENCE_FILE,
-  AVRO,
-  PARQUET,
-  ORC,
-}
+  TEXT = 0,
+  LZO_TEXT = 1,
+  RC_BINARY = 2,
+  RC_TEXT = 3,
+  AVRO = 4,
+  PARQUET = 5,
+  ORC = 6,
+  SEQUENCE_FILE = 7,
 
+  UNKNOWN = 100
+}
 
 // Text file desc
 struct TTextFileDesc {
@@ -158,7 +160,8 @@ enum TSchemaTableType {
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
-    SCH_PIPES
+    SCH_PIPES,
+    SCH_FE_METRICS
 }
 
 enum THdfsCompression {
@@ -265,6 +268,7 @@ struct TOlapTableIndexSchema {
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
+    5: optional Exprs.TExpr where_clause
 }
 
 struct TOlapTableSchemaParam {
@@ -369,6 +373,18 @@ struct THdfsTable {
 
     // The prefixes of locations of partitions in this table
     5: optional list<string> partition_prefixes
+
+    // hive table hive_column_names
+    6: optional string hive_column_names
+
+    // hive table hive_column_types
+    7: optional string hive_column_types
+
+    // hive table input_format
+    8: optional string input_format
+
+    // hive table serde_lib
+    9: optional string serde_lib
 }
 
 struct TFileTable {
@@ -377,6 +393,14 @@ struct TFileTable {
 
     // Schema columns
     2: optional list<TColumn> columns
+
+    3: optional string hive_column_names
+
+    4: optional string hive_column_types
+
+    5: optional string input_format
+
+    6: optional string serde_lib
 }
 
 struct TTableFunctionTable {
@@ -417,6 +441,16 @@ struct TIcebergSchemaField {
     100: optional list<TIcebergSchemaField> children
 }
 
+struct TPartitionMap {
+    1: optional map<i64, THdfsPartition> partitions
+}
+
+struct TCompressedPartitionMap {
+    1: optional i32 original_len
+    2: optional i32 compressed_len
+    3: optional string compressed_serialized_partitions
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -429,6 +463,12 @@ struct TIcebergTable {
 
     // partition column names
     4: optional list<string> partition_column_names
+
+    // partition map may be very big, serialize costs too much, just use serialized byte[]
+    5: optional TCompressedPartitionMap compressed_partitions
+
+    // if serialize partition info throws exception, then use unserialized partitions
+    6: optional map<i64, THdfsPartition> partitions
 }
 
 struct THudiTable {

@@ -58,6 +58,8 @@ public:
         return 0;
     }
 
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
     Status _spill_aggregated_data(RuntimeState* state);
@@ -115,8 +117,8 @@ public:
 
     void close(RuntimeState* state) override;
 
-    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    bool pending_finish() const override { return _aggregator->has_pending_restore(); }
+    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
 private:

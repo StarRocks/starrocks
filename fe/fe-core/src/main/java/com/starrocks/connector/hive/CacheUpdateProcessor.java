@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.RemoteFileIO;
@@ -90,11 +91,16 @@ public class CacheUpdateProcessor {
     }
 
     public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
-        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
-        refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions);
-        if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
-            processSchemaChange(dbName, (HiveTable) table);
+        if (table instanceof HiveMetaStoreTable) {
+            HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
+            metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+            refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions);
+            if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
+                processSchemaChange(dbName, (HiveTable) table);
+            }
+        } else {
+            HiveView view = (HiveView) table;
+            metastore.refreshView(dbName, view.getName());
         }
     }
 

@@ -304,6 +304,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
+                    int shadowSchemaVersion = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion;
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
@@ -370,7 +371,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             countDownLatch.addMark(backendId, shadowTabletId);
                             CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
-                                    shadowShortKeyColumnCount, shadowSchemaHash,
+                                    shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
                                     Partition.PARTITION_INIT_VERSION,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
                                     copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
@@ -464,13 +465,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            long orgIndexId = indexIdMap.get(shadowIdxId);
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes,
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
                     sortKeyUniqueIds);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         tbl.rebuildFullSchema();

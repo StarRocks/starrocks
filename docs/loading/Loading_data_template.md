@@ -164,7 +164,7 @@ LOAD LABEL user_behavior
  (
     "aws.s3.enable_ssl" = "true",
     "aws.s3.use_instance_profile" = "false",
-    "aws.s3.region" = "us-west-1",
+    "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
  )
@@ -248,7 +248,7 @@ Querying directly from S3 using `FILES()` can gives a good preview of the conten
 SELECT * FROM FILES(
     "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
     "format" = "parquet",
-    "aws.s3.region" = "us-west-1",
+    "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 ) LIMIT 10;
@@ -291,7 +291,7 @@ CREATE TABLE `user_behavior_inferred` AS
 SELECT * FROM FILES(
     "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
     "format" = "parquet",
-    "aws.s3.region" = "us-west-1",
+    "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 );
@@ -379,7 +379,7 @@ INSERT INTO user_behavior_declared
   SELECT * FROM FILES(
     "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
     "format" = "parquet",
-    "aws.s3.region" = "us-west-1",
+    "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
 );
@@ -392,4 +392,4 @@ INSERT INTO user_behavior_declared
 - This document only covered IAM user-based authentication. For other options please see [authenticate to AWS resources](../integrations/authenticate_to_aws_resources.md).
 - The [AWS CLI Command Reference](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/s3/index.html) covers the S3 URI in detail.
 - Learn more about [table design](../table_design/StarRocks_table_design.md).
-- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
+- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)

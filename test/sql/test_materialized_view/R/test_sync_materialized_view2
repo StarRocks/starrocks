@@ -149,3 +149,52 @@ drop materialized view test_ce_mv1;
 4	b	2	None
 6	None	None	None
 -- !result
+CREATE TABLE UPPER_TBL1 
+(
+    K1 date,
+    K2 int,
+    V1 int sum
+)
+PARTITION BY RANGE(K1)
+(
+    PARTITION p1 values [('2020-01-01'),('2020-02-01')),
+    PARTITION p2 values [('2020-02-01'),('2020-03-01'))
+)
+DISTRIBUTED BY HASH(K2) BUCKETS 3
+PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into UPPER_TBL1 values ('2020-01-01', 1, 1), ('2020-01-01', 1, 1), ('2020-01-01', 1, 2),  ('2020-01-01', 2, 1);
+-- result:
+-- !result
+create materialized view UPPER_MV1 as select K1, sum(V1) from UPPER_TBL1 group by K1;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+select * from UPPER_MV1 [_SYNC_MV_] order by K1, mv_sum_V1;
+-- result:
+2020-01-01	1
+2020-01-01	4
+-- !result
+select K1, sum(V1) from UPPER_TBL1 group by K1;
+-- result:
+2020-01-01	5
+-- !result
+insert into UPPER_TBL1 values ('2020-01-01', 1, 1), ('2020-01-01', 1, 1), ('2020-01-01', 1, 2),  ('2020-01-01', 2, 1);
+-- result:
+-- !result
+select * from UPPER_MV1 [_SYNC_MV_] order by K1, mv_sum_V1;
+-- result:
+2020-01-01	2
+2020-01-01	8
+-- !result
+select K1, sum(V1) from UPPER_TBL1 group by K1;
+-- result:
+2020-01-01	10
+-- !result
+drop materialized view UPPER_MV1;
+-- result:
+-- !result

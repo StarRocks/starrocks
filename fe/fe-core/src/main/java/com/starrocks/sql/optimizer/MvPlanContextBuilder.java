@@ -35,6 +35,9 @@ public class MvPlanContextBuilder {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
         }
         optimizerConfig.setMVRewritePlan(true);
-        return mvOptimizer.optimize(mv, new ConnectContext(), optimizerConfig);
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(
+                ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
+        return mvOptimizer.optimize(mv, connectContext, optimizerConfig);
     }
 }

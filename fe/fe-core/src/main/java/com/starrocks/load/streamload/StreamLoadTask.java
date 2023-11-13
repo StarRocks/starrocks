@@ -1057,8 +1057,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         profile.addChild(summaryProfile);
         if (coord.getQueryProfile() != null) {
             if (!isSyncStreamLoad()) {
-                coord.endProfile();
-                profile.addChild(coord.buildMergedQueryProfile());
+                coord.collectProfileSync();
+                profile.addChild(coord.buildQueryProfile(session == null || session.needMergeProfile()));
             } else {
                 profile.addChild(coord.getQueryProfile());
             }
@@ -1110,7 +1110,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 return;
             }
             if (coord != null && !isSyncStreamLoad) {
-                coord.cancel();
+                coord.cancel(txnStatusChangeReason);
                 QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             }
             for (int i = 0; i < channelNum; i++) {

@@ -196,9 +196,10 @@ void WorkGroup::decr_num_running_drivers() {
     }
 }
 
-StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token() {
+StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token(bool enable_group_level_query_queue) {
     int64_t old = _num_running_queries.fetch_add(1);
-    if (_concurrency_limit != ABSENT_CONCURRENCY_LIMIT && old >= _concurrency_limit) {
+    if (!enable_group_level_query_queue && _concurrency_limit != ABSENT_CONCURRENCY_LIMIT &&
+        old >= _concurrency_limit) {
         _num_running_queries.fetch_sub(1);
         _concurrency_overflow_count++;
         return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
@@ -259,7 +260,7 @@ WorkGroupPtr WorkGroupManager::add_workgroup(const WorkGroupPtr& wg) {
     if (_workgroup_versions.count(wg->id()) && _workgroup_versions[wg->id()] == wg->version()) {
         return _workgroups[unique_id];
     } else {
-        return get_default_workgroup();
+        return get_default_workgroup_unlocked();
     }
 }
 
@@ -442,6 +443,10 @@ void WorkGroupManager::update_metrics() {
 
 WorkGroupPtr WorkGroupManager::get_default_workgroup() {
     std::shared_lock read_lock(_mutex);
+    return get_default_workgroup_unlocked();
+}
+
+WorkGroupPtr WorkGroupManager::get_default_workgroup_unlocked() {
     auto unique_id = WorkGroup::create_unique_id(WorkGroup::DEFAULT_VERSION, WorkGroup::DEFAULT_WG_ID);
     DCHECK(_workgroups.count(unique_id));
     return _workgroups[unique_id];

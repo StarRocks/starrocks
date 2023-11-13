@@ -77,6 +77,10 @@ select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
 -- result:
 4096
 -- !result
+select count(*) from (select distinct c0 from t0 limit 100) tb;
+-- result:
+100
+-- !result
 set tablet_internal_parallel_mode="auto";
 -- result:
 -- !result
@@ -135,4 +139,8 @@ select count(*) from (select distinct c0 from t0) tb;
 select count(*) from (select c0, c1, sum(c2) from t0 group by c0, c1) tb;
 -- result:
 4096
+-- !result
+select count(*) from (select distinct c0 from t0 limit 100) tb;
+-- result:
+100
 -- !result

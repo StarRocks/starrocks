@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DnsCache;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
@@ -178,6 +179,11 @@ public class ComputeNode implements IComputable, Writable {
         return host;
     }
 
+    // The result will be in the IP string format.
+    public String getIP() {
+        return DnsCache.tryLookup(host);
+    }
+
     public String getVersion() {
         return version;
     }
@@ -208,6 +214,10 @@ public class ComputeNode implements IComputable, Writable {
 
     public TNetworkAddress getBrpcAddress() {
         return new TNetworkAddress(host, brpcPort);
+    }
+
+    public TNetworkAddress getBrpcIpAddress() {
+        return new TNetworkAddress(getIP(), brpcPort);
     }
 
     public TNetworkAddress getHttpAddress() {

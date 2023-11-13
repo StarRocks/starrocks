@@ -277,6 +277,7 @@ public:
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
+    void set_schema_version(int32_t version) { _schema_version = version; }
     void clear_columns();
     void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
@@ -304,8 +305,8 @@ public:
 
     std::string debug_string() const;
 
-    int64_t mem_usage() const {
-        int64_t mem_usage = sizeof(TabletSchema);
+    size_t mem_usage() const {
+        size_t mem_usage = sizeof(TabletSchema);
         for (const auto& col : _cols) {
             mem_usage += col.mem_usage();
         }

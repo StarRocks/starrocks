@@ -50,9 +50,9 @@ There are two ways to create a bitmap index for a column.
     | column_name   | Yes          | The name of the column on which a bitmap index is created. You can specify multiple column names to create bitmap indexes for multiple columns at a time. Separate multiple columns with commas (`,`).  |
     | COMMENT       | No           | The comment of the bitmap index.                             |
 
-    You can create bitmap indexes for multiple columns at a time by specifying multiple `INDEX index_name (column_name [, ...]) [USING BITMAP] [COMMENT '']` commands. These commands need to be separated with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+    You can create bitmap indexes for multiple columns at a time by specifying multiple `INDEX index_name (column_name [, ...]) [USING BITMAP] [COMMENT '']` commands. These commands need to be separated with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
 
-- Create a bitmap index for a column of a table using the CREATE INDEX statement. For parameter descriptions and examples, see [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE%20INDEX.md).
+- Create a bitmap index for a column of a table using the CREATE INDEX statement. For parameter descriptions and examples, see [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md).
 
     ```SQL
     CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT ''];
@@ -60,7 +60,7 @@ There are two ways to create a bitmap index for a column.
 
 ## Display bitmap indexes
 
-You can view all bitmap indexes created in a table using the SHOW INDEX statement. For parameter descriptions and examples, see [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW%20INDEX.md).
+You can view all bitmap indexes created in a table using the SHOW INDEX statement. For parameter descriptions and examples, see [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW_INDEX.md).
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
@@ -72,7 +72,7 @@ SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
 
 ## Delete a bitmap index
 
-You can delete a bitmap index from a table using the DROP INDEX statement. For parameter descriptions and examples, see [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP%20INDEX.md).
+You can delete a bitmap index from a table using the DROP INDEX statement. For parameter descriptions and examples, see [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md).
 
 ```SQL
 DROP INDEX index_name ON [db_name.]table_name;

@@ -43,7 +43,7 @@ Status HorizontalCompactionTask::run_impl() {
     RETURN_IF_ERROR(_validate_compaction(statistics));
     TRACE("[Compaction] horizontal compaction validated");
 
-    _commit_compaction();
+    RETURN_IF_ERROR(_commit_compaction());
     TRACE("[Compaction] horizontal compaction committed");
 
     return Status::OK();
@@ -65,7 +65,7 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
 
     Schema schema = ChunkHelper::convert_schema(_tablet_schema);
     TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()), output_rs_writer->version(),
-                        schema);
+                        schema, _tablet_schema);
     TabletReaderParams reader_params;
     DCHECK(compaction_type() == BASE_COMPACTION || compaction_type() == CUMULATIVE_COMPACTION);
     reader_params.reader_type =

@@ -68,7 +68,7 @@ public abstract class PrivTable implements Writable {
             if (compareByHost != 0) {
                 return compareByHost;
             }
-            return o2.getQualifiedUser().compareTo(o1.getQualifiedUser());
+            return o2.getUser().compareTo(o1.getUser());
         }
     });
 
@@ -228,7 +228,7 @@ public abstract class PrivTable implements Writable {
 
     public boolean doesUsernameExist(String qualifiedUsername) {
         for (UserIdentity userIdentity : map.keySet()) {
-            if (userIdentity.getQualifiedUser().equals(qualifiedUsername)) {
+            if (userIdentity.getUser().equals(qualifiedUsername)) {
                 return true;
             }
         }
@@ -311,7 +311,7 @@ public abstract class PrivTable implements Writable {
      * return a iterator to all the entries that match currentUser
      */
     public Iterator<PrivEntry> getReadOnlyIteratorByUser(UserIdentity currentUser) {
-        return getReadOnlyIteratorByUser(currentUser.getQualifiedUser(), currentUser.getHost());
+        return getReadOnlyIteratorByUser(currentUser.getUser(), currentUser.getHost());
     }
 
     /**

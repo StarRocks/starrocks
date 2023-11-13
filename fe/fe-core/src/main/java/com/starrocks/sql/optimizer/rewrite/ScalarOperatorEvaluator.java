@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,8 +45,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions.SUPPORT_JAVA_STYLE_DATETIME_FORMATTER;
 
 /**
  * Use for execute constant functions
@@ -169,13 +173,13 @@ public enum ScalarOperatorEvaluator {
         FunctionSignature signature =
                 new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
 
-        if (!functions.containsKey(signature)) {
+        FunctionInvoker invoker = functions.get(signature);
+
+        if (invoker == null) {
             return root;
         }
 
-        FunctionInvoker invoker = functions.get(signature);
-
-        if (needMonotonic && !invoker.isMonotonic) {
+        if (needMonotonic && !isMonotonicFunc(invoker, root)) {
             return root;
         }
 
@@ -193,10 +197,81 @@ public enum ScalarOperatorEvaluator {
         } catch (AnalysisException e) {
             LOG.debug("failed to invoke", e);
             if (invoker.isMetaFunction) {
-                throw new StarRocksPlannerException(ErrorType.USER_ERROR, e.getMessage());
+                throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
             }
         }
         return root;
+    }
+
+
+    private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {
+        if (!invoker.isMonotonic) {
+            return false;
+        }
+
+        if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())) {
+            String pattern = operator.getChild(1).toString();
+            if (pattern.isEmpty()) {
+                return true;
+            }
+
+            if (SUPPORT_JAVA_STYLE_DATETIME_FORMATTER.contains(pattern.trim())) {
+                return true;
+            }
+            Optional<String> stripedPattern = stripFormatValue(pattern);
+            // "YmdHiSf" or "YmdHisf" ensure the format string value reserve the original date order
+            // like date_format('2021-01-01', '%Y-%m-%d') is qualified but date_format('2021-01-01', '%m-%Y-%d') is not
+            return stripedPattern.map(e -> "YmdHiSf".startsWith(e) || "YmdHisf".startsWith(e)).orElse(false);
+        }
+
+        return true;
+    }
+    private Optional<String> stripFormatValue(String pattern) {
+        StringBuilder builder = new StringBuilder();
+        boolean unsupportedFormat = false;
+        for (char c : pattern.toCharArray()) {
+            switch (c) {
+                case 'Y':
+                case 'm':
+                case 'd':
+                case 'H':
+                case 'i':
+                case 'S':
+                case 's':
+                case 'f':
+                    builder.append(c);
+                    break;
+                case 'a':
+                case 'b':
+                case 'c':
+                case 'D':
+                case 'e':
+                case 'h':
+                case 'I':
+                case 'j':
+                case 'k':
+                case 'l':
+                case 'M':
+                case 'p':
+                case 'r':
+                case 'T':
+                case 'U':
+                case 'u':
+                case 'V':
+                case 'v':
+                case 'W':
+                case 'w':
+                case 'X':
+                case 'x':
+                case 'y':
+                    unsupportedFormat = true;
+                    break;
+                default:
+                    // do nothing
+            }
+        }
+
+        return unsupportedFormat ? Optional.empty() : Optional.of(builder.toString());
     }
 
     private static class FunctionInvoker {

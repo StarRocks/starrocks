@@ -17,7 +17,7 @@ Note the following points:
 
 - In actual business scenarios, both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
 
-- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
+- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
 
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
@@ -57,7 +57,7 @@ If strict mode is enabled, StarRocks loads only the rows that hold `\N` or `1` a
 
 ## Set strict mode
 
-If you run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md) job to load data, use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
+If you run a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) job to load data, use the `strict_mode` parameter to set strict mode for the load job. Valid values are `true` and `false`. The default value is `false`. The value `true` enables strict mode, and the value `false` disables strict mode.
 
 If you execute [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) to load data, use the `enable_insert_strict` session variable to set strict mode. Valid values are `true` and `false`. The default value is `true`. The value `true` enables strict mode, and the value `false` disables strict mode.
 
@@ -72,7 +72,7 @@ curl --location-trusted -u <username>:<password> \
     http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 ```
 
-For detailed syntax and parameters about Stream Load, see [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+For detailed syntax and parameters about Stream Load, see [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
 ### Broker Load
 
@@ -93,7 +93,7 @@ PROPERTIES
 )
 ```
 
-The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Broker Load, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Broker Load, see [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
 
 ### Routine Load
 
@@ -110,7 +110,7 @@ FROM KAFKA
 )
 ```
 
-The preceding code snippet uses Apache Kafka® as an example. For detailed syntax and parameters about Routine Load, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
+The preceding code snippet uses Apache Kafka® as an example. For detailed syntax and parameters about Routine Load, see [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md).
 
 ### Spark Load
 
@@ -132,7 +132,7 @@ PROPERTIES
 )
 ```
 
-The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Spark Load, see [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md).
+The preceding code snippet uses HDFS as an example. For detailed syntax and parameters about Spark Load, see [SPARK LOAD](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md).
 
 ### INSERT
 

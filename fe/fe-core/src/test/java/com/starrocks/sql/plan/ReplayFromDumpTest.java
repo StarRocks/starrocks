@@ -65,10 +65,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' " +
                 "WHEN '0' THEN TRUE ELSE FALSE END\n" +
                 "  |  limit: 10"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("4:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  4:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
-                "  |  output columns: 3, 90"));
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (5: customer_id), remote = true"));
         sessionVariable.setNewPlanerAggStage(0);
     }
 
@@ -86,7 +87,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |      [391, INT, true] | [392, DECIMAL64(7,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [325: ws_sold_date_sk, INT, true] | [346: ws_ext_sales_price, DECIMAL64(7,2), true]\n" +
-                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]"));
+                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]\n" +
+                "  |  pass-through-operands: all\n" +
+                "  |  cardinality: 194398472\n" +
+                "  |  column statistics: \n" +
+                "  |  * ws_sold_date_sk-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
+                "  |  * ws_ext_sales_price-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
 
     @Test
@@ -200,7 +206,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
@@ -318,7 +323,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 replayPair.second.contains("  |  <slot 40> : CAST(15: id_smallint AS INT)\n" +
                         "  |  <slot 41> : CAST(23: id_date AS DATETIME)\n" +
                         "  |  \n" +
-                        "  5:OlapScanNode\n" +
+                        "  6:OlapScanNode\n" +
                         "     TABLE: external_es_table_without_null"));
     }
 
@@ -327,7 +332,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("34:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("33:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
                 "  |  group by: 40: city, 116: division_en, 104: department, 106: category, 126: concat, " +
@@ -480,7 +486,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  other join predicates: if(19: c_0_0 != 1: c_0_0, 4: c_0_3, 20: c_0_3) = '1969-12-28', " +
                 "CASE WHEN (21: countRows IS NULL) OR (21: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL " +
                 "WHEN 16: c_0_0 IS NOT NULL THEN TRUE WHEN 22: countNotNulls < 21: countRows THEN NULL ELSE FALSE END IS NULL"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: c_0_0 = 16: c_0_0\n" +
@@ -505,14 +511,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testMultiSubqueries() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/subquery_statistics"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  95:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  96:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]\n" +
                 "  |  hasNullableGenerateChild: true\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * count-->[0.0, 1.0420273298435367, 0.0, 8.0, 1.0] ESTIMATE\n" +
                 "  |  \n" +
-                "  94:Project\n" +
+                "  95:Project\n" +
                 "  |  output columns:\n" +
                 "  |  548 <-> 1\n" +
                 "  |  hasNullableGenerateChild: true\n" +
@@ -592,7 +598,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testHiveTPCH02UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
-        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [24: n_regionkey, INT, true] = [26: r_regionkey, INT, true]\n" +
@@ -606,9 +611,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testHiveTPCH05UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch05_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [10: o_custkey, INT, true] = [1: c_custkey, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 3, build_expr = (1: c_custkey), remote = false\n" +
                 "  |  output columns: 4, 9\n" +
                 "  |  cardinality: 22765073"));
     }
@@ -618,11 +625,11 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         FeConstants.isReplayFromQueryDump = true;
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [52: n_regionkey, INT, true] = [58: r_regionkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (58: r_regionkey), remote = false\n" +
+                "  |  - filter_id = 0, build_expr = (58: r_regionkey), remote = false\n" +
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
         FeConstants.isReplayFromQueryDump = false;
@@ -634,7 +641,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_catalog"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 17: ps_partkey = 1: p_partkey"));
@@ -690,7 +697,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
         Pair<String, ExecPlan> result = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext,
                 getDumpInfoFromJson(jsonStr));
-        System.out.println(result.second.getPhysicalPlan().debugString());
         OptExpression expression = result.second.getPhysicalPlan().inputAt(1);
         Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
@@ -701,7 +707,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_1"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("31:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("32:AGGREGATE (update finalize)\n" +
                 "  |  output: multi_distinct_count(212: case)\n" +
                 "  |  group by: 34: cast, 33: cast, 38: handle, 135: concat, 136: case, 36: cast"));
     }
@@ -711,7 +717,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("40:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("38:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 396: substring = 361: date\n" +
@@ -723,12 +729,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_3"),
                         null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("26:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  25:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 71: order_id = 2: orderid\n" +
                 "  |  \n" +
-                "  |----25:EXCHANGE"));
+                "  |----24:EXCHANGE"));
     }
 
     @Test
@@ -773,31 +779,34 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_all_with_topn_runtime_filter"),
                         sessionVariable, TExplainLevel.VERBOSE);
-        System.out.println(replayPair.second);
         String plan = replayPair.second;
 
         // tbl_mock_015
-        Assert.assertTrue(plan, plan.contains("17:TOP-N\n" +
-                "  |  order by: [60, DATETIME, false] DESC\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (<slot 60> 60: mock_004), remote = false"));
-        Assert.assertTrue(plan, plan.contains("table: tbl_mock_015, rollup: tbl_mock_015\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: [61: mock_005, VARCHAR, true] = '1000'"));
-        Assert.assertTrue(plan, plan.contains(" probe runtime filters:\n" +
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 1, probe_expr = (37: mock_004)"));
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
                 "     - filter_id = 3, probe_expr = (60: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
-        Assert.assertTrue(plan, plan.contains("4:TOP-N\n" +
-                "  |  order by: [37, DATETIME, false] DESC\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (<slot 37> 37: mock_004), remote = false"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (37: mock_004)"));
-        Assert.assertTrue(plan, plan.contains("6:OlapScanNode\n" +
-                "     table: tbl_mock_001, rollup: tbl_mock_001\n" +
-                "     preAggregation: on\n" +
-                "     Predicates: [39: mock_008, VARCHAR, true] = '1000', (38: mock_005 != '1000') OR (38: mock_005 IS NULL)"));
+        Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 4, probe_expr = (60: mock_004)"));
 
+    }
+
+    @Test
+    public void testJoinWithArray() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/join_with_array"),
+                        null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: 109: mock_007 = 46: mock_007\n" +
+                "  |  equal join conjunct: 153: any_value = 86: mock_008\n" +
+                "  |  \n" +
+                "  |----3:OlapScanNode\n" +
+                "  |       TABLE: tbl_mock_024"));
     }
 }

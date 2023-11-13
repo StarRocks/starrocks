@@ -38,7 +38,6 @@ public class ExecuteAsExecutor {
         Preconditions.checkArgument(!stmt.isAllowRevert());
         LOG.info("{} EXEC AS {} from now on", ctx.getCurrentUserIdentity(), stmt.getToUser());
 
-        ctx.setQualifiedUser(stmt.getToUser().getQualifiedUser());
         ctx.setCurrentUserIdentity(stmt.getToUser());
         ctx.setCurrentRoleIds(stmt.getToUser());
     }

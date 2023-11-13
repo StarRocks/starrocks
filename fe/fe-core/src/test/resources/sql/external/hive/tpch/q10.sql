@@ -109,6 +109,8 @@ OutPut Exchange Id: 18
 14:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [1: c_custkey, INT, true] = [10: o_custkey, INT, true]
+|  build runtime filters:
+|  - filter_id = 2, build_expr = (10: o_custkey), remote = false
 |  output columns: 1, 2, 3, 5, 6, 8, 23, 24, 35
 |  cardinality: 7651211
 |  column statistics:
@@ -134,6 +136,8 @@ OutPut Exchange Id: 18
 distribution type: SHUFFLE
 partition exprs: [1: c_custkey, INT, true]
 cardinality: 15000000
+probe runtime filters:
+- filter_id = 2, probe_expr = (1: c_custkey)
 
 PLAN FRAGMENT 2(F04)
 

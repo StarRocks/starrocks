@@ -305,18 +305,23 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     ASSIGN_OR_RETURN(auto new_schema, new_tablet.get_schema());
     ASSIGN_OR_RETURN(auto has_delete_predicates, base_tablet.has_delete_predicates(alter_version));
 
+    std::vector<std::string> base_table_columns;
+    for (auto& column : base_schema->columns()) {
+        base_table_columns.emplace_back(std::string{column.name()});
+    }
     // parse request and create schema change params
     SchemaChangeParams sc_params;
     sc_params.base_tablet = &base_tablet;
     sc_params.new_tablet = &new_tablet;
-    sc_params.chunk_changer = std::make_unique<ChunkChanger>(new_schema);
+    sc_params.chunk_changer =
+            std::make_unique<ChunkChanger>(base_schema, new_schema, base_table_columns, request.alter_job_type);
     sc_params.version = alter_version;
     sc_params.txn_id = request.txn_id;
 
-    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(base_schema, new_schema, sc_params.chunk_changer.get(),
-                                                     sc_params.materialized_params_map, has_delete_predicates,
-                                                     &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
+    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map, sc_params.where_expr);
+    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(
+            base_schema, new_schema, sc_params.chunk_changer.get(), sc_params.materialized_params_map,
+            sc_params.where_expr, has_delete_predicates, &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
 
     // create txn log
     auto txn_log = std::make_shared<TxnLog>();
@@ -330,6 +335,51 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
 
     // write txn log
     RETURN_IF_ERROR(new_tablet.put_txn_log(std::move(txn_log)));
+    return Status::OK();
+}
+
+Status SchemaChangeHandler::process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request) {
+    if (!request.__isset.txn_id) {
+        LOG(WARNING) << "txn_id not set in request";
+        return Status::InternalError("txn_id not set in request");
+    }
+    int64_t txn_id = request.txn_id;
+
+    for (const auto& tablet_meta_info : request.tabletMetaInfos) {
+        RETURN_IF_ERROR(do_process_update_tablet_meta(tablet_meta_info, txn_id));
+    }
+
+    return Status::OK();
+}
+
+Status SchemaChangeHandler::do_process_update_tablet_meta(const TTabletMetaInfo& tablet_meta_info, int64_t txn_id) {
+    if (tablet_meta_info.meta_type != TTabletMetaType::ENABLE_PERSISTENT_INDEX) {
+        return Status::InternalError(fmt::format("unsupported update meta type: {}", tablet_meta_info.meta_type));
+    }
+
+    MonotonicStopWatch timer;
+    timer.start();
+    LOG(INFO) << "begin to update tablet, tablet: " << tablet_meta_info.tablet_id
+              << ", update meta type: " << tablet_meta_info.meta_type;
+
+    auto tablet_id = tablet_meta_info.tablet_id;
+    ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(tablet_id));
+
+    // create txn log
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto op_alter_metadata = txn_log->mutable_op_alter_metadata();
+
+    auto metadata_update_info = op_alter_metadata->add_metadata_update_infos();
+    metadata_update_info->set_enable_persistent_index(tablet_meta_info.enable_persistent_index);
+
+    LOG(INFO) << "update lake tablet: " << tablet_id
+              << ", enable_persistent_index: " << tablet_meta_info.enable_persistent_index
+              << ", cost: " << timer.elapsed_time();
+
+    // write txn log
+    RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
 }
 

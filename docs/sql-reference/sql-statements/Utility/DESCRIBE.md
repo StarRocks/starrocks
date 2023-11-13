@@ -4,7 +4,7 @@
 
 You can use the statement to perform the following operations:
 
-- View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](../../../table_design/Sort_key) and [materialized view](../../../using_starrocks/Materialized_view) of the table.
+- View the schema of a table stored in your StarRocks cluster, along with the type of the [sort key](../../../table_design/Sort_key.md) and [materialized view](../../../using_starrocks/Materialized_view.md) of the table.
 - View the schema of a table stored in the following external data sources, such as Apache Hive™. Note that you can perform this operation only in StarRocks 2.4 and later versions.
 
 ## Syntax
@@ -107,8 +107,8 @@ DESC hive_catalog.hive_db.hive_table;
 
 ## References
 
-- [CREATE DATABASE](../data-definition/CREATE%20DATABASE.md)
-- [SHOW CREATE DATABASE](SHOW%20CREATE%20DATABASE.md)
+- [CREATE DATABASE](../data-definition/CREATE_DATABASE.md)
+- [SHOW CREATE DATABASE](../data-manipulation/SHOW_CREATE_DATABASE.md)
 - [USE](../data-definition/USE.md)
-- [SHOW DATABASES](../data-manipulation/SHOW%20DATABASES.md)
-- [DROP DATABASE](../data-definition/DROP%20DATABASE.md)
+- [SHOW DATABASES](../data-manipulation/SHOW_DATABASES.md)
+- [DROP DATABASE](../data-definition/DROP_DATABASE.md)

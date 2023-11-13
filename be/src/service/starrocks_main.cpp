@@ -37,8 +37,6 @@
 #include <sys/file.h>
 #include <unistd.h>
 
-#include "block_cache/block_cache.h"
-
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif

@@ -167,6 +167,11 @@ include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
 
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
+set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
+
+if (${JEMALLOC_DEBUG})
+    set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc-debug")
+endif()
 
 # Set all libraries
 
@@ -251,7 +256,7 @@ add_library(leveldb STATIC IMPORTED GLOBAL)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
 add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_pic.a)
+set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib/libjemalloc_pic.a)
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
@@ -279,6 +284,21 @@ set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/
 
 add_library(rocksdb STATIC IMPORTED GLOBAL)
 set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
+
+add_library(krb5support STATIC IMPORTED)
+set_target_properties(krb5support PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libkrb5support.a)
+
+add_library(krb5 STATIC IMPORTED)
+set_target_properties(krb5 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libkrb5.a)
+
+add_library(com_err STATIC IMPORTED)
+set_target_properties(com_err PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcom_err.a)
+
+add_library(k5crypto STATIC IMPORTED)
+set_target_properties(k5crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libk5crypto.a)
+
+add_library(gssapi_krb5 STATIC IMPORTED)
+set_target_properties(gssapi_krb5 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgssapi_krb5.a)
 
 add_library(sasl STATIC IMPORTED GLOBAL)
 set_target_properties(sasl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libsasl2.a)
@@ -402,6 +422,18 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     endforeach()
 endif()
 
+if (${WITH_STARCACHE} STREQUAL "ON")
+    add_library(starcache STATIC IMPORTED GLOBAL)
+    if ("${USE_STAROS}" STREQUAL "ON")
+        set(STARCACHE_DIR "${STARLET_INSTALL_DIR}/starlet_install")
+    else()
+        set(STARCACHE_DIR "${THIRDPARTY_DIR}/starcache")
+    endif()
+    set_target_properties(starcache PROPERTIES IMPORTED_LOCATION ${STARCACHE_DIR}/lib/libstarcache.a)
+    include_directories(SYSTEM ${STARCACHE_DIR}/include)
+    message(STATUS "link the starcache in directory: ${STARCACHE_DIR}")
+endif()
+
 if ("${USE_STAROS}" STREQUAL "ON")
     if (DEFINED ENV{STARLET_INSTALL_DIR})
         set(STARLET_INSTALL_DIR "$ENV{STARLET_INSTALL_DIR}")
@@ -431,6 +463,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(leveldb::leveldb ALIAS leveldb)
     add_library(CURL::libcurl ALIAS curl)
     add_library(rocksdb::rocksdb ALIAS rocksdb)
+    add_library(starcache::starcache ALIAS starcache)
 
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
@@ -464,11 +497,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
     set(AZURE_SDK_LIB Azure::azure-identity Azure::azure-storage-blobs Azure::azure-core Azure::azure-storage-common)
 
-    set(starcache_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake/starcache" CACHE PATH "starcachelib search path")
-    find_package(starcache CONFIG REQUIRED)
-    set_target_properties(starcache::starcache PROPERTIES IMPORTED_GLOBAL TRUE)
-    add_library(starcachelib ALIAS starcache::starcache)
-
     set(starlet_DIR "${STARLET_INSTALL_DIR}/starlet_install/lib/cmake" CACHE PATH "starlet search path")
     find_package(starlet CONFIG REQUIRED)
     message(STATUS "Using starlet ${starlet_VERSION}")
@@ -485,7 +513,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
        ${STARROCKS_DEPENDENCIES}
        starlet
        starlet_fslib_all
-       starcachelib
+       starcache
        ${AZURE_SDK_LIB}
        )
 endif()
@@ -579,7 +607,7 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment"
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables -Werror=string-plus-int -Werror=pessimizing-move")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
     endif()
@@ -735,6 +763,7 @@ include_directories(
     ${GENSRC_DIR}/
     SYSTEM ${THIRDPARTY_DIR}/include
     SYSTEM ${GPERFTOOLS_HOME}/include
+    SYSTEM ${JEMALLOC_HOME}/include
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
     SYSTEM ${THIRDPARTY_DIR}/llvm/include/
@@ -845,6 +874,11 @@ set(STARROCKS_DEPENDENCIES
     hyperscan
     simdjson
     sasl
+    gssapi_krb5
+    krb5
+    krb5support
+    k5crypto
+    com_err
     librdkafka_cpp
     librdkafka
     libpulsar
@@ -872,6 +906,16 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     )
 endif()
 
+if (${WITH_STARCACHE} STREQUAL "ON")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        ${WL_START_GROUP}
+        brpc
+        starcache
+        ${WL_END_GROUP}
+    )
+endif()
+
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
@@ -886,6 +930,7 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${STARROCKS_DEPENDENCIES}
     -static-libstdc++
     -static-libgcc
+    -lresolv
 )
 
 # Add sanitize static link flags or jemalloc

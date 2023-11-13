@@ -1337,6 +1337,9 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
 void Tablet::do_tablet_meta_checkpoint() {
     std::unique_lock store_lock(_meta_store_lock);
+    if (_will_be_force_replaced) {
+        return;
+    }
     if (_newly_created_rowset_num == 0) {
         return;
     }
@@ -1720,7 +1723,8 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
 }
 
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
-    std::lock_guard wrlock(_schema_lock);
+    std::lock_guard l0(_meta_lock);
+    std::lock_guard l1(_schema_lock);
     // Double Check for concurrent update
     if (!_max_version_schema || tablet_schema->schema_version() > _max_version_schema->schema_version()) {
         if (tablet_schema->id() == TabletSchema::invalid_id()) {
@@ -1729,6 +1733,7 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
             _max_version_schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_schema).first;
         }
     }
+
     _tablet_meta->save_tablet_schema(_max_version_schema, _data_dir);
 }
 

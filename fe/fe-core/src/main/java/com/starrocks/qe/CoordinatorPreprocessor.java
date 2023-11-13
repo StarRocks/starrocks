@@ -162,6 +162,10 @@ public class CoordinatorPreprocessor {
         return workerProvider.getWorkerById(workerId).getBrpcAddress();
     }
 
+    public TNetworkAddress getBrpcIpAddress(long workerId) {
+        return workerProvider.getWorkerById(workerId).getBrpcIpAddress();
+    }
+
     public TNetworkAddress getAddress(long workerId) {
         ComputeNode worker = workerProvider.getWorkerById(workerId);
         return worker.getAddress();

@@ -52,7 +52,7 @@ BloomFilterIndexReader::BloomFilterIndexReader() {
 }
 
 BloomFilterIndexReader::~BloomFilterIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> BloomFilterIndexReader::load(const IndexReadOptions& opts, const BloomFilterIndexPB& meta) {
@@ -60,7 +60,7 @@ StatusOr<bool> BloomFilterIndexReader::load(const IndexReadOptions& opts, const 
         Status st = _do_load(opts, meta);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
-                                     _mem_usage() - sizeof(BloomFilterIndexReader));
+                                     mem_usage() - sizeof(BloomFilterIndexReader));
         } else {
             _reset();
         }

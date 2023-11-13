@@ -259,6 +259,7 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -1128,6 +1129,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             alterType = ShowAlterStmt.AlterType.ROLLUP;
         } else if (context.MATERIALIZED() != null && context.VIEW() != null) {
             alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        } else if (context.OPTIMIZE() != null) {
+            alterType = ShowAlterStmt.AlterType.OPTIMIZE;
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }
@@ -1157,6 +1160,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             alterType = ShowAlterStmt.AlterType.ROLLUP;
         } else if (context.MATERIALIZED() != null && context.VIEW() != null) {
             alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        } else if (context.OPTIMIZE() != null) {
+            alterType = ShowAlterStmt.AlterType.OPTIMIZE;
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }
@@ -1515,7 +1520,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
-        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments, comment,
+        return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments,
+                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
+                comment,
                 refreshSchemeDesc,
                 expressionPartitionDesc, distributionDesc, sortKeys, properties, queryStatement, createPos(context));
     }
@@ -3501,6 +3508,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitOptimizeClause(StarRocksParser.OptimizeClauseContext context) {
+        return new OptimizeClause(
+                context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
+                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                context.orderByDesc() == null ? null :
+                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                .stream().map(Identifier::getValue).collect(toList()),
+                context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                createPos(context));
+    }
+
+    @Override
     public ParseNode visitAddColumnClause(StarRocksParser.AddColumnClauseContext context) {
         ColumnDef columnDef = getColumnDef(context.columnDesc());
         if (columnDef.isAutoIncrement()) {
@@ -3532,7 +3552,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             if (columnPosition != null) {
                 throw new ParsingException(
-                        PARSER_ERROR_MSG.generatedColumnLimit("columnPosition", "ADD GENERATED COLUMN"),
+                        PARSER_ERROR_MSG.generatedColumnLimit("AFTER", "ADD GENERATED COLUMN"),
                         columnDef.getPos());
             }
 
@@ -5374,6 +5394,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             case StarRocksLexer.SLASH_SYMBOL:
                 return ArithmeticExpr.Operator.DIVIDE;
             case StarRocksLexer.PERCENT_SYMBOL:
+            case StarRocksLexer.MOD:
                 return ArithmeticExpr.Operator.MOD;
             case StarRocksLexer.INT_DIV:
                 return ArithmeticExpr.Operator.INT_DIVIDE;
@@ -5387,8 +5408,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return ArithmeticExpr.Operator.BIT_SHIFT_LEFT;
             case StarRocksLexer.BIT_SHIFT_RIGHT:
                 return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT;
-            default:
+            case StarRocksLexer.BIT_SHIFT_RIGHT_LOGICAL:
                 return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL;
+            default:
+                throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(operator.getText()), new NodePosition(operator));
         }
     }
 
@@ -5554,8 +5577,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new FunctionCallExpr(functionName, ImmutableList.of(split, e2), pos);
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
-            return new InformationFunction("CONNECTION_ID");
+        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
+            return new InformationFunction(FunctionSet.CONNECTION_ID.toUpperCase());
         }
 
         if (functionName.equals(FunctionSet.MAP)) {

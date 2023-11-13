@@ -1,0 +1,145 @@
+-- name: test_query_cache_use_fresh_global_dict
+DROP TABLE IF EXISTS `t0`;
+-- result:
+-- !result
+CREATE TABLE `t0` (
+  `dt` date NOT NULL COMMENT "",
+  `k1` varchar(100) NOT NULL COMMENT "",
+  `k2` varchar(100) NOT NULL COMMENT "",
+  `v1` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`dt`, `k1`, `k2`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`dt`)
+(PARTITION p20230101 VALUES [("2023-01-01"), ("2023-01-02")),
+PARTITION p20230102 VALUES [("2023-01-02"), ("2023-01-03")),
+PARTITION p20230103 VALUES [("2023-01-03"), ("2023-01-04")),
+PARTITION p20230104 VALUES [("2023-01-04"), ("2023-01-05")),
+PARTITION p20230105 VALUES [("2023-01-05"), ("2023-01-06")),
+PARTITION p20230106 VALUES [("2023-01-06"), ("2023-01-07")),
+PARTITION p20230107 VALUES [("2023-01-07"), ("2023-01-08")),
+PARTITION p20230108 VALUES [("2023-01-08"), ("2023-01-09")),
+PARTITION p20230109 VALUES [("2023-01-09"), ("2023-01-10")))
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 4 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 values('2023-01-01', 'foo_0001', 'bar_0010', 1);
+-- result:
+-- !result
+insert into t0 values('2023-01-02', 'foo_0001', 'bar_0011', 1);
+-- result:
+-- !result
+insert into t0 values('2023-01-03', 'foo_0001', 'bar_0012', 1);
+-- result:
+-- !result
+[UC]analyze full table t0;
+-- result:
+-- !result
+select sleep(10);
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+insert into t0 values('2023-01-04', 'foo_0002', 'bar_0001', 1);
+-- result:
+-- !result
+insert into t0 values('2023-01-05', 'foo_0002', 'bar_0002', 1);
+-- result:
+-- !result
+insert into t0 values('2023-01-06', 'foo_0002', 'bar_0003', 1);
+-- result:
+-- !result
+[UC]analyze full table t0;
+-- result:
+-- !result
+select sleep(10);
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result
+select  /*+SET_VAR(enable_query_cache=true,new_planner_agg_stage=2) */ assert_true(k2='bar_0010') from (select distinct k2  from t0 where k1 = 'foo_0001' order by k2 limit 1) t;
+-- result:
+1
+-- !result

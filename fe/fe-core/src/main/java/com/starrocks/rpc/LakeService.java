@@ -30,6 +30,7 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -57,7 +58,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = /*24H=*/86400000)
     Future<CompactResponse> compact(CompactRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10m=*/60000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10m=*/600000)
     Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 300000)
@@ -71,6 +72,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = /*1m=*/60000)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version_batch", onceTalkTimeout = /*1m=*/60000)
+    Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
     Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request);

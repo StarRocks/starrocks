@@ -86,6 +86,7 @@ public class PhysicalPartitionImplTest {
         Assert.assertEquals(0, p.storageDataSize());
         Assert.assertEquals(0, p.storageRowCount());
         Assert.assertEquals(0, p.storageReplicaCount());
+        Assert.assertEquals(0, p.getTabletMaxDataSize());
 
         p.toString();
 
@@ -109,6 +110,13 @@ public class PhysicalPartitionImplTest {
         p.deleteRollupIndex(4);
 
         Assert.assertFalse(p.equals(p2));
+
+        p.setIdForRestore(3);
+        Assert.assertEquals(3, p.getId());
+        Assert.assertEquals(1, p.getBeforeRestoreId());
+
+        p.setParentId(3);
+        Assert.assertEquals(3, p.getParentId());
     }
 
     @Test

@@ -112,7 +112,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
-        Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+        Assert.assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
     }
 
     // start a schema change, then finished
@@ -297,7 +297,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     @Test
     public void testModifyDynamicPartitionWithoutTableProperty() throws UserException {
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.ENABLE, "false",
-                DynamicPartitionProperty.TIME_UNIT);
+                "not a dynamic partition table");
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.TIME_UNIT, "day",
                 DynamicPartitionProperty.ENABLE);
         modifyDynamicPartitionWithoutTableProperty(DynamicPartitionProperty.END, "3", DynamicPartitionProperty.ENABLE);

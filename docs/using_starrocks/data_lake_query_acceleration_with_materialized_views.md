@@ -100,9 +100,9 @@ For Hive catalogs, you can enable the Hive metadata cache refresh feature to all
 
   > **NOTE**
   >
-  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+  > You can still choose to tolerate a certain level of data inconsistency by setting the property `mv_rewrite_staleness_second` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 
-To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md):
+To enable the Hive metadata cache refresh feature, you can set the following FE dynamic configuration item using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md):
 
 | **Configuration item**                                       | **Default**                | **Description**                                              |
 | ------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------ |

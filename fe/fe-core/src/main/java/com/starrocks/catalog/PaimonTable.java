@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -60,6 +61,7 @@ public class PaimonTable extends Table {
                 .collect(Collectors.toList());
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }
@@ -89,6 +91,16 @@ public class PaimonTable extends Table {
     @Override
     public List<String> getPartitionColumnNames() {
         return partColumnNames;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns() {
+        List<Column> partitionColumns = new ArrayList<>();
+        if (!partColumnNames.isEmpty()) {
+            partitionColumns = partColumnNames.stream().map(this::getColumn)
+                    .collect(Collectors.toList());
+        }
+        return partitionColumns;
     }
 
     public List<String> getFieldNames() {

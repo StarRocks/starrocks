@@ -31,13 +31,9 @@ class Tablet;
 // mainly include tablet
 struct OlapMetaReaderParams : MetaReaderParams {
     OlapMetaReaderParams() = default;
-    ;
+
     TabletSharedPtr tablet;
-    void check_validation() const {
-        if (UNLIKELY(version.first == -1)) {
-            LOG(FATAL) << "version is not set. tablet=" << tablet->full_name();
-        }
-    }
+    TabletSchemaCSPtr tablet_schema;
 };
 
 class OlapMetaReader final : public MetaReader {
@@ -53,6 +49,7 @@ public:
 
 private:
     TabletSharedPtr _tablet;
+    TabletSchemaSPtr _tablet_schema;
     std::vector<RowsetSharedPtr> _rowsets;
 
     Status _init_params(const OlapMetaReaderParams& read_params);

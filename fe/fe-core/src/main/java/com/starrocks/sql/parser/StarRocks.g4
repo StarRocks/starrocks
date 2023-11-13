@@ -520,7 +520,7 @@ refreshTableStatement
     ;
 
 showAlterStatement
-    : SHOW ALTER TABLE (COLUMN | ROLLUP) ((FROM | IN) db=qualifiedName)?
+    : SHOW ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE) ((FROM | IN) db=qualifiedName)?
         (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     | SHOW ALTER MATERIALIZED VIEW ((FROM | IN) db=qualifiedName)?
               (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
@@ -551,7 +551,7 @@ truncateTableStatement
     ;
 
 cancelAlterTableStatement
-    : CANCEL ALTER TABLE (COLUMN | ROLLUP)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
+    : CANCEL ALTER TABLE (COLUMN | ROLLUP | OPTIMIZE)? FROM qualifiedName ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?
     | CANCEL ALTER MATERIALIZED VIEW FROM qualifiedName
     ;
 
@@ -603,7 +603,7 @@ dropTaskStatement
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
-    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
+    ('(' columnNameWithComment (',' columnNameWithComment)* (',' indexDesc)* ')')?
     withRowAccessPolicy*
     comment?
     materializedViewDesc*
@@ -758,7 +758,7 @@ resumeWarehouseStatement
 
 createStorageVolumeStatement
     : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc locationsDesc
-          comment? properties
+          comment? properties?
     ;
 
 typeDesc
@@ -847,6 +847,7 @@ alterClause
     | rollupRenameClause
     | compactionClause
     | modifyCommentClause
+    | optimizeClause
 
     //Apply Policy clause
     | applyMaskingPolicyClause
@@ -943,6 +944,14 @@ modifyPropertiesClause
 modifyCommentClause
     : COMMENT '=' string
     ;
+
+optimizeClause
+    : keyDesc?
+      partitionDesc?
+      orderByDesc?
+      distributionDesc?
+      partitionNames?
+     ;
 
 addColumnClause
     : ADD COLUMN columnDesc (FIRST | AFTER identifier)? ((TO | IN) rollupName=identifier)? properties?
@@ -1600,18 +1609,21 @@ privilegeType
     : ALL PRIVILEGES?
     | ALTER | APPLY | BLACKLIST
     | CREATE (
-        DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME)
+        DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW|
+        RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY | STORAGE VOLUME
+        | PIPE )
     | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
     | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
     : CATALOG | DATABASE | MATERIALIZED VIEW | POLICY | RESOURCE | RESOURCE GROUP| STORAGE VOLUME | SYSTEM | TABLE| VIEW
+    | PIPE
     ;
 
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
-    | STORAGE VOLUMES | TABLES | USERS | VIEWS
+    | STORAGE VOLUMES | TABLES | USERS | VIEWS | PIPES
     ;
 
 // ---------------------------------------- Security Policy Statement ---------------------------------------------------

@@ -497,7 +497,7 @@ build_curl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
-    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6
+    --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6 --without-brotli
     make -j$PARALLEL
     make install
 }
@@ -566,11 +566,21 @@ build_rocksdb() {
     cp -r include/rocksdb $TP_INCLUDE_DIR
 }
 
+# kerberos
+build_kerberos() {
+    check_if_source_exist $KRB5_SOURCE
+    cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
+    CFLAGS="-fcommon" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
+    make -j$PARALLEL
+    make install
+}
+
 # sasl
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=no --enable-static=yes --enable-shared=no --with-openssl=$TP_INSTALL_DIR
+    CFLAGS= LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
     make -j$PARALLEL
     make install
 }
@@ -666,7 +676,7 @@ build_arrow() {
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
-    -DJEMALLOC_HOME=$TP_INSTALL_DIR \
+    -DJEMALLOC_HOME=$TP_INSTALL_DIR/jemalloc \
     -Dzstd_SOURCE=BUNDLED \
     -DRapidJSON_ROOT=$TP_INSTALL_DIR \
     -DARROW_SNAPPY_USE_SHARED=OFF \
@@ -1047,8 +1057,14 @@ build_jemalloc() {
         # change to 64K for arm architecture
         addition_opts=" --with-lg-page=16"
     fi
+    # build jemalloc with release
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
-    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    make -j$PARALLEL
+    make install
+    # build jemalloc with debug options
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
 }
@@ -1079,6 +1095,11 @@ build_fast_float() {
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
     rm -rf $TP_INSTALL_DIR/$CACHELIB_SOURCE && mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
+}
+
+build_starcache() {
+    check_if_source_exist $STARCACHE_SOURCE
+    rm -rf $TP_INSTALL_DIR/$STARCACHE_SOURCE && mv $TP_SOURCE_DIR/$STARCACHE_SOURCE $TP_INSTALL_DIR/
 }
 
 # streamvbyte
@@ -1243,6 +1264,7 @@ build_thrift
 build_leveldb
 build_brpc
 build_rocksdb
+build_kerberos
 build_sasl
 build_librdkafka
 build_flatbuffers
@@ -1271,6 +1293,7 @@ build_opentelemetry
 build_benchmark
 build_fast_float
 build_cachelib
+build_starcache
 build_streamvbyte
 build_jansson
 build_avro_c

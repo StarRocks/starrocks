@@ -401,12 +401,12 @@ public class JoinTest extends PlanTestBase {
                 "\n" +
                 "WHERE l1.tc < s0.t1c";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:Project\n" +
+        assertContains(plan, "  2:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 49\n" +
                 "  |  <slot 26> : '49'\n" +
                 "  |  \n" +
-                "  0:OlapScanNode");
+                "  1:OlapScanNode");
     }
 
     @Test
@@ -2058,7 +2058,7 @@ public class JoinTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "|  equal join conjunct: 1: v1 = 4: v4");
+        assertContains(plan, "equal join conjunct: 4: v4 = 1: v1");
         assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
@@ -2745,6 +2745,8 @@ public class JoinTest extends PlanTestBase {
         }
     }
 
+
+
     @Test
     public void testPushDownTopWithOuterJoin() throws Exception {
         String sql = "SELECT\n" +
@@ -2836,25 +2838,22 @@ public class JoinTest extends PlanTestBase {
                 "  |  \n" +
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1");
-        assertContains(plan, "13:TOP-N\n" +
+        assertContains(plan, "14:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  12:HASH JOIN\n" +
+                "  13:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: v7\n" +
                 "  |  \n" +
-                "  |----11:EXCHANGE\n" +
+                "  |----12:EXCHANGE\n" +
                 "  |    \n" +
-                "  9:TOP-N\n" +
+                "  10:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
                 "  |  offset: 0\n" +
-                "  |  limit: 10\n" +
-                "  |  \n" +
-                "  8:MERGING-EXCHANGE\n" +
-                "     limit: 20");
+                "  |  limit: 10");
 
         sql = "select\n" +
                 "    *\n" +
@@ -2896,12 +2895,12 @@ public class JoinTest extends PlanTestBase {
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1");
 
-        assertContains(plan, "11:TOP-N\n" +
+        assertContains(plan, "12:TOP-N\n" +
                 "  |  order by: <slot 8> 8: v8 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  10:OlapScanNode\n" +
+                "  11:OlapScanNode\n" +
                 "     TABLE: t2");
 
         sql = "SELECT\n" +
@@ -3102,19 +3101,19 @@ public class JoinTest extends PlanTestBase {
                 "limit\n" +
                 "    100;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "12:TOP-N\n" +
+        assertContains(plan, "13:TOP-N\n" +
                 "  |  order by: <slot 2> 2: v2 ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 100\n" +
                 "  |  \n" +
-                "  11:HASH JOIN\n" +
+                "  12:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 7: v7\n" +
                 "  |  \n" +
-                "  |----10:EXCHANGE\n" +
+                "  |----11:EXCHANGE\n" +
                 "  |    \n" +
-                "  8:MERGING-EXCHANGE\n" +
+                "  9:MERGING-EXCHANGE\n" +
                 "     limit: 20");
 
         FeConstants.runningUnitTest = true;

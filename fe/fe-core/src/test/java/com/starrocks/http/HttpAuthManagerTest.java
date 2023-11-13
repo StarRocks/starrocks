@@ -31,7 +31,7 @@ public class HttpAuthManagerTest {
         authMgr.addSessionValue(sessionId, sessionValue);
         Assert.assertEquals(1, authMgr.getAuthSessions().size());
         System.out.println("username in test: " + authMgr.getSessionValue(sessionId).currentUser);
-        Assert.assertEquals(username, authMgr.getSessionValue(sessionId).currentUser.getQualifiedUser());
+        Assert.assertEquals(username, authMgr.getSessionValue(sessionId).currentUser.getUser());
 
         String noExistSession = "no-exist-session-id";
         Assert.assertNull(authMgr.getSessionValue(noExistSession));

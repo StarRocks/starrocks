@@ -60,8 +60,6 @@ struct HdfsScanStats {
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
-    // iceberg pos-delete filter
-    int64_t build_iceberg_pos_filter_ns = 0;
     // io coalesce
     int64_t group_active_lazy_coalesce_together = 0;
     int64_t group_active_lazy_coalesce_seperately = 0;
@@ -74,9 +72,12 @@ struct HdfsScanStats {
     int64_t group_min_round_cost = 0;
 
     // ORC only!
-    int64_t delete_build_ns = 0;
-    int64_t delete_file_per_scan = 0;
     std::vector<int64_t> stripe_sizes;
+
+    // Iceberg v2 only!
+    int64_t iceberg_delete_file_build_ns = 0;
+    int64_t iceberg_delete_files_per_scan = 0;
+    int64_t iceberg_delete_file_build_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
@@ -93,16 +94,20 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
 
-    RuntimeProfile::Counter* block_cache_read_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_read_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_read_timer = nullptr;
-    RuntimeProfile::Counter* block_cache_write_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_write_timer = nullptr;
-    RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_read_block_buffer_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_read_block_buffer_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_timer = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_bytes = nullptr;
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
@@ -180,8 +185,8 @@ struct HdfsScannerParams {
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
-    bool use_block_cache = false;
-    bool enable_populate_block_cache = false;
+    bool use_datacache = false;
+    bool enable_populate_datacache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
@@ -258,11 +263,12 @@ struct HdfsScannerContext {
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
-    void update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count);
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
 
     void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk，append partition column to chunk，otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
@@ -329,6 +335,8 @@ public:
 
 protected:
     Status open_random_access_file();
+
+    void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 
 private:
     bool _opened = false;

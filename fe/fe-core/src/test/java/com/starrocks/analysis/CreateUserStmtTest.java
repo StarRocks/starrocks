@@ -70,7 +70,7 @@ public class CreateUserStmtTest {
 
         sql = "CREATE USER 'user' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'";
         stmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
-        Assert.assertEquals("user", stmt.getUserIdentity().getQualifiedUser());
+        Assert.assertEquals("user", stmt.getUserIdentity().getUser());
         Assert.assertEquals(
                 "CREATE USER 'user'@'%' IDENTIFIED BY PASSWORD '*59c70da2f3e3a5bdf46b68f5c8b8f25762bccef0'",
                 AstToSQLBuilder.toSQL(stmt));

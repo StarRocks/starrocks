@@ -41,5 +41,6 @@ public:
 private:
     bool _maybe_duplicated_keys;
     std::vector<SlotId> _arguments_ids;
+    bool _is_prepared = false;
 };
 } // namespace starrocks

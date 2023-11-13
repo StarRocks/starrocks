@@ -30,20 +30,26 @@ public:
     Status init(const CacheOptions& options);
 
     // Write data to cache, the offset must be aligned by block size
-    Status write_cache(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, size_t ttl_seconds = 0,
-                       bool overwrite = true);
+    Status write_cache(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
+                       WriteCacheOptions* options = nullptr);
 
-    Status write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* data, size_t ttl_seconds = 0,
-                       bool overwrite = true);
+    Status write_cache(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
+                       WriteCacheOptions* options = nullptr);
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned. The offset and size must be aligned by block size.
-    Status read_cache(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer);
+    Status read_cache(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
+                      ReadCacheOptions* options = nullptr);
 
-    StatusOr<size_t> read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* data);
+    StatusOr<size_t> read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* data,
+                                ReadCacheOptions* options = nullptr);
 
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove_cache(const CacheKey& cache_key, off_t offset, size_t size);
+
+    void record_read_remote(size_t size, int64_t lateny_us);
+
+    void record_read_cache(size_t size, int64_t lateny_us);
 
     // Shutdown the cache instance to save some state meta
     Status shutdown();

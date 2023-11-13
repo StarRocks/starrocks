@@ -98,3 +98,41 @@ update_submodules()
     git submodule update --init --recursive
     popd
 }
+
+# if $FE_ENABLE_AUTO_JVM_XMX_DETECT=true, auto detect the memory limit MEM_LIMIT of the container
+# get $FE_JVM_XMX_PERCENTAGE, if not set, assume it is 70.
+# the xmx value will be $MEM_LIMIT * $FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024
+# output string, e.g. -Xmx4096m
+detect_jvm_xmx() {
+    if [[ "$FE_ENABLE_AUTO_JVM_XMX_DETECT" != "true" ]]; then
+        return
+    fi
+
+    # check if application is in docker container or not via /.dockerenv file
+    if [[ ! -f "/.dockerenv" ]]; then
+        return
+    fi
+
+    # if resource limit is not set, $MEM_LIMIT will be "max"
+    MEM_LIMIT=max
+    # get the cgroup version from /proc/filesystems
+    # if cgroup v2 is enabled, the output will contain "cgroup2"
+    if grep -q cgroup2 /proc/filesystems &>/dev/null; then
+        MEM_LIMIT=$(cat /sys/fs/cgroup/memory.max)
+    else
+        MEM_LIMIT=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+    fi
+
+    # check if $MEM_LIMIT is a number.
+    if [[ ! "$MEM_LIMIT" =~ ^[0-9]+$ ]]; then
+        return
+    fi
+
+    if [[ -z "$FE_JVM_XMX_PERCENTAGE" ]]; then
+        FE_JVM_XMX_PERCENTAGE=70
+    fi
+
+    # shellcheck disable=SC1102
+    let "MX = MEM_LIMIT * FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024"
+    echo "-Xmx${MX}m"
+}

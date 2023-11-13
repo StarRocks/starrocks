@@ -70,12 +70,12 @@ public class SetExecutorTest {
 
     private static void ctxToTestUser() {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
-        starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(testUser.getUser());
     }
 
     private static void ctxToRoot() {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
-        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
+        starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getUser());
     }
 
     @Test

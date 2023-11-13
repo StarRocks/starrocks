@@ -123,6 +123,11 @@ enum TOverflowMode {
   REPORT_ERROR = 1;
 }
 
+struct TQueryQueueOptions {
+  1: optional bool enable_global_query_queue;
+  2: optional bool enable_group_level_query_queue;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0
@@ -176,13 +181,13 @@ struct TQueryOptions {
 
   64: optional TLoadJobType load_job_type
 
-  66: optional bool use_scan_block_cache;
+  66: optional bool enable_scan_datacache;
 
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
   
-  69: optional bool enable_populate_block_cache;
+  69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
 
@@ -228,6 +233,12 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true;
+
+  107: optional i64 global_runtime_filter_build_max_size;
+  108: optional i64 runtime_filter_rpc_http_min_size;
+  109: optional i64 big_query_profile_second_threshold;
+
+  110: optional TQueryQueueOptions query_queue_options;
 }
 
 

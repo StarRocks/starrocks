@@ -12,7 +12,7 @@ The similarity is between -1 and 1. Smaller angles between vectors indicate grea
 
 `cosine_similarity` is commonly used for assessing text and video similarity.
 
-This function normalizes vectors before measuring the cosine similarity. If the input vectors have been normalized, you can use [cosine_similarity_norm](./).
+This function normalizes vectors before measuring the cosine similarity. If the input vectors have been normalized, you can use [cosine_similarity_norm](./cos_similarity_norm.md).
 
 ## Syntax
 

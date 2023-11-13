@@ -107,6 +107,7 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -146,6 +147,25 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public SchemaChangeHandler() {
         super("schema change");
+    }
+
+    private AlterJobV2 createOptimizeTableJob(
+            OptimizeClause optimizeClause, Database db, OlapTable olapTable, Map<String, String> propertyMap) 
+        throws UserException {
+        if (olapTable.getState() != OlapTableState.NORMAL) {
+            throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
+        }
+
+        long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
+
+        // create job
+        OptimizeJobV2Builder jobBuilder = olapTable.optimizeTable();
+        jobBuilder.withOptimizeClause(optimizeClause)
+                .withJobId(GlobalStateMgr.getCurrentState().getNextId())
+                .withDbId(db.getId())
+                .withTimeoutSeconds(timeoutSecond);
+
+        return jobBuilder.build();
     }
 
     /**
@@ -969,6 +989,13 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Column[" + columnPos.getLastCol() + "] does not found");
         }
 
+        if (hasPos && modIndexSchema.get(posIndex) != null) {
+            Column posColumn = modIndexSchema.get(posIndex);
+            if (posColumn.isGeneratedColumn()) {
+                throw new DdlException("Can not add column after Generated Column");
+            }
+        }
+
         // check if add to first
         if (columnPos != null && columnPos.isFirst()) {
             posIndex = -1;
@@ -1343,10 +1370,20 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+    public List<List<Comparable>> getOptimizeJobInfosByDb(Database db) {
+        List<List<Comparable>> optimizeJobInfos = new LinkedList<>();
+        getAlterJobV2Infos(db, AlterJobV2.JobType.OPTIMIZE, optimizeJobInfos);
+
+        // sort by "JobId", "PartitionName", "CreateTime", "FinishTime", "IndexName", "IndexState"
+        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2, 3, 4, 5);
+        optimizeJobInfos.sort(comparator);
+        return optimizeJobInfos;
+    }
+
     @Override
     public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
         List<List<Comparable>> schemaChangeJobInfos = new LinkedList<>();
-        getAlterJobV2Infos(db, schemaChangeJobInfos);
+        getAlterJobV2Infos(db, AlterJobV2.JobType.SCHEMA_CHANGE, schemaChangeJobInfos);
 
         // sort by "JobId", "PartitionName", "CreateTime", "FinishTime", "IndexName", "IndexState"
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2, 3, 4, 5);
@@ -1354,19 +1391,22 @@ public class SchemaChangeHandler extends AlterHandler {
         return schemaChangeJobInfos;
     }
 
-    private void getAlterJobV2Infos(Database db, List<AlterJobV2> alterJobsV2,
-                                    List<List<Comparable>> schemaChangeJobInfos) {
+    private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<AlterJobV2> alterJobsV2,
+            List<List<Comparable>> schemaChangeJobInfos) {
         ConnectContext ctx = ConnectContext.get();
         for (AlterJobV2 alterJob : alterJobsV2) {
             if (alterJob.getDbId() != db.getId()) {
+                continue;
+            }
+            if (alterJob.getType() != type) {
                 continue;
             }
             alterJob.getInfo(schemaChangeJobInfos);
         }
     }
 
-    private void getAlterJobV2Infos(Database db, List<List<Comparable>> schemaChangeJobInfos) {
-        getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
+    private void getAlterJobV2Infos(Database db, AlterJobV2.JobType type, List<List<Comparable>> schemaChangeJobInfos) {
+        getAlterJobV2Infos(db, type, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
     public Optional<Long> getActiveTxnIdOfTable(long tableId) {
@@ -1383,7 +1423,6 @@ public class SchemaChangeHandler extends AlterHandler {
     @VisibleForTesting
     @Nullable
     public AlterJobV2 analyzeAndCreateJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
-
         //alterClauses can or cannot light schema change
         boolean lightSchemaChange = true;
         //for multi add colmuns clauses
@@ -1396,6 +1435,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 return pendingMaxColUniqueId;
             }
         };
+
         // index id -> index schema
         Map<Long, LinkedList<Column>> indexSchemaMap = new HashMap<>();
         for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexIdToSchema().entrySet()) {
@@ -1430,7 +1470,14 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
-                        DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        try {
+                            DynamicPartitionUtil
+                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        } catch (DdlException e) {
+                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
+                            throw new DdlException("Table " + db.getOriginName() + "." +
+                                    olapTable.getName() + " is not a dynamic partition table.");
+                        }
                     }
                     if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
                         String colocateGroup = olapTable.getColocateGroup();
@@ -1515,6 +1562,8 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof DropIndexClause) {
                 lightSchemaChange = false;
                 processDropIndex((DropIndexClause) alterClause, olapTable, newIndexes);
+            } else if (alterClause instanceof OptimizeClause) {
+                return createOptimizeTableJob((OptimizeClause) alterClause, db, olapTable, propertyMap);
             } else {
                 Preconditions.checkState(false);
             }
@@ -1550,6 +1599,63 @@ public class SchemaChangeHandler extends AlterHandler {
         // 3. write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(schemaChangeJob);
         LOG.info("finished to create schema change job: {}", schemaChangeJob.getJobId());
+        return null;
+    }
+
+    public AlterJobV2 createAlterMetaJob(List<AlterClause> alterClauses, Database db, OlapTable olapTable) throws UserException {
+        LakeTableAlterMetaJob alterMetaJob;
+        Preconditions.checkState(alterClauses.size() == 1);
+        AlterClause alterClause = alterClauses.get(0);
+        Map<String, String> properties = alterClause.getProperties();
+        if (alterClause instanceof ModifyTablePropertiesClause) {
+            // update table meta
+            // for now enable_persistent_index
+            if (properties.size() > 1) {
+                throw new DdlException("Only support alter one property in one stmt");
+            }
+
+            boolean enablePersistentIndex = false;
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
+                enablePersistentIndex = PropertyAnalyzer.analyzeBooleanProp(properties,
+                        PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, false);
+                boolean oldEnablePersistentIndex = olapTable.enablePersistentIndex();
+                if (oldEnablePersistentIndex == enablePersistentIndex) {
+                    LOG.info(String.format("table: %s enable_persistent_index is %s, nothing need to do",
+                            olapTable.getName(), enablePersistentIndex));
+                    return null;
+                }
+            } else {
+                throw new DdlException("only support alter enable_persistent_index in shared_data mode");
+            }
+
+            long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
+            alterMetaJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(),
+                    olapTable.getId(), olapTable.getName(), timeoutSecond,
+                    TTabletMetaType.ENABLE_PERSISTENT_INDEX, enablePersistentIndex);
+        } else {
+            // shouldn't happen
+            throw new DdlException("only support alter enable_persistent_index in shared_data mode");
+        }
+        return alterMetaJob;
+    }
+
+    public ShowResultSet processLakeTableAlterMeta(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+            throws UserException {
+
+        AlterJobV2 alterMetaJob = createAlterMetaJob(alterClauses, db, olapTable);
+        if (alterMetaJob == null) {
+            return null;
+        }
+        // set table state
+        olapTable.setState(OlapTableState.SCHEMA_CHANGE);
+
+        // 2. add schemaChangeJob
+        addAlterJobV2(alterMetaJob);
+
+        // 3. write edit log
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(alterMetaJob);
+        LOG.info("finished to create alter meta job {} of cloud table: {}", alterMetaJob.getJobId(), olapTable.getName());
         return null;
     }
 

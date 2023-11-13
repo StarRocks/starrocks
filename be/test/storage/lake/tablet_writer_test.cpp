@@ -298,8 +298,71 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     // `close()` directly without calling `finish()`
     writer->close();
 
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
     // segment file should be deleted
     ASSERT_TRUE(fs->path_exists(seg_path).is_not_found());
+}
+
+TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
+    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+    auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
+    auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
+
+    Chunk c0_chunk({c0}, schema0);
+    Chunk c1_chunk({c1}, schema1);
+    Chunk c2_chunk({c2}, schema0);
+    Chunk c3_chunk({c3}, schema1);
+
+    const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kVertical, next_id(), segment_rows + 1));
+
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write_columns(c0_chunk, {0}, true));
+    ASSERT_OK(writer->write_columns(c2_chunk, {0}, true));
+    ASSERT_OK(writer->write_columns(c0_chunk, {0}, true));
+    ASSERT_OK(writer->write_columns(c2_chunk, {0}, true));
+    ASSERT_OK(writer->flush_columns());
+    ASSERT_OK(writer->write_columns(c1_chunk, {1}, false));
+    ASSERT_OK(writer->write_columns(c3_chunk, {1}, false));
+    ASSERT_OK(writer->write_columns(c1_chunk, {1}, false));
+    ASSERT_OK(writer->write_columns(c3_chunk, {1}, false));
+    ASSERT_OK(writer->flush_columns());
+
+    auto files = writer->files();
+    ASSERT_EQ(2, files.size());
+    ASSERT_NE(files[0], files[1]);
+    for (const auto& f : files) {
+        ASSERT_TRUE(fs->path_exists(_tablet_mgr->segment_location(_tablet_metadata->id(), f)).ok());
+    }
+
+    // `close()` directly without calling `finish()`
+    writer->close();
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+    // segment file should be deleted
+    for (const auto& f : files) {
+        ASSERT_TRUE(fs->path_exists(_tablet_mgr->segment_location(_tablet_metadata->id(), f)).is_not_found());
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,

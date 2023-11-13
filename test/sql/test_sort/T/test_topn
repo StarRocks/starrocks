@@ -1,0 +1,54 @@
+-- name: test_topn
+-- 
+set pipeline_dop=1;
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- nulls first nulls last
+insert into t0 SELECT null, null FROM TABLE(generate_series(1,  65536));
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+select c0 from t0 order by 1 asc limit 10;
+select c0 from t0 order by 1 asc nulls last limit 10;
+select c0 from t0 order by 1 asc nulls first limit 10;
+select c0 from t0 order by 1 desc limit 10;
+select c0 from t0 order by 1 desc nulls last limit 10;
+select c0 from t0 order by 1 desc nulls first limit 10;
+-- multi column
+select * from t0 order by 1,2 asc limit 5;
+select * from t0 order by 1,2 desc limit 5;
+select * from t0 order by 2,1 asc limit 5;
+select * from t0 order by 2,1 desc limit 5;
+-- materialize
+select * from t0 order by 1 where c0 > 10 limit 10;
+select * from t0 order by 1 where c0 > 1000 limit 10;
+-- little rows
+create table t1 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  10));
+select * from t1 order by 1 limit 10;
+-- partition key
+CREATE TABLE `t2` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`c1`)
+(
+PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("1024")),
+PARTITION p3 VALUES [("1024"), ("2048")),
+PARTITION p4 VALUES [("2048"), ("4096")),
+PARTITION p5 VALUES [("4096"), ("8192")),
+PARTITION p6 VALUES [("8192"), ("65536")),
+PARTITION p7 VALUES [("65536"), ("2100000000")))
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1");
+insert into t2 SELECT generate_series, generate_series FROM TABLE(generate_series(1,  63336));
+select c0 from t2 order by c0 asc limit 10;
+select c1 from t2 order by c1 asc limit 10;
+select c1,c0 from t2 order by c1,c0 asc limit 10;

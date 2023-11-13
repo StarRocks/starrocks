@@ -265,7 +265,7 @@ DISTRIBUTED BY HASH(LO_ORDERDATE, LO_ORDERKEY) BUCKETS 48
 PARTITION BY LO_ORDERDATE
 REFRESH MANUAL
 PROPERTIES (
-    "session.partition_refresh_nubmer"="1"
+    "partition_refresh_number"="1"
 )
 AS SELECT /*+ SET_VAR(query_timeout = 7200) */     -- Set timeout for the refresh operation.
        l.LO_ORDERDATE        AS LO_ORDERDATE,
@@ -794,7 +794,7 @@ mysql> EXPLAIN SELECT
 
 By default, StarRocks enables query rewrite for asynchronous materialized views created based on the default catalog. You can disable this feature by setting the session variable `enable_materialized_view_rewrite` to `false`.
 
-For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md).
+For asynchronous materialized views created based on an external catalog, you can disable this feature by setting the materialized view property `force_external_table_query_rewrite` to `false` using [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md).
 
 ## Limitations
 

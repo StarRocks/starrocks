@@ -1,4 +1,4 @@
-# Integrate with other tools and systems
+# Other tools and systems
 
 This topic introduces the other tools and systems with which StarRocks can integrate.
 

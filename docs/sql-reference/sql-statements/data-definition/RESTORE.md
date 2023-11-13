@@ -4,7 +4,7 @@
 
 Restores data to a specified database, table, or partition. Currently, StarRocks only supports restoring data to OLAP tables. For more information, see [data backup and restoration](../../../administration/Backup_and_restore.md).
 
-RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../data-manipulation/SHOW%20RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../data-definition/CANCEL%20RESTORE.md).
+RESTORE is an asynchronous operation. You can check the status of a RESTORE job using [SHOW RESTORE](../data-manipulation/SHOW_RESTORE.md), or cancel a RESTORE job using [CANCEL RESTORE](../data-definition/CANCEL_RESTORE.md).
 
 > **CAUTION**
 >
@@ -29,8 +29,8 @@ PROPERTIES ("key"="value", ...)
 | snapshot_name   | Name for the data snapshot.                                  |
 | repository_name | Repository name.                                             |
 | ON              | Name of the tables to restored. The whole database is restored if this parameter is not specified. |
-| PARTITION       | Name of the partitions to be restored. The whole table is restored if this parameter is not specified. You can view the partition name using [SHOW PARTITIONS](../data-manipulation/SHOW%20PARTITIONS.md). |
-| PROPERTIES      | Properties of the RESTORE operation. Valid keys:<ul><li>`backup_timestamp`: Backup timestamp. **Required**. You can view backup timestamps using [SHOW SNAPSHOT](../data-manipulation/SHOW%20SNAPSHOT.md).</li><li>`replication_num`: Specify the number of replicas to be restored. Default: `3`.</li><li>`meta_version`: This parameter is only used as a temporary solution to restore the data backed up by the earlier version of StarRocks. The latest version of the backed up data already contains `meta version`, and you do not need to specify it.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li></ul> |
+| PARTITION       | Name of the partitions to be restored. The whole table is restored if this parameter is not specified. You can view the partition name using [SHOW PARTITIONS](../data-manipulation/SHOW_PARTITIONS.md). |
+| PROPERTIES      | Properties of the RESTORE operation. Valid keys:<ul><li>`backup_timestamp`: Backup timestamp. **Required**. You can view backup timestamps using [SHOW SNAPSHOT](../data-manipulation/SHOW_SNAPSHOT.md).</li><li>`replication_num`: Specify the number of replicas to be restored. Default: `3`.</li><li>`meta_version`: This parameter is only used as a temporary solution to restore the data backed up by the earlier version of StarRocks. The latest version of the backed up data already contains `meta version`, and you do not need to specify it.</li><li>`timeout`: Task timeout. Unit: second. Default: `86400`.</li></ul> |
 
 ## Examples
 

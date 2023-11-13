@@ -129,7 +129,7 @@ public class AnalyzeShowTest {
         String sql = "SHOW AUTHENTICATION;";
         ShowAuthenticationStmt stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("root", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("root", stmt.getUserIdent().getUser());
 
         sql = "SHOW ALL AUTHENTICATION;";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
@@ -147,7 +147,7 @@ public class AnalyzeShowTest {
         sql = "SHOW AUTHENTICATION FOR u1";
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
-        Assert.assertEquals("u1", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("u1", stmt.getUserIdent().getUser());
 
         DropUserStmt dropUserStmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "drop user u1", context);

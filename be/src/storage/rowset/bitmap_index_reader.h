@@ -80,10 +80,7 @@ public:
 
     bool loaded() const { return invoked(_load_once); }
 
-private:
-    friend class BitmapIndexIterator;
-
-    size_t _mem_usage() const {
+    size_t mem_usage() const {
         size_t size = sizeof(BitmapIndexReader);
         if (_dict_column_reader != nullptr) {
             size += _dict_column_reader->mem_usage();
@@ -93,6 +90,9 @@ private:
         }
         return size;
     }
+
+private:
+    friend class BitmapIndexIterator;
 
     void _reset();
 

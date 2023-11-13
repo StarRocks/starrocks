@@ -124,6 +124,7 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -669,6 +670,12 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().setConfig(stmt);
+                if (stmt.getConfig().containsKey("mysql_server_version")) {
+                    String version = stmt.getConfig().getMap().get("mysql_server_version");
+                    if (!Strings.isNullOrEmpty(version)) {
+                        GlobalVariable.version = version;
+                    }
+                }
             });
             return null;
         }
@@ -788,7 +795,6 @@ public class DDLStmtExecutor {
                 // from current session, may execute analyze stmt
                 statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                         context.getSessionVariable().getStatisticCollectParallelism());
-                statsConnectCtx.setStatisticsConnection(true);
                 Thread thread = new Thread(() -> {
                     statsConnectCtx.setThreadLocalInfo();
                     StatisticExecutor statisticExecutor = new StatisticExecutor();

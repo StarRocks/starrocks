@@ -17,6 +17,7 @@ package com.starrocks.hudi.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
+import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.hadoop.conf.Configuration;
@@ -50,7 +51,6 @@ import java.util.Properties;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.starrocks.hudi.reader.HudiScannerUtils.HIVE_TYPE_MAPPING;
 import static java.util.stream.Collectors.toList;
 
 public class HudiSliceScanner extends ConnectorScanner {
@@ -77,6 +77,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private Deserializer deserializer;
     private final int fetchSize;
     private final ClassLoader classLoader;
+    private final String fsOptionsProps;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -98,6 +99,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
         this.classLoader = this.getClass().getClassLoader();
+        this.fsOptionsProps = params.get("fs_options_props");
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
@@ -159,16 +161,24 @@ public class HudiSliceScanner extends ConnectorScanner {
         }
         properties.setProperty("columns", this.hiveColumnNames);
         // recover INT64 based timestamp mark to hive type, TimestampMicros/TimestampMillis => timestamp
+
         List<String> types = new ArrayList<>();
+        String[] hiveColumnNames = this.hiveColumnNames.split(",");
         for (int i = 0; i < this.hiveColumnTypes.length; i++) {
-            String type = this.hiveColumnTypes[i];
-            if (HIVE_TYPE_MAPPING.containsKey(type)) {
-                type = HIVE_TYPE_MAPPING.get(type);
-            }
+            ColumnType columnType = new ColumnType(hiveColumnNames[i], hiveColumnTypes[i]);
+            String type = HudiScannerUtils.mapColumnTypeToHiveType(columnType);
             types.add(type);
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
+
+        ScannerHelper.parseFSOptionsProps(fsOptionsProps, kv -> {
+            properties.put(kv[0], kv[1]);
+            return null;
+        }, t -> {
+            LOG.warn("Invalid hudi scanner fs options props argument: " + t);
+            return null;
+        });
         return properties;
     }
 

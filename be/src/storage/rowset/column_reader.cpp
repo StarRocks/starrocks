@@ -64,13 +64,13 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, const Segment* segment) {
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta, Segment* segment) {
     auto r = std::make_unique<ColumnReader>(private_type(0), segment);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
-ColumnReader::ColumnReader(const private_type&, const Segment* segment) : _segment(segment) {
+ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
 }
 
@@ -128,6 +128,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 _ordinal_index_meta.reset(index_meta->release_ordinal_index());
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                          _ordinal_index_meta->SpaceUsedLong());
+                _meta_mem_usage.fetch_add(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _ordinal_index = std::make_unique<OrdinalIndexReader>();
                 break;
             case ZONE_MAP_INDEX:
@@ -145,22 +146,26 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                 }
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                          _zonemap_index_meta->SpaceUsedLong())
+                _meta_mem_usage.fetch_add(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 // the segment zone map will release from zonemap_index_map,
                 // so we should calc mem usage after release.
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_zonemap_mem_tracker(),
                                          _segment_zone_map->SpaceUsedLong())
+                _meta_mem_usage.fetch_add(_segment_zone_map->SpaceUsedLong(), std::memory_order_relaxed);
                 _zonemap_index = std::make_unique<ZoneMapIndexReader>();
                 break;
             case BITMAP_INDEX:
                 _bitmap_index_meta.reset(index_meta->release_bitmap_index());
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                          _bitmap_index_meta->SpaceUsedLong());
+                _meta_mem_usage.fetch_add(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bitmap_index = std::make_unique<BitmapIndexReader>();
                 break;
             case BLOOM_FILTER_INDEX:
                 _bloom_filter_index_meta.reset(index_meta->release_bloom_filter_index());
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                          _bloom_filter_index_meta->SpaceUsedLong());
+                _meta_mem_usage.fetch_add(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
                 break;
             case UNKNOWN_INDEX_TYPE:
@@ -360,7 +365,10 @@ Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->ordinal_index_mem_tracker(),
                                  _ordinal_index_meta->SpaceUsedLong());
+        _meta_mem_usage.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+        _meta_mem_usage.fetch_add(_ordinal_index->mem_usage(), std::memory_order_relaxed);
         _ordinal_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -373,7 +381,10 @@ Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                  _zonemap_index_meta->SpaceUsedLong());
+        _meta_mem_usage.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+        _meta_mem_usage.fetch_add(_zonemap_index->mem_usage());
         _zonemap_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -386,7 +397,10 @@ Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
                                  _bitmap_index_meta->SpaceUsedLong());
+        _meta_mem_usage.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+        _meta_mem_usage.fetch_add(_bitmap_index->mem_usage(), std::memory_order_relaxed);
         _bitmap_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -399,7 +413,10 @@ Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     if (UNLIKELY(first_load)) {
         MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bloom_filter_index_mem_tracker(),
                                  _bloom_filter_index_meta->SpaceUsedLong());
+        _meta_mem_usage.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+        _meta_mem_usage.fetch_add(_bloom_filter_index->mem_usage(), std::memory_order_relaxed);
         _bloom_filter_index_meta.reset();
+        _segment->update_cache_size();
     }
     return Status::OK();
 }
@@ -551,6 +568,18 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
     }
+}
+
+size_t ColumnReader::mem_usage() const {
+    size_t size = sizeof(ColumnReader) + _meta_mem_usage.load(std::memory_order_relaxed);
+
+    if (_sub_readers != nullptr) {
+        for (auto& reader : *_sub_readers) {
+            size += reader->mem_usage();
+        }
+    }
+
+    return size;
 }
 
 } // namespace starrocks

@@ -30,6 +30,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -90,6 +91,12 @@ protected:
             }
         }
         return chunk;
+    }
+
+    Status publish_version_for_schema_change(int64_t tablet_id, int64_t new_version, int64_t txn_id) {
+        return publish_version(_tablet_manager.get(), tablet_id, 1, new_version, std::span<const int64_t>(&txn_id, 1),
+                               time(nullptr))
+                .status();
     }
 
     std::unique_ptr<MemTracker> _mem_tracker;
@@ -248,7 +255,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         version++;
         txn_id++;
     }
@@ -293,7 +300,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk1, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_log_version(new_tablet_id, txn_id, version + 1));
+        ASSERT_OK(TEST_publish_single_log_version(_tablet_manager.get(), new_tablet_id, txn_id, version + 1));
         version++;
         txn_id++;
     }
@@ -301,12 +308,12 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
     // publish schema change
     int concurrency = GetParam().concurrency;
     if (concurrency == 1) {
-        ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+        ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
     } else {
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++) {
             threads.emplace_back(
-                    [&]() { (void)_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1); });
+                    [&]() { (void)publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id); });
         }
         for (auto& t : threads) {
             t.join();
@@ -503,7 +510,7 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         version++;
         txn_id++;
     }
@@ -547,19 +554,19 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk1, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_log_version(new_tablet_id, txn_id, version + 1));
+        ASSERT_OK(TEST_publish_single_log_version(_tablet_manager.get(), new_tablet_id, txn_id, version + 1));
         version++;
         txn_id++;
     }
 
     int concurrency = GetParam().concurrency;
     if (concurrency == 1) {
-        ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+        ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
     } else {
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++) {
             threads.emplace_back(
-                    [&]() { (void)_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1); });
+                    [&]() { (void)publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id); });
         }
         for (auto& t : threads) {
             t.join();
@@ -782,7 +789,7 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         version++;
         txn_id++;
     }
@@ -816,12 +823,12 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_log_version(new_tablet_id, txn_id, version + 1));
+        ASSERT_OK(TEST_publish_single_log_version(_tablet_manager.get(), new_tablet_id, txn_id, version + 1));
         version++;
         txn_id++;
     }
 
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
     version++;
     txn_id++;
 
@@ -1043,7 +1050,7 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         version++;
         txn_id++;
     }
@@ -1077,12 +1084,12 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_log_version(new_tablet_id, txn_id, version + 1));
+        ASSERT_OK(TEST_publish_single_log_version(_tablet_manager.get(), new_tablet_id, txn_id, version + 1));
         version++;
         txn_id++;
     }
 
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
     version++;
     txn_id++;
 
@@ -1281,7 +1288,7 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         version++;
         txn_id++;
     }
@@ -1315,12 +1322,12 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_log_version(new_tablet_id, txn_id, version + 1));
+        ASSERT_OK(TEST_publish_single_log_version(_tablet_manager.get(), new_tablet_id, txn_id, version + 1));
         version++;
         txn_id++;
     }
 
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
     version++;
     txn_id++;
 
@@ -1517,7 +1524,7 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         version++;
         txn_id++;
     }
@@ -1551,12 +1558,12 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_log_version(new_tablet_id, txn_id, version + 1));
+        ASSERT_OK(TEST_publish_single_log_version(_tablet_manager.get(), new_tablet_id, txn_id, version + 1));
         version++;
         txn_id++;
     }
 
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &alter_txn_id, 1).status());
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
     version++;
     txn_id++;
 

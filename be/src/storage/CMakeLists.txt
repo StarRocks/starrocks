@@ -106,7 +106,6 @@ add_library(Storage STATIC
     rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
-    rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
@@ -138,6 +137,9 @@ add_library(Storage STATIC
     projection_iterator.cpp
     push_handler.cpp
     row_source_mask.cpp
+    row_store_encoder.cpp
+    row_store_encoder_simple.cpp
+    row_store_encoder_factory.cpp
     schema_change.cpp
     schema_change_utils.cpp
     tablet_reader.cpp
@@ -184,13 +186,16 @@ add_library(Storage STATIC
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
+    lake/transactions.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
     lake/update_manager.cpp
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
+    lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+    lake/metacache.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp

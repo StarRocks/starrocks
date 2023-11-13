@@ -18,12 +18,14 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -33,9 +35,11 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -54,13 +58,17 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
@@ -70,6 +78,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -478,12 +487,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 colPos.analyze();
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
-            }
-        }
-        if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
-            Column afterColumn = table.getColumn(colPos.getLastCol());
-            if (afterColumn.isGeneratedColumn()) {
-                throw new SemanticException("Can not add column after Generated Column");
             }
         }
 

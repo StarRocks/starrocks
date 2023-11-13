@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -133,14 +134,19 @@ public class ConnectContext {
     protected String currentDb = "";
     // warehouse
     protected String currentWarehouse;
-
-    // username@host of current login user
+    // `qualifiedUser` is the user used when the user establishes connection and authentication.
+    // It is the real user used for this connection.
+    // Different from the `currentUserIdentity` authentication user of execute as,
+    // `qualifiedUser` should not be changed during the entire session.
     protected String qualifiedUser;
-    // username@host combination for the StarRocks account
-    // that the server used to authenticate the current client.
-    // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
-    // This account determines user's access privileges.
+    // `currentUserIdentity` is the user used for authorization. Under normal circumstances,
+    // `currentUserIdentity` and `qualifiedUser` are the same user,
+    // but currentUserIdentity may be modified by execute as statement.
     protected UserIdentity currentUserIdentity;
+    // currentRoleIds is the role that has taken effect in the current session.
+    // Note that this set is not all roles belonging to the current user.
+    // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
+    // For specific logic, please refer to setCurrentRoleIds.
     protected Set<Long> currentRoleIds = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -552,6 +558,25 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
+    public boolean isProfileEnabled() {
+        if (sessionVariable == null) {
+            return false;
+        }
+        if (sessionVariable.isEnableProfile()) {
+            return true;
+        }
+        if (!sessionVariable.isEnableBigQueryProfile()) {
+            return false;
+        }
+        return System.currentTimeMillis() - getStartTime() >
+                1000L * sessionVariable.getBigQueryProfileSecondThreshold();
+    }
+
+    public boolean needMergeProfile() {
+        return isProfileEnabled() &&
+                sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
+    }
+
     public byte[] getAuthDataSalt() {
         return authDataSalt;
     }
@@ -676,7 +701,7 @@ public class ConnectContext {
     }
 
     // kill operation with no protect.
-    public void kill(boolean killConnection) {
+    public void kill(boolean killConnection, String cancelledMessage) {
         LOG.warn("kill query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
         // Now, cancel running process.
@@ -685,7 +710,7 @@ public class ConnectContext {
             isKilled = true;
         }
         if (executorRef != null) {
-            executorRef.cancel();
+            executorRef.cancel(cancelledMessage);
         }
         if (killConnection) {
             int times = 0;
@@ -736,7 +761,7 @@ public class ConnectContext {
             }
         }
         if (killFlag) {
-            kill(killConnection);
+            kill(killConnection, "query timeout");
         }
     }
 

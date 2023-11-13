@@ -2,7 +2,7 @@
 
 A Hudi catalog is a kind of external catalog that enables you to query data from Apache Hudi without ingestion.
 
-Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
+Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -754,13 +754,13 @@ PROPERTIES
 
 ## View Hudi catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG hudi_catalog_glue;
@@ -770,7 +770,7 @@ SHOW CREATE CATALOG hudi_catalog_glue;
 
 You can use one of the following methods to switch to a Hudi catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hudi catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -787,7 +787,7 @@ You can use one of the following methods to switch to a Hudi catalog and a datab
 
 ## Drop a Hudi catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Hudi catalog named `hudi_catalog_glue`:
 
@@ -813,7 +813,7 @@ You can use one of the following syntaxes to view the schema of a Hudi table:
 
 ## Query a Hudi table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your Hudi cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Hudi cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -839,7 +839,7 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Hudi and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hudi table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Hudi and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hudi table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>

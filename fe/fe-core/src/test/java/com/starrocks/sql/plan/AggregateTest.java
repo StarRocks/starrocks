@@ -2192,6 +2192,17 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneGroupByKeysRule4() throws Exception {
+        String sql = "select v1, rand_col, v2, v3, count(1) from (select v1, UUID() v2," +
+                " case when v1 in (1, 6) then round(rand() * 100) else 1 end as rand_col," +
+                " v1 > v1 + 1 or v1 > rand() v3 from t0) a group by 1, 2, 3, 4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 1: v1, 5: case, 4: uuid, 6: expr");
+    }
+
+    @Test
     public void testDistinctRewrite() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select count(distinct t1a), sum(t1c) from test_all_type group by t1b";

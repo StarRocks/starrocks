@@ -517,6 +517,18 @@ public class Config extends ConfigBase {
     public static int heartbeat_mgr_blocking_queue_size = 1024;
 
     /**
+     * num of thread to handle profile processing
+     */
+    @ConfField
+    public static int profile_process_threads_num = 2;
+
+    /**
+     * blocking queue size to store profile process task
+     */
+    @ConfField
+    public static int profile_process_blocking_queue_size = profile_process_threads_num * 128;
+
+    /**
      * max num of thread to handle agent task in agent task thread-pool.
      */
     @ConfField
@@ -596,6 +608,12 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static int http_max_chunk_size = 8192;
+
+    /**
+     * If a request takes longer than the configured time, a log will be generated to trace it.
+     */
+    @ConfField(mutable = true)
+    public static int http_slow_request_threshold_ms = 5000;
 
     /**
      * When obtaining hardware information, some sensitive commands will be executed indirectly through
@@ -707,7 +725,7 @@ public class Config extends ConfigBase {
      * handshake packet version.
      * global variable version.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
 
     /**
@@ -747,6 +765,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int publish_version_interval_ms = 10;
+
+    @ConfField(mutable = true)
+    public static boolean lake_enable_batch_publish_version  = false;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_max_version_num = 10;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_min_version_num = 1;
 
     /**
      * The thrift server max worker threads
@@ -1074,9 +1101,6 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_udf = false;
-
-    @ConfField
-    public static boolean enable_remote_script = false;
 
     @ConfField(mutable = true)
     public static boolean enable_decimal_v3 = true;
@@ -1644,6 +1668,12 @@ public class Config extends ConfigBase {
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     /**
+     * Enable statistics collection profile
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistics_collect_profile = false;
+
+    /**
      * Check expire partition statistics data when StarRocks start up
      */
     @ConfField(mutable = true)
@@ -1712,6 +1742,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
@@ -1805,7 +1838,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -1902,7 +1935,7 @@ public class Config extends ConfigBase {
      * or hdfs into smaller files for hive external table
      */
     @ConfField(mutable = true)
-    public static long hive_max_split_size = 512L * 1024L * 1024L;
+    public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
@@ -2512,12 +2545,15 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = true;
+    public static boolean allow_default_light_schema_change = false;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
     public static int pipe_scheduler_interval_millis = 1000;
+
+    @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
@@ -2553,4 +2589,17 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean replan_on_insert = false;
+
+    /**
+     * Checking the connectivity of port opened by FE,
+     * mainly used for checking edit log port currently.
+     */
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_interval_sec = 60;
+
+    @ConfField(mutable = true)
+    public static long port_connectivity_check_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int port_connectivity_check_timeout_ms = 10000;
 }

@@ -119,6 +119,7 @@ Status Spiller::reset_state(RuntimeState* state) {
     _spilled_append_rows = 0;
     _restore_read_rows = 0;
     _block_group->clear();
+    RETURN_IF_ERROR(prepare(state));
     return Status::OK();
 }
 

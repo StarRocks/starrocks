@@ -72,6 +72,7 @@ public class DeltaLakeTable extends Table {
         return deltaLog.getPath().toString();
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }

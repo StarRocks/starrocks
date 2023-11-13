@@ -170,7 +170,7 @@ public class LoadLoadingTask extends LoadTask {
             long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
 
-            if (context.getSessionVariable().isEnableLoadProfile()) {
+            if (context.getSessionVariable().isEnableProfile()) {
                 RuntimeProfile profile = new RuntimeProfile("Load");
                 RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
                 summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
@@ -217,8 +217,8 @@ public class LoadLoadingTask extends LoadTask {
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
-                curCoordinator.endProfile();
-                profile.addChild(curCoordinator.buildMergedQueryProfile());
+                curCoordinator.collectProfileSync();
+                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");

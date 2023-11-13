@@ -504,7 +504,7 @@ public class AnalyzeMgr implements Writable {
         ConnectContext context = connectionMap.remove(analyzeID);
         if (killExecutor) {
             if (context != null) {
-                context.kill(false);
+                context.kill(false, "kill analyze unregisterConnection");
             } else {
                 throw new SemanticException("There is no running task with analyzeId " + analyzeID);
             }
@@ -514,7 +514,7 @@ public class AnalyzeMgr implements Writable {
     public void killConnection(long analyzeID) {
         ConnectContext context = connectionMap.get(analyzeID);
         if (context != null) {
-            context.kill(false);
+            context.kill(false, "kill analyze");
         } else {
             throw new SemanticException("There is no running task with analyzeId " + analyzeID);
         }

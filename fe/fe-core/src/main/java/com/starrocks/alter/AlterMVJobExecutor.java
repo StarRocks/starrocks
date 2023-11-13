@@ -26,6 +26,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
@@ -52,6 +53,7 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.commons.lang3.StringUtils;
+import org.threeten.extra.PeriodDuration;
 
 import java.util.List;
 import java.util.Map;
@@ -88,7 +90,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         propClone.putAll(properties);
         int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
-            partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+            partitionTTL = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+        }
+        Pair<String, PeriodDuration> ttlDuration = null;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
@@ -158,7 +164,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         boolean isChanged = false;
         Map<String, String> curProp = materializedView.getTableProperty().getProperties();
-        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL) && ttlDuration != null &&
+                !materializedView.getTableProperty().getPartitionTTL().equals(ttlDuration.second)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
+            materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
                 materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
             materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
@@ -319,6 +330,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
         try {
             if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
+                materializedView.fixRelationship();
                 if (materializedView.isActive()) {
                     return null;
                 }

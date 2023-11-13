@@ -22,7 +22,6 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
-// TODO: implements reset_state
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
 public:
     template <class... Args>

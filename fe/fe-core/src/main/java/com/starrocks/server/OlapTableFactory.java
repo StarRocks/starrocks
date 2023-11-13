@@ -357,6 +357,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                         PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
                 if (bucketSize > 0) {
                     table.setAutomaticBucketSize(bucketSize);
+                } else {
+                    throw new DdlException("Illegal bucket size: " + bucketSize);
                 }
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
@@ -483,7 +485,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             // get base index storage type. default is COLUMN
             TStorageType baseIndexStorageType = null;
             try {
-                baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties);
+                baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties, table);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -514,7 +516,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 // get storage type for rollup index
                 TStorageType rollupIndexStorageType = null;
                 try {
-                    rollupIndexStorageType = PropertyAnalyzer.analyzeStorageType(addRollupClause.getProperties());
+                    rollupIndexStorageType = PropertyAnalyzer.analyzeStorageType(addRollupClause.getProperties(), table);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
@@ -543,6 +545,9 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (properties != null) {
                 properties.remove("storage_format");
             }
+
+            //storage type
+            table.setStorageType(baseIndexStorageType.name());
 
             // get compression type
             TCompressionType compressionType = TCompressionType.LZ4_FRAME;

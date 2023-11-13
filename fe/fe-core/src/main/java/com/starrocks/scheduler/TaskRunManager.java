@@ -93,7 +93,7 @@ public class TaskRunManager {
         }
         ConnectContext runCtx = taskRun.getRunCtx();
         if (runCtx != null) {
-            runCtx.kill(false);
+            runCtx.kill(false, "kill TaskRun");
             return true;
         }
         return false;
@@ -258,6 +258,22 @@ public class TaskRunManager {
 
     public long getPendingTaskRunCount() {
         return pendingTaskRunMap.size();
+    }
+
+    public boolean containsTaskInRunningTaskRunMap(long taskId) {
+        return this.runningTaskRunMap.containsKey(taskId);
+    }
+
+    public long getPendingTaskRunCount(long taskId) {
+        taskRunLock.lock();
+        try {
+            return pendingTaskRunMap.containsKey(taskId) ? 0L :
+                    pendingTaskRunMap.get(taskId).size();
+        } catch (Exception e) {
+            return 0L;
+        } finally {
+            taskRunLock.unlock();
+        }
     }
 
     public long getRunningTaskRunCount() {
