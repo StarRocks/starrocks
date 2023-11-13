@@ -32,6 +32,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ConvertIntervalExpr;
 import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -815,6 +816,24 @@ public class ExpressionAnalyzer {
                     .toArray(Type[]::new);
             Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(), argumentTypes,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn == null) {
+                String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
+                        .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
+                throw new SemanticException(msg, node.getPos());
+            }
+            node.setType(fn.getReturnType());
+            node.setFn(fn);
+            return null;
+        }
+
+        @Override
+        public Void visitConvertIntervalExpr(ConvertIntervalExpr node, Scope context) {
+            String funcOpName = node.getFuncName();
+
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType)
+                    .toArray(Type[]::new);
+            Function fn = Expr.getBuiltinFunction(funcOpName.toLowerCase(),
+                    argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn == null) {
                 String msg = String.format("No matching function with signature: %s(%s)", funcOpName, Joiner.on(", ")
                         .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));

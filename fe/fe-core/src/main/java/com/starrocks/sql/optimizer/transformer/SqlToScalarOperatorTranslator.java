@@ -27,6 +27,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.ConvertIntervalExpr;
 import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -514,6 +515,16 @@ public final class SqlToScalarOperatorTranslator {
 
             return new CallOperator(node.getFn().getFunctionName().getFunction(), node.getType(), arguments,
                     node.getFn());
+        }
+
+        @Override
+        public ScalarOperator visitConvertIntervalExpr(ConvertIntervalExpr node, Context context) {
+            List<ScalarOperator> arguments = Lists.newArrayList();
+            for (Expr argument : node.getChildren()) {
+                arguments.add(visit(argument, context.clone(node)));
+            }
+            return new CallOperator(node.getFn().getFunctionName().getFunction(), node.getType(), arguments, node.getFn());
+
         }
 
         private LogicalPlan getSubqueryPlan(QueryStatement queryStatement) {
