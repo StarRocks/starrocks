@@ -113,7 +113,8 @@ int init_test_env(int argc, char** argv) {
     // delete engine
     StorageEngine::instance()->stop();
     // destroy exec env
-    tls_thread_status.set_mem_tracker(nullptr);
+    // tls_thread_status.set_mem_tracker(nullptr);
+    CurrentThread::current().set_mem_tracker(nullptr);
     exec_env->stop();
     exec_env->destroy();
     global_env->stop();

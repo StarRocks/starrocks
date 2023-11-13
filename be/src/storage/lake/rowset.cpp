@@ -204,7 +204,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache)
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache, bool fill_metadata_cache) {
 #ifndef BE_TEST
-    RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
+    // RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
+    RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
 
     size_t footer_size_hint = 16 * 1024;

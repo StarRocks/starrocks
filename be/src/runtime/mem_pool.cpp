@@ -133,7 +133,9 @@ bool MemPool::find_chunk(size_t min_size, bool check_limits) {
     // Allocate a new chunk. Return early if allocate fails.
     MemChunk chunk;
     if (!MemChunkAllocator::instance()->allocate(chunk_size, &chunk)) {
-        if (tls_thread_status.is_catched()) {
+        // @TODO
+        // if (tls_thread_status.is_catched()) {
+        if (CurrentThread::current().is_catched()) {
             throw std::bad_alloc();
         } else {
             return false;

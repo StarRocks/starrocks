@@ -19,7 +19,8 @@
 
 namespace starrocks {
 
-CurrentThread::CurrentThread(): _mem_cache_manager(CurrentThread::current), _operator_mem_cache_manager(CurrentThread::current) {
+CurrentThread::CurrentThread(): _mem_cache_manager(this, std::bind(&CurrentThread::get_mem_tracker,this)),
+    _operator_mem_cache_manager(this, std::bind(&CurrentThread::get_operator_mem_tracker, this)) {
     // if (!bthread_self()) {
     //     tls_is_thread_status_init = true;
     // }
@@ -97,6 +98,8 @@ CurrentThread& CurrentThread::current() {
                 // if we didn't create manually, just use pthread local
                 // no bthread local thread status, use pthread
                 // @TODO is it safe?
+
+                // @TODO if bthread destruct and it hold tls_thread_status, maybe not safe
                 bthread_tls_thread_status = &tls_thread_status;
             }
         }
@@ -116,6 +119,28 @@ CurrentThread& CurrentThread::current() {
     return tls_thread_status;
 }
 
+CurrentThread* CurrentThread::current_ptr() {
+    if (bthread_self()) {
+        if (bthread_equal(bthread_self(), bthread_tls_id) == 0) {
+            // bthread recorded in bthread_tls_id is not the current bthread, we should get it via bthread_get_specific
+            bthread_tls_id = bthread_self();
+            bthread_tls_thread_status = static_cast<CurrentThread*>(bthread_getspecific(bthread_tls_key));
+            if (bthread_tls_thread_status == nullptr) {
+                bthread_tls_thread_status = &tls_thread_status;
+            }
+        }
+        // LOG(INFO) << "get bthread tls";
+        // DCHECK(bthread_tls_thread_status != nullptr);
+        // return bthread_tls_thread_status;
+        // @TODO remove it
+        // @TODO in which case, bthread_tls_thread_status can be null
+        if (bthread_tls_thread_status == nullptr) {
+            bthread_tls_thread_status = &tls_thread_status;
+        }
+        return bthread_tls_thread_status;
+    }
+    return &tls_thread_status;
+}
 // MemTracker* CurrentThread::current_mem_tracker() {
 //     if (LIKELY(GlobalEnv::is_init())) {
 //         if (auto mem_tracker = CurrentThread::current().mem_tracker(); mem_tracker != nullptr) {

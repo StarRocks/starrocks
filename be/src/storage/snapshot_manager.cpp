@@ -81,8 +81,9 @@ SnapshotManager* SnapshotManager::instance() {
 
 Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* snapshot_path) {
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
+    // DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     if (UNLIKELY(snapshot_path == nullptr)) {
         return Status::InvalidArgument("snapshot_path is null");
@@ -140,8 +141,9 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
 
 Status SnapshotManager::release_snapshot(const string& snapshot_path) {
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
+    // DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
 
     // If the requested snapshot_path is located under the root/snapshot folder,
     // it is considered legitimate and can be deleted.

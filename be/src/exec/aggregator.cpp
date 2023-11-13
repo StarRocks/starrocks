@@ -278,7 +278,8 @@ Status Aggregator::open(RuntimeState* state) {
                     created++;
                 }
             } catch (std::bad_alloc& e) {
-                tls_thread_status.set_is_catched(false);
+                // tls_thread_status.set_is_catched(false);
+                CurrentThread::current().set_is_catched(false);
                 for (int i = 0; i < created; i++) {
                     _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
                 }

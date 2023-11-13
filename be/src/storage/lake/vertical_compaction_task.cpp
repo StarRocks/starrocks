@@ -166,7 +166,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             return Status::Cancelled("cancelled");
         }
 #ifndef BE_TEST
-        RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
+        // RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
+        RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("Compaction"));
 #endif
         if (auto st = reader.get_next(chunk.get(), source_masks); st.is_end_of_file()) {
             break;

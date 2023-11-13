@@ -237,8 +237,14 @@ bool DataStreamRecvr::is_data_ready() {
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_instance_mem_tracker.get());
+    // @TODO need set tracker??
+    MemTracker* prev_tracker = CurrentThread::current().set_mem_tracker(_instance_mem_tracker.get());
+
+    DeferOp op([&] {
+        // tls_thread_status.set_mem_tracker(prev_tracker);
+        CurrentThread::current().set_mem_tracker(prev_tracker);
+    });
 
     auto& metrics = get_metrics_round_robin();
     SCOPED_TIMER(metrics.process_total_timer);

@@ -170,8 +170,9 @@ Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(Chunk** chunk, const i
         // and the execution thread will call run() to let brpc continue to send packets,
         // and there will be memory release
 #ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
-        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+        // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
+        // DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(GlobalEnv::GetInstance()->process_mem_tracker());
 #endif
 
         closure->Run();
@@ -459,9 +460,12 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int3
         auto* closure = item.closure;
         if (closure != nullptr) {
 #ifndef BE_TEST
-            MemTracker* prev_tracker =
-                    tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
-            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            // MemTracker* prev_tracker =
+            //         tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
+            // DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(GlobalEnv::GetInstance()->process_mem_tracker());
+ 
+
 #endif
             COUNTER_UPDATE(metrics.closure_block_timer, MonotonicNanos() - item.queue_enter_time);
             closure->Run();

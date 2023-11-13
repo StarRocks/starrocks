@@ -150,7 +150,10 @@ bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
     FAIL_POINT_TRIGGER_RETURN(random_error, false);
     bool ret = true;
 #ifndef BE_TEST
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    // @TODO need a interface for thread won't change 
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    MemTracker* prev_tracker = CurrentThread::current().set_mem_tracker(_mem_tracker);
+
     DeferOp op([&] {
         if (ret) {
             if (LIKELY(_mem_tracker != nullptr)) {
@@ -160,7 +163,8 @@ bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
                 prev_tracker->consume(chunk->size);
             }
         }
-        tls_thread_status.set_mem_tracker(prev_tracker);
+        // tls_thread_status.set_mem_tracker(prev_tracker);
+        CurrentThread::current().set_mem_tracker(prev_tracker);
     });
 #endif
 
@@ -208,7 +212,9 @@ bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
 
 void MemChunkAllocator::free(const MemChunk& chunk) {
 #ifndef BE_TEST
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    MemTracker* prev_tracker = CurrentThread::current().set_mem_tracker(_mem_tracker);
+
     DeferOp op([&] {
         int64_t chunk_size = chunk.size;
         if (LIKELY(prev_tracker != nullptr)) {
@@ -217,7 +223,8 @@ void MemChunkAllocator::free(const MemChunk& chunk) {
         if (LIKELY(_mem_tracker != nullptr)) {
             _mem_tracker->consume(chunk_size);
         }
-        tls_thread_status.set_mem_tracker(prev_tracker);
+        // tls_thread_status.set_mem_tracker(prev_tracker);
+        CurrentThread::current().set_mem_tracker(prev_tracker);
     });
 #endif
 

@@ -42,10 +42,14 @@ struct EmptyMemGuard {
 struct MemTrackerGuard {
     MemTrackerGuard(MemTracker* scope_tracker_) : scope_tracker(scope_tracker_) {}
     bool scoped_begin() const {
-        old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
+        // old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
+        old_tracker = CurrentThread::current().set_mem_tracker(scope_tracker);
         return true;
     }
-    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+    void scoped_end() const {
+        // tls_thread_status.set_mem_tracker(old_tracker);
+        CurrentThread::current().set_mem_tracker(old_tracker);
+    }
     MemTracker* scope_tracker;
     mutable MemTracker* old_tracker = nullptr;
 };

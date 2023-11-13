@@ -394,8 +394,13 @@ void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_sta
     auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
     auto s_tracker = exec_state->runtime_state()->instance_mem_tracker_ptr();
 
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    // MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
+    // DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    // @TODO need a scope tracker
+    MemTracker* prev_tracker = CurrentThread::current().set_mem_tracker(s_tracker.get());
+    DeferOp op([&] { CurrentThread::current().set_mem_tracker(prev_tracker); });
+
+
 
     WARN_IF_ERROR(exec_state->execute(),
                   strings::Substitute("Fail to execute fragment $0", print_id(exec_state->fragment_instance_id())));
