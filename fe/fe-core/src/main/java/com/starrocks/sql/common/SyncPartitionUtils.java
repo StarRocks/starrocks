@@ -62,10 +62,10 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
@@ -324,7 +324,10 @@ public class SyncPartitionUtils {
         if (!srcRanges.isEmpty() && !dstRanges.isEmpty()) {
             List<PrimitiveType> srcTypes = srcRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
             List<PrimitiveType> dstTypes = dstRanges.get(0).getPartitionKeyRange().lowerEndpoint().getTypes();
-            Preconditions.checkArgument(Objects.equals(srcTypes, dstTypes), "types must be identical");
+            boolean castable = IntStream.range(0, srcTypes.size())
+                    .allMatch(i -> PrimitiveType.isImplicitCast(srcTypes.get(i), dstTypes.get(i)));
+            Preconditions.checkArgument(castable,
+                    String.format("types are not compatible: %s AND %s", srcTypes, dstTypes));
         }
 
         Map<String, Set<String>> result = srcRanges.stream().collect(

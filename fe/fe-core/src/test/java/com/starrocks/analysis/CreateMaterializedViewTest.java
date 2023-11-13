@@ -106,6 +106,7 @@ public class CreateMaterializedViewTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_experimental_mv = true;
+        Config.default_replication_num = 1;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -2252,8 +2253,9 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
 
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
@@ -2413,8 +2415,9 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
@@ -2432,8 +2435,9 @@ public class CreateMaterializedViewTest {
                 ")\n" +
                 "as select date_trunc('month',k1) s1, k2 s2 from tbl1;";
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
@@ -2451,8 +2455,9 @@ public class CreateMaterializedViewTest {
                 ") " +
                 "as select k1, tbl1.k2 from tbl1;";
         try {
-            CreateMaterializedViewStatement stmt = (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
-                    connectContext);
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
+                            connectContext);
             currentState.createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
@@ -2799,7 +2804,8 @@ public class CreateMaterializedViewTest {
                 String sql = "create materialized view test_mv_different_db.test_mv_use_different_tbl " +
                         "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
                 CreateMaterializedViewStmt stmt =
-                        (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+                        (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                                newStarRocksAssert.getCtx());
 
             });
             newStarRocksAssert.dropDatabase("test_mv_different_db");
@@ -3426,7 +3432,8 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view related base table partition type: LIST not supports."));
+            Assert.assertTrue(
+                    e.getMessage().contains("Materialized view related base table partition type: LIST not supports."));
         }
         starRocksAssert.dropTable("list_partition_tbl1");
     }
@@ -3922,5 +3929,32 @@ public class CreateMaterializedViewTest {
             Assert.assertThrows("Materialized view partition function date_trunc check failed",
                     AnalysisException.class, () -> starRocksAssert.useDatabase("test").withMaterializedView(sql));
         }
+    }
+
+    /**
+     * base table is DATE type, time_slice function returns DATETIME type
+     */
+    @Test
+    public void testDateTrunc_Timeslice() throws Exception {
+        String tableName = "dt_date";
+        String mvName = "mv_dt_date";
+        starRocksAssert.withTable("CREATE TABLE " + tableName +
+                "                 (dt date,\n" +
+                "                     num int\n" +
+                "                 )\n" +
+                "                 DUPLICATE KEY(dt)\n" +
+                "                 PARTITION BY RANGE(`dt`)\n" +
+                "                (\n" +
+                "                    PARTITION `p1` VALUES LESS THAN (\"2020-07-01\"),\n" +
+                "                    PARTITION `p2` VALUES LESS THAN (\"2020-07-15\"),\n" +
+                "                    PARTITION `p3` VALUES LESS THAN (\"2020-08-01\")\n" +
+                "                )");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " PARTITION BY date_trunc(\"month\", dt1) " +
+                "REFRESH MANUAL AS " +
+                "SELECT time_slice(dt, interval 5 day) as dt1,min(num) FROM dt_date GROUP BY dt1;");
+        starRocksAssert.refreshMv(mvName);
+        starRocksAssert.dropTable(tableName);
+        starRocksAssert.dropMaterializedView(mvName);
     }
 }
