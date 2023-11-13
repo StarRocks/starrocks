@@ -15,8 +15,8 @@ SHOW RUNNING QUERIES
 - `QueryId`: The ID of the query.
 - `ResourceGroupId`: The ID of the resource group that the query hit. When there is no hit on a user-defined resource group, it will be displayed as "-".
 - `StartTime`: The start time of the query.
-- `PendingTimeout`: The time in the future when the query will time out in the queue.
-- `QueryTimeout`: The time when the query has timed out.
+- `PendingTimeout`: The time when the PENDING query will time out in the queue.
+- `QueryTimeout`: The time when the query times out.
 - `State`: The queue state of the query, where "PENDING" indicates it is in the queue, and "RUNNING" indicates it is currently executing.
 - `Slots`: The logical resource quantity requested by the query, currently fixed at `1`.
 - `Frontend`: The FE node that initiated the query.
