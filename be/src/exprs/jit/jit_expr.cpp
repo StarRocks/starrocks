@@ -51,14 +51,6 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
         return Status::OK();
     }
 
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
-    std::vector<FunctionContext::TypeDesc> args_types;
-
-    for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
-    }
-    _fn_context_index = context->register_func(state, return_type, args_types);
-
     // TODO(Yueyang): remove this time cost.
     auto start = MonotonicNanos();
 

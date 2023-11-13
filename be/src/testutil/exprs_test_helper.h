@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include "column/chunk.h"
 #include "common/object_pool.h"
 #include "common/status.h"
