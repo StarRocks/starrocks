@@ -3984,7 +3984,7 @@ public class LocalMetastore implements ConnectorMetadata {
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> logProperties = new HashMap<>(properties);
-        int partitionLiveNumber = -1;
+        int partitionLiveNumber = TableProperty.INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
                 partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
@@ -4014,6 +4014,13 @@ public class LocalMetastore implements ConnectorMetadata {
         if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
                     String.valueOf(partitionLiveNumber));
+            if (partitionLiveNumber == TableProperty.INVALID) {
+               GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
+                       table.getId());
+            } else {
+                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
+                        table.getId());
+            }
             tableProperty.setPartitionTTLNumber(partitionLiveNumber);
         } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             TStorageMedium storageMedium = dataProperty.getStorageMedium();
