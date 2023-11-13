@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
@@ -27,11 +26,15 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.HudiTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -44,6 +47,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -123,8 +128,6 @@ public class HudiTableTest {
         Assert.fail("No exception throws.");
     }
 
-
-
     @Test(expected = DdlException.class)
     public void testNoDb() throws Exception {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
@@ -188,7 +191,7 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
                 ScalarType.createDefaultCatalogString());
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
-                Schema.createArray(Schema.create(Schema.Type.INT))),
+                        Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createFixed("FIXED", "FIXED", "F", 1)),
@@ -248,5 +251,64 @@ public class HudiTableTest {
         TTableDescriptor tTableDescriptor = table.toThrift(ImmutableList.of());
         Assert.assertEquals("db0", tTableDescriptor.getDbName());
         Assert.assertEquals("table0", tTableDescriptor.getTableName());
+    }
+
+    @Test
+    public void testCreateTableResourceName(@Mocked GlobalStateMgr globalStateMgr) throws DdlException {
+
+        String resourceName = "Hudi_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        final Resource resource = new HudiResource(resourceName);
+        final int tableId = 1000;
+        HudiTable.Builder tableBuilder = HudiTable.builder()
+                .setId(tableId)
+                .setTableName("supplier")
+                .setCatalogName("hudi_catalog")
+                .setHiveDbName("hudi_oss_tpch_1g_parquet_gzip")
+                .setHiveTableName("supplier")
+                .setResourceName(resourceName.toString())
+                .setFullSchema(new ArrayList<>())
+                .setDataColNames(new ArrayList<>())
+                .setPartitionColNames(Lists.newArrayList())
+                .setCreateTime(10)
+                .setHudiProperties(new HashMap<>());
+        HudiTable oTable = tableBuilder.build();
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getNextId();
+                result = tableId + 1;
+
+                globalStateMgr.getResourceMgr().getResource(resourceName);
+                result = resource;
+
+                globalStateMgr.getMetadataMgr().getTable(anyString, anyString, anyString);
+                result = oTable;
+            }
+        };
+        String sql = "CREATE external TABLE supplier (\n" +
+                "s_suppkey int,\n" +
+                "s_name varchar(25),\n" +
+                "s_address varchar(40),\n" +
+                "s_nationkey int,\n" +
+                "s_phone varchar(15),\n" +
+                "s_acctbal decimal(15, 2),\n" +
+                "s_comment varchar(101)\n" +
+                ") ENGINE=Hudi\n" +
+                "properties (\n" +
+                "\"resource\" = \"" + resourceName + "\",\n" +
+                "\"table\" = \"supplier\",\n" +
+                "\"database\" = \"hudi_oss_tpch_1g_parquet_gzip\");";
+        List<StatementBase> res = SqlParser.parse(sql, new SessionVariable());
+        CreateTableStmt stmt = (CreateTableStmt) res.get(0);
+        HudiTableFactory factory = new HudiTableFactory() {
+            {
+                byPassColumnTypeValidation = true;
+            }
+        };
+        HudiTable table = (HudiTable) factory.createTable(null, null, stmt);
+        Assert.assertEquals(table.getResourceName(), resourceName);
     }
 }

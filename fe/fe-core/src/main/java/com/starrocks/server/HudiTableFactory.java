@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -43,7 +44,10 @@ import static com.starrocks.catalog.Resource.ResourceType.HUDI;
 public class HudiTableFactory extends ExternalTableFactory {
     public static final HudiTableFactory INSTANCE = new HudiTableFactory();
 
-    private HudiTableFactory() {
+    protected boolean byPassColumnTypeValidation = false;
+
+    @VisibleForTesting
+    protected HudiTableFactory() {
 
     }
 
@@ -74,7 +78,9 @@ public class HudiTableFactory extends ExternalTableFactory {
                     + " from the resource " + properties.get(RESOURCE));
         }
         HudiTable oHudiTable = (HudiTable) table;
-        validateHudiColumnType(columns, oHudiTable);
+        if (!byPassColumnTypeValidation) {
+            validateHudiColumnType(columns, oHudiTable);
+        }
 
         HudiTable.Builder tableBuilder = HudiTable.builder()
                 .setId(tableId)
