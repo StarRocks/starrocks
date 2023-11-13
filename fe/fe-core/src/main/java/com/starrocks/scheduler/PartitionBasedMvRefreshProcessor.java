@@ -325,9 +325,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (partitionTable != null && tableId != partitionTable.getId()) {
                 continue;
             }
-            if (!currentVersionMap.containsKey(tableId)) {
-                currentVersionMap.put(tableId, Maps.newHashMap());
-            }
+            currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(tableId);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
@@ -377,9 +375,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (partitionTableInfo != null && !partitionTableInfo.equals(baseTableInfo)) {
                 continue;
             }
-            if (!currentVersionMap.containsKey(baseTableInfo)) {
-                currentVersionMap.put(baseTableInfo, Maps.newHashMap());
-            }
+            currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
