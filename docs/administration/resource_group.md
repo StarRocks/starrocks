@@ -17,7 +17,7 @@ The roadmap of Resource Group:
 | 2.2 | √ | × | × | × | × | × |
 | 2.3 | √ | √ | √ | √ | × | × |
 | 2.4 | √ | √ | √ | √ | × | × |
-| 2.5 | √ | √ | √ | √ | √ | × |
+| 2.5 and later | √ | √ | √ | √ | √ | × |
 
 ## Terms
 
@@ -345,14 +345,14 @@ The following FE metrics only provide statistics within the current FE node:
 | resource_group_mem_limit_bytes            | Bytes    | Instantaneous | The memory limit for this resource group.                         |
 | resource_group_mem_inuse_bytes            | Bytes    | Instantaneous | The memory currently in use by this resource group.               |
 | resource_group_cpu_limit_ratio            | Percentage | Instantaneous | The ratio of this resource group's `cpu_core_limit` to the total `cpu_core_limit` across all resource groups. |
-| resource_group_inuse_cpu_cores            | Count     | Average     | The estimated number of CPU cores in use by this resource group. This value is an approximate estimate. It represents the average over two consecutive metric collection intervals. This metric is supported from v3.1.4 onwards. |
-| resource_group_cpu_use_ratio              | Percentage | Average     | **Deprecated** The ratio of the Pipeline thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. This represents the average over two consecutive metric collection intervals. |
-| resource_group_connector_scan_use_ratio   | Percentage | Average     | **Deprecated** The ratio of the external table Scan thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. This represents the average over two consecutive metric collection intervals. |
-| resource_group_scan_use_ratio             | Percentage | Average     | **Deprecated** The ratio of the internal table Scan thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. This represents the average over two consecutive metric collection intervals. |
+| resource_group_inuse_cpu_cores            | Count     | Average     | The estimated number of CPU cores in use by this resource group. This value is an approximate estimate. It represents the average value calculated based on the statistics from two consecutive metric collections. This metric is supported from v3.1.4 onwards. |
+| resource_group_cpu_use_ratio              | Percentage | Average     | **Deprecated** The ratio of the Pipeline thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. It represents the average value calculated based on the statistics from two consecutive metric collections. |
+| resource_group_connector_scan_use_ratio   | Percentage | Average     | **Deprecated** The ratio of the external table Scan thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. It represents the average value calculated based on the statistics from two consecutive metric collections. |
+| resource_group_scan_use_ratio             | Percentage | Average     | **Deprecated** The ratio of the internal table Scan thread time slices used by this resource group to the total Pipeline thread time slices used by all resource groups. It represents the average value calculated based on the statistics from two consecutive metric collections. |
 
 ### View resource group usage information
 
-From v3.1.4 onwards, StarRocks supports the SQL statement `SHOW USAGE RESOURCE GROUPS`, which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
+From v3.1.4 onwards, StarRocks supports the SQL statement [SHOW USAGE RESOURCE GROUPS](../sql-reference/sql-statements/Administration/SHOW_USAGE_RESOURCE_GROUPS.md), which is used to display usage information for each resource group across BEs. The descriptions of each field are as follows:
 
 - `Name`: The name of the resource group.
 - `Id`: The ID of the resource group.
