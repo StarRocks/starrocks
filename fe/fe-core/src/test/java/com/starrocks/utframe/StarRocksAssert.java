@@ -357,6 +357,12 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert refreshMv(String mvName) throws Exception {
+        String sql = String.format("refresh materialized view %s with sync mode", mvName);
+        this.ctx.executeSql(sql);
+        return this;
+    }
+
     public StarRocksAssert refreshMvPartition(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof RefreshMaterializedViewStatement) {

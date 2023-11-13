@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -1383,7 +1384,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
     }
 
     @NotNull
-    private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
+    private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end)
+            throws Exception {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(materializedViewName));
         refreshMVRange(materializedView.getName(), start, end, false);
@@ -2832,7 +2834,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         starRocksAssert.dropMaterializedView("test_drop_partition_mv1");
     }
 
-
     @Test
     public void testStr2DateMVRefresh_Rewrite() throws Exception {
         MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
@@ -2863,6 +2864,74 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertEquals(Arrays.asList("p00010101_20230801", "p20230801_20230802", "p20230802_20230803",
                 "p20230803_99991231"), partitions);
 
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    /**
+     * Base table has discrete partitions, MV should create the correct partitions
+     */
+    @Test
+    public void testMVPartitionDateTruncMonth_discrete() throws Exception {
+        // case 1
+        {
+            String partitionSql = "PARTITION `p1` VALUES LESS THAN (\"2020-07-01\"),\n" +
+                    "PARTITION `p2` VALUES LESS THAN (\"2020-07-15\"),\n" +
+                    "PARTITION `p3` VALUES LESS THAN (\"2020-08-01\"),\n" +
+                    "PARTITION `p4` VALUES LESS THAN (\"2020-09-15\"),\n" +
+                    "PARTITION `p5` VALUES LESS THAN (\"2021-01-15\")\n";
+            Set<String> partitions =
+                    ImmutableSet.of("p000101_202007", "p202007_202008", "p202008_202009", "p202009_202010",
+                            "p202010_202011", "p202011_202012", "p202012_202101", "p202101_202102");
+            testMVPartitionDateTruncMonth(partitionSql, partitions);
+        }
+        // case 2
+        {
+            String partitionSql = "PARTITION `p1` VALUES LESS THAN (\"2020-07-01\")";
+            Set<String> partitions = ImmutableSet.of("p000101_202007");
+            testMVPartitionDateTruncMonth(partitionSql, partitions);
+        }
+        // case 3
+        {
+            String partitionSql = "PARTITION `p1` VALUES LESS THAN (\"2020-07-01\"), " +
+                    "PARTITION `p2` VALUES LESS THAN (\"2020-10-01\")";
+            Set<String> partitions =
+                    ImmutableSet.of("p202009_202010", "p202007_202008", "p202008_202009", "p000101_202007");
+            testMVPartitionDateTruncMonth(partitionSql, partitions);
+        }
+        // case 4
+        {
+            String partitionSql = "PARTITION `p1` VALUES LESS THAN (\"2020-07-01\"), " +
+                    "PARTITION `p2` VALUES LESS THAN (\"2020-10-01\"), " +
+                    "PARTITION `p3` VALUES LESS THAN (\"2020-10-02\"), " +
+                    "PARTITION `p4` VALUES LESS THAN (\"2020-10-03\")";
+            Set<String> partitions =
+                    ImmutableSet.of("p000101_202007", "p202007_202008", "p202008_202009", "p202009_202010",
+                            "p202010_202011");
+            testMVPartitionDateTruncMonth(partitionSql, partitions);
+        }
+    }
+
+    public void testMVPartitionDateTruncMonth(String partitionSql, Set<String> expectedPartitions) throws Exception {
+        String baseTableName = "mv_base_discrete";
+        String mvName = "mv_date_trunc_month";
+        starRocksAssert.withTable("CREATE TABLE " + baseTableName +
+                "                 ( dt datetime,\n" +
+                "                     num int\n" +
+                "                 )\n" +
+                "                 DUPLICATE KEY(dt)\n" +
+                "                 PARTITION BY RANGE(`dt`)\n" +
+                "                (\n" + partitionSql +
+                "                );");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName +
+                " PARTITION BY date_trunc('month',dt) REFRESH ASYNC\n" +
+                " AS SELECT dt,sum(num) FROM " + baseTableName +
+                " GROUP BY dt");
+        starRocksAssert.refreshMv(mvName);
+
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable("test", mvName);
+        Assert.assertEquals(expectedPartitions, mv.getPartitionNames());
+
+        starRocksAssert.dropTable(baseTableName);
         starRocksAssert.dropMaterializedView(mvName);
     }
 }

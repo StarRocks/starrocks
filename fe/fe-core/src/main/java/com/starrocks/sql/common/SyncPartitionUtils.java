@@ -38,11 +38,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -52,6 +54,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -201,26 +204,41 @@ public class SyncPartitionUtils {
         } catch (AnalysisException e) {
             throw new SemanticException("Convert to PartitionMapping failed:", e);
         }
+
+        // check the time-point interval, fill the gap if it's not well-defined
         List<LocalDateTime> timePointList = Lists.newArrayList(timePointSet);
+        List<Range<LocalDateTime>> partitionRanges = Lists.newArrayList();
+        PeriodDuration interval = TimeUtils.parseHumanReadablePeriodOrDuration("1 " + granularity);
+        DateLiteral minValue = DateLiteral.createMinValue(ScalarType.createType(partitionType));
+        for (int i = 1; i < timePointList.size(); i++) {
+            LocalDateTime start = timePointList.get(i - 1);
+            LocalDateTime end = timePointList.get(i);
+
+            if (start.isEqual(minValue.toLocalDateTime())) {
+                partitionRanges.add(Range.closedOpen(start, end));
+            } else {
+                do {
+                    LocalDateTime next = start.plus(interval);
+                    Range<LocalDateTime> range = Range.closedOpen(start, next);
+                    partitionRanges.add(range);
+                    start = next;
+                } while (start.isBefore(end));
+            }
+        }
+
         // deal overlap
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         if (timePointList.size() < 2) {
             return result;
         }
-        for (int i = 1; i < timePointList.size(); i++) {
+        for (Range<LocalDateTime> range : partitionRanges) {
             try {
                 PartitionKey lowerPartitionKey = new PartitionKey();
-                LocalDateTime lowerDateTime = timePointList.get(i - 1);
-                LocalDateTime upperDateTime = timePointList.get(i);
                 PartitionKey upperPartitionKey = new PartitionKey();
-                if (partitionType == PrimitiveType.DATE) {
-                    lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime, Type.DATE), partitionType);
-                    upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, Type.DATE), partitionType);
-                } else {
-                    lowerPartitionKey.pushColumn(new DateLiteral(lowerDateTime, Type.DATETIME), partitionType);
-                    upperPartitionKey.pushColumn(new DateLiteral(upperDateTime, Type.DATETIME), partitionType);
-                }
-                String mvPartitionName = getMVPartitionName(lowerDateTime, upperDateTime, granularity);
+                Type temporalType = ScalarType.createType(partitionType);
+                lowerPartitionKey.pushColumn(new DateLiteral(range.lowerEndpoint(), temporalType), partitionType);
+                upperPartitionKey.pushColumn(new DateLiteral(range.upperEndpoint(), temporalType), partitionType);
+                String mvPartitionName = getMVPartitionName(range.lowerEndpoint(), range.upperEndpoint(), granularity);
                 result.put(mvPartitionName, Range.closedOpen(lowerPartitionKey, upperPartitionKey));
             } catch (AnalysisException ex) {
                 throw new SemanticException("Convert to DateLiteral failed:", ex);
