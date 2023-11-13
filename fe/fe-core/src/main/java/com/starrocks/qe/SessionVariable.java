@@ -982,7 +982,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean runtimeFilterOnExchangeNode = false;
 
     @VariableMgr.VarAttr(name = ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER)
-    private boolean enableMultiColumnsOnGlobalRuntimeFilter = false;
+    private boolean enableMultiColumnsOnGlobalRuntimeFilter = true;
 
     @VariableMgr.VarAttr(name = ENABLE_TABLET_INTERNAL_PARALLEL_V2,
             alias = ENABLE_TABLET_INTERNAL_PARALLEL, show = ENABLE_TABLET_INTERNAL_PARALLEL)
