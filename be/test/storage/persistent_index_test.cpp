@@ -94,7 +94,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
         idxes.emplace_back(num);
         num++;
     }
-    vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+    vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
     KeysInfo erase_not_found;
     size_t erase_num_found = 0;
     ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes)
@@ -123,7 +123,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
         upsert_values[i] = i * 3;
         idxes.emplace_back(i);
     }
-    vector<IndexValue> upsert_old_values(upsert_keys.size(), NullIndexValue);
+    vector<IndexValue> upsert_old_values(upsert_keys.size(), IndexValue(NullIndexValue));
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
@@ -189,7 +189,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
         idxes.emplace_back(num);
         num++;
     }
-    vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+    vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
     KeysInfo erase_not_found;
     size_t erase_num_found = 0;
     ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes)
@@ -218,7 +218,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
         upsert_values[i] = i * 3;
         idxes.emplace_back(i);
     }
-    vector<IndexValue> upsert_old_values(upsert_keys.size(), NullIndexValue);
+    vector<IndexValue> upsert_old_values(upsert_keys.size(), IndexValue(NullIndexValue));
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
@@ -306,7 +306,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index) {
     erase_keys.emplace_back(gen_random_string_of_random_length(24, 41));
     erase_key_slices.emplace_back(erase_keys.back());
     idxes.emplace_back(num++);
-    vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+    vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
     KeysInfo erase_not_found;
     size_t erase_num_found = 0;
     ASSERT_TRUE(idx->erase(erase_key_slices.data(), erase_old_values.data(), &erase_not_found, &erase_num_found, idxes)
@@ -341,7 +341,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index) {
         upsert_values[i] = i * 3;
         idxes.emplace_back(i);
     }
-    vector<IndexValue> upsert_old_values(upsert_keys.size(), NullIndexValue);
+    vector<IndexValue> upsert_old_values(upsert_keys.size(), IndexValue(NullIndexValue));
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
@@ -422,7 +422,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         version.to_pb(snapshot_meta->mutable_version());
 
-        std::vector<IndexValue> old_values(N, NullIndexValue);
+        std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
         PersistentIndex index(kPersistentIndexDir);
         // flush l0 first
         ASSERT_OK(index.load(index_meta));
@@ -447,7 +447,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
             ASSERT_EQ(values[i], get_values[i]);
         }
 
-        vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+        vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(3, 0), erase_keys.size()).ok());
         ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
         // update PersistentMetaPB in memory
@@ -482,7 +482,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         }
 
         // upsert key/value to new_index
-        vector<IndexValue> old_values(invalid_keys.size(), NullIndexValue);
+        vector<IndexValue> old_values(invalid_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
@@ -546,7 +546,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
     IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
     version.to_pb(snapshot_meta->mutable_version());
 
-    std::vector<IndexValue> old_values(N, NullIndexValue);
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
     PersistentIndex index(kPersistentIndexDir);
     auto one_time_num = N / 4;
     // do snapshot twice, when cannot do flush_l0, which mean index_file checker works
@@ -625,7 +625,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_max_memory_usage) {
     version.to_pb(snapshot_meta->mutable_version());
 
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
-    std::vector<IndexValue> old_values(N, NullIndexValue);
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
     PersistentIndex index(kPersistentIndexDir);
     config::l0_max_mem_usage = 100;
     for (auto t = 0; t < 100; ++t) {
@@ -692,7 +692,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_min_memory_usage) {
     const int64_t old_l0_min_mem_usage = config::l0_min_mem_usage;
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1000000000000;
-    std::vector<IndexValue> old_values(N, NullIndexValue);
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
     PersistentIndex index(kPersistentIndexDir);
     config::l0_min_mem_usage = 100;
     for (auto t = 0; t < 100; ++t) {
@@ -842,7 +842,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal)
             snapshot_key_slices.emplace_back(snapshot_keys[i]);
         }
 
-        std::vector<IndexValue> old_values(NUM_SNAPSHOT, NullIndexValue);
+        std::vector<IndexValue> old_values(NUM_SNAPSHOT, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(2, 0), NUM_SNAPSHOT));
         ASSERT_OK(index.upsert(NUM_SNAPSHOT, snapshot_key_slices.data(), snapshot_values.data(), old_values.data()));
         ASSERT_OK(index.commit(&index_meta));
@@ -860,7 +860,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal)
         }
 
         config::l0_l1_merge_ratio = 1;
-        std::vector<IndexValue> wal_old_values(NUM_WAL, NullIndexValue);
+        std::vector<IndexValue> wal_old_values(NUM_WAL, IndexValue(NullIndexValue));
         ASSERT_OK(index.prepare(EditVersion(3, 0), NUM_WAL));
         ASSERT_OK(index.upsert(NUM_WAL, wal_key_slices.data(), wal_values.data(), wal_old_values.data()));
         ASSERT_OK(index.commit(&index_meta));
@@ -946,13 +946,13 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
-        std::vector<IndexValue> old_values(keys.size(), NullIndexValue);
+        std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
         ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
-        vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+        vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(3, 0), erase_keys.size()).ok());
         ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
         // update PersistentMetaPB in memory
@@ -986,7 +986,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
         }
 
         // upsert key/value to new_index
-        vector<IndexValue> old_values(invalid_keys.size(), NullIndexValue);
+        vector<IndexValue> old_values(invalid_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
@@ -1072,13 +1072,13 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
 
-        std::vector<IndexValue> old_values(keys.size(), NullIndexValue);
+        std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(2, 0), keys.size()).ok());
         ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
 
-        vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+        vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(3, 0), erase_keys.size()).ok());
         ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
         // update PersistentMetaPB in memory
@@ -1112,7 +1112,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
         }
 
         // upsert key/value to new_index
-        vector<IndexValue> old_values(invalid_keys.size(), NullIndexValue);
+        vector<IndexValue> old_values(invalid_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(new_index.prepare(EditVersion(4, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
@@ -1729,7 +1729,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
             for (int j = 0; j < N; j++) {
                 values.emplace_back(i * j);
             }
-            std::vector<IndexValue> old_values(N, NullIndexValue);
+            std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
             ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
             std::vector<IndexValue> get_values(N);
             ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
@@ -1824,14 +1824,14 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_tmp_l1) {
 
         // generate 3 versions
         for (int i = 0; i < 3; i++) {
-            std::vector<IndexValue> old_values(keys.size(), NullIndexValue);
+            std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
             ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), keys.size()).ok());
             ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
             ASSERT_TRUE(index.commit(&index_meta).ok());
             ASSERT_TRUE(index.on_commited().ok());
         }
 
-        vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+        vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), erase_keys.size()).ok());
         ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
         // update PersistentMetaPB in memory
@@ -1865,7 +1865,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_tmp_l1) {
         }
 
         // upsert key/value to new_index
-        vector<IndexValue> old_values(invalid_keys.size(), NullIndexValue);
+        vector<IndexValue> old_values(invalid_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(new_index.prepare(EditVersion(cur_version++, 0), invalid_keys.size()).ok());
         ASSERT_TRUE(new_index
                             .upsert(invalid_keys.size(), invalid_key_slices.data(), invalid_values.data(),
@@ -1941,7 +1941,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
         // 1. upsert
         for (int i = 0; i < K; i++) {
             incre_key(i);
-            std::vector<IndexValue> old_values(M, NullIndexValue);
+            std::vector<IndexValue> old_values(M, IndexValue(NullIndexValue));
             ASSERT_OK(index.load(index_meta));
             ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), M));
             ASSERT_OK(index.upsert(M, key_slices.data(), values.data(), old_values.data()));
@@ -2060,7 +2060,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
         // 1. upsert
         for (int i = 0; i < K; i++) {
             incre_key(i);
-            std::vector<IndexValue> old_values(M, NullIndexValue);
+            std::vector<IndexValue> old_values(M, IndexValue(NullIndexValue));
             ASSERT_OK(index.load(index_meta));
             ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), M));
             ASSERT_OK(index.upsert(M, key_slices.data(), values.data(), old_values.data()));
@@ -2144,14 +2144,14 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_delete) {
 
         // generate 3 versions
         for (int i = 0; i < 3; i++) {
-            std::vector<IndexValue> old_values(keys.size(), NullIndexValue);
+            std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
             ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), keys.size()).ok());
             ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
             ASSERT_TRUE(index.commit(&index_meta).ok());
             ASSERT_TRUE(index.on_commited().ok());
         }
 
-        vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+        vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.prepare(EditVersion(cur_version++, 0), erase_keys.size()).ok());
         // not trigger l0 advance flush
         config::l0_max_mem_usage = 100 * 1024 * 1024; // 100MB
@@ -2272,7 +2272,7 @@ PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_OK(index.prepare(EditVersion(cur_version++, 0), N));
         // erase non-exist keys
         // flush advance
-        vector<IndexValue> erase_old_values(erase_keys.size(), NullIndexValue);
+        vector<IndexValue> erase_old_values(erase_keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
@@ -2284,7 +2284,7 @@ PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
         ASSERT_TRUE(index.erase(erase_keys.size(), erase_key_slices.data(), erase_old_values.data()).ok());
         // not trigger flush advance
         config::l0_max_mem_usage = 100 * 1024 * 1024; // 100MB
-        std::vector<IndexValue> old_values(keys.size(), NullIndexValue);
+        std::vector<IndexValue> old_values(keys.size(), IndexValue(NullIndexValue));
         ASSERT_TRUE(index.upsert(keys.size(), key_slices.data(), values.data(), old_values.data()).ok());
         ASSERT_TRUE(index.commit(&index_meta).ok());
         ASSERT_TRUE(index.on_commited().ok());
