@@ -73,6 +73,7 @@ public class DateUtils {
             .addSerializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .addDeserializationExclusionStrategy(new GsonUtils.HiddenAnnotationExclusionStrategy())
             .enableComplexMapKeySerialization()
+            .disableHtmlEscaping()
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATETIME_PRINTER)
             .create();
     /*
