@@ -3350,8 +3350,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "     partitions=1/1");
         }
 
-
-
         {
             String mv = "select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, lo_custkey, c_name" +
                     " from lineorder right outer join customer" +

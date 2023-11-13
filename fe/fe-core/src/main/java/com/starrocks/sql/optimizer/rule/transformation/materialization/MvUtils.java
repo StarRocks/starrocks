@@ -1236,26 +1236,28 @@ public class MvUtils {
             Range<PartitionKey> from, String dateFormat) throws AnalysisException {
         DateTimeFormatter formatter = DateUtils.unixDatetimeFormatter(dateFormat);
         if (from.hasLowerBound() && from.hasUpperBound()) {
-            DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
-            String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
-            PartitionKey lowerPartitionKey = PartitionKey.ofString(lowerDateString);
+            PartitionKey lowerPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.lowerEndpoint().getKeys().get(0), formatter);
 
-            DateLiteral upperDate = (DateLiteral) from.upperEndpoint().getKeys().get(0);
-            String upperDateString = upperDate.toLocalDateTime().toLocalDate().format(formatter);
-            PartitionKey upperPartitionKey = PartitionKey.ofString(upperDateString);
+            PartitionKey upperPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.upperEndpoint().getKeys().get(0), formatter);
             return Range.range(lowerPartitionKey, from.lowerBoundType(), upperPartitionKey, from.upperBoundType());
         } else if (from.hasUpperBound()) {
-            DateLiteral upperDate = (DateLiteral) from.upperEndpoint().getKeys().get(0);
-            String upperDateString = upperDate.toLocalDateTime().toLocalDate().format(formatter);
-            PartitionKey upperPartitionKey = PartitionKey.ofString(upperDateString);
+            PartitionKey upperPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.upperEndpoint().getKeys().get(0), formatter);
             return Range.upTo(upperPartitionKey, from.upperBoundType());
         } else if (from.hasLowerBound()) {
-            DateLiteral lowerDate = (DateLiteral) from.lowerEndpoint().getKeys().get(0);
-            String lowerDateString = lowerDate.toLocalDateTime().toLocalDate().format(formatter);
-            PartitionKey lowerPartitionKey = PartitionKey.ofString(lowerDateString);
+            PartitionKey lowerPartitionKey = convertToVarcharPartitionKey(
+                    (DateLiteral) from.lowerEndpoint().getKeys().get(0), formatter);
             return Range.downTo(lowerPartitionKey, from.lowerBoundType());
         }
         return Range.all();
+    }
+
+    private static PartitionKey convertToVarcharPartitionKey(DateLiteral dateLiteral, DateTimeFormatter formatter) {
+        String lowerDateString = dateLiteral.toLocalDateTime().toLocalDate().format(formatter);
+        PartitionKey partitionKey = PartitionKey.ofString(lowerDateString);
+        return partitionKey;
     }
 
     /**
