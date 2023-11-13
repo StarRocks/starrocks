@@ -144,7 +144,6 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "test_all_type ) t where cnt > 1 limit 10;";
 
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(4: t1d)\n" +
                 "  |  group by: 3: t1c, 4: t1d, 5: t1e\n" +
