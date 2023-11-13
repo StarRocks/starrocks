@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -44,11 +43,19 @@ import static com.starrocks.catalog.Resource.ResourceType.HUDI;
 public class HudiTableFactory extends ExternalTableFactory {
     public static final HudiTableFactory INSTANCE = new HudiTableFactory();
 
-    protected boolean byPassColumnTypeValidation = false;
+    private HudiTableFactory() {
 
-    @VisibleForTesting
-    protected HudiTableFactory() {
+    }
 
+    public static void copyFromOldTable(HudiTable.Builder builder, HudiTable oHudiTable, Map<String, String> properties) {
+        builder.setCatalogName(oHudiTable.getCatalogName())
+                .setResourceName(properties.get(RESOURCE))
+                .setHiveDbName(oHudiTable.getDbName())
+                .setHiveTableName(oHudiTable.getTableName())
+                .setPartitionColNames(oHudiTable.getPartitionColumnNames())
+                .setDataColNames(oHudiTable.getDataColumnNames())
+                .setHudiProperties(oHudiTable.getProperties())
+                .setCreateTime(oHudiTable.getCreateTime());
     }
 
     @Override
@@ -78,23 +85,13 @@ public class HudiTableFactory extends ExternalTableFactory {
                     + " from the resource " + properties.get(RESOURCE));
         }
         HudiTable oHudiTable = (HudiTable) table;
-        if (!byPassColumnTypeValidation) {
-            validateHudiColumnType(columns, oHudiTable);
-        }
+        validateHudiColumnType(columns, oHudiTable);
 
         HudiTable.Builder tableBuilder = HudiTable.builder()
                 .setId(tableId)
                 .setTableName(tableName)
-                .setCatalogName(oHudiTable.getCatalogName())
-                .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(oHudiTable.getDbName())
-                .setHiveTableName(oHudiTable.getTableName())
-                .setFullSchema(columns)
-                .setPartitionColNames(oHudiTable.getPartitionColumnNames())
-                .setDataColNames(oHudiTable.getDataColumnNames())
-                .setHudiProperties(oHudiTable.getProperties())
-                .setCreateTime(oHudiTable.getCreateTime());
-
+                .setFullSchema(columns);
+        copyFromOldTable(tableBuilder, oHudiTable, properties);
         HudiTable hudiTable = tableBuilder.build();
 
         // partition key, commented for show partition key

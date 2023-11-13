@@ -26,15 +26,12 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.HudiTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.EngineType;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -51,6 +48,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HudiTableTest {
     private static ConnectContext connectContext;
@@ -254,18 +253,20 @@ public class HudiTableTest {
     }
 
     @Test
-    public void testCreateTableResourceName(@Mocked GlobalStateMgr globalStateMgr) throws DdlException {
-
+    public void testCreateTableResourceName() throws DdlException {
         String resourceName = "Hudi_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
-        final Resource resource = new HudiResource(resourceName);
-        final int tableId = 1000;
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
         HudiTable.Builder tableBuilder = HudiTable.builder()
-                .setId(tableId)
+                .setId(1000)
                 .setTableName("supplier")
                 .setCatalogName("hudi_catalog")
                 .setHiveDbName("hudi_oss_tpch_1g_parquet_gzip")
                 .setHiveTableName("supplier")
-                .setResourceName(resourceName.toString())
+                .setResourceName(resourceName)
                 .setFullSchema(new ArrayList<>())
                 .setDataColNames(new ArrayList<>())
                 .setPartitionColNames(Lists.newArrayList())
@@ -273,42 +274,9 @@ public class HudiTableTest {
                 .setHudiProperties(new HashMap<>());
         HudiTable oTable = tableBuilder.build();
 
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-
-                globalStateMgr.getNextId();
-                result = tableId + 1;
-
-                globalStateMgr.getResourceMgr().getResource(resourceName);
-                result = resource;
-
-                globalStateMgr.getMetadataMgr().getTable(anyString, anyString, anyString);
-                result = oTable;
-            }
-        };
-        String sql = "CREATE external TABLE supplier (\n" +
-                "s_suppkey int,\n" +
-                "s_name varchar(25),\n" +
-                "s_address varchar(40),\n" +
-                "s_nationkey int,\n" +
-                "s_phone varchar(15),\n" +
-                "s_acctbal decimal(15, 2),\n" +
-                "s_comment varchar(101)\n" +
-                ") ENGINE=Hudi\n" +
-                "properties (\n" +
-                "\"resource\" = \"" + resourceName + "\",\n" +
-                "\"table\" = \"supplier\",\n" +
-                "\"database\" = \"hudi_oss_tpch_1g_parquet_gzip\");";
-        List<StatementBase> res = SqlParser.parse(sql, new SessionVariable());
-        CreateTableStmt stmt = (CreateTableStmt) res.get(0);
-        HudiTableFactory factory = new HudiTableFactory() {
-            {
-                byPassColumnTypeValidation = true;
-            }
-        };
-        HudiTable table = (HudiTable) factory.createTable(null, null, stmt);
+        HudiTable.Builder newBuilder = HudiTable.builder();
+        HudiTableFactory.copyFromOldTable(newBuilder, oTable, properties);
+        HudiTable table = newBuilder.build();
         Assert.assertEquals(table.getResourceName(), resourceName);
     }
 }

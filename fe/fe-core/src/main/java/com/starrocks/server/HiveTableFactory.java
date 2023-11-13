@@ -39,6 +39,20 @@ public class HiveTableFactory extends ExternalTableFactory {
 
     }
 
+    public static void copyFromOldTable(HiveTable.Builder tableBuilder, HiveTable oHiveTable, Map<String, String> properties) {
+        tableBuilder
+                .setCatalogName(oHiveTable.getCatalogName())
+                .setResourceName(properties.get(RESOURCE))
+                .setHiveDbName(oHiveTable.getDbName())
+                .setHiveTableName(oHiveTable.getTableName())
+                .setPartitionColumnNames(oHiveTable.getPartitionColumnNames())
+                .setDataColumnNames(oHiveTable.getDataColumnNames())
+                .setTableLocation(oHiveTable.getTableLocation())
+                .setStorageFormat(oHiveTable.getStorageFormat())
+                .setCreateTime(oHiveTable.getCreateTime())
+                .setProperties(oHiveTable.getProperties());
+    }
+
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
@@ -60,17 +74,8 @@ public class HiveTableFactory extends ExternalTableFactory {
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(tableId)
                 .setTableName(tableName)
-                .setCatalogName(oHiveTable.getCatalogName())
-                .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(oHiveTable.getDbName())
-                .setHiveTableName(oHiveTable.getTableName())
-                .setPartitionColumnNames(oHiveTable.getPartitionColumnNames())
-                .setDataColumnNames(oHiveTable.getDataColumnNames())
-                .setFullSchema(columns)
-                .setTableLocation(oHiveTable.getTableLocation())
-                .setStorageFormat(oHiveTable.getStorageFormat())
-                .setCreateTime(oHiveTable.getCreateTime())
-                .setProperties(oHiveTable.getProperties());
+                .setFullSchema(columns);
+        copyFromOldTable(tableBuilder, oHiveTable, properties);
 
         HiveTable hiveTable = tableBuilder.build();
 

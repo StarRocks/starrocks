@@ -40,6 +40,16 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
     }
 
+    public static void copyFromOldTable(IcebergTable.Builder tableBuilder, IcebergTable oIcebergTable,
+                                        Map<String, String> properties) {
+        tableBuilder.setCatalogName(oIcebergTable.getCatalogName())
+                .setResourceName(properties.get(RESOURCE))
+                .setRemoteDbName(oIcebergTable.getRemoteDbName())
+                .setRemoteTableName(oIcebergTable.getRemoteTableName())
+                .setIcebergProperties(properties)
+                .setNativeTable(oIcebergTable.getNativeTable());
+    }
+
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
@@ -63,13 +73,9 @@ public class IcebergTableFactory extends ExternalTableFactory {
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(tableId)
                 .setSrTableName(tableName)
-                .setCatalogName(oIcebergTable.getCatalogName())
-                .setResourceName(properties.get(RESOURCE))
-                .setRemoteDbName(oIcebergTable.getRemoteDbName())
-                .setRemoteTableName(oIcebergTable.getRemoteTableName())
-                .setFullSchema(columns)
-                .setIcebergProperties(properties)
-                .setNativeTable(oIcebergTable.getNativeTable());
+                .setFullSchema(columns);
+
+        copyFromOldTable(tableBuilder, oIcebergTable, properties);
 
         IcebergTable icebergTable = tableBuilder.build();
 
