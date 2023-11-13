@@ -102,7 +102,7 @@ Fixed the following issues:
 
 - BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
 - Schema Change may fail if it takes an excessive period of time, because the specified tablet version is handled by garbage collection. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
-- Failed to access the Parquet files in MinIO or AWS S3 via file external tables. [#29873] (https://github.com/StarRocks/starrocks/pull/29873)
+- Failed to access the Parquet files in MinIO or AWS S3 via file external tables. [#29873](https://github.com/StarRocks/starrocks/pull/29873)
 - The ARRAY, MAP, and STRUCT type columns are not correctly displayed in  `information_schema.columns`. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 - `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)
 
