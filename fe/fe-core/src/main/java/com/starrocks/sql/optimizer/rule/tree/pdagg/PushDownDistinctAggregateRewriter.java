@@ -15,9 +15,9 @@
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
@@ -65,6 +65,8 @@ public class PushDownDistinctAggregateRewriter {
     private final OptimizerContext optimizerContext;
     private final ColumnRefFactory factory;
     private final SessionVariable sessionVariable;
+
+    private static final Set<String> SUPPORT_WINDOW_FUNC = ImmutableSet.of(FunctionSet.SUM);
 
     public PushDownDistinctAggregateRewriter(TaskContext taskContext) {
         this.taskContext = taskContext;
@@ -214,12 +216,32 @@ public class PushDownDistinctAggregateRewriter {
 
         private boolean canPushDownAgg(LogicalWindowOperator windowOp) {
             //TODO(by satanson): support AVG and COUNT in future
-            Set<String> supportWindowFun = Sets.newHashSet(FunctionSet.SUM);
             AnalyticWindow window = windowOp.getAnalyticWindow();
-            return window == null || window.getType().equals(AnalyticWindow.Type.RANGE) &&
-                    windowOp.getWindowCall().values().stream()
-                            .allMatch(call -> !call.isDistinct() && supportWindowFun.contains(call.getFnName()) &&
-                                    call.getChild(0).isColumnRef());
+            final ColumnRefSet partitionCols = new ColumnRefSet();
+            windowOp.getPartitionExpressions().stream().forEach(e -> partitionCols.union(e.getUsedColumns()));
+            return (window == null || window.getType().equals(AnalyticWindow.Type.RANGE))
+                    && windowOp.getWindowCall().values().stream()
+                            .allMatch(call -> isSupportedWindowCall(call, partitionCols) );
+        }
+
+        private boolean isSupportedWindowCall(CallOperator windowCall, ColumnRefSet partitionCols) {
+            if (windowCall.isDistinct()) {
+                return false;
+            }
+
+            if (!SUPPORT_WINDOW_FUNC.contains(windowCall.getFnName())) {
+                return false;
+            }
+
+            if (!windowCall.getChild(0).isColumnRef()) {
+                return false;
+            }
+
+            if (partitionCols.contains((ColumnRefOperator) windowCall.getChild(0))) {
+                return false;
+            }
+
+            return true;
         }
 
         @Override
@@ -410,11 +432,19 @@ public class PushDownDistinctAggregateRewriter {
             if (!rewriteInfo.getRemapping().get().getColumnRefSet().isIntersect(columnRefSet)) {
                 return RewriteInfo.NOT_REWRITE;
             }
-            Map<ColumnRefOperator, CallOperator> newWindowCall = Maps.newHashMap();
-            windowOp.getWindowCall()
-                    .forEach((key, value) -> newWindowCall.put(key, (CallOperator) replacer.rewrite(value)));
+            Map<ColumnRefOperator, CallOperator> newWindowCalls = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : windowOp.getWindowCall().entrySet()) {
+                String funcName = entry.getValue().getFnName();
+                ScalarOperator rewriteCallOp = replacer.rewrite(entry.getValue());
+                List<ScalarOperator> newArgs = rewriteCallOp.getChildren();
+                Type[] argTypes = newArgs.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+                Function newFunc = Expr.getBuiltinFunction(funcName, argTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                CallOperator newWindowCall = new CallOperator(funcName, newFunc.getReturnType(), newArgs, newFunc);
+                newWindowCalls.put(entry.getKey(), newWindowCall);
+            }
             LogicalWindowOperator newWindowOp =
-                    new LogicalWindowOperator.Builder().withOperator(windowOp).setWindowCall(newWindowCall).build();
+                    new LogicalWindowOperator.Builder().withOperator(windowOp).setWindowCall(newWindowCalls).build();
             rewriteInfo.setOp(OptExpression.create(newWindowOp, optExpression.getInputs()));
             return rewriteInfo;
         }

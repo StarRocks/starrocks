@@ -89,4 +89,72 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "args nullable: false; result nullable: false] = 1\n" +
                 ""));
     }
+
+    @Test
+    public void testPushDownDistinctAggBelowWindow_1() throws Exception {
+        // unsupported window func ref cols from partition by cols
+        String sql = "select distinct t1d from (select *, sum(t1e) over (partition by t1d) as cnt from test_all_type ) " +
+                "t where cnt > 1 limit 10;";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:SELECT\n" +
+                "  |  predicates: 11: sum(5: t1e) > 1.0\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, sum(12: sum), ]\n" +
+                "  |  partition by: 4: t1d\n" +
+                "  |  \n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(5: t1e)\n" +
+                "  |  group by: 4: t1d\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testNotPushDownDistinctAggBelowWindow_1() throws Exception {
+        // unsupported count function
+        String sql = "select distinct t1d from (select *, count(1) over (partition by t1d) as cnt from test_all_type ) " +
+                "t where cnt > 1 limit 10;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 11: count(1) > 1\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, count(1), ]\n" +
+                "  |  partition by: 4: t1d\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testNotPushDownDistinctAggBelowWindow_2() throws Exception {
+        // unsupported window func ref cols from partition by cols
+        String sql = "select distinct t1d from (select *, sum(t1d + 1) over (partition by t1d, t1e) as cnt from test_all_type ) " +
+                "t where cnt > 1 limit 10;";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 11: sum(add(4: t1d, 1)) > 1\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, sum(4: t1d + 1), ]\n" +
+                "  |  partition by: 4: t1d, 5: t1e\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 4> 4: t1d ASC, <slot 5> 5: t1e ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+
 }
