@@ -41,7 +41,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.MatchPredicate;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
@@ -731,7 +730,6 @@ public class FunctionSet {
         ArithmeticExpr.initBuiltins(this);
         TableFunction.initBuiltins(this);
         VectorizedBuiltinFunctions.initBuiltins(this);
-        MatchPredicate.initBuiltins(this);
         initAggregateBuiltins();
     }
 

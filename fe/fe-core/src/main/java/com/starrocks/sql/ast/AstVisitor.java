@@ -37,7 +37,6 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MatchPredicate;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
@@ -1128,10 +1127,6 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitBinaryPredicate(BinaryPredicate node, C context) {
-        return visitExpression(node, context);
-    }
-
-    public R visitMatchPredicate(MatchPredicate node, C context) {
         return visitExpression(node, context);
     }
 

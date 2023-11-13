@@ -36,10 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexDef.IndexType;
-import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
-import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
-import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -51,15 +47,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Internal representation of index, including index type, name, columns and comments.
@@ -236,57 +227,11 @@ public class Index implements Writable {
 
     public TOlapTableIndex toThrift() {
         TOlapTableIndex tIndex = new TOlapTableIndex();
-        tIndex.setIndex_id(indexId);
         tIndex.setIndex_name(indexName);
         tIndex.setColumns(columns);
         tIndex.setIndex_type(TIndexType.valueOf(indexType.toString()));
         if (columns != null) {
             tIndex.setComment(comment);
-        }
-        if (properties != null) {
-            Map<String, String> commonProperties = new HashMap<>();
-            Map<String, String> indexProperties = new HashMap<>();
-            Map<String, String> searchProperties = new HashMap<>();
-            Map<String, String> extraProperties = new HashMap<>();
-            Set<String> commonIndexParamKeySet;
-            Set<String> indexIndexParamKeySet;
-            Set<String> searchIndexParamKeySet;
-            if (indexType == IndexType.GIN) {
-                commonIndexParamKeySet = CommonIndexParamKey.KEY_SET;
-                indexIndexParamKeySet = IndexParamsKey.KEY_SET;
-                searchIndexParamKeySet = SearchParamsKey.KEY_SET;
-            } else {
-                commonIndexParamKeySet = Collections.emptySet();
-                indexIndexParamKeySet = Collections.emptySet();
-                searchIndexParamKeySet = Collections.emptySet();
-            }
-
-            for (Entry<String, String> propEntry : properties.entrySet()) {
-                String key = propEntry.getKey();
-                String value = propEntry.getValue();
-                String upperKey = key.toUpperCase(Locale.ROOT);
-                if (commonIndexParamKeySet.contains(upperKey)) {
-                    commonProperties.put(key, value);
-                } else if (indexIndexParamKeySet.contains(upperKey)) {
-                    indexProperties.put(key, value);
-                } else if (searchIndexParamKeySet.contains(upperKey)) {
-                    searchProperties.put(key, value);
-                } else {
-                    extraProperties.put(key, value);
-                }
-            }
-
-            Arrays.stream(CommonIndexParamKey.values()).filter(k -> !commonProperties.containsKey(k.name()) && k.needDefault())
-                    .forEach(k -> commonProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-            Arrays.stream(IndexParamsKey.values()).filter(k -> !indexProperties.containsKey(k.name()) && k.needDefault())
-                    .forEach(k -> indexProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-            Arrays.stream(SearchParamsKey.values()).filter(k -> !searchProperties.containsKey(k.name()) && k.needDefault())
-                    .forEach(k -> searchProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
-
-            tIndex.setCommon_properties(commonProperties);
-            tIndex.setIndex_properties(indexProperties);
-            tIndex.setSearch_properties(searchProperties);
-            tIndex.setExtra_properties(extraProperties);
         }
         return tIndex;
     }
