@@ -136,31 +136,6 @@ std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& 
     TabletSchemaPtr result = nullptr;
     //TabletSchemaPtr ptr = nullptr;
     bool insert = false;
-    /*
-    {
-        std::unique_lock l(shard->mtx);
-        auto it = shard->map.find(id);
-        if (it == shard->map.end()) {
-            result = TabletSchema::create(schema_pb, this);
-            shard->map.emplace(id, result);
-            insert = true;
-        } else {
-            ptr = it->second.lock();
-            if (UNLIKELY(!ptr)) {
-                result = TabletSchema::create(schema_pb, this);
-                it->second = std::weak_ptr<const TabletSchema>(result);
-                insert = true;
-            } else {
-                if (UNLIKELY(!check_schema_unique_id(schema_pb, ptr))) {
-                    result = TabletSchema::create(schema_pb, nullptr);
-                } else {
-                    result = ptr;
-                }
-                insert = false;
-            }
-        }
-    }
-    */
     {
         std::unique_lock l(shard->get_lock());
         auto res = shard->get(id, version);
@@ -189,32 +164,7 @@ std::pair<TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPtr&
     MapShard* shard = get_shard(id);
     bool insert = false;
     TabletSchemaPtr result = nullptr;
-    /*
-    TabletSchemaPtr ptr = nullptr;
-    {
-        std::unique_lock l(shard->mtx);
-        auto it = shard->map.find(id);
-        if (it == shard->map.end()) {
-            result = tablet_schema;
-            shard->map.emplace(id, result);
-            insert = true;
-        } else {
-            ptr = it->second.lock();
-            if (UNLIKELY(!ptr)) {
-                result = tablet_schema;
-                it->second = std::weak_ptr<const TabletSchema>(result);
-                insert = true;
-            } else {
-                if (check_schema_unique_id(tablet_schema, ptr)) {
-                    result = ptr;
-                } else {
-                    result = tablet_schema;
-                }
-                insert = false;
-            }
-        }
-    }
-    */
+
     {
         std::unique_lock l(shard->get_lock());
         auto res = shard->get(id, version);
@@ -252,18 +202,6 @@ TableSchemaMapStats TabletSchemaMap::stats() const {
         stats.num_items += shard_stat.num_items;
         stats.memory_usage += shard_stat.memory_usage;
         stats.saved_memory_usage += shard_stat.saved_memory_usage;
-        /*
-        stats.num_items += shard.map.size();
-        for (const auto& [_, weak_ptr] : shard.map) {
-            if (auto schema_ptr = weak_ptr.lock(); schema_ptr) {
-                auto use_cnt = schema_ptr.use_count();
-                auto schema_size = schema_ptr->mem_usage();
-                // The temporary variable schema_ptr took one reference, should exclude it.
-                stats.memory_usage += use_cnt >= 2 ? schema_size : 0;
-                stats.saved_memory_usage += (use_cnt >= 2) ? (use_cnt - 2) * schema_size : 0;
-            }
-        }
-        */
     }
     return stats;
 }
