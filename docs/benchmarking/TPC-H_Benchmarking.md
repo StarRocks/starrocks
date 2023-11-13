@@ -67,7 +67,6 @@ group by  l_returnflag,  l_linestatus
 order by  l_returnflag,  l_linestatus;
 
 --Q2
-select count(*) from (
 select  s_acctbal, s_name,  n_name,  p_partkey,  p_mfgr,  s_address,  s_phone,  s_comment
 from  part,  partsupp,  supplier,  nation,  region
 where
@@ -88,24 +87,21 @@ where
       and n_regionkey = r_regionkey
       and r_name = 'EUROPE'
   )
-order by  s_acctbal desc, n_name,  s_name,  p_partkey
-) as t1;
+order by  s_acctbal desc, n_name,  s_name,  p_partkey;
 
 --Q3
-select count(*) from (
-    select
-      l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority
-    from
-      customer, orders, lineitem
-    where
-      c_mktsegment = 'BUILDING'
-      and c_custkey = o_custkey
-      and l_orderkey = o_orderkey
-      and o_orderdate < date '1995-03-15'
-      and l_shipdate > date '1995-03-15'
-    group by l_orderkey, o_orderdate, o_shippriority
-    order by revenue desc, o_orderdate
-    ) as t1;
+select
+  l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority
+from
+  customer, orders, lineitem
+where
+  c_mktsegment = 'BUILDING'
+  and c_custkey = o_custkey
+  and l_orderkey = o_orderkey
+  and o_orderdate < date '1995-03-15'
+  and l_shipdate > date '1995-03-15'
+group by l_orderkey, o_orderdate, o_shippriority
+order by revenue desc, o_orderdate;
 
 --Q4
 select  o_orderpriority,  count(*) as order_count
@@ -197,7 +193,6 @@ group by o_year
 order by o_year;
 
 --Q9
-select count(*) from (
 select nation, o_year, sum(amount) as sum_profit
 from
   (
@@ -216,11 +211,9 @@ from
       and p_name like '%green%'
   ) as profit
 group by nation, o_year
-order by nation, o_year desc
-) as t1;
+order by nation, o_year desc;
 
 --Q10
-select count(*) from (
 select c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) as revenue, c_acctbal, n_name, c_address, c_phone, c_comment
     from customer, orders, lineitem, nation
     where
@@ -231,11 +224,9 @@ select c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) as revenue, c_
       and l_returnflag = 'R'
       and c_nationkey = n_nationkey
     group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, c_comment
-    order by revenue desc
-) as t1;
+    order by revenue desc;
 
 --Q11
-select count(*) from (
 select ps_partkey, sum(ps_supplycost * ps_availqty) as value
 from partsupp, supplier, nation
 where
@@ -251,8 +242,7 @@ group by ps_partkey having
         and s_nationkey = n_nationkey
         and n_name = 'GERMANY'
     )
-order by value desc
-) as t1;
+order by value desc;
 
 --Q12
 select
@@ -299,7 +289,6 @@ where
 order by s_suppkey;
 
 --Q16
-select count(*) from (
 select p_brand, p_type, p_size, count(distinct ps_suppkey) as supplier_cnt
 from partsupp, part
 where
@@ -311,8 +300,7 @@ where
     select s_suppkey from supplier where s_comment like '%Customer%Complaints%'
   )
 group by p_brand, p_type, p_size
-order by supplier_cnt desc, p_brand, p_type, p_size
-) as t1;
+order by supplier_cnt desc, p_brand, p_type, p_size;
 
 --Q17
 select sum(l_extendedprice) / 7.0 as avg_yearly
@@ -326,7 +314,6 @@ where
   );
 
 --Q18
-select count(*) from (
 select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, sum(l_quantity)
 from customer, orders, lineitem
 where
@@ -338,8 +325,7 @@ where
   and c_custkey = o_custkey
   and o_orderkey = l_orderkey
 group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice
-order by o_totalprice desc, o_orderdate
-) as t1;
+order by o_totalprice desc, o_orderdate;
 
 --Q19
 select sum(l_extendedprice* (1 - l_discount)) as revenue
@@ -402,7 +388,6 @@ where
 order by s_name;
 
 --Q21
-select count(*) from (
 select s_name, count(*) as numwait
 from  supplier,  lineitem l1,  orders,  nation
 where
@@ -426,8 +411,7 @@ where
   and s_nationkey = n_nationkey
   and n_name = 'SAUDI ARABIA'
 group by s_name
-order by  numwait desc, s_name
-) as t1;
+order by  numwait desc, s_name;
 
 
 --Q22
@@ -1287,7 +1271,6 @@ group by  l_returnflag,  l_linestatus
 order by  l_returnflag,  l_linestatus;
 
 --Q2
-select count(*) from (
 select  s_acctbal, s_name,  n_name,  p_partkey,  p_mfgr,  s_address,  s_phone,  s_comment
 from  part,  partsupp,  supplier,  nation,  region
 where
@@ -1308,24 +1291,21 @@ where
       and n_regionkey = r_regionkey
       and r_name = 'EUROPE'
   )
-order by  s_acctbal desc, n_name,  s_name,  p_partkey
-) as t1;
+order by  s_acctbal desc, n_name,  s_name,  p_partkey;
 
 --Q3
-select count(*) from (
-    select
-      l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority
-    from
-      customer, orders, lineitem
-    where
-      c_mktsegment = 'BUILDING'
-      and c_custkey = o_custkey
-      and l_orderkey = o_orderkey
-      and o_orderdate < date '1995-03-15'
-      and l_shipdate > date '1995-03-15'
-    group by l_orderkey, o_orderdate, o_shippriority
-    order by revenue desc, o_orderdate
-    ) as t1;
+select
+  l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority
+from
+  customer, orders, lineitem
+where
+  c_mktsegment = 'BUILDING'
+  and c_custkey = o_custkey
+  and l_orderkey = o_orderkey
+  and o_orderdate < date '1995-03-15'
+  and l_shipdate > date '1995-03-15'
+group by l_orderkey, o_orderdate, o_shippriority
+order by revenue desc, o_orderdate;
 
 --Q4
 select  o_orderpriority,  count(*) as order_count
@@ -1417,7 +1397,6 @@ group by o_year
 order by o_year;
 
 --Q9
-select count(*) from (
 select nation, o_year, sum(amount) as sum_profit
 from
   (
@@ -1436,11 +1415,9 @@ from
       and p_name like '%green%'
   ) as profit
 group by nation, o_year
-order by nation, o_year desc
-) as t1;
+order by nation, o_year desc;
 
 --Q10
-select count(*) from (
 select c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) as revenue, c_acctbal, n_name, c_address, c_phone, c_comment
     from customer, orders, lineitem, nation
     where
@@ -1451,11 +1428,9 @@ select c_custkey, c_name, sum(l_extendedprice * (1 - l_discount)) as revenue, c_
       and l_returnflag = 'R'
       and c_nationkey = n_nationkey
     group by c_custkey, c_name, c_acctbal, c_phone, n_name, c_address, c_comment
-    order by revenue desc
-) as t1;
+    order by revenue desc;
 
 --Q11
-select count(*) from (
 select ps_partkey, sum(ps_supplycost * ps_availqty) as value
 from partsupp, supplier, nation
 where
@@ -1471,8 +1446,7 @@ group by ps_partkey having
         and s_nationkey = n_nationkey
         and n_name = 'GERMANY'
     )
-order by value desc
-) as t1;
+order by value desc;
 
 --Q12
 select
@@ -1519,7 +1493,6 @@ where
 order by s_suppkey;
 
 --Q16
-select count(*) from (
 select p_brand, p_type, p_size, count(distinct ps_suppkey) as supplier_cnt
 from partsupp, part
 where
@@ -1531,8 +1504,7 @@ where
     select s_suppkey from supplier where s_comment like '%Customer%Complaints%'
   )
 group by p_brand, p_type, p_size
-order by supplier_cnt desc, p_brand, p_type, p_size
-) as t1;
+order by supplier_cnt desc, p_brand, p_type, p_size;
 
 --Q17
 select sum(l_extendedprice) / 7.0 as avg_yearly
@@ -1546,7 +1518,6 @@ where
   );
 
 --Q18
-select count(*) from (
 select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, sum(l_quantity)
 from customer, orders, lineitem
 where
@@ -1558,8 +1529,7 @@ where
   and c_custkey = o_custkey
   and o_orderkey = l_orderkey
 group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice
-order by o_totalprice desc, o_orderdate
-) as t1;
+order by o_totalprice desc, o_orderdate;
 
 --Q19
 select sum(l_extendedprice* (1 - l_discount)) as revenue
@@ -1622,7 +1592,6 @@ where
 order by s_name;
 
 --Q21
-select count(*) from (
 select s_name, count(*) as numwait
 from  supplier,  lineitem l1,  orders,  nation
 where
@@ -1646,8 +1615,7 @@ where
   and s_nationkey = n_nationkey
   and n_name = 'SAUDI ARABIA'
 group by s_name
-order by  numwait desc, s_name
-) as t1;
+order by  numwait desc, s_name;
 
 --Q22
 select
