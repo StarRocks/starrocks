@@ -12,8 +12,8 @@ Release date: November xx, 2023
 
 #### Data Lake Analytics
 
-- Supports creating and dropping databases and managed tables in Hive catalogs, and supports exporting data to Hive's managed tables using INSERT or INSERT OVERWRITE.
-- Supports Unified Catalog, with which users can access different table formats (Hive, Iceberg, Hudi, and Delta Lake) that share a common metastore like Hive metastore or AWS Glue.
+- Supports creating and dropping databases and managed tables in [Hive catalogs](../data_source/catalog/hive_catalog.md), and supports exporting data to Hive's managed tables using INSERT or INSERT OVERWRITE.
+- Supports [Unified Catalog](../data_source/catalog/unified_catalog.md), with which users can access different table formats (Hive, Iceberg, Hudi, and Delta Lake) that share a common metastore like Hive metastore or AWS Glue.
 
 #### Storage engine, data ingestion, and export
 
