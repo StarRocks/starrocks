@@ -51,6 +51,7 @@ The query statement to create the materialized view. Its result is the data in t
 
 ```SQL
 SELECT select_expr[, select_expr ...]
+[WHERE where_expr]
 [GROUP BY column_name[, column_name ...]]
 [ORDER BY column_name[, column_name ...]]
 ```
@@ -65,14 +66,16 @@ SELECT select_expr[, select_expr ...]
   > **NOTE**
   >
   > - You must specify at least one column in `select_expr`.
-  > - Synchronous materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
   > - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in `select_expr`.
   > - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
   > - From v3.1 onwards, each synchronous materialized view can support more than one aggregate function for each column of the base table, for example, query statements such as `select b, sum(a), min(a) from table group by b`.
   > - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`. The following restrictions are imposed on the complex expression used for synchronous materialized views:
-  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table.
-  >   - Each complex expression can reference only one column. Query statements such as `a + b as col1` are not supported.
+  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table, you may set a different alias name for a different complex expression.
   >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
+
+- WHERE (optional)
+
+  From v3.2 onwards, synchronous materialized view can support `where_expr` which can filter rows used for the materialized view.
 
 - GROUP BY (optional)
 
@@ -231,8 +234,9 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 Valid values:
 
 - `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
-- time_slice or date_slice functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
+- `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
+- `str2date` function: The function used to partition string type parititions of base table into materialized view's partition. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a string date type whichi its date formate is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer [str2date](../sql-reference/sql-functions/date-time-functions/str2date) function reference for more information.
+- `time_slice` or `date_slice` functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
 
@@ -244,6 +248,7 @@ The sort key of the asynchronous materialized view. If you do not specify the so
 
 Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](./ALTER_MATERIALIZED_VIEW.md).
 
+- `session.`: If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`.
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
@@ -490,6 +495,81 @@ The materialized view's schema is as follows.
 
 It can be observed that the `key` field of the k3, k4, and k5 columns is `true`, which indicates that they are the sort keys. The key field of the k6, and k7 columns is `false`, which indicates that they are not the sort keys.
 
+
+Example 6: Create a synchronous materialized view that contains where expression and complex expresssions.
+
+```SQL
+
+-- Base Table : user_event
+CREATE TABLE user_event (
+    ds date   NOT NULL,
+    id  varchar(256)    NOT NULL,
+    user_id int DEFAULT NULL,
+    user_id1    varchar(256)    DEFAULT NULL,
+    user_id2    varchar(256)    DEFAULT NULL,
+    column_01   int DEFAULT NULL,
+    column_02   int DEFAULT NULL,
+    column_03   int DEFAULT NULL,
+    column_04   int DEFAULT NULL,
+    column_05   int DEFAULT NULL,
+    column_06   DECIMAL(12,2)   DEFAULT NULL,
+    column_07   DECIMAL(12,3)   DEFAULT NULL,
+    column_08   JSON   DEFAULT NULL,
+    column_09   DATETIME    DEFAULT NULL,
+    column_10   DATETIME    DEFAULT NULL,
+    column_11   DATE    DEFAULT NULL,
+    column_12   varchar(256)    DEFAULT NULL,
+    column_13   varchar(256)    DEFAULT NULL,
+    column_14   varchar(256)    DEFAULT NULL,
+    column_15   varchar(256)    DEFAULT NULL,
+    column_16   varchar(256)    DEFAULT NULL,
+    column_17   varchar(256)    DEFAULT NULL,
+    column_18   varchar(256)    DEFAULT NULL,
+    column_19   varchar(256)    DEFAULT NULL,
+    column_20   varchar(256)    DEFAULT NULL,
+    column_21   varchar(256)    DEFAULT NULL,
+    column_22   varchar(256)    DEFAULT NULL,
+    column_23   varchar(256)    DEFAULT NULL,
+    column_24   varchar(256)    DEFAULT NULL,
+    column_25   varchar(256)    DEFAULT NULL,
+    column_26   varchar(256)    DEFAULT NULL,
+    column_27   varchar(256)    DEFAULT NULL,
+    column_28   varchar(256)    DEFAULT NULL,
+    column_29   varchar(256)    DEFAULT NULL,
+    column_30   varchar(256)    DEFAULT NULL,
+    column_31   varchar(256)    DEFAULT NULL,
+    column_32   varchar(256)    DEFAULT NULL,
+    column_33   varchar(256)    DEFAULT NULL,
+    column_34   varchar(256)    DEFAULT NULL,
+    column_35   varchar(256)    DEFAULT NULL,
+    column_36   varchar(256)    DEFAULT NULL,
+    column_37   varchar(256)    DEFAULT NULL
+)
+partition by date_trunc("day", ds)
+distributed by hash(id);
+
+-- MV with where expression and complex expressions
+create materialized view test_mv1
+as 
+select
+ds
+,column_19 
+,column_36
+,sum(column_01) as column_01_sum
+,bitmap_union(to_bitmap( user_id)) as user_id_dist_cnt
+,bitmap_union(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1
+,bitmap_union(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2
+,bitmap_union(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3
+,bitmap_union(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4
+,bitmap_union(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
+ from user_event
+ where ds >= '2023-11-02'
+ group by
+ ds
+ ,column_19
+ ,column_36;
+ ```
+
 ### Examples of asynchronous materialized views
 
 The following examples are based on the base tables below:
@@ -717,4 +797,57 @@ SELECT
 INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
+```
+
+Example 4: Create an asynchronous materialized view which its base table's partition is string type.
+
+``` SQL
+
+-- Hive Table with string partition column.
+CREATE TABLE `part_dates` (
+  `d_date` varchar(20) DEFAULT NULL,
+  `d_dayofweek` varchar(10) DEFAULT NULL,
+  `d_month` varchar(11) DEFAULT NULL,
+  `d_year` int(11) DEFAULT NULL,
+  `d_yearmonthnum` int(11) DEFAULT NULL,
+  `d_yearmonth` varchar(9) DEFAULT NULL,
+  `d_daynuminweek` int(11) DEFAULT NULL,
+  `d_daynuminmonth` int(11) DEFAULT NULL,
+  `d_daynuminyear` int(11) DEFAULT NULL,
+  `d_monthnuminyear` int(11) DEFAULT NULL,
+  `d_weeknuminyear` int(11) DEFAULT NULL,
+  `d_sellingseason` varchar(14) DEFAULT NULL,
+  `d_lastdayinweekfl` int(11) DEFAULT NULL,
+  `d_lastdayinmonthfl` int(11) DEFAULT NULL,
+  `d_holidayfl` int(11) DEFAULT NULL,
+  `d_weekdayfl` int(11) DEFAULT NULL,
+  `d_datekey` varchar(11) DEFAULT NULL
+) partition by (d_datekey);
+
+
+-- CREATE MATERIALIXED VIEW  with `str2date`
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv` 
+PARTITION BY str2date(`d_datekey`,'%Y%m%d')
+DISTRIBUTED BY HASH(`d_date`, `d_month`, `d_month`) 
+REFRESH MANUAL 
+AS
+SELECT
+`d_date` ,
+  `d_dayofweek`,
+  `d_month` ,
+  `d_yearmonthnum` ,
+  `d_yearmonth` ,
+  `d_daynuminweek`,
+  `d_daynuminmonth`,
+  `d_daynuminyear` ,
+  `d_monthnuminyear` ,
+  `d_weeknuminyear` ,
+  `d_sellingseason`,
+  `d_lastdayinweekfl`,
+  `d_lastdayinmonthfl`,
+  `d_holidayfl` ,
+  `d_weekdayfl`,
+   `d_datekey`
+FROM
+ `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
