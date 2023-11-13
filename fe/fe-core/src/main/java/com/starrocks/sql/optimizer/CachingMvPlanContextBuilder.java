@@ -18,7 +18,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
 
@@ -27,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 public class CachingMvPlanContextBuilder {
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private Cache<MvId, MvPlanContext> mvPlanContextCache = Caffeine.newBuilder()
+    private Cache<MaterializedView, MvPlanContext> mvPlanContextCache = Caffeine.newBuilder()
             .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.mv_plan_cache_max_size)
             .build();
@@ -41,26 +40,25 @@ public class CachingMvPlanContextBuilder {
     }
 
     public MvPlanContext getPlanContext(MaterializedView mv, boolean useCache) {
-        MvId mvId = new MvId(mv.getDbId(), mv.getId());
-        MvPlanContext result = useCache ? mvPlanContextCache.getIfPresent(mvId) : null;
-        if (result == null) {
-            MvPlanContextBuilder builder = new MvPlanContextBuilder();
-            result = builder.getPlanContext(mv);
-            if (result.isValidMvPlan()) {
-                mvPlanContextCache.put(mvId, result);
-                mv.setPlanMode(MaterializedView.PlanMode.VALID);
-            }
+        if (useCache) {
+            return mvPlanContextCache.get(mv, this::loadMvPlanContext);
+        } else {
+            return loadMvPlanContext(mv);
         }
+    }
 
+    private MvPlanContext loadMvPlanContext(MaterializedView mv) {
+        MvPlanContextBuilder builder = new MvPlanContextBuilder();
+        MvPlanContext result = builder.getPlanContext(mv);
         return result;
     }
 
     @VisibleForTesting
     public boolean contains(MaterializedView mv) {
-        return mvPlanContextCache.asMap().containsKey(new MvId(mv.getDbId(), mv.getId()));
+        return mvPlanContextCache.asMap().containsKey(mv);
     }
 
     public void invalidateFromCache(MaterializedView mv) {
-        mvPlanContextCache.invalidate(new MvId(mv.getDbId(), mv.getId()));
+        mvPlanContextCache.invalidate(mv);
     }
 }

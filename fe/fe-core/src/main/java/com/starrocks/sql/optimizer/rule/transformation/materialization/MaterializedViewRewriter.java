@@ -218,7 +218,7 @@ public class MaterializedViewRewriter {
         }
 
         if (!isValidPlan(mvExpression)) {
-            logMVRewrite(mvRewriteContext, "MV is not applicable: mv expression is not valid");
+            logMVRewrite(mvRewriteContext, "MV is not applicable: MV's plan is not valid");
             return false;
         }
 

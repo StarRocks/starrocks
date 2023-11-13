@@ -55,6 +55,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -93,7 +94,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
-    private boolean isImmutable = false;
+    private AtomicBoolean isImmutable = new AtomicBoolean(false);
 
     @SerializedName(value = "baseIndex")
     private MaterializedIndex baseIndex;
@@ -195,11 +196,12 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     @Override
     public void setImmutable(boolean isImmutable) {
-        this.isImmutable = isImmutable;
+        this.isImmutable.set(isImmutable);
     }
 
+    @Override
     public boolean isImmutable() {
-        return this.isImmutable;
+        return this.isImmutable.get();
     }
 
     public void addSubPartition(PhysicalPartition subPartition) {
@@ -392,6 +394,15 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
             count += subPartition.getMaterializedIndices(IndexExtState.VISIBLE).size();
         }
         return count;
+    }
+
+    @Override
+    public long getTabletMaxDataSize() {
+        long maxDataSize = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            maxDataSize = Math.max(maxDataSize, mIndex.getTabletMaxDataSize());
+        }
+        return maxDataSize;
     }
 
     public long storageDataSize() {

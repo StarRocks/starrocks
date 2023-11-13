@@ -180,7 +180,7 @@ message PTabletWriterOpenRequest {
     optional int64 table_id = 32;
 
     // tablet's data size larger than this will mark as inmutable
-    optional int64 min_immutable_tablet_size = 33 [default = 0];
+    optional int64 immutable_tablet_size = 33 [default = 0];
 };
 
 message PTabletWriterOpenResult {

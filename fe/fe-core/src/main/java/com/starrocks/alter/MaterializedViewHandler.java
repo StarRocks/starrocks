@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -212,8 +213,8 @@ public class MaterializedViewHandler extends AlterHandler {
 
         // Step2: create mv job
         RollupJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns,
-                addMVClause.getProperties(), olapTable, db, baseIndexId, addMVClause.getMVKeysType(),
-                addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
+                addMVClause.getWhereClause(), addMVClause.getProperties(), olapTable, db, baseIndexId,
+                addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
 
         addAlterJobV2(rollupJobV2);
 
@@ -271,7 +272,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
                 // step 3 create rollup job
                 RollupJobV2 alterJobV2 = createMaterializedViewJob(rollupIndexName, baseIndexName, rollupSchema,
-                        addRollupClause.getProperties(),
+                        null, addRollupClause.getProperties(),
                         olapTable, db, baseIndexId, olapTable.getKeysType(), null, null);
 
                 rollupNameJobMap.put(addRollupClause.getRollupName(), alterJobV2);
@@ -319,8 +320,8 @@ public class MaterializedViewHandler extends AlterHandler {
      * @throws DdlException
      * @throws AnalysisException
      */
-    private RollupJobV2 createMaterializedViewJob(String mvName, String baseIndexName,
-                                                  List<Column> mvColumns, Map<String, String> properties,
+    private RollupJobV2 createMaterializedViewJob(String mvName, String baseIndexName, List<Column> mvColumns,
+                                                  Expr whereClause, Map<String, String> properties,
                                                   OlapTable olapTable, Database db, long baseIndexId,
                                                   KeysType mvKeysType, OriginStatement origStmt,
                                                   QueryStatement queryStatement)
@@ -351,14 +352,14 @@ public class MaterializedViewHandler extends AlterHandler {
 
         // Check table is in colocate group if the mv wants to use colocate mv optimization.
         boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(properties,
-                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false);
+                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false) && whereClause == null;
         if (isColocateMv && Strings.isNullOrEmpty(olapTable.getColocateGroup())) {
             throw new AnalysisException(String.format("Please ensure table %s is in colocate group if you want to use " +
                     "mv colocate optimization.", olapTable.getName()));
         }
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
                 baseIndexId, mvIndexId, baseIndexName, mvName,
-                mvColumns, baseSchemaHash, mvSchemaHash,
+                mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
 
         /*
