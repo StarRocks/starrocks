@@ -138,8 +138,8 @@ public class AggregatePushDownTest extends PlanTestBase {
     @Test
     public void testNotPushDownDistinctAggBelowWindow_2() throws Exception {
         // unsupported window func ref cols from partition by cols
-        String sql = "select distinct t1d from (select *, sum(t1d + 1) over (partition by t1d, t1e) as cnt from test_all_type ) " +
-                "t where cnt > 1 limit 10;";
+        String sql = "select distinct t1d from (select *, sum(t1d + 1) over (partition by t1d, t1e) as cnt from " +
+                "test_all_type ) t where cnt > 1 limit 10;";
 
         String plan = getFragmentPlan(sql);
         assertContains(plan, "4:SELECT\n" +
