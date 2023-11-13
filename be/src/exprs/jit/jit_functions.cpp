@@ -244,9 +244,7 @@ StatusOr<LLVMDatum> JITFunction::generate_exprs_ir(ExprContext* context, const l
                 args.emplace_back(intermediate[offset - 1]);
             }
 
-            ASSIGN_OR_RETURN(auto ir, expr->generate_ir(context, module, b, args));
-
-            intermediate[i] = ir;
+            ASSIGN_OR_RETURN(intermediate[i], expr->generate_ir(context, module, b, args));
         }
     }
 

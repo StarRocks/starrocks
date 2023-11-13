@@ -228,7 +228,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     const auto* prev_e = e;
     status = e->replace_compilable_exprs(&e, pool);
     if (!status.ok()) {
-        LOG(ERROR) << "Could replace compilable exprs.\n"
+        LOG(ERROR) << "Can't replace compilable exprs.\n"
                    << status.get_error_msg() << "\n"
                    << apache::thrift::ThriftDebugString(texpr);
         // Fall back to the non-JIT path.

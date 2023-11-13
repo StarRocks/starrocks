@@ -426,7 +426,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                     const auto* prev_e = expr;
                     auto status = expr->replace_compilable_exprs(&expr, _pool);
                     if (!status.ok()) {
-                        LOG(ERROR) << "Could replace compilable exprs.\n" << status.get_error_msg() << "\n";
+                        LOG(ERROR) << "Can't replace compilable exprs.\n" << status.get_error_msg() << "\n";
                         continue;
                     }
 
