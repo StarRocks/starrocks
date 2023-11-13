@@ -2010,4 +2010,77 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView("mv_t1_v0");
         starRocksAssert.dropTable("t1_agg");
     }
+
+    @Test
+    public void testQueryIncludingExcludingMVNames() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        createAndRefreshMv("test", "mv_agg_1", "CREATE MATERIALIZED VIEW mv_agg_1 " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        createAndRefreshMv("test", "mv_agg_2", "CREATE MATERIALIZED VIEW mv_agg_2 " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("mv_agg_1");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_1");
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_2");
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("mv_agg_1, mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_");
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("mv_agg_1");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_2");
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_1");
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("mv_agg_1, mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "mv_agg_");
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("");
+        }
+        starRocksAssert.dropMaterializedView("mv_agg_1");
+        starRocksAssert.dropMaterializedView("mv_agg_2");
+    }
 }
