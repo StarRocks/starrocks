@@ -15,13 +15,12 @@
 package com.starrocks.http;
 
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
@@ -40,7 +39,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 
-public class TransactionLoadActionTest extends StarRocksHttpTestCase {
+public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpTestCase {
 
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
@@ -48,12 +47,20 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Override
     @Before
     public void setUp() {
-        Backend backend4 = new Backend(1234, "localhost", 8040);
-        backend4.setBePort(9300);
-        backend4.setAlive(true);
-        backend4.setHttpPort(TEST_HTTP_PORT);
-        backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend4);
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+
+
+        ComputeNode computeNode = new ComputeNode(1234, "localhost", 8040);
+        computeNode.setBePort(9300);
+        computeNode.setAlive(true);
+        computeNode.setHttpPort(TEST_HTTP_PORT);
+        GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -61,16 +68,15 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
             }
         };
     }
-    
+
     @After
     public void tearDown() {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
+        GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
     }
 
     @BeforeClass
     public static void initBeServer() throws IllegalArgException, InterruptedException {
         TEST_HTTP_PORT = detectUsableSocketPort();
-
         beServer = new HttpServer(TEST_HTTP_PORT);
         BaseAction ac = new BaseAction(beServer.getController()) {
 
@@ -141,7 +147,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -164,7 +170,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -188,7 +194,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -214,7 +220,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -237,7 +243,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -264,7 +270,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -287,7 +293,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -310,7 +316,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -337,7 +343,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     @Override
                     public void writeTo(BufferedSink arg0) throws IOException {
                     }
-                    
+
                 })
                 .build();
 
@@ -347,4 +353,5 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
         Assert.assertEquals(false, res.contains("OK"));
     }
+
 }
