@@ -28,6 +28,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MapType;
+import com.starrocks.catalog.MaterializedView;
+>>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -64,6 +71,11 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.Collections;
+import java.util.HashMap;
+>>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -553,9 +565,7 @@ public class AnalyzerUtils {
             if (!tables.isEmpty()) {
                 return null;
             }
-            // if olap table has MV, we remove it
-            if (!node.getTable().isOlapTable() ||
-                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
+            if (!node.getTable().isNativeTableOrMaterializedView()) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
@@ -563,21 +573,42 @@ public class AnalyzerUtils {
     }
 
     private static class OlapTableCollector extends TableCollector {
-        Set<OlapTable> olapTables;
+        private Set<OlapTable> olapTables;
+        private Map<Long, OlapTable> idMap;
 
         public OlapTableCollector(Set<OlapTable> tables) {
             this.olapTables = tables;
+            this.idMap = new HashMap<>();
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
             if (node.getTable().isOlapTable()) {
                 OlapTable table = (OlapTable) node.getTable();
-                olapTables.add(table);
-                // Only copy the necessary olap table meta to avoid the lock when plan query
-                OlapTable copied = new OlapTable();
-                table.copyOnlyForQuery(copied);
-                node.setTable(copied);
+                if (!idMap.containsKey(table.getId())) {
+                    olapTables.add(table);
+                    idMap.put(table.getId(), table);
+                    // Only copy the necessary olap table meta to avoid the lock when plan query
+                    OlapTable copied = new OlapTable();
+                    table.copyOnlyForQuery(copied);
+                    node.setTable(copied);
+                } else {
+                    node.setTable(idMap.get(table.getId()));
+                }
+
+            } else if (node.getTable().isMaterializedView()) {
+                MaterializedView table = (MaterializedView) node.getTable();
+                if (!idMap.containsKey(table.getId())) {
+                    olapTables.add(table);
+                    idMap.put(table.getId(), table);
+                    // Only copy the necessary olap table meta to avoid the lock when plan query
+                    MaterializedView copied = new MaterializedView();
+                    table.copyOnlyForQuery(copied);
+                    node.setTable(copied);
+                } else {
+                    node.setTable(idMap.get(table.getId()));
+                }
+
             }
             return null;
         }
