@@ -1,7 +1,7 @@
 # 支持 Superset
 
 [Apache Superset](https://superset.apache.org) 是一个现代数据探索和可视化平台。它使用 [SQLAlchemy](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks) 来查询数据。
-虽然可以使用 [Mysql Dialect](https://superset.apache.org/docs/databases/mysql)，但是它不支持 LARGEINT。所以我们开发了 [StarRocks Dialect](https://github.com/StarRocks/starrocks/blob/main/contrib/sqlalchemy-connector)。
+虽然可以使用 [Mysql Dialect](https://superset.apache.org/docs/databases/mysql)，但是它不支持 LARGEINT。所以我们开发了 [StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/sqlalchemy)。
 
 ## 环境准备
 
