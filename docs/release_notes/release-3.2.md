@@ -8,7 +8,7 @@ Release date: November xx, 2023
 
 #### Shared-data cluster
 
-- Supports the persistent index for Primary Key tables on local disks.
+- Supports [the persistent index for Primary Key tables](../table_design/table_types/primary_key_table.md) on local disks.
 
 #### Data Lake Analytics
 
@@ -67,8 +67,8 @@ Asynchronous materialized view
 
 - Optimized the persistent index for Primary Key tables by improving memory usage logic while reducing I/O read and write amplification. [#24875](https://github.com/StarRocks/starrocks/pull/24875)  [#27577](https://github.com/StarRocks/starrocks/pull/27577)  [#28769](https://github.com/StarRocks/starrocks/pull/28769)
 - Supports data re-distribution across local disks for Primary Key tables.
-- Partitioned tables support automatic cooldown based on the partition time range and cooldown time.
-- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes.
+- Partitioned tables support automatic cooldown based on the partition time range and cooldown time. For detailed information, see [Set initial storage medium and automatic storage cooldown time](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number).
+- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. For detailed information, see [enable_sync_publish](../administration/Configuration.md#enable_sync_publish).
 
 #### Query
 
