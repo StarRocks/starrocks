@@ -4015,8 +4015,8 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
                     String.valueOf(partitionLiveNumber));
             if (partitionLiveNumber == TableProperty.INVALID) {
-               GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
-                       table.getId());
+                GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
+                        table.getId());
             } else {
                 GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
                         table.getId());
