@@ -37,7 +37,6 @@ package com.starrocks.alter;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -779,7 +778,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
             inactiveRelatedMv(modifiedColumns, tbl);
-            MetadataMgr.clearViewAnalyzedCache(ImmutableList.of(new TableName(db.getOriginName(), tbl.getName())));
+            MetadataMgr.clearViewAnalyzedCache();
 
             pruneMeta();
             tbl.onReload();

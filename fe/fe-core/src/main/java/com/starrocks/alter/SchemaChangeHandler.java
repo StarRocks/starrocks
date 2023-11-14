@@ -43,7 +43,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotRef;
@@ -96,6 +95,7 @@ import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -2438,6 +2438,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                     }
                 }
+                MetadataMgr.clearViewAnalyzedCache();
             }
 
             LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),

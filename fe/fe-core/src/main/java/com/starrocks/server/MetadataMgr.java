@@ -276,7 +276,7 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.dropTable(stmt);
-                clearViewAnalyzedCache(ImmutableList.of(new TableName(dbName, tableName)));
+                clearViewAnalyzedCache();
             } catch (DdlException e) {
                 LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
                 throw new StarRocksConnectorException("Failed to drop table %s.%s.%s. msg: %s",
@@ -285,7 +285,7 @@ public class MetadataMgr {
         });
     }
 
-    public static void clearViewAnalyzedCache(List<TableName> tableNames) {
+    public static void clearViewAnalyzedCache() {
         List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
         List<View> views = Lists.newArrayList();
         for (Long viewDbId : allDbIds) {

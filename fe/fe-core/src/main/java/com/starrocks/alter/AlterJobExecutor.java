@@ -15,7 +15,6 @@
 package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -145,8 +144,7 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
             LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
                     String.format("based table %s swapped", newTblName));
 
-            MetadataMgr.clearViewAnalyzedCache(ImmutableList.of(new TableName(db.getOriginName(), newTblName),
-                    new TableName(db.getOriginName(), origTblName)));
+            MetadataMgr.clearViewAnalyzedCache();
 
             SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
             GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
