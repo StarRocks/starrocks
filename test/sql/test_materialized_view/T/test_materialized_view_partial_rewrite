@@ -1,0 +1,50 @@
+-- name: test_materialized_view_partial_rewrite
+create external catalog hive_catalog_${uuid0}
+properties
+(
+    "type" = "hive",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+set catalog hive_catalog_${uuid0};
+create database hive_db_${uuid0};
+use hive_db_${uuid0};
+create table hive_tbl_${uuid0} (
+    num int,
+    dt date not null
+)
+PARTITION BY (dt);
+
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,"2020-06-15"),(2,"2020-06-18"),(3,"2020-06-21"),(4,"2020-06-24"),
+                                     (1,"2020-07-02"),(2,"2020-07-05"),(3,"2020-07-08"),(4,"2020-07-11"),
+                                     (1,"2020-07-16"),(2,"2020-07-19"),(3,"2020-07-22"),(4,"2020-07-25"),
+                                     (2,"2020-06-15"),(3,"2020-06-18"),(4,"2020-06-21"),(5,"2020-06-24"),
+                                     (2,"2020-07-02"),(3,"2020-07-05"),(4,"2020-07-08"),(5,"2020-07-11"),
+                                     (2,"2020-07-16"),(3,"2020-07-19"),(4,"2020-07-22"),(5,"2020-07-25");
+
+
+set catalog default_catalog;
+create database test_db_${uuid0};
+use test_db_${uuid0};
+
+CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc('month',dt) REFRESH MANUAL AS SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt;
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
+
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-15");
+function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
+
+insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-25");
+function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
+
+set catalog hive_catalog_${uuid0};
+use hive_db_${uuid0};
+drop table hive_tbl_${uuid0} force;
+drop database hive_db_${uuid0};
+drop catalog hive_catalog_${uuid0};
+
+set catalog default_catalog;
+drop database test_db_${uuid0};
