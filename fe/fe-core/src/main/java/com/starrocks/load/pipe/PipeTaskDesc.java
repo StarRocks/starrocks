@@ -109,19 +109,14 @@ public class PipeTaskDesc {
         taskManager.killTask(uniqueTaskName, true);
     }
 
-    public boolean isExecutionFinished() {
+    /**
+     * Is the task still running ?
+     */
+    public boolean isTaskRunning() {
         if (isFinished()) {
-            return true;
+            return false;
         }
-        if (future != null && future.isDone()) {
-            try {
-                Constants.TaskRunState taskRunState = getFuture().get();
-                return taskRunState.equals(Constants.TaskRunState.SUCCESS);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
-        return false;
+        return future != null && !future.isDone();
     }
 
     public long getId() {

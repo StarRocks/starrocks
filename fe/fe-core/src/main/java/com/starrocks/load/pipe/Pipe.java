@@ -500,7 +500,7 @@ public class Pipe implements GsonPostProcessable {
 
                 List<PipeFileRecord> loadingFiles = Lists.newArrayList();
                 for (PipeTaskDesc task : runningTasks.values()) {
-                    if (!task.isExecutionFinished()) {
+                    if (task.isTaskRunning()) {
                         task.interrupt();
                         loadingFiles.addAll(task.getPiece().getFiles());
                     }
