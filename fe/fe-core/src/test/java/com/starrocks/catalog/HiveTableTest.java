@@ -41,7 +41,6 @@ import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.HiveTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactory;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -56,13 +55,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
-import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HiveTableTest {
     private static ConnectContext connectContext;
