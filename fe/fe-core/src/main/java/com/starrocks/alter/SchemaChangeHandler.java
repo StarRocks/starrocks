@@ -2438,8 +2438,8 @@ public class SchemaChangeHandler extends AlterHandler {
                         }
                     }
                 }
-                MetadataMgr.clearViewAnalyzedCache();
             }
+            MetadataMgr.clearViewAnalyzedCache();
 
             LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
