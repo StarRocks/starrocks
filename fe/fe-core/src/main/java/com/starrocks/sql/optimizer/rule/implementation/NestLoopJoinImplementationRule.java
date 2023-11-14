@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -23,6 +24,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import org.apache.commons.collections.CollectionUtils;
@@ -70,9 +72,21 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
         OptExpression commutedExpr = JoinCommutativityRule.commuteRightSemiAntiJoin(input);
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) commutedExpr.getOp();
 
+        // Transform the NULL-AWARE LEFT-ANTI JOIN to a vanilla LEFT-ANTI JOIN
+        ScalarOperator onPredicate = joinOperator.getOnPredicate();
+        JoinOperator joinType = joinOperator.getJoinType();
+        boolean isNALA = joinOperator.getJoinType().equals(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN);
+        boolean isEq = joinOperator.getOnPredicate() instanceof BinaryPredicateOperator
+                && ((BinaryPredicateOperator) joinOperator.getOnPredicate()).getBinaryType().isEqual();
+        if (isNALA && isEq) {
+            onPredicate = new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL,
+                    joinOperator.getOnPredicate().getChildren());
+            joinType = JoinOperator.LEFT_ANTI_JOIN;
+        }
+
         PhysicalNestLoopJoinOperator physicalNestLoopJoin = new PhysicalNestLoopJoinOperator(
-                joinOperator.getJoinType(),
-                joinOperator.getOnPredicate(),
+                joinType,
+                onPredicate,
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),

@@ -337,7 +337,6 @@ public class NestLoopJoinTest extends PlanTestBase {
         assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
     }
 
-
     @Test
     public void testMultipleNlJoinInSingleFragment() throws Exception {
         connectContext.getSessionVariable().disableJoinReorder();
@@ -353,5 +352,12 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:EMPTYSET");
+    }
+
+    @Test
+    public void testNullAwareLeftAntiJoin() throws Exception {
+        String sql = "select id_int from test_all_type_nullable where " +
+                "not (123) IN ( select id_int from test_all_type_nullable2 )";
+        assertPlanContains(sql, "join op: LEFT ANTI JOIN", "other join predicates: 27: id_int <=> 123");
     }
 }
