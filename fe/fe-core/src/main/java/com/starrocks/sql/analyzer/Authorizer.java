@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -24,6 +25,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.privilege.AccessControlProvider;
+import com.starrocks.privilege.AccessController;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ObjectType;
@@ -279,37 +281,52 @@ public class Authorizer {
     }
 
     /**
+     * A lambda function that throws AccessDeniedException
+     */
+    @FunctionalInterface
+    public interface AccessControlChecker {
+        void check() throws AccessDeniedException;
+    }
+
+    /**
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
     public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
         Preconditions.checkNotNull(db, "db should not null");
+        AccessController controller =
+                getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
 
+        // Check privilege on database
         try {
-            getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
-        } catch (AccessDeniedException e1) {
-            try {
-                getInstance().getAccessControlOrDefault(catalogName)
-                        .checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db);
-            } catch (AccessDeniedException e2) {
-                if (CatalogMgr.isInternalCatalog(catalogName)) {
-                    try {
-                        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                .checkAnyActionOnAnyView(currentUser, roleIds, db);
-                    } catch (AccessDeniedException e3) {
-                        try {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db);
-                        } catch (AccessDeniedException e4) {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyFunction(currentUser, roleIds, db);
-                        }
-                    }
-                } else {
-                    throw new AccessDeniedException();
-                }
+            getInstance().getAccessControlOrDefault(catalogName)
+                    .checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
+        } catch (AccessDeniedException e) {
+            if (!CatalogMgr.isInternalCatalog(catalogName)) {
+                throw new AccessDeniedException();
             }
+        }
+
+        // Check privilege on other objects
+        List<AccessControlChecker> checkers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
+        );
+        AccessDeniedException lastExcepton = null;
+        for (AccessControlChecker checker : checkers) {
+            try {
+                checker.check();
+                // Pass any checker could return
+                break;
+            } catch (AccessDeniedException e) {
+                lastExcepton = e;
+            }
+        }
+        if (lastExcepton != null) {
+            throw lastExcepton;
         }
     }
 
