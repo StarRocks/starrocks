@@ -31,7 +31,6 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,12 +53,12 @@ public class Utils {
             return tablet.getPrimaryComputeNodeId(workerGroupId);
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
+            try {
+                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+            } catch (UserException e) {
+                return null;
+            }
         }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (CollectionUtils.isEmpty(backendIds)) {
-            return null;
-        }
-        return backendIds.get(0);
     }
 
     public static Long chooseBackend(LakeTablet tablet) {

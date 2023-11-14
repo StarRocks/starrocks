@@ -334,20 +334,5 @@ public class TransactionLoadAction extends RestBaseAction {
         redirectTo(request, response, redirectAddr);
     }
 
-    private static Long getBackendOrComputeId() throws UserException {
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (CollectionUtils.isNotEmpty(backendIds)) {
-            return backendIds.get(0);
-        }
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new UserException("No backend alive.");
-        }
-        List<Long> computeNodes = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true,
-                false);
-        if (CollectionUtils.isNotEmpty(computeNodes)) {
-            return computeNodes.get(0);
-        }
-        throw new UserException("No backend or compute node alive.");
-    }
 }
 
