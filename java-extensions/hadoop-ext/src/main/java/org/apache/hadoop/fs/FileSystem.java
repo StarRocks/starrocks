@@ -603,7 +603,8 @@ public abstract class FileSystem extends Configured
             }
             return CACHE.get(uri, conf);
         });
-        return fs;
+        FileSystem fs2 = HadoopExt.getInstance().bindUGIToFileSystem(fs, ugi);
+        return fs2;
     }
 
     /**
