@@ -19,9 +19,9 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 
 StarRocks supports three types (levels) of variables: global variables, session variables, and `SET_VAR` hints. Their hierarchical relationship is as follows:
 
-- Global variables take effect on global level, and can be overridden by session variables and `SET_VAR` hints.
-- Session variables take effect only on the current session, and can be overridden by `SET_VAR` hints.
-- `SET_VAR` hints take effect only on the current query statement.
+* Global variables take effect on global level, and can be overridden by session variables and `SET_VAR` hints.
+* Session variables take effect only on the current session, and can be overridden by `SET_VAR` hints.
+* `SET_VAR` hints take effect only on the current query statement.
 
 ## View variables
 
