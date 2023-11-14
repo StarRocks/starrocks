@@ -1364,7 +1364,8 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                             DCHECK(column.col_unique_id == old_unique_id);
                             if (column.col_unique_id != old_unique_id) {
                                 std::string msg = strings::Substitute(
-                                        "Tablet[$0] column[$1] has different column unique id during schema change. $2(FE) "
+                                        "Tablet[$0] column[$1] has different column unique id during schema change. "
+                                        "$2(FE) "
                                         "vs $3(BE)",
                                         base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
                                 return Status::InternalError(msg);
