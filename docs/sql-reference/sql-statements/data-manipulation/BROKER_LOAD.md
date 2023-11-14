@@ -197,7 +197,15 @@ INTO TABLE <table_name>
 
 ### WITH BROKER
 
-In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see the "Background information" section in [Load data from HDFS](../../../loading/hdfs_load.md) or [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+In v2.3 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword.
+
+> **NOTE**
+>
+> In v2.4 and earlier, StarRocks depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. This is called "broker-based loading." A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your external storage system, and can use its own computing resources to pre-process and load the data of these data files.
+>
+> From v2.5 onwards, StarRocks removes the dependency on brokers and implements "broker-free loading."
+>
+> You can use the [SHOW BROKER](../Administration/SHOW_BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../../../deployment/deploy_broker.md).
 
 ### StorageCredentialParams
 

@@ -74,7 +74,7 @@ public class RuntimeFilterTest {
                 "\"in_memory\" = \"false\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
-                "\"light_schema_change\" = \"true\",\n" +
+                "\"fast_schema_evolution\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ";
         starRocksAssert = new StarRocksAssert();

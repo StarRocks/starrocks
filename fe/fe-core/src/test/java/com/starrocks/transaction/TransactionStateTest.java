@@ -42,6 +42,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 public class TransactionStateTest {
@@ -149,5 +150,23 @@ public class TransactionStateTest {
             e.printStackTrace();
         }
         Assert.assertTrue(readTransactionState.isNewFinish());
+    }
+
+    @Test
+    public void testIsRunning() {
+        Set<TransactionStatus> nonRunningStatus = new HashSet<>();
+        nonRunningStatus.add(TransactionStatus.UNKNOWN);
+        nonRunningStatus.add(TransactionStatus.VISIBLE);
+        nonRunningStatus.add(TransactionStatus.ABORTED);
+
+        UUID uuid = UUID.randomUUID();
+        for (TransactionStatus status : TransactionStatus.values()) {
+            TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                    3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    60 * 1000L);
+            transactionState.setTransactionStatus(status);
+            Assert.assertEquals(nonRunningStatus.contains(status), !transactionState.isRunning());
+        }
     }
 }
