@@ -129,7 +129,7 @@ Fixed the following issue:
 
   - To upgrade the Helm Chart, you need to perform the following:
 
-    1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section.  You can get help information of this tool by running the` migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
+    1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section.  You can get help information of this tool by running the`migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
 
        ```Bash
        migrate-chart-value --input values.yaml --target-version v1.8.0 --output ./values-v1.8.0.yaml
