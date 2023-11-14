@@ -410,10 +410,10 @@ LLVM_SOURCE="llvm-project-16.0.6.src"
 LLVM_MD5SUM="dc13938a604f70379d3b38d09031de98"
 
 #clucene
-CLUCENE_DOWNLOAD="https://github.com/dujijun007/clucene/archive/refs/tags/clucene-1114.tar.gz"
-CLUCENE_NAME="clucene-1114.tar.gz"
-CLUCENE_SOURCE="clucene-1114"
-CLUCENE_MD5SUM="43562d96dda9a8180a67c9ae4827ff65"
+CLUCENE_DOWNLOAD="https://github.com/dujijun007/clucene/archive/refs/tags/clucene-1115.tar.gz"
+CLUCENE_NAME="clucene-1115.tar.gz"
+CLUCENE_SOURCE="clucene-1115"
+CLUCENE_MD5SUM="d6c3fd425ebc19f31f9b109dc8a881b0"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
