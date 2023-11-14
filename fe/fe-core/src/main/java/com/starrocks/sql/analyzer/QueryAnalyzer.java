@@ -251,7 +251,8 @@ public class QueryAnalyzer {
                 if (tableName != null && Strings.isNullOrEmpty(tableName.getDb())) {
                     Optional<CTERelation> withQuery = scope.getCteQueries(tableName.getTbl());
                     if (withQuery.isPresent()) {
-                        CTERelation cteRelation = withQuery.get();
+                        CTERelation withRelation = withQuery.get();
+                        withRelation.addTableRef();
                         RelationFields withRelationFields = withQuery.get().getRelationFields();
                         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
 
@@ -268,9 +269,9 @@ public class QueryAnalyzer {
                         // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
                         //                "having v1 in (select v3 from w where v2 = 2)
                         // cte used in outer query and sub-query can't use same relation-id and field
-                        CTERelation newCteRelation = new CTERelation(cteRelation.getCteMouldId(), tableName.getTbl(),
-                                cteRelation.getColumnOutputNames(),
-                                cteRelation.getCteQueryStatement());
+                        CTERelation newCteRelation = new CTERelation(withRelation.getCteMouldId(), tableName.getTbl(),
+                                withRelation.getColumnOutputNames(),
+                                withRelation.getCteQueryStatement());
                         newCteRelation.setAlias(tableRelation.getAlias());
                         newCteRelation.setResolvedInFromClause(true);
                         newCteRelation.setScope(

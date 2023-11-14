@@ -29,10 +29,13 @@ public class CTETransformerContext {
     private final Map<Integer, Integer> cteRefIdMapping;
     private final AtomicInteger uniqueId;
 
-    public CTETransformerContext() {
+    private final int cteMaxLimit;
+
+    public CTETransformerContext(int cteMaxLimit) {
         this.cteExpressions = new HashMap<>();
         this.cteRefIdMapping = new HashMap<>();
         this.uniqueId = new AtomicInteger();
+        this.cteMaxLimit = cteMaxLimit;
     }
 
     public CTETransformerContext(CTETransformerContext other) {
@@ -42,6 +45,7 @@ public class CTETransformerContext {
         // must use one instance
         this.cteRefIdMapping = other.cteRefIdMapping;
         this.uniqueId = other.uniqueId;
+        this.cteMaxLimit = other.cteMaxLimit;
     }
 
     public Map<Integer, ExpressionMapping> getCteExpressions() {
@@ -84,13 +88,21 @@ public class CTETransformerContext {
      *  CTEAnchor2 and CTEAnchor2-1 are from same CTE (with x2), but have different cteID
      *  So, generate the cteID everytime on one CTE instance.
      */
-    public int registerCteRef(int cteMouldId) {
+    public int registerCte(int cteMouldId) {
         cteRefIdMapping.put(cteMouldId, uniqueId.incrementAndGet());
         return cteRefIdMapping.get(cteMouldId);
+    }
+
+    public boolean hasRegisteredCte(int cteMouldId) {
+        return cteRefIdMapping.containsKey(cteMouldId);
     }
 
     public int getCurrentCteRef(int cteMouldId) {
         Preconditions.checkState(cteRefIdMapping.containsKey(cteMouldId));
         return cteRefIdMapping.get(cteMouldId);
+    }
+
+    public boolean isForceInline() {
+        return cteRefIdMapping.size() > cteMaxLimit;
     }
 }
