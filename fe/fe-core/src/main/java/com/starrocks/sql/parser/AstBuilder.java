@@ -259,6 +259,7 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
@@ -1128,6 +1129,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             alterType = ShowAlterStmt.AlterType.ROLLUP;
         } else if (context.MATERIALIZED() != null && context.VIEW() != null) {
             alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        } else if (context.OPTIMIZE() != null) {
+            alterType = ShowAlterStmt.AlterType.OPTIMIZE;
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }
@@ -1157,6 +1160,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             alterType = ShowAlterStmt.AlterType.ROLLUP;
         } else if (context.MATERIALIZED() != null && context.VIEW() != null) {
             alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        } else if (context.OPTIMIZE() != null) {
+            alterType = ShowAlterStmt.AlterType.OPTIMIZE;
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }
@@ -3500,6 +3505,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             properties.put(property.getKey(), property.getValue());
         }
         return new ModifyTablePropertiesClause(properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitOptimizeClause(StarRocksParser.OptimizeClauseContext context) {
+        return new OptimizeClause(
+                context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
+                context.partitionDesc() == null ? null : getPartitionDesc(context.partitionDesc(), null),
+                context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
+                context.orderByDesc() == null ? null :
+                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                .stream().map(Identifier::getValue).collect(toList()),
+                context.partitionNames() == null ? null : (PartitionNames) visit(context.partitionNames()),
+                createPos(context));
     }
 
     @Override

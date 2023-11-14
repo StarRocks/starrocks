@@ -1796,15 +1796,20 @@ public class LocalMetastore implements ConnectorMetadata {
 
     Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
                               Long version, Set<Long> tabletIdSet) throws DdlException {
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
+        table.inferDistribution(distributionInfo);
+
+        return createPartition(db, table, partitionId, partitionName, version, tabletIdSet, distributionInfo);
+    }
+
+    Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
+                              Long version, Set<Long> tabletIdSet, DistributionInfo distributionInfo) throws DdlException {
         PartitionInfo partitionInfo = table.getPartitionInfo();
         Map<Long, MaterializedIndex> indexMap = new HashMap<>();
         for (long indexId : table.getIndexIdToMeta().keySet()) {
             MaterializedIndex rollup = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
             indexMap.put(indexId, rollup);
         }
-
-        DistributionInfo distributionInfo = table.getDefaultDistributionInfo().copy();
-        table.inferDistribution(distributionInfo);
 
         // create shard group
         long shardGroupId = 0;
@@ -2006,6 +2011,8 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, PhysicalPartition partition,
                                                             MaterializedIndex index) throws DdlException {
         boolean createSchemaFile = true;
+        LOG.debug("build create replica tasks for index {} db {} table {} partition {}",
+                index, dbId, table.getId(), partition); 
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
@@ -3641,7 +3648,8 @@ public class LocalMetastore implements ConnectorMetadata {
     public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
         if (stmt.getAlterType() == ShowAlterStmt.AlterType.ROLLUP) {
             stateMgr.getRollupHandler().cancel(stmt);
-        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN) {
+        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN
+                || stmt.getAlterType() == ShowAlterStmt.AlterType.OPTIMIZE) {
             stateMgr.getSchemaChangeHandler().cancel(stmt);
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             stateMgr.getRollupHandler().cancelMV(stmt);
@@ -4991,13 +4999,15 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @VisibleForTesting
     public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
-                                    Map<Long, String> origPartitions) {
+                                    Map<Long, String> origPartitions, boolean isOptimize) {
         OlapTable copiedTbl;
         db.readLock();
         try {
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
-                throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
-                        + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
+                if (!isOptimize || olapTable.getState() != OlapTable.OlapTableState.SCHEMA_CHANGE)  {
+                    throw new RuntimeException("Table' state is not NORMAL: " + olapTable.getState()
+                            + ", tableId:" + olapTable.getId() + ", tabletName:" + olapTable.getName());
+                }
             }
             for (Long id : sourcePartitionIds) {
                 origPartitions.put(id, olapTable.getPartition(id).getName());
@@ -5010,11 +5020,17 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @VisibleForTesting
+    public OlapTable getCopiedTable(Database db, OlapTable olapTable, List<Long> sourcePartitionIds,
+                                    Map<Long, String> origPartitions) {
+        return getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, false);
+    }
+
+    @VisibleForTesting
     public List<Partition> getNewPartitionsFromPartitions(Database db, OlapTable olapTable,
                                                           List<Long> sourcePartitionIds,
                                                           Map<Long, String> origPartitions, OlapTable copiedTbl,
                                                           String namePostfix, Set<Long> tabletIdSet,
-                                                          List<Long> tmpPartitionIds)
+                                                          List<Long> tmpPartitionIds, DistributionDesc distributionDesc)
             throws DdlException {
         List<Partition> newPartitions = Lists.newArrayListWithCapacity(sourcePartitionIds.size());
         for (int i = 0; i < sourcePartitionIds.size(); ++i) {
@@ -5037,8 +5053,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 partitionInfo.setDataCacheInfo(newPartitionId, partitionInfo.getDataCacheInfo(sourcePartitionId));
             }
 
-            Partition newPartition =
-                    createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+            Partition newPartition = null;
+            if (distributionDesc != null) {
+                DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(olapTable.getColumns());
+                if (distributionInfo.getBucketNum() == 0) {
+                    Partition sourcePartition = olapTable.getPartition(sourcePartitionId);
+                    olapTable.optimizeDistribution(distributionInfo, sourcePartition);
+                }
+                newPartition = createPartition(
+                        db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet, distributionInfo);
+            } else {
+                newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+            }
+
             newPartitions.add(newPartition);
         }
         return newPartitions;
@@ -5048,11 +5075,11 @@ public class LocalMetastore implements ConnectorMetadata {
     // new partitions have the same indexes as source partitions.
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds) {
+                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         Preconditions.checkState(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Map<Long, String> origPartitions = Maps.newHashMap();
-        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
+        OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions, distributionDesc != null);
         copiedTbl.setDefaultDistributionInfo(olapTable.getDefaultDistributionInfo());
 
         // 2. use the copied table to create partitions
@@ -5061,7 +5088,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
             newPartitions = getNewPartitionsFromPartitions(db, olapTable, sourcePartitionIds, origPartitions,
-                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds);
+                    copiedTbl, namePostfix, tabletIdSet, tmpPartitionIds, distributionDesc);
             buildPartitions(db, copiedTbl, newPartitions.stream().map(Partition::getSubPartitions)
                     .flatMap(p -> p.stream()).collect(Collectors.toList()));
         } catch (Exception e) {
