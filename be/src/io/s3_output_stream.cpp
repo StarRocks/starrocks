@@ -98,11 +98,6 @@ Status S3OutputStream::close() {
         RETURN_IF_ERROR(upload_part(std::move(_buffer)));
     }
 
-//    // S3 mandates at least one part, upload an empty one if necessary
-//    if (_part_id == 1) {
-//        RETURN_IF_ERROR(upload_part(_buffer));
-//    }
-
     if (_io_status.ok()) {
         RETURN_IF_ERROR(complete_multipart_upload());
     } else {
