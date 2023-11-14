@@ -49,7 +49,6 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -58,7 +57,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -299,11 +297,7 @@ public class MetadataMgr {
         }
 
         for (View view : views) {
-            Map<TableName, com.starrocks.catalog.Table> usedTable =
-                    AnalyzerUtils.collectAllTableAndView(view.getViewDefCache());
-            if (CollectionUtils.containsAny(usedTable.keySet(), tableNames)) {
-                view.clearAnalyzedCache();
-            }
+            view.clearAnalyzedCache();
         }
     }
 
