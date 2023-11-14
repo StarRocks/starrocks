@@ -191,8 +191,7 @@ public class AlterTableTest {
                 "    \"partition_live_number\" = \"2\"\n" +
                 ");");
         ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = "ALTER TABLE test_partition_live_number\n" +
-                " SET(\"partition_live_number\" = \"-1\");";
+        String sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"-1\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         Set<Pair<Long, Long>> ttlPartitionInfo = GlobalStateMgr.getCurrentState()
@@ -200,6 +199,10 @@ public class AlterTableTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("test_partition_live_number");
         Assert.assertFalse(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
+        sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"1\");";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        Assert.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
     }
 
 }
