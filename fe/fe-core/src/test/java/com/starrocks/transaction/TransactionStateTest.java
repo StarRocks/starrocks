@@ -21,6 +21,7 @@ import com.baidu.bjf.remoting.protobuf.Codec;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnFinishStatePB;
 import com.starrocks.thrift.TUniqueId;
@@ -149,5 +150,25 @@ public class TransactionStateTest {
             e.printStackTrace();
         }
         Assert.assertTrue(readTransactionState.isNewFinish());
+    }
+
+    @Test
+    public void testSkipTxnByConfig() throws IOException {
+        UUID uuid = UUID.randomUUID();
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        Assert.assertFalse(transactionState.isExpired(0));
+        long[] test1 = {1000, 3000};
+        Config.skip_transaction_range = test1;
+        Assert.assertTrue(transactionState.isExpired(0));
+        long[] test2 = {3000, 4000};
+        Config.skip_transaction_range = test2;
+        Assert.assertTrue(transactionState.isExpired(0));
+        long[] test3 = {100, 300};
+        Config.skip_transaction_range = test3;
+        Assert.assertFalse(transactionState.isExpired(0));
     }
 }

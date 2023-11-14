@@ -258,6 +258,14 @@ public class Config extends ConfigBase {
     public static int label_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * Transaction between [skip_transaction_range[0], skip_transaction_range[1]] will be removed,
+     * even though they are not in final status.
+     * Used for temporary solve issues
+     */
+    @ConfField(mutable = true)
+    public static long[] skip_transaction_range = {};
+
+    /**
      * for load job managed by LoadManager, such as Insert, Broker load and Spark load.
      */
     @ConfField(mutable = true)
