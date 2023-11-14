@@ -385,6 +385,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 partitionIds.add(partition.getId());
             }
+            clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
         }

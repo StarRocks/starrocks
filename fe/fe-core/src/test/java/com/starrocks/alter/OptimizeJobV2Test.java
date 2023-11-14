@@ -85,7 +85,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
         stmt = "alter table testTable1 order by (v1)";
         alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
 
-        stmt = "alter table testTable1 duplicate key(v1) partition (t1)";
+        stmt = "alter table testTable1 partition (t1) duplicate key(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -101,7 +101,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support optimize"));
         }
 
-        stmt = "alter table testTable1 distributed by hash(v1) partition (t1)";
+        stmt = "alter table testTable1 partition (t1) distributed by hash(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
@@ -110,7 +110,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("does not exist"));
         }
 
-        stmt = "alter table testTable1 distributed by hash(v1) temporary partition (t1)";
+        stmt = "alter table testTable1 temporary partition (t1) distributed by hash(v1)";
         try {
             alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
             Assert.fail();
