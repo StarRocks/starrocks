@@ -418,6 +418,23 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
             });
 
+            boolean allPartitionOptimized = false;
+            if (!hasFailedTask && optimizeClause.getDistributionDesc() != null) {
+                Set<String> targetPartitionNames = targetTable.getPartitionNames();
+                long targetPartitionNum = targetPartitionNames.size();
+                targetPartitionNames.retainAll(sourcePartitionNames);
+
+                if (targetPartitionNames.size() == targetPartitionNum && targetPartitionNum == sourcePartitionNames.size()) {
+                    // all partitions of target table are optimized
+                    // so that we can change default distribution info of target table
+                    allPartitionOptimized = true;
+                } else if (optimizeClause.getDistributionDesc().getType() != targetTable.getDefaultDistributionInfo().getType()) {
+                    // partial partitions of target table are optimized
+                    throw new AlterCancelException("can not change distribution type of target table" +
+                            "since partial partitions are not optimized");
+                }
+            }
+
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
@@ -440,6 +457,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
 
                 targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            }
+            if (allPartitionOptimized) {
+                targetTable.setDefaultDistributionInfo(
+                        optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns()));
             }
             targetTable.setState(OlapTableState.NORMAL);
 

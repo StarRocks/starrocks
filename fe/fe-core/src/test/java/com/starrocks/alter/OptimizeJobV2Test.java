@@ -118,6 +118,24 @@ public class OptimizeJobV2Test extends DDLTestBase {
             Assert.assertTrue(e.getMessage().contains("not support optimize temp partition"));
         }
 
+        stmt = "alter table testTable1 partition (t1) distributed by random";
+        try {
+            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            LOG.warn("Alter fail:", e);
+            Assert.assertTrue(e.getMessage().contains("not support"));
+        }
+
+        stmt = "alter table testTable1 partition (t1) distributed by hash(v3)";
+        try {
+            alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            LOG.warn("Alter fail:", e);
+            Assert.assertTrue(e.getMessage().contains("not support"));
+        }
+
         stmt = "alter table testTable1 distributed by random";
         UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
     }
