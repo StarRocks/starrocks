@@ -1359,7 +1359,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                 auto old_name = base_tablet_schema->column(old_col_idx).name();
                 if (old_name == column.column_name) {
                     uint32_t old_unique_id = base_tablet_schema->column(old_col_idx).unique_id();
-                    if (normal_request.tablet_schema.schema_version <= base_tablet_schema->schema_version()) {
+                    if (normal_request.tablet_schema.schema_version > base_tablet_schema->schema_version() + 1) {
                         if (column.col_unique_id > 0) {
                             DCHECK(column.col_unique_id == old_unique_id);
                             if (column.col_unique_id != old_unique_id) {
