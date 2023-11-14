@@ -39,6 +39,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -3985,7 +3986,7 @@ public class LocalMetastore implements ConnectorMetadata {
             throws DdlException {
         Map<String, String> logProperties = new HashMap<>(properties);
         int partitionLiveNumber = TableProperty.INVALID;
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
                 partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
             } catch (AnalysisException ex) {
@@ -3993,14 +3994,14 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
         DataProperty dataProperty = DataProperty.getInferredDefaultDataProperty();
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {
                 dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, dataProperty, false);
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }
         }
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             try {
                 PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
             } catch (AnalysisException ex) {
@@ -4022,23 +4023,34 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.getId());
             }
             tableProperty.setPartitionTTLNumber(partitionLiveNumber);
-        } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                            ImmutableMap.of(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
+                                    logProperties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)));
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+        }
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             TStorageMedium storageMedium = dataProperty.getStorageMedium();
             table.setStorageMedium(storageMedium);
             tableProperty.getProperties()
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                             String.valueOf(dataProperty.getCooldownTimeMs()));
-        } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                            ImmutableMap.of(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                                    logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)));
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+        }
+        if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
             String storageCoolDownTTL = logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
             tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
             tableProperty.buildStorageCoolDownTTL();
-        } else {
-            throw new DdlException("Modify failed because unknown properties: " + properties);
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                            ImmutableMap.of(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
+                                    logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)));
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
         }
-
-        ModifyTablePropertyOperationLog info =
-                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), logProperties);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
     }
 
     /**
