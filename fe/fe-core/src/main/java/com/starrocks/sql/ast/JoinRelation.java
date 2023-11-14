@@ -27,6 +27,8 @@ public class JoinRelation extends Relation {
     private Relation right;
     private Expr onPredicate;
     private String joinHint = "";
+    private Expr skewColumn;
+    private List<Expr> skewValues;
     private boolean lateral;
     private boolean isImplicit;
 
@@ -89,6 +91,22 @@ public class JoinRelation extends Relation {
 
     public String getJoinHint() {
         return joinHint;
+    }
+
+    public void setSkewColumn(Expr column) {
+        this.skewColumn = column;
+    }
+
+    public Expr getSkewColumn() {
+        return skewColumn;
+    }
+
+    public void setSkewValues(List<Expr> values) {
+        this.skewValues = values;
+    }
+
+    public List<Expr> getSkewValues() {
+        return skewValues;
     }
 
     public boolean isLateral() {
