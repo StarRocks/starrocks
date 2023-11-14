@@ -4,11 +4,7 @@ create table t(k int) distributed by hash(k) buckets 10;
 -- !result
 show partitions from t;
 -- result:
-<<<<<<< HEAD
-[REGEX].*0	NORMAL			k	10	3	HDD	9999-12-31 23:59:59	None	0B	false	0
-=======
 [REGEX].*k	10	3	HDD	9999-12-31 23:59:59	None.*
->>>>>>> 04a0be7df1 ([BugFix] Fix optimize table fail when specify partition name (#34896))
 -- !result
 insert into t values(1),(2),(3);
 -- result:
@@ -34,9 +30,6 @@ select * from t;
 -- !result
 show partitions from t;
 -- result:
-<<<<<<< HEAD
-[REGEX].*0	NORMAL			k	1	3	HDD	9999-12-31 23:59:59	None.*
-=======
 [REGEX].*k	1	3	HDD	9999-12-31 23:59:59	None.*
 -- !result
 
@@ -77,5 +70,4 @@ alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202007,p2020
 function: wait_optimize_table_finish()
 -- result:
 None
->>>>>>> 04a0be7df1 ([BugFix] Fix optimize table fail when specify partition name (#34896))
 -- !result
