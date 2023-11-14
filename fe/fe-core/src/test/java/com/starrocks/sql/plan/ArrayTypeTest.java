@@ -114,6 +114,26 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
                 "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'], CAST([1.1] AS ARRAY<VARCHAR>)");
+
+        sql = "with t0 as (\n" +
+                "    select c1 from (values([])) as t(c1)\n" +
+                ")\n" +
+                "select \n" +
+                "array_concat(c1, [1])\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        getThriftPlan(sql); // Check null type handling
+        assertContains(plan, "<slot 3> : array_concat(CAST(2: c1 AS ARRAY<TINYINT>), [1])");
+
+        sql = "with t0 as (\n" +
+                "    select c1 from (values([])) as t(c1)\n" +
+                ")\n" +
+                "select \n" +
+                "array_concat(c1, [1])\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        getThriftPlan(sql); // Check null type handling
+        assertContains(plan, "<slot 3> : array_concat(CAST(2: c1 AS ARRAY<TINYINT>), [1])");
     }
 
     @Test

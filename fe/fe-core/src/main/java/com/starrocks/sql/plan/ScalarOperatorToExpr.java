@@ -158,9 +158,7 @@ public class ScalarOperatorToExpr {
                 return expr;
             }
 
-            if (expr.getType().isNull()) {
-                hackTypeNull(expr);
-            }
+            hackTypeNull(expr);
             return expr;
         }
 

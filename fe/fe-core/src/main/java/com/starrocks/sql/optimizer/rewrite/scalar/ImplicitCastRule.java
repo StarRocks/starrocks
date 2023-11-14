@@ -91,10 +91,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);
 
-                //Cast from array(null), direct assignment type to avoid passing null_literal into be
+                // Cast from array(null), direct assignment type to avoid passing null_literal into be
                 if (type.isArrayType() && child.getType().isArrayType()
                         && ((ArrayType) child.getType()).getItemType().isNull()) {
-                    child.setType(type);
+                    addCastChild(type, call, i);
                     continue;
                 }
 
