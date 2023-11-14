@@ -44,6 +44,7 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.HiveTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -62,10 +63,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HiveTableTest {
     private static ConnectContext connectContext;
@@ -211,7 +215,7 @@ public class HiveTableTest {
         HiveTable oTable = HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
         Assert.assertFalse(oTable.hasBooleanTypePartitionColumn());
     }
-    
+
     // create a hive table with specific storage format
     private HiveTable createExternalTableByFormat(String format) throws Exception {
         String inputFormatClass = HiveStorageFormat.get(format).getInputFormat();
@@ -292,4 +296,31 @@ public class HiveTableTest {
         }
     }
 
+    @Test
+    public void testCreateTableResourceName() throws DdlException {
+
+        String resourceName = "Hive_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
+        HiveTable.Builder tableBuilder = HiveTable.builder()
+                .setId(1000)
+                .setTableName("supplier")
+                .setCatalogName("hice_catalog")
+                .setHiveDbName("hive_oss_tpch_1g_parquet_gzip")
+                .setHiveTableName("supplier")
+                .setResourceName(resourceName)
+                .setTableLocation("")
+                .setFullSchema(new ArrayList<>())
+                .setDataColumnNames(new ArrayList<>())
+                .setPartitionColumnNames(Lists.newArrayList())
+                .setStorageFormat(null);
+        HiveTable oTable = tableBuilder.build();
+        HiveTable.Builder newBuilder = HiveTable.builder();
+        HiveTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
+        HiveTable table = newBuilder.build();
+        Assert.assertEquals(table.getResourceName(), resourceName);
+    }
 }

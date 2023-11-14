@@ -47,6 +47,17 @@ public class HudiTableFactory extends ExternalTableFactory {
 
     }
 
+    public static void copyFromCatalogTable(HudiTable.Builder builder, HudiTable catalogTable, Map<String, String> properties) {
+        builder.setCatalogName(catalogTable.getCatalogName())
+                .setResourceName(properties.get(RESOURCE))
+                .setHiveDbName(catalogTable.getDbName())
+                .setHiveTableName(catalogTable.getTableName())
+                .setPartitionColNames(catalogTable.getPartitionColumnNames())
+                .setDataColNames(catalogTable.getDataColumnNames())
+                .setHudiProperties(catalogTable.getProperties())
+                .setCreateTime(catalogTable.getCreateTime());
+    }
+
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
@@ -79,16 +90,8 @@ public class HudiTableFactory extends ExternalTableFactory {
         HudiTable.Builder tableBuilder = HudiTable.builder()
                 .setId(tableId)
                 .setTableName(tableName)
-                .setCatalogName(oHudiTable.getCatalogName())
-                .setResourceName(oHudiTable.getResourceName())
-                .setHiveDbName(oHudiTable.getDbName())
-                .setHiveTableName(oHudiTable.getTableName())
-                .setFullSchema(columns)
-                .setPartitionColNames(oHudiTable.getPartitionColumnNames())
-                .setDataColNames(oHudiTable.getDataColumnNames())
-                .setHudiProperties(oHudiTable.getProperties())
-                .setCreateTime(oHudiTable.getCreateTime());
-
+                .setFullSchema(columns);
+        copyFromCatalogTable(tableBuilder, oHudiTable, properties);
         HudiTable hudiTable = tableBuilder.build();
 
         // partition key, commented for show partition key
