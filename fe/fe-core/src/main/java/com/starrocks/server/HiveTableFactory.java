@@ -39,6 +39,21 @@ public class HiveTableFactory extends ExternalTableFactory {
 
     }
 
+    public static void copyFromCatalogTable(HiveTable.Builder tableBuilder, HiveTable catalogTable,
+                                            Map<String, String> properties) {
+        tableBuilder
+                .setCatalogName(catalogTable.getCatalogName())
+                .setResourceName(properties.get(RESOURCE))
+                .setHiveDbName(catalogTable.getDbName())
+                .setHiveTableName(catalogTable.getTableName())
+                .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
+                .setDataColumnNames(catalogTable.getDataColumnNames())
+                .setTableLocation(catalogTable.getTableLocation())
+                .setStorageFormat(catalogTable.getStorageFormat())
+                .setCreateTime(catalogTable.getCreateTime())
+                .setProperties(catalogTable.getProperties());
+    }
+
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database database, CreateTableStmt stmt) throws DdlException {
@@ -60,6 +75,7 @@ public class HiveTableFactory extends ExternalTableFactory {
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(tableId)
                 .setTableName(tableName)
+<<<<<<< HEAD
                 .setCatalogName(oHiveTable.getCatalogName())
                 .setResourceName(oHiveTable.getResourceName())
                 .setHiveDbName(oHiveTable.getDbName())
@@ -69,6 +85,10 @@ public class HiveTableFactory extends ExternalTableFactory {
                 .setFullSchema(columns)
                 .setTableLocation(oHiveTable.getTableLocation())
                 .setCreateTime(oHiveTable.getCreateTime());
+=======
+                .setFullSchema(columns);
+        copyFromCatalogTable(tableBuilder, oHiveTable, properties);
+>>>>>>> d7be916838 ([BugFix] fix resource name from stmt propery instead of catalog recast (#34844))
 
         HiveTable hiveTable = tableBuilder.build();
 
