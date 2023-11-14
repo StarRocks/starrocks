@@ -221,7 +221,7 @@ The replica status is **only present in the leader FE node**. Therefore, the fol
 
 2. Table (Partition) Level Status Check  
     Users can check the status of replicas of a specific table or partition with the following command and can filter the status by the WHERE statement. For example, to view the status of NORMAL replicas of `p1` and `p2` in `tbl1`.  
-    `ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2) WHERE STATUS = "NORMAL";`
+    `ADMIN SHOW REPLICA STATUS FROM tbl1 PARTITION (p1, p2) WHERE STATUS = "OK";`
 
     ```plaintext
     +----------+-----------+-----------+---------+-------------------+--------------------+------------------+------------+------------+-------+--------+--------+
