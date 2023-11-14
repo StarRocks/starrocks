@@ -173,11 +173,11 @@ public class DateUtils {
         return convertedDatetime;
     }
 
-    public static String formatTimeStampInSeconds(long timestampInSeconds) {
-        return formatTimeStampInSeconds(timestampInSeconds, TimeUtils.getSystemTimeZone().toZoneId());
+    public static String formatTimestampInSeconds(long timestampInSeconds) {
+        return formatTimestampInSeconds(timestampInSeconds, TimeUtils.getSystemTimeZone().toZoneId());
     }
 
-    public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+    public static String formatTimestampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
         return formatTimeStampInMill(timestampInSeconds * 1000, timeZoneId);
     }
 

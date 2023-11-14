@@ -77,7 +77,7 @@ public class ShowPipeStmt extends ShowStmt {
         row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
         row.add(pipe.getLoadStatus().toJson());
         row.add(pipe.getLastErrorInfo().toJson());
-        row.add(DateUtils.formatTimeStampInSeconds(pipe.getCreatedTime()));
+        row.add(DateUtils.formatTimestampInSeconds(pipe.getCreatedTime()));
     }
 
     public static int findSlotIndex(String name) {
