@@ -1205,6 +1205,8 @@ CONF_mInt32(json_flat_internal_column_min_limit, "5");
 
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "20");
+CONF_mBool(use_lake_pk_index_loader, "true");
+CONF_mInt32(lake_pk_index_loader_thread, "10");
 
 // Allowable intervals for continuous generation of pk dumps
 // Disable when pk_dump_interval_seconds <= 0

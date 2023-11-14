@@ -98,6 +98,7 @@ class LocationProvider;
 class TabletManager;
 class UpdateManager;
 class ReplicationTxnManager;
+class PkIndexLoader;
 } // namespace lake
 namespace spill {
 class DirManager;
@@ -319,6 +320,8 @@ public:
 
     lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
 
+    lake::PkIndexLoader* lake_pk_index_loader() const { return _lake_pk_index_loader; }
+
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
@@ -389,6 +392,7 @@ private:
     lake::LocationProvider* _lake_location_provider = nullptr;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
+    lake::PkIndexLoader* _lake_pk_index_loader = nullptr;
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
