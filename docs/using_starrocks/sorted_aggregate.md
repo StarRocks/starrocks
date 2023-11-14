@@ -42,7 +42,11 @@ set enable_sort_aggregate=true;
     DUPLICATE KEY(`id_int`)COMMENT "OLAP"
     DISTRIBUTED BY HASH(`id_int`) BUCKETS 10 
     PROPERTIES
+<<<<<<< HEAD
     ("replication_num" = "1"); 
+=======
+    ("replication_num" = "3"); 
+>>>>>>> branch-2.5
 
     INSERT INTO test_sorted_streaming_agg_basic VALUES
     (1, 'v1'),
@@ -86,4 +90,8 @@ View the results of `EXPLAIN costs`. If the `sorted streaming` field is `true` i
 |      column statistics:                                                                                                            |
 |      * id_int-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN                                                                       |
 |      * id_string-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN                                                                    |
+<<<<<<< HEAD
 ```
+=======
+```
+>>>>>>> branch-2.5

@@ -20,6 +20,7 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::functi
     if (bthread_self()) {
         state->exec_env()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
             MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());
+            SCOPED_SET_TRACE_INFO({}, state->query_id(), state->fragment_instance_id());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
             promise->set_value(func());
         });

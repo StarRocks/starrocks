@@ -284,10 +284,11 @@ public class QueryAnalyzer {
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             ImmutableMap.Builder<Field, Column> columns = ImmutableMap.builder();
+            Set<Column> baseSchemaColumns = new HashSet<>(table.getBaseSchema());
 
             for (Column column : table.getFullSchema()) {
                 Field field;
-                if (table.getBaseSchema().contains(column)) {
+                if (baseSchemaColumns.contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
                 } else {
@@ -300,21 +301,23 @@ public class QueryAnalyzer {
 
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
+            if (session.getDumpInfo() != null) {
+                session.getDumpInfo().addTable(dbName, table);
 
-            session.getDumpInfo().addTable(dbName, table);
-            if (table.isHiveTable()) {
-                HiveTable hiveTable = (HiveTable) table;
-                Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
-                        getResource(hiveTable.getResourceName());
-                if (resource != null) {
-                    session.getDumpInfo().addResource(resource);
+                if (table.isHiveTable()) {
+                    HiveTable hiveTable = (HiveTable) table;
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
+                            hiveTable.getTableName());
+                    HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                            hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+                    hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
+                    hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
+                    Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
+                            getResource(hiveTable.getResourceName());
+                    if (resource != null) {
+                        session.getDumpInfo().addResource(resource);
+                    }
                 }
-                session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
-                        hiveTable.getTableName());
-                HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
-                        hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
-                hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
-                hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
             }
 
             Scope scope = new Scope(RelationId.of(node), new RelationFields(fields.build()));
@@ -549,8 +552,11 @@ public class QueryAnalyzer {
                 fields.add(field);
             }
 
-            String dbName = node.getName().getDb();
-            session.getDumpInfo().addView(dbName, view);
+            if (session.getDumpInfo() != null) {
+                String dbName = node.getName().getDb();
+                session.getDumpInfo().addView(dbName, view);
+            }
+
             Scope viewScope = new Scope(RelationId.of(node), new RelationFields(fields));
             node.setScope(viewScope);
             return viewScope;
@@ -583,6 +589,8 @@ public class QueryAnalyzer {
             Scope leftChildScope = process(setOpRelations.get(0), context);
             Type[] outputTypes = leftChildScope.getRelationFields().getAllFields()
                     .stream().map(Field::getType).toArray(Type[]::new);
+            List<Boolean> nullables = leftChildScope.getRelationFields().getAllFields()
+                    .stream().map(field -> field.isNullable()).collect(Collectors.toList());
             int outputSize = leftChildScope.getRelationFields().size();
 
             for (int i = 1; i < setOpRelations.size(); ++i) {
@@ -591,7 +599,8 @@ public class QueryAnalyzer {
                     throw new SemanticException("Operands have unequal number of columns");
                 }
                 for (int fieldIdx = 0; fieldIdx < relation.getRelationFields().size(); ++fieldIdx) {
-                    Type fieldType = relation.getRelationFields().getAllFields().get(fieldIdx).getType();
+                    Field field = relation.getRelationFields().getAllFields().get(fieldIdx);
+                    Type fieldType = field.getType();
                     if (fieldType.isOnlyMetricType() &&
                             !((node instanceof UnionRelation) &&
                                     (node.getQualifier().equals(SetQualifier.ALL)))) {
@@ -606,6 +615,7 @@ public class QueryAnalyzer {
                                 relation.getRelationFields().getFieldByIndex(fieldIdx).getType()));
                     }
                     outputTypes[fieldIdx] = commonType;
+                    nullables.set(fieldIdx, nullables.get(fieldIdx) | field.isNullable());
                 }
             }
 
@@ -613,7 +623,7 @@ public class QueryAnalyzer {
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
                 fields.add(new Field(oldField.getName(), outputTypes[fieldIdx], oldField.getRelationAlias(),
-                        oldField.getOriginExpression()));
+                        oldField.getOriginExpression(), true, nullables.get(fieldIdx)));
             }
 
             Scope setOpOutputScope = new Scope(RelationId.of(node), new RelationFields(fields));

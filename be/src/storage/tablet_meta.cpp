@@ -492,6 +492,16 @@ void TabletMeta::create_inital_updates_meta() {
     _updatesPB->set_next_rowset_id(0);
 }
 
+void TabletMeta::reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb) {
+    _schema.reset();
+    if (schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()) {
+        // Does not collect the memory usage of |_schema|.
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+    } else {
+        _schema = std::make_shared<const TabletSchema>(schema_pb);
+    }
+}
+
 bool operator==(const TabletMeta& a, const TabletMeta& b) {
     if (a._table_id != b._table_id) return false;
     if (a._partition_id != b._partition_id) return false;

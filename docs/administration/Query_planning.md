@@ -12,7 +12,7 @@ Query performance in StarRocks is determined by query planning and query executi
 
 A query plan provides the DBA with a macro perspective to access query information. A query plan is the key to query performance and a good resource for the DBA to reference. The following code snippet uses `TPCDS query96` as an example to show how to view a query plan.
 
-~~~ SQL
+~~~SQL
 -- query96.sql
 select  count(*)
 from store_sales

@@ -30,7 +30,7 @@ RESULT SINK
 cardinality: 5
 column statistics:
 * o_orderpriority-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
-* count-->[0.0, 5.0, 0.0, 8.0, 5.0] ESTIMATE
+* count-->[0.0, 5675675.675675674, 0.0, 8.0, 5.0] ESTIMATE
 
 PLAN FRAGMENT 1(F05)
 
@@ -44,7 +44,7 @@ OutPut Exchange Id: 12
 |  cardinality: 5
 |  column statistics:
 |  * o_orderpriority-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
-|  * count-->[0.0, 5.0, 0.0, 8.0, 5.0] ESTIMATE
+|  * count-->[0.0, 5675675.675675674, 0.0, 8.0, 5.0] ESTIMATE
 |
 10:AGGREGATE (merge finalize)
 |  aggregate: count[([27: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -52,7 +52,7 @@ OutPut Exchange Id: 12
 |  cardinality: 5
 |  column statistics:
 |  * o_orderpriority-->[-Infinity, Infinity, 0.0, 15.0, 5.0] ESTIMATE
-|  * count-->[0.0, 5.0, 0.0, 8.0, 5.0] ESTIMATE
+|  * count-->[0.0, 5675675.675675674, 0.0, 8.0, 5.0] ESTIMATE
 |
 9:EXCHANGE
 cardinality: 5

@@ -21,6 +21,7 @@
 
 package com.starrocks.http.rest;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
@@ -59,8 +60,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+<<<<<<< HEAD
 import org.apache.thrift.transport.TTransportException;
 import org.codehaus.jackson.map.ObjectMapper;
+=======
+>>>>>>> branch-2.5
 import org.json.JSONException;
 import org.json.JSONObject;
 

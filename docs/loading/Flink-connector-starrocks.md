@@ -4,7 +4,7 @@ This topic describes how to load data from Apache Flink® to StarRocks.
 
 ## Overview
 
-The flink-connector-jdbc tool provided by Apache Flink® may not meet your performance requirements in certain scenarios. Therefore we provide a new connector named flink-connector-starrocks, which can cache data and then load data at a time by using Stream Load.
+The flink-connector-jdbc tool provided by Apache Flink® may not meet your performance requirements in certain scenarios. Therefore we provide a new connector named flink-connector-starrocks, which can cache data and then load data at a time by using [Stream Load](./StreamLoad.md).
 
 ## Procedure
 
@@ -37,20 +37,24 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
             StarRocksSink.sink(
                 // the sink options
                 StarRocksSinkOptions.builder()
-                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                     .withProperty("username", "xxx")
                     .withProperty("password", "xxx")
                     .withProperty("table-name", "xxx")
                     .withProperty("database-name", "xxx")
                     // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify the columns to be updated by configuring the following two properties.
+<<<<<<< HEAD
+=======
+                    // The '__op' column must be specified at the end of 'sink.properties.columns'.
+>>>>>>> branch-2.5
                     // .withProperty("sink.properties.partial_update", "true")
-                    // .withProperty("sink.properties.columns", "k1,k2,k3")
+                    // .withProperty("sink.properties.columns", "k1,k2,k3,__op")
                     .withProperty("sink.properties.format", "json")
                     .withProperty("sink.properties.strip_outer_array", "true")
                     .build()
             )
-        );
+        ).setParallelism(1); // Define the parallelism of the sink. In the scenario of multiple paralel sinks, you need to guarantee the data order. 
 
         // -------- sink with stream transformation --------
         class RowData {
@@ -74,15 +78,19 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     .build(),
                 // the sink options
                 StarRocksSinkOptions.builder()
-                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
+                    .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port,xxxxx")
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
                     .withProperty("username", "xxx")
                     .withProperty("password", "xxx")
                     .withProperty("table-name", "xxx")
                     .withProperty("database-name", "xxx")
                     // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify the columns to be updated by configuring the following two properties.
+<<<<<<< HEAD
+=======
+                    // The '__op' column must be specified at the end of 'sink.properties.columns'.
+>>>>>>> branch-2.5
                     // .withProperty("sink.properties.partial_update", "true")
-                    // .withProperty("sink.properties.columns", "k1,k2,k3")
+                    // .withProperty("sink.properties.columns", "k1,k2,k3,__op")
                     .withProperty("sink.properties.format", "csv")  
                     .withProperty("sink.properties.column_separator", "\\x01")
                     .withProperty("sink.properties.row_delimiter", "\\x02")
@@ -116,16 +124,23 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                 "'sink.buffer-flush.max-rows' = '1000000'," +
                 "'sink.buffer-flush.max-bytes' = '300000000'," +
                 "'sink.buffer-flush.interval-ms' = '5000'," +
+<<<<<<< HEAD
                 // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify
                 // the columns to be updated by configuring the following two properties, and the '__op'
                 // column must be specified at the end of 'sink.properties.columns'.
+=======
+                // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify the columns to be updated by configuring the following two properties.
+                // The '__op' column must be specified at the end of 'sink.properties.columns'.
+>>>>>>> branch-2.5
                 // "'sink.properties.partial_update' = 'true'," +
                 // "'sink.properties.columns' = 'k1,k2,k3'," + 
                 "'sink.properties.column_separator' = '\\x01'," +
                 "'sink.properties.row_delimiter' = '\\x02'," +
-                "'sink.max-retries' = '3'" +
-                // stream load properties like `'sink.properties.columns' = 'k1, v1'`
-                "'sink.properties.*' = 'xxx'" + 
+                "'sink.max-retries' = '3'," +
+                // Stream load properties like `'sink.properties.columns' = 'k1, v1'`
+                "'sink.properties.*' = 'xxx'," + 
+                // Define the parallelism of the sink. In the scenario of multiple paralel sinks, you need to guarantee the data order.
+                "'sink.parallelism' = '1'"
             ")"
         );
         ```

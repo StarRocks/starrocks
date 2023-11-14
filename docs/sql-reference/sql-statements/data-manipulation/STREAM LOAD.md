@@ -18,27 +18,27 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 This topic uses curl as an example to describe how to load data by using Stream Load. In addition to curl, you can also use other HTTP-compatible tools or languages to perform Stream Load. Load-related parameters are included in HTTP request header fields. When you input these parameters, take note of the following points:
 
-- You can use HTTP chunked transfer encoding. If you do not choose chunked encoding, you must input a `Content-Length` header field to indicate the length of content to be transferred, thereby ensuring data integrity.
+- You can use chunked transfer encoding, as demonstrated in this topic. If you do not choose chunked transfer encoding, you must input a `Content-Length` header field to indicate the length of content to be transferred, thereby ensuring data integrity.
 
   > **NOTE**
   >
   > If you use curl to perform Stream Load, StarRocks automatically adds a `Content-Length` header field and you do not need manually input it.
 
-- We recommend that you add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied.
+- You must add an `Expect` header field and specify its value as `100-continue`, as in `"Expect:100-continue"`. This helps prevent unnecessary data transfers and reduce resource overheads in case your job request is denied.
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md).
 
 ## Parameters
 
-### `username` and `password`
+### username and password
 
-Specify the username and password of the account that you use to connect to your StarRocks cluster. This is a required parameter. If you use the account `root` for which no password is set, you need to input only `root:`.
+Specify the username and password of the account that you use to connect to your StarRocks cluster. This is a required parameter. If you use an account for which no password is set, you need to input only `<username>:`.
 
-### `XPUT`
+### XPUT
 
 Specifies the HTTP request method. This is a required parameter. Stream Load supports only the PUT method.
 
-### `url`
+### url
 
 Specifies the URL of the StarRocks table. Syntax:
 
@@ -55,17 +55,18 @@ The following table describes the parameters in the URL.
 | database_name | Yes      | The name of the database to which the StarRocks table belongs. |
 | table_name    | Yes      | The name of the StarRocks table.                             |
 
-### `data_desc`
+### data_desc
 
 Describes the data file that you want to load. The `data_desc` descriptor can include the data file's name, format, column separator, row separator, destination partitions, and column mapping against the StarRocks table. Syntax:
 
 ```Bash
--T <file_name>
+-T <file_path>
 -H "format: CSV | JSON"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
 -H "columns: <column1_name>[, <column2_name>, ... ]"
 -H "partitions: <partition1_name>[, <partition2_name>, ...]"
+-H "temporary_partitions: <temporary_partition1_name>[, <temporary_partition2_name>, ...]"
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
 -H "strip_outer_array:  true | false"
 -H "json_root: <json_path>"
@@ -77,9 +78,10 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 | Parameter  | Required | Description                                                  |
 | ---------- | -------- | ------------------------------------------------------------ |
-| file_name  | Yes      | The name of the data file. You can optionally include the extension of the file name. |
+| file_path  | Yes      | The save path of the data file. You can optionally include the extension of the file name. |
 | format     | No       | The format of the data file. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
 | partitions | No       | The partitions into which you want to load the data file. By default, if you do not specify this parameter, StarRocks loads the data file into all partitions of the StarRocks table. |
+| temporary_partitions|  No       | The name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data file. You can specify multiple temporary partitions, which must be separated by commas (,).|
 | columns    | No       | The column mapping between the data file and the StarRocks table.<br/>If the fields in the data file can be mapped in sequence onto the columns in the StarRocks table, you do not need to specify this parameter. Instead, you can use this parameter to implement data conversions. For example, if you load a CSV data file and the file consists of two columns that can be mapped in sequence onto the two columns, `id` and `city`, of the StarRocks table, you can specify `"columns: city,tmp_id, id = tmp_id * 100"`. For more information, see the "[Column mapping](#column-mapping)" section in this topic. |
 
 #### CSV parameters
@@ -105,7 +107,7 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
 
-### `opt_properties`
+### opt_properties
 
 Specifies some optional parameters, which are applied to the entire load job. Syntax:
 
@@ -185,11 +187,11 @@ After the load job finishes, StarRocks returns the job result in JSON format. Ex
     "NumberUnselectedRows": 0,
     "LoadBytes": 40888898,
     "LoadTimeMs": 2144,
-    BeginTxnTimeMs: 0,
-    StreamLoadPutTimeMS: 1,
-    ReadDataTimeMs: 0,
-    WriteDataTimeMs: 11,
-    CommitAndPublishTimeMs: 16,
+    "BeginTxnTimeMs": 0,
+    "StreamLoadPutTimeMS": 1,
+    "ReadDataTimeMs": 0,
+    "WriteDataTimeMs": 11,
+    "CommitAndPublishTimeMs": 16,
 }
 ```
 
@@ -246,7 +248,8 @@ Your data file `example1.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example1.csv` into `table1` within up to 100 seconds, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label1" \
+curl --location-trusted -u <username>:<password> -H "label:label1" \
+    -H "Expect:100-continue" \
     -H "timeout:100" \
     -H "max_filter_ratio:0.2" \
     -T example1.csv -XPUT \
@@ -262,7 +265,8 @@ Your data file `example2.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example2.csv` into `table2` with a maximum error tolerance of `0.2`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label2" \
+curl --location-trusted -u <username>:<password> -H "label:label2" \
+    -H "Expect:100-continue" \
     -H "max_filter_ratio:0.2" \
     -T example2.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
@@ -277,7 +281,8 @@ Your data file `example3.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example3.csv` into `table3`, run the following command:
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label3" \
+curl --location-trusted -u <username>:<password>  -H "label:label3" \
+    -H "Expect:100-continue" \
     -H "columns: col2, col1, col3" \
     -T example3.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
@@ -296,7 +301,12 @@ Your data file `example4.csv` also consists of three columns, which can be mappe
 If you want to load only the data records whose values in the first column of `example4.csv` are equal to `20180601` into `table4`, run the following command:
 
 ```Bash
+<<<<<<< HEAD
 curl --location-trusted -u root: -H "label:label4" \
+=======
+curl --location-trusted -u <username>:<password> -H "label:label4" \
+    -H "Expect:100-continue" \
+>>>>>>> branch-2.5
     -H "columns: col1, col2, col3]"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
@@ -316,7 +326,8 @@ Your data file `example5.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example5.csv` into partitions `p1` and `p2` of `table5`, run the following command:
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label5" \
+curl --location-trusted -u <username>:<password>  -H "label:label5" \
+    -H "Expect:100-continue" \
     -H "partitions: p1, p2" \
     -T example5.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
@@ -331,7 +342,8 @@ Your data file `example6.csv` also consists of three columns, which can be mappe
 If you want to load all data from `example6.csv` into `table6` by using the strict mode and the time zone `Africa/Abidjan`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "strict_mode: true" \
     -H "timezone: Africa/Abidjan" \
     -T example6.csv -XPUT \
@@ -347,7 +359,8 @@ Your data file `example7.csv` also consists of two columns, among which the firs
 If you want to load data from `example7.csv` into `table7`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=hll_hash(temp1), col2=hll_empty()" \
     -T example7.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table7/_stream_load
@@ -372,7 +385,8 @@ Your data file `example8.csv` also consists of two columns, among which the firs
 If you want to load data from `example8.csv` into `table8`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "columns: temp1, temp2, col1=to_bitmap(temp1), col2=bitmap_empty()" \
     -T example8.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table8/_stream_load
@@ -409,7 +423,8 @@ Suppose that your data file `example1.json` consists of the following data:
 To load all data from `example1.json` into `tbl1`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label6" \
+curl --location-trusted -u <username>:<password> -H "label:label6" \
+    -H "Expect:100-continue" \
     -H "format: json" \
     -T example1.json -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
@@ -454,7 +469,8 @@ Suppose that your data file `example2.json` consists of the following data:
 To load only `category`, `author`, and `price` from `example2.json`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: -H "label:label7" \
+curl --location-trusted -u <username>:<password> -H "label:label7" \
+    -H "Expect:100-continue" \
     -H "format: json" \
     -H "strip_outer_array: true" \
     -H "jsonpaths: [\"$.category\",\"$.price\",\"$.author\"]" \
@@ -478,7 +494,8 @@ Suppose your data file `example3.json` consists of the following data:
 To load only `category`, `author`, and `price` from `example3.json`, run the following command:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
+    -H "Expect:100-continue" \
     -H "format: json" \
     -H "json_root: $.RECORDS" \
     -H "strip_outer_array: true" \

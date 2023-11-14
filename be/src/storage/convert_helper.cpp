@@ -1930,6 +1930,8 @@ std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
         auto c = _converters[i]->copy_convert(*from.get_column_by_id(f->id()));
         dest->append_column(std::move(c), f);
     }
+    // Make sure schema in chunk contains valid sort key idx
+    dest->schema()->init_sort_key_idxes();
     return dest;
 }
 
@@ -1942,6 +1944,8 @@ std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
         auto c = _converters[i]->move_convert(from->get_column_by_id(f->id()).get());
         dest->append_column(std::move(c), f);
     }
+    // Make sure schema in chunk contains valid sort key idx
+    dest->schema()->init_sort_key_idxes();
     return dest;
 }
 

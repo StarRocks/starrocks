@@ -8,22 +8,52 @@
   + [Architecture](./introduction/Architecture.md)
   + [Features](./introduction/Features.md)
 + Quick Start
+<<<<<<< HEAD
   + Deploy
     + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
     + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Load and query data](./quick_start/Import_and_query.md)
+=======
+  + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
+  + [Create a table](./quick_start/Create_table.md)
+  + [Load and query data](./quick_start/Import_and_query.md)
++ Deployment
+  + [Deployment overview](./deployment/deployment_overview.md)
+  + Prepare
+    + [Deployment prerequisites](./deployment/deployment_prerequisites.md)
+    + [Plan StarRocks cluster](./deployment/plan_cluster.md)
+    + [Check environment configurations](./deployment/environment_configurations.md)
+    + [Prepare deployment files](./deployment/prepare_deployment_files.md)
+  + Deploy
+    + Deploy classic StarRocks
+      + [Deploy StarRocks manually](./deployment/deploy_manually.md)
+      + Deploy on Kubernetes
+        + [Deploy StarRocks with Operator](./deployment/sr_operator.md)
+        + [Deploy StarRocks with Helm](./deployment/helm.md)
+      + [Deploy StarRocks on AWS](./deployment/starrocks_on_aws.md)
+    + [Deploy and use shared-data StarRocks](./deployment/deploy_shared_data.md)
+  + Manage
+    + [Post-deployment setup](./deployment/post_deployment_setup.md)
+    + [Upgrade StarRocks](./deployment/upgrade.md)
+    + [Downgrade StarRocks](./deployment/downgrade.md)
+>>>>>>> branch-2.5
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + Table types
     + [Overview of table types](./table_design/table_types/table_types.md)
     + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
+<<<<<<< HEAD
     + [Aggragete table](./table_design/table_types/aggregate_table.md)
+=======
+    + [Aggregate table](./table_design/table_types/aggregate_table.md)
+>>>>>>> branch-2.5
     + [Unique Key table](./table_design/table_types/unique_key_table.md)
     + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+    + [Temporary partition](./table_design/Temporary_partition.md)
   + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
@@ -32,8 +62,12 @@
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
-  + [Continuously load data from Apache Kafka®](./loading/RoutineLoad.md)
-  + [Bulk load using Apache Spark™](./loading/SparkLoad.md)
+  + Load data from Apache Kafka®
+    + [Load data using Kafka connector](/loading/Kafka-connector-starrocks.md)
+    + [Load data using Routine Load](/loading/RoutineLoad.md)
+  + Load data from Apache Spark™
+    + [Load data using Spark Connector (recommended)](./loading/Spark-connector-starrocks.md)
+    + [Load data in bulk using Spark Load](./loading/SparkLoad.md)
   + [Load data using INSERT](./loading/InsertInto.md)
   + [Load data using Stream Load transaction interface](./loading/Stream_Load_transaction_interface.md)
   + [Synchronize data from MySQL in real time](./loading/Flink_cdc_load.md)
@@ -44,7 +78,7 @@
   + [Export data using EXPORT](./unloading/Export.md)
   + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
   + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
-+ Query Data Sources
++ Query Data Lakes
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
@@ -55,11 +89,28 @@
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
-  + [Local Cache](./data_source/Block_cache.md)
+  + [Data Cache](./data_source/data_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
+<<<<<<< HEAD
   + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
   + [Asynchronous materialized view](./using_starrocks/Materialized_view.md)
+=======
+  + [Synchronous materialized views](./using_starrocks/Materialized_view-single_table.md)
+  + Asynchronous materialized views
+    + [Overview](./using_starrocks/Materialized_view.md)
+    + Use cases
+      + [Data modeling](./using_starrocks/data_modeling_with_materialized_views.md)
+      + [Query rewrite](./using_starrocks/query_rewrite_with_materialized_views.md)
+      + [Data lake query acceleration](./using_starrocks/data_lake_query_acceleration_with_materialized_views.md)
+    + Usage
+      + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
+      + [ALTER MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)
+      + [DROP MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [information_schema.materialized_views](./administration/information_schema.md#materialized_views)
+      + [Troubleshooting](./using_starrocks/troubleshooting_asynchronous_materialized_views.md)
+>>>>>>> branch-2.5
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
@@ -76,6 +127,7 @@
     + [Apache Superset](./integrations/superset_support.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
+<<<<<<< HEAD
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + Deploy StarRocks on Kubernetes
@@ -83,13 +135,14 @@
       + [Deploy StarRocks with Helm](./administration/helm.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
+=======
+>>>>>>> branch-2.5
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
-    + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
     + [Information Schema](./administration/information_schema.md)
@@ -175,28 +228,28 @@
       + [CANCEL BACKUP](./sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md)
       + [CANCEL RESTORE](./sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md)
       + [CREATE ANALYZE](./sql-reference/sql-statements/data-definition/CREATE%20ANALYZE.md)
-      + [CREATE EXTERNAL CATALOG](./sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)
       + [CREATE DATABASE](./sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md)
+      + [CREATE EXTERNAL CATALOG](./sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)
+      + [CREATE FUNCTION](./sql-reference/sql-statements/data-definition/create-function.md)
       + [CREATE INDEX](./sql-reference/sql-statements/data-definition/CREATE%20INDEX.md)
       + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
       + [CREATE REPOSITORY](./sql-reference/sql-statements/data-definition/CREATE%20REPOSITORY.md)
       + [CREATE RESOURCE](./sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)
+      + [CREATE TABLE](./sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
       + [CREATE TABLE AS SELECT](./sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md)
       + [CREATE TABLE LIKE](./sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md)
-      + [CREATE TABLE](./sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)
       + [CREATE VIEW](./sql-reference/sql-statements/data-definition/CREATE%20VIEW.md)
-      + [CREATE FUNCTION](./sql-reference/sql-statements/data-definition/create-function.md)
       + [DROP ANALYZE](./sql-reference/sql-statements/data-definition/DROP%20ANALYZE.md)
-      + [DROP STATS](./sql-reference/sql-statements/data-definition/DROP%20STATS.md)
       + [DROP CATALOG](./sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)
       + [DROP DATABASE](./sql-reference/sql-statements/data-definition/DROP%20DATABASE.md)
+      + [DROP FUNCTION](./sql-reference/sql-statements/data-definition/drop-function.md)
       + [DROP INDEX](./sql-reference/sql-statements/data-definition/DROP%20INDEX.md)
       + [DROP MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
       + [DROP REPOSITORY](./sql-reference/sql-statements/data-definition/DROP%20REPOSITORY.md)
       + [DROP RESOURCE](./sql-reference/sql-statements/data-definition/DROP%20RESOURCE.md)
+      + [DROP STATS](./sql-reference/sql-statements/data-definition/DROP%20STATS.md)
       + [DROP TABLE](./sql-reference/sql-statements/data-definition/DROP%20TABLE.md)
       + [DROP VIEW](./sql-reference/sql-statements/data-definition/DROP%20VIEW.md)
-      + [DROP FUNCTION](./sql-reference/sql-statements/data-definition/drop-function.md)
       + [HLL](./sql-reference/sql-statements/data-definition/HLL.md)
       + [KILL ANALYZE](./sql-reference/sql-statements/data-definition/KILL%20ANALYZE.md)
       + [RECOVER](./sql-reference/sql-statements/data-definition/RECOVER.md)
@@ -204,9 +257,9 @@
       + [RESTORE](./sql-reference/sql-statements/data-definition/RESTORE.md)
       + [SHOW ANALYZE JOB](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20JOB.md)
       + [SHOW ANALYZE STATUS](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20STATUS.md)
+      + [SHOW FUNCTION](./sql-reference/sql-statements/data-definition/show-functions.md)
       + [SHOW META](./sql-reference/sql-statements/data-definition/SHOW%20META.md)
       + [SHOW RESOURCES](./sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
-      + [SHOW FUNCTION](./sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](./sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
       + [USE](./sql-reference/sql-statements/data-definition/USE.md)
     + DML
@@ -229,6 +282,8 @@
       + [SHOW ALTER MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md)
       + [SHOW BACKUP](./sql-reference/sql-statements/data-manipulation/SHOW%20BACKUP.md)
       + [SHOW CATALOGS](./sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)
+      + [SHOW CREATE CATALOG](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md)
+      + [SHOW CREATE DATABASE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20DATABASE.md)
       + [SHOW CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md)
       + [SHOW CREATE TABLE](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md)
       + [SHOW CREATE VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20VIEW.md)
@@ -252,9 +307,11 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+      + [UPDATE](./sql-reference/sql-statements/data-manipulation/UPDATE.md)
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
+      + [Data type list](./sql-reference/sql-statements/data-types/data-type-list.md)
       + Numeric
         + [TINYINT](./sql-reference/sql-statements/data-types/TINYINT.md)
         + [SMALLINT](./sql-reference/sql-statements/data-types/SMALLINT.md)
@@ -267,29 +324,38 @@
         + [BOOLEAN](./sql-reference/sql-statements/data-types/BOOLEAN.md)
       + String
         + [CHAR](./sql-reference/sql-statements/data-types/CHAR.md)
-        + [VARCHAR](./sql-reference/sql-statements/data-types/VARCHAR.md)
         + [STRING](./sql-reference/sql-statements/data-types/STRING.md)
+        + [VARCHAR](./sql-reference/sql-statements/data-types/VARCHAR.md)
       + Date
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
-      + Others
+      + Semi-structured
         + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+      + Others
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
   + Function Reference
+    + [Function list](./sql-reference/sql-functions/function-list.md)
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + [Lambda expression](./sql-reference/sql-functions/Lambda_expression.md)
     + Aggregate Functions
-      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
       + [any_value](./sql-reference/sql-functions/aggregate-functions/any_value.md)
       + [approx_count_distinct](./sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)
+      + [array_agg](./sql-reference/sql-functions/array-functions/array_agg.md)
+      + [avg](./sql-reference/sql-functions/aggregate-functions/avg.md)
       + [bitmap](./sql-reference/sql-functions/aggregate-functions/bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [count](./sql-reference/sql-functions/aggregate-functions/count.md)
+      + [corr](./sql-reference/sql-functions/aggregate-functions/corr.md)
+      + [covar_pop](./sql-reference/sql-functions/aggregate-functions/covar_pop.md)
+      + [covar_samp](./sql-reference/sql-functions/aggregate-functions/covar_samp.md)
+      + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [grouping](./sql-reference/sql-functions/aggregate-functions/grouping.md)
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
+      + [group_concat](./sql-reference/sql-functions/string-functions/group_concat.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
       + [hll_raw_agg](./sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)
@@ -347,6 +413,7 @@
       + [bit_shift_right_logical](./sql-reference/sql-functions/bit-functions/bit_shift_right_logical.md)
     + Bitmap Functions
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
+      + [bitmap_agg](./sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_andnot](./sql-reference/sql-functions/bitmap-functions/bitmap_andnot.md)
       + [bitmap_contains](./sql-reference/sql-functions/bitmap-functions/bitmap_contains.md)
@@ -371,6 +438,7 @@
       + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
     + Conditional Functions
+      + [case](./sql-reference/sql-functions/condition-functions/case_when.md)
       + [coalesce](./sql-reference/sql-functions/condition-functions/coalesce.md)
       + [if](./sql-reference/sql-functions/condition-functions/if.md)
       + [ifnull](./sql-reference/sql-functions/condition-functions/ifnull.md)
@@ -492,7 +560,8 @@
       + [ceiling](./sql-reference/sql-functions/math-functions/ceiling.md)
       + [conv](/sql-reference/sql-functions/math-functions/conv.md)
       + [cos](./sql-reference/sql-functions/math-functions/cos.md)
-      + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
+      + [cosine_similarity](./sql-reference/sql-functions/math-functions/cos_similarity.md)
+      + [cosine_similarity_norm](./sql-reference/sql-functions/math-functions/cos_similarity_norm.md)
       + [cot](/sql-reference/sql-functions/math-functions/cot.md)
       + [degrees](/sql-reference/sql-functions/math-functions/degrees.md)
       + [divide](./sql-reference/sql-functions/math-functions/divide.md)
@@ -518,11 +587,9 @@
       + [round](./sql-reference/sql-functions/math-functions/round.md)
       + [sign](./sql-reference/sql-functions/math-functions/sign.md)
       + [sin](./sql-reference/sql-functions/math-functions/sin.md)
-      + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
       + [sqrt](./sql-reference/sql-functions/math-functions/sqrt.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
       + [tan](./sql-reference/sql-functions/math-functions/tan.md)
-      + [tanh](./sql-reference/sql-functions/math-functions/tanh.md)
       + [truncate](./sql-reference/sql-functions/math-functions/truncate.md)
     + String Functions
       + [append_trailing_char_if_absent](./sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)
@@ -566,17 +633,19 @@
     + Pattern Matching Functions
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
-      + [regexp_extract](./sql-reference/sql-functions/string-functions/regexp_extract.md)
-      + [regexp_replace](./sql-reference/sql-functions/string-functions/regexp_replace.md)
+      + [regexp_extract](./sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
+      + [regexp_replace](./sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
     + Percentile Functions
       + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
     + Scalar Functions
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
+      + [hll_cardinality](./sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
+      + [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [database](./sql-reference/sql-functions/utility-functions/database.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
@@ -590,6 +659,7 @@
   + [User-defined variables](./reference/user_defined_variables.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
+  + [AWS IAM policies](./reference/aws_iam_policies.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -599,11 +669,11 @@
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
+      + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
-      + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
-  + [Query Dump](./faq/Dump_query.md)
+  + [query_dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
@@ -617,6 +687,10 @@
     + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
++ Ecosystem Release Notes
+  + [Kafka connector](./ecosystem_release/kafka_connector.md)
+  + [Spark connector](./ecosystem_release/spark_connector.md)
+  + [Flink connector](./ecosystem_release/flink_connector.md)
 + Release Notes
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)

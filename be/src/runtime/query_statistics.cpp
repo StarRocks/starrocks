@@ -30,7 +30,33 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_returned_rows(returned_rows);
     statistics->set_cpu_cost_ns(cpu_ns);
     statistics->set_mem_cost_bytes(mem_cost_bytes);
-    *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
+    {
+        std::lock_guard l(_lock);
+        for (const auto& [table_id, stats_item] : _stats_items) {
+            auto new_stats_item = statistics->add_stats_items();
+            new_stats_item->set_table_id(table_id);
+            new_stats_item->set_scan_rows(stats_item->scan_rows);
+            new_stats_item->set_scan_bytes(stats_item->scan_bytes);
+        }
+    }
+}
+
+void QueryStatistics::to_params(TAuditStatistics* params) {
+    DCHECK(params != nullptr);
+    params->__set_scan_rows(scan_rows);
+    params->__set_scan_bytes(scan_bytes);
+    params->__set_returned_rows(returned_rows);
+    params->__set_cpu_cost_ns(cpu_ns);
+    params->__set_mem_cost_bytes(mem_cost_bytes);
+    {
+        std::lock_guard l(_lock);
+        for (const auto& [table_id, stats_item] : _stats_items) {
+            auto new_stats_item = params->stats_items.emplace_back();
+            new_stats_item.__set_table_id(table_id);
+            new_stats_item.__set_scan_rows(stats_item->scan_rows);
+            new_stats_item.__set_scan_bytes(stats_item->scan_bytes);
+        }
+    }
 }
 
 void QueryStatistics::clear() {
@@ -41,8 +67,23 @@ void QueryStatistics::clear() {
     _stats_items.clear();
 }
 
+void QueryStatistics::update_stats_item(int64_t table_id, int64_t scan_rows, int64_t scan_bytes) {
+    if (table_id > 0 && (scan_rows > 0 || scan_bytes > 0)) {
+        auto iter = _stats_items.find(table_id);
+        if (iter == _stats_items.end()) {
+            _stats_items.insert({table_id, std::make_shared<ScanStats>(scan_rows, scan_bytes)});
+        } else {
+            iter->second->scan_rows += scan_rows;
+            iter->second->scan_bytes += scan_bytes;
+        }
+    }
+}
+
 void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
-    this->_stats_items.emplace_back(stats_item);
+    {
+        std::lock_guard l(_lock);
+        update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
+    }
     this->scan_rows += stats_item.scan_rows();
     this->scan_bytes += stats_item.scan_bytes();
 }
@@ -54,30 +95,57 @@ void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
 
 void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
     // Make the exchange action atomic
-    int64_t rows = other.scan_rows.load();
-    scan_rows += rows;
-    other.scan_rows -= rows;
+    int64_t scan_rows = other.scan_rows.load();
+    if (other.scan_rows.compare_exchange_strong(scan_rows, 0)) {
+        this->scan_rows += scan_rows;
+    }
 
-    int64_t bytes = other.scan_bytes.load();
-    scan_bytes += bytes;
-    other.scan_bytes -= bytes;
+    int64_t scan_bytes = other.scan_bytes.load();
+    if (other.scan_bytes.compare_exchange_strong(scan_bytes, 0)) {
+        this->scan_bytes += scan_bytes;
+    }
 
     int64_t cpu_ns = other.cpu_ns.load();
-    cpu_ns += cpu_ns;
-    other.cpu_ns -= cpu_ns;
+    if (other.cpu_ns.compare_exchange_strong(cpu_ns, 0)) {
+        this->cpu_ns += cpu_ns;
+    }
 
-    int64_t mem_bytes = other.mem_cost_bytes.load();
-    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, mem_bytes);
+    int64_t mem_cost_bytes = other.mem_cost_bytes.load();
+    this->mem_cost_bytes = std::max<int64_t>(this->mem_cost_bytes, mem_cost_bytes);
 
-    _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
+    {
+        std::unordered_map<int64_t, std::shared_ptr<ScanStats>> other_stats_item;
+        {
+            std::lock_guard l(other._lock);
+            other_stats_item.swap(other._stats_items);
+        }
+        std::lock_guard l(_lock);
+        for (const auto& [table_id, stats_item] : other_stats_item) {
+            update_stats_item(table_id, stats_item->scan_rows, stats_item->scan_bytes);
+        }
+    }
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
-    scan_rows += statistics.scan_rows();
-    scan_bytes += statistics.scan_bytes();
-    cpu_ns += statistics.cpu_cost_ns();
-    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
-    _stats_items.insert(_stats_items.end(), statistics.stats_items().begin(), statistics.stats_items().end());
+    if (statistics.has_scan_rows()) {
+        scan_rows += statistics.scan_rows();
+    }
+    if (statistics.has_scan_bytes()) {
+        scan_bytes += statistics.scan_bytes();
+    }
+    if (statistics.has_cpu_cost_ns()) {
+        cpu_ns += statistics.cpu_cost_ns();
+    }
+    if (statistics.has_mem_cost_bytes()) {
+        mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    }
+    {
+        std::lock_guard l(_lock);
+        for (int i = 0; i < statistics.stats_items_size(); ++i) {
+            const auto& stats_item = statistics.stats_items(i);
+            update_stats_item(stats_item.table_id(), stats_item.scan_rows(), stats_item.scan_bytes());
+        }
+    }
 }
 
 void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender_id) {

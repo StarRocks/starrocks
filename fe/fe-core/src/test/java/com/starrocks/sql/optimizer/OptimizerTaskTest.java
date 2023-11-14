@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.JoinOperator;
@@ -51,7 +52,6 @@ import mockit.Mocked;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.spark_project.guava.collect.Maps;
 
 import java.util.ArrayList;
 import java.util.List;

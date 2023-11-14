@@ -48,6 +48,7 @@
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
+#include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/task/engine_alter_tablet_task.h"
@@ -470,14 +471,19 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
     int64_t batch_publish_latency = 0;
 
     while (true) {
+        uint32_t wait_time = config::wait_apply_time;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
+            worker_pool_this->_sleeping_count++;
             worker_pool_this->_worker_thread_condition_variable->wait(l, [&]() {
                 return !priority_tasks.empty() || !worker_pool_this->_tasks.empty() || worker_pool_this->_stopped;
             });
+            worker_pool_this->_sleeping_count--;
             if (worker_pool_this->_stopped) {
                 break;
             }
+            // All thread are running, set wait_timeout = 0 to avoid publish block
+            wait_time = wait_time * worker_pool_this->_sleeping_count / worker_pool_this->_worker_count;
 
             while (!worker_pool_this->_tasks.empty()) {
                 // collect some publish version tasks as a group.
@@ -489,32 +495,53 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         const auto& publish_version_task = *priority_tasks.top();
         LOG(INFO) << "get publish version task txn_id: " << publish_version_task.task_req.transaction_id
                   << " priority queue size: " << priority_tasks.size();
+        bool enable_sync_publish = publish_version_task.task_req.enable_sync_publish;
+        if (enable_sync_publish) {
+            wait_time = 0;
+        }
         StarRocksMetrics::instance()->publish_task_request_total.increment(1);
         auto& finish_task_request = finish_task_requests.emplace_back();
         finish_task_request.__set_backend(BackendOptions::get_localBackend());
         finish_task_request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         int64_t start_ts = MonotonicMillis();
-        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs);
+        run_publish_version_task(token.get(), publish_version_task, finish_task_request, affected_dirs, wait_time);
         batch_publish_latency += MonotonicMillis() - start_ts;
         priority_tasks.pop();
 
-        if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
-            batch_publish_latency > config::max_batch_publish_latency_ms) {
-            int64_t t0 = MonotonicMillis();
-            StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
-            int64_t t1 = MonotonicMillis();
-            // notify FE when all tasks of group have been finished.
-            for (auto& finish_task_request : finish_task_requests) {
-                finish_task(finish_task_request);
-                remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+        if (!enable_sync_publish) {
+            if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
+                batch_publish_latency > config::max_batch_publish_latency_ms) {
+                int64_t t0 = MonotonicMillis();
+                StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
+                int64_t t1 = MonotonicMillis();
+                // notify FE when all tasks of group have been finished.
+                for (auto& finish_task_request : finish_task_requests) {
+                    finish_task(finish_task_request);
+                    remove_task_info(finish_task_request.task_type, finish_task_request.signature);
+                }
+                int64_t t2 = MonotonicMillis();
+                LOG(INFO) << "batch flush " << finish_task_requests.size()
+                          << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
+                          << "ms finish_task_rpc:" << t2 - t1 << "ms";
+                finish_task_requests.clear();
+                affected_dirs.clear();
+                batch_publish_latency = 0;
             }
-            int64_t t2 = MonotonicMillis();
-            LOG(INFO) << "batch flush " << finish_task_requests.size()
-                      << " txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0
-                      << "ms finish_task_rpc:" << t2 - t1 << "ms";
-            finish_task_requests.clear();
-            affected_dirs.clear();
-            batch_publish_latency = 0;
+        } else {
+            if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
+                batch_publish_latency > config::max_batch_publish_latency_ms) {
+                int64_t finish_task_size = finish_task_requests.size();
+                int64_t t0 = MonotonicMillis();
+                StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
+                int64_t t1 = MonotonicMillis();
+                StorageEngine::instance()->publish_version_manager()->wait_publish_task_apply_finish(
+                        std::move(finish_task_requests));
+                StorageEngine::instance()->wake_finish_publish_vesion_thread();
+                affected_dirs.clear();
+                batch_publish_latency = 0;
+                LOG(INFO) << "batch submit " << finish_task_size << " finish publish version task "
+                          << "txn publish task(s). #dir:" << affected_dirs.size() << " flush:" << t1 - t0 << "ms";
+            }
         }
     }
     return nullptr;

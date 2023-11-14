@@ -26,7 +26,7 @@ protected:
 
     bool is_constant() const override;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
 
 private:
     const FunctionDescriptor* _fn_desc;

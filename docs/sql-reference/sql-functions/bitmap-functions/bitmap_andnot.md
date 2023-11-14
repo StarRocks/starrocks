@@ -2,7 +2,7 @@
 
 ## Description
 
-Calculates the set after lhs minus rhs, and return the new bitmap.
+Returns bitmap values that exist in `lhs` but do not exist in `rhs`, and returns the new bitmap.
 
 ## Syntax
 

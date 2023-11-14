@@ -146,9 +146,11 @@ public:
 
     virtual RowsetId rowset_id() { return _context.rowset_id; }
 
-    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
         return _global_dict_columns_valid_info;
     }
+
+    const vectorized::GlobalDictByNameMaps* rowset_global_dicts() const { return _writer_options.global_dicts; }
 
 protected:
     RowsetWriterContext _context;
@@ -160,6 +162,7 @@ protected:
 
     int _num_segment{0};
     int _num_delfile{0};
+    vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
@@ -212,7 +215,9 @@ private:
 
     Status _flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr);
 
-    std::string _dump_mixed_segment_delfile_not_supported();
+    std::string _flush_state_to_string();
+
+    std::string _error_msg();
 
     std::unique_ptr<SegmentWriter> _segment_writer;
     std::unique_ptr<VerticalRowsetWriter> _vertical_rowset_writer;

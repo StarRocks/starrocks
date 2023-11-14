@@ -17,7 +17,7 @@ public:
     ArrayExpr(const ArrayExpr&) = default;
     ArrayExpr(ArrayExpr&&) = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
         const TypeDescriptor& element_type = _type.children[0];
         const size_t num_elements = _children.size();
 
@@ -30,7 +30,7 @@ public:
         std::vector<ColumnPtr> element_columns(num_elements);
         std::vector<Column*> element_raw_ptrs(num_elements);
         for (size_t i = 0; i < num_elements; i++) {
-            auto col = _children[i]->evaluate(context, chunk);
+            ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
             num_rows = std::max(num_rows, col->size());
             element_columns[i] = std::move(col);
         }

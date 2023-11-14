@@ -10,10 +10,10 @@
 #####################################################
 
 # HADOOP
-HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_NAME="hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.0-aarch64"
-HADOOP_MD5SUM="c84cfa985175341d3df0b2b57521eec9"
+HADOOP_DOWNLOAD="https://archive.apache.org/dist/hadoop/common/hadoop-3.3.6/hadoop-3.3.6-aarch64.tar.gz"
+HADOOP_NAME="hadoop-3.3.6-aarch64.tar.gz"
+HADOOP_SOURCE="hadoop-3.3.6"
+HADOOP_MD5SUM="369f899194a920e0d1c3c3bc1718b3b5"
 
 # OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
 JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
@@ -26,3 +26,9 @@ HYPERSCAN_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tag
 HYPERSCAN_NAME="hyperscan-5.3.0.aarch64.tar.gz"
 HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
 HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
+
+# async-profiler
+ASYNC_PROFILER_DOWNLOAD="https://github.com/async-profiler/async-profiler/releases/download/v2.9/async-profiler-2.9-linux-arm64.tar.gz"
+ASYNC_PROFILER_NAME="async-profiler-2.9-linux-arm64.tar.gz"
+ASYNC_PROFILER_SOURCE="async-profiler-2.9-linux-arm64"
+ASYNC_PROFILER_MD5SUM="d31a70d2c176146a46dffc15948040ed"

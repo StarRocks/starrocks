@@ -53,9 +53,9 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedBinaryPredicate(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
 };
@@ -72,9 +72,9 @@ public:
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
     // if v1 not null and v2 not null = v1 OP v2
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         ColumnViewer<Type> v1(l);
         ColumnViewer<Type> v2(r);

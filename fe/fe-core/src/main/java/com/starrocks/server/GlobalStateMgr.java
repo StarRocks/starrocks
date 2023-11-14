@@ -124,7 +124,6 @@ import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
-import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -164,6 +163,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -284,6 +284,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -293,7 +294,6 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -338,7 +338,6 @@ public class GlobalStateMgr {
     private Daemon replayer;
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
-    private StarRocksRepository starRocksRepository;
     private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
@@ -504,6 +503,10 @@ public class GlobalStateMgr {
         return this.tabletInvertedIndex;
     }
 
+    public NodeMgr getNodeMgr() {
+        return this.nodeMgr;
+    }
+
     // only for test
     public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
         this.colocateTableIndex = colocateTableIndex;
@@ -592,7 +595,6 @@ public class GlobalStateMgr {
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
         this.esRepository = new EsRepository();
-        this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
@@ -606,13 +608,14 @@ public class GlobalStateMgr {
         this.tabletChecker = new TabletChecker(this, nodeMgr.getClusterInfo(), tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
-                new LeaderTaskExecutor("pending_load_task_scheduler", Config.async_load_task_pool_size,
+                new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
                         Config.desired_max_waiting_jobs, !isCheckpointCatalog);
         // One load job will be split into multiple loading tasks, the queue size is not
         // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
-                Config.async_load_task_pool_size,
+                Config.max_broker_load_job_concurrency,
                 Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
+
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
@@ -660,6 +663,16 @@ public class GlobalStateMgr {
                 gsm.transferToNonLeader(newType);
             }
         };
+
+        getConfigRefreshDaemon().registerListener(() -> {
+            try {
+                if (Config.max_broker_load_job_concurrency != loadingLoadTaskScheduler.getCorePoolSize()) {
+                    loadingLoadTaskScheduler.setPoolSize(Config.max_broker_load_job_concurrency);
+                }
+            } catch (Exception e) {
+                LOG.warn("check config failed", e);
+            }
+        });
     }
 
     public static void destroyCheckpoint() {
@@ -1137,6 +1150,11 @@ public class GlobalStateMgr {
         }
     }
 
+    public void setFrontendNodeType(FrontendNodeType newType) {
+        // just for test, don't call it directly
+        feType = newType;
+    }
+
     // start all daemon threads only running on Master
     private void startLeaderOnlyDaemonThreads() {
         if (Config.integrate_starmgr) {
@@ -1217,7 +1235,6 @@ public class GlobalStateMgr {
         labelCleaner.start();
         // ES state store
         esRepository.start();
-        starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
@@ -1291,7 +1308,6 @@ public class GlobalStateMgr {
             localMetastore.recreateTabletInvertIndex();
             // rebuild es state state
             esRepository.loadTableFromCatalog();
-            starRocksRepository.loadTableFromCatalog();
 
             checksum = load.loadLoadJob(dis, checksum);
             checksum = loadAlterJob(dis, checksum);
@@ -1367,36 +1383,47 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-                    Table table = baseTableInfo.getTable();
-                    if (table == null) {
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                        mv.setActive(false);
-                        continue;
-                    }
-                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                        MaterializedView baseMv = (MaterializedView) table;
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                        "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
-                                baseMv.getName(), baseMv.getId());
-                        mv.setActive(false);
-                        continue;
-                    }
-                    MvId mvId = new MvId(db.getId(), mv.getId());
-                    table.addRelatedMaterializedView(mvId);
-                    if (!table.isLocalTable()) {
-                        connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
-                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                        Sets.newHashSet(mvId)).build());
-                    }
-                }
+                List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+                updateBaseTableRelatedMv(db.getId(), mv, baseTableInfos);
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
+    }
+
+    public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table;
+            try {
+                table = baseTableInfo.getTable();
+            } catch (Exception e) {
+                LOG.warn("there is an exception during get table from mv base table. exception:", e);
+                continue;
+            }
+            if (table == null) {
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                        "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
+                mv.setActive(false);
+                continue;
+            }
+            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                MaterializedView baseMv = (MaterializedView) table;
+                LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
+                        baseMv.getName(), baseMv.getId());
+                mv.setActive(false);
+                continue;
+            }
+            MvId mvId = new MvId(dbId, mv.getId());
+            table.addRelatedMaterializedView(mvId);
+            if (!table.isMaterializedView()) {
+                connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build());
+            }
+        }
     }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
@@ -1744,10 +1771,17 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker",
+                Config.transaction_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
+
+                try {
+                    loadManager.cancelResidualJob();
+                } catch (Throwable t) {
+                    LOG.warn("load manager cancel residual job failed", t);
+                }
             }
         };
     }
@@ -2118,17 +2152,16 @@ public class GlobalStateMgr {
             List<String> colDef = Lists.newArrayList();
             for (Column column : table.getBaseSchema()) {
                 StringBuilder colSb = new StringBuilder();
-                colSb.append(column.getName());
+                colSb.append("`" + column.getName() + "`");
                 if (!Strings.isNullOrEmpty(column.getComment())) {
-                    colSb.append(" COMMENT ").append("\"").append(column.getComment()).append("\"");
+                    colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
                 }
                 colDef.add(colSb.toString());
             }
             sb.append(Joiner.on(", ").join(colDef));
             sb.append(")");
-            if (!Strings.isNullOrEmpty(view.getComment())) {
-                sb.append(" COMMENT \"").append(view.getComment()).append("\"");
-            }
+            addTableComment(sb, view);
+
             sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
@@ -2194,9 +2227,7 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // partition
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -2329,36 +2360,8 @@ public class GlobalStateMgr {
                     && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                         .append("\" = \"");
-                List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
-                List<String> constraintStrs = Lists.newArrayList();
-                for (ForeignKeyConstraint constraint : constraints) {
-                    BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
-                    StringBuilder constraintSb = new StringBuilder();
-                    constraintSb.append("(");
-                    String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
-                            .stream().map(pair -> pair.first).collect(Collectors.toList()));
-                    constraintSb.append(baseColumns);
-                    constraintSb.append(")");
-                    constraintSb.append(" REFERENCES ");
-                    if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
-                        Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
-                        constraintSb.append(parentDb.getFullName());
-                        constraintSb.append(".");
-                        Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
-                        constraintSb.append(parentTable.getName());
-                    } else {
-                        constraintSb.append(parentTableInfo);
-                    }
-
-                    constraintSb.append("(");
-                    String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
-                            .stream().map(pair -> pair.second).collect(Collectors.toList()));
-                    constraintSb.append(parentColumns);
-                    constraintSb.append(")");
-                    constraintStrs.add(constraintSb.toString());
-                }
-
-                sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
+                sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
+                        .append("\"");
             }
 
             // compression type
@@ -2399,9 +2402,8 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
@@ -2413,9 +2415,8 @@ public class GlobalStateMgr {
             sb.append(")");
         } else if (table.getType() == TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
+
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
@@ -2431,9 +2432,7 @@ public class GlobalStateMgr {
             }
         } else if (table.getType() == TableType.ELASTICSEARCH) {
             EsTable esTable = (EsTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // partition
             PartitionInfo partitionInfo = esTable.getPartitionInfo();
@@ -2468,9 +2467,7 @@ public class GlobalStateMgr {
             sb.append(")");
         } else if (table.getType() == TableType.HIVE) {
             HiveTable hiveTable = (HiveTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2486,17 +2483,20 @@ public class GlobalStateMgr {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
             CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
+<<<<<<< HEAD
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
+=======
+            addTableComment(sb, table);
+
+>>>>>>> branch-2.5
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2506,9 +2506,7 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.ICEBERG) {
             IcebergTable icebergTable = (IcebergTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2522,9 +2520,7 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.JDBC) {
             JDBCTable jdbcTable = (JDBCTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
+            addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2585,6 +2581,12 @@ public class GlobalStateMgr {
                 sb.append(");");
                 createRollupStmt.add(sb.toString());
             }
+        }
+    }
+
+    private static void addTableComment(StringBuilder sb, Table table) {
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
         }
     }
 
@@ -2653,8 +2655,20 @@ public class GlobalStateMgr {
         return nodeMgr.getToken();
     }
 
+    public Optional<Database> mayGetDb(String name) {
+        return Optional.ofNullable(localMetastore.getDb(name));
+    }
+
     public Database getDb(String name) {
         return localMetastore.getDb(name);
+    }
+
+    public Optional<Table> mayGetTable(long dbId, long tableId) {
+        return mayGetDb(dbId).flatMap(db -> db.tryGetTable(tableId));
+    }
+
+    public Optional<Database> mayGetDb(long dbId) {
+        return Optional.ofNullable(localMetastore.getDb(dbId));
     }
 
     public Database getDb(long dbId) {
@@ -2848,14 +2862,9 @@ public class GlobalStateMgr {
         return this.esRepository;
     }
 
-    public StarRocksRepository getStarRocksRepository() {
-        return this.starRocksRepository;
-    }
-
     public IcebergRepository getIcebergRepository() {
         return this.icebergRepository;
     }
-
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
@@ -3094,6 +3103,11 @@ public class GlobalStateMgr {
         localMetastore.modifyTableReplicationNum(db, table, properties);
     }
 
+    public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        localMetastore.alterTableProperties(db, table, properties);
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableDefaultReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
@@ -3120,6 +3134,12 @@ public class GlobalStateMgr {
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         localMetastore.replayModifyTableProperty(opCode, info);
     }
+
+
+    public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
+        this.alter.replayAlterMaterializedViewStatus(log);
+    }
+
 
     /*
      * used for handling AlterClusterStmt
@@ -3558,6 +3578,7 @@ public class GlobalStateMgr {
         } catch (Throwable t) {
             LOG.warn("load manager remove old load jobs failed", t);
         }
+
         try {
             exportMgr.removeOldExportJobs();
         } catch (Throwable t) {

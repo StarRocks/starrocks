@@ -29,10 +29,26 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_hdfs_scan_node.tuple_id);
+}
+
 // ================================
 
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
+
+Status HiveDataSource::_check_all_slots_nullable() {
+    for (const auto* slot : _tuple_desc->slots()) {
+        if (!slot->is_nullable()) {
+            return Status::RuntimeError(fmt::format(
+                    "All columns must be nullable for external table. Column '{}' is not nullable, You can rebuild the"
+                    "external table and We strongly recommend that you use catalog to access external data.",
+                    slot->col_name()));
+        }
+    }
+    return Status::OK();
+}
 
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
@@ -54,6 +70,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (_hive_table == nullptr) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
     }
+    RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_block_cache = config::block_cache_enable;
     if (state->query_options().__isset.use_scan_block_cache) {
@@ -76,6 +93,14 @@ Status HiveDataSource::open(RuntimeState* state) {
     return Status::OK();
 }
 
+void HiveDataSource::_update_has_any_predicate() {
+    auto f = [&]() {
+        if (_runtime_filters != nullptr && _runtime_filters->size() > 0) return true;
+        return false;
+    };
+    _has_any_predicate = f();
+}
+
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
@@ -91,6 +116,7 @@ Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_min_max_conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_partition_conjunct_ctxs, state));
+    _update_has_any_predicate();
 
     RETURN_IF_ERROR(_decompose_conjunct_ctxs(state));
     return Status::OK();
@@ -229,6 +255,21 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
+    {
+        static const char* prefix = "SharedBuffered";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.shared_buffered_shared_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_shared_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
+        _profile.shared_buffered_direct_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_direct_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
+    }
+
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
         ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
@@ -293,6 +334,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
+    scanner_params.modification_time = _scan_range.modification_time;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -432,6 +474,14 @@ int64_t HiveDataSource::num_bytes_read() const {
 int64_t HiveDataSource::cpu_time_spent() const {
     if (_scanner == nullptr) return 0;
     return _scanner->cpu_time_spent();
+}
+int64_t HiveDataSource::io_time_spent() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->io_time_spent();
+}
+int64_t HiveDataSource::estimated_mem_usage() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->estimated_mem_usage();
 }
 
 } // namespace starrocks::connector

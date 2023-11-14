@@ -31,7 +31,7 @@ import java.util.List;
 
 public class DeletePlanner {
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
-        if (!deleteStatement.supportNewPlanner()) {
+        if (deleteStatement.shouldHandledByDeleteHandler()) {
             // executor will use DeleteHandler to handle delete statement
             // so just return empty plan here
             return null;
@@ -39,7 +39,7 @@ public class DeletePlanner {
         QueryRelation query = deleteStatement.getQueryStatement().getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transform(query);
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();

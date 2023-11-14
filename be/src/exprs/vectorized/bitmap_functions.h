@@ -14,7 +14,7 @@ public:
      * @paramType columns: [TYPE_VARCHAR]
      * @return TYPE_OBJECT
      */
-    DEFINE_VECTORIZED_FN(to_bitmap);
+    DEFINE_VECTORIZED_FN_TEMPLATE(to_bitmap);
 
     /**
      * @param: 

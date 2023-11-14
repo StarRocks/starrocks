@@ -16,7 +16,7 @@ StarRocks supports both storage and efficient querying and analytics of JSON dat
 
 When you create a table, you can use the `JSON` keyword to specify the `j` column as a JSON column.
 
-```Plain%20Text
+```sql
 CREATE TABLE `tj` (
     `id` INT(11) NOT NULL COMMENT "",
     `j`  JSON NULL COMMENT ""
@@ -25,8 +25,12 @@ DUPLICATE KEY(`id`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
+<<<<<<< HEAD
     "replication_num" = "1",
     "in_memory" = "false",
+=======
+    "replication_num" = "3",
+>>>>>>> branch-2.5
     "storage_format" = "DEFAULT"
 );
 ```
@@ -37,7 +41,7 @@ StarRocks provides the following three methods for you to load data and store th
 
 - Method 1: Use `INSERT INTO` to write data to a JSON column of a table. In the following example, a table named `tj` is used, and the `j` column of the table is a JSON column.
 
-```Plain%20Text
+```plaintext
 INSERT INTO tj (id, j) VALUES (1, parse_json('{"a": 1, "b": true}'));
 INSERT INTO tj (id, j) VALUES (2, parse_json('{"a": 2, "b": false}'));
 INSERT INTO tj (id, j) VALUES (3, parse_json('{"a": 3, "b": true}'));
@@ -47,12 +51,21 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 > The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON file. For more information, see [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md).
 
 - Method 2: Use Stream Load to load a JSON file and store the file as JSON data. For more information, see [Load JSON data](../../../loading/StreamLoad.md#load-json-data).
+<<<<<<< HEAD
 
   - If you want to load a root JSON object, set `jsonpaths` to `$`.
   - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
 
 - Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
 
+=======
+
+  - If you want to load a root JSON object, set `jsonpaths` to `$`.
+  - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
+
+- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
+
+>>>>>>> branch-2.5
 StarRocks supports the following data type conversions at Parquet file loading.
 
 | Data type of Parquet file                                    | JSON data type |
@@ -72,7 +85,7 @@ StarRocks supports the querying and processing of JSON data and the use of JSON 
 
 In the following examples, a table named `tj` is used, and the `j` column of the table is specified as the JSON column.
 
-```Plain%20Text
+```plaintext
 mysql> select * from tj;
 +------+----------------------+
 | id   |          j           |
@@ -86,7 +99,7 @@ mysql> select * from tj;
 
 Example 1: Filter the data of the JSON column to retrieve the data that meets the `id=1` filter condition.
 
-```Plain%20Text
+```plaintext
 mysql> select * from tj where id = 1;
 +------+---------------------+
 | id   |           j         |
@@ -95,6 +108,7 @@ mysql> select * from tj where id = 1;
 +------+---------------------+
 ```
 
+<<<<<<< HEAD
 Example 2: Filter the data of the JSON column to retrieve the data that meets the specified filter condition.
 
 > `j->'a'` returns JSON data. You can interpret SQL data as JSON data by using the PARSE_JSON function and then compare the data. Alternatively, you can convert JSON data to INT data by using the CAST function and then compare the data.
@@ -107,6 +121,24 @@ mysql> select * from tj where cast(j->'a' as INT) = 1;
 +------+---------------------+
 | id   | j                   |
 +------+---------------------+
+=======
+Example 2: Filter data of the JSON column `j` to retrieve the data that meets the specified filter condition.
+
+> `j->'a'` returns JSON data. You can use the first example to compare data (Note that implicit conversion is performed in this example). Alternatively, you can convert JSON data to INT by using the CAST function and then compare the data.
+
+```plaintext
+mysql> select * from tj where j->'a' = 1;
++------+---------------------+
+| id   | j                   |
++------+---------------------+
+|    1 | {"a": 1, "b": true} |
+
+
+mysql> select * from tj where cast(j->'a' as INT) = 1;
++------+---------------------+
+| id   | j                   |
++------+---------------------+
+>>>>>>> branch-2.5
 |    1 | {"a": 1, "b": true} |
 +------+---------------------+
 1 row in set (0.05 sec)
@@ -114,7 +146,7 @@ mysql> select * from tj where cast(j->'a' as INT) = 1;
 
 Example 3: Use the CAST function to convert the values in the JSON column of the table to BOOLEAN values. Then, filter the data of the JSON column to retrieve the data that meets the specified filter condition.
 
-```Plain%20Text
+```plaintext
 mysql> select * from tj where cast(j->'b' as boolean);
 +------+---------------------+
 |  id  |          j          |
@@ -126,7 +158,7 @@ mysql> select * from tj where cast(j->'b' as boolean);
 
 Example 4: Use the CAST function to convert the values in the JSON column of the table to BOOLEAN values. Then, filter the data of the JSON column to retrieve the data that meets the specified filter condition, and perform arithmetic operations on the data.
 
-```Plain%20Text
+```plaintext
 mysql> select cast(j->'a' as int) from tj where cast(j->'b' as boolean);
 +-----------------------+
 |  CAST(j->'a' AS INT)  |
@@ -145,7 +177,7 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 
 Example 5: Sort the data of the table by using the JSON column as a sort key.
 
-```Plain%20Text
+```plaintext
 mysql> select * from tj
     ->        where j->'a' <= parse_json('3')
     ->        order by cast(j->'a' as int);
@@ -166,7 +198,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 ## Limits and usage notes
 
-- The maximum length per JSON value is the same as the maximum length per STRING value.
+- The maximum length of a JSON value is 16 MB.
 
 - The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 

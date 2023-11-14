@@ -28,7 +28,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.planner.MaterializedViewTPCHTest;
+=======
+>>>>>>> branch-2.5
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -93,6 +96,15 @@ public class PlanTestNoneDBBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void assertContains(String text, List<String> patterns) {
+        for (String s : patterns) {
+            Assert.assertTrue(text, text.contains(s));
+        }
+    }
+
+>>>>>>> branch-2.5
     public void assertCContains(String text, String... pattern) {
         try {
             for (String s : pattern) {
@@ -291,6 +303,10 @@ public class PlanTestNoneDBBase {
                                 Assert.assertEquals(exceptString.toString(), ex.getMessage());
                                 continue;
                             }
+<<<<<<< HEAD
+=======
+                            ex.printStackTrace();
+>>>>>>> branch-2.5
                             Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
                         }
 
@@ -460,10 +476,17 @@ public class PlanTestNoneDBBase {
 
     private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
         expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
+<<<<<<< HEAD
                 .map(str -> str.replaceAll("\\d+", ""))
                 .collect(Collectors.joining("\n"));
         actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
                 .map(str -> str.replaceAll("\\d+", ""))
+=======
+                .map(str -> str.replaceAll("\\d+", "").trim())
+                .collect(Collectors.joining("\n"));
+        actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", "").trim())
+>>>>>>> branch-2.5
                 .collect(Collectors.joining("\n"));
         Assert.assertEquals(expect, actual);
     }
@@ -504,12 +527,20 @@ public class PlanTestNoneDBBase {
         }
     }
 
+<<<<<<< HEAD
     protected void assertExceptionMessage(String sql, String message) {
+=======
+    protected void assertExceptionMsgContains(String sql, String message) {
+>>>>>>> branch-2.5
         try {
             getFragmentPlan(sql);
             throw new Error();
         } catch (Exception e) {
+<<<<<<< HEAD
             Assert.assertEquals(message, e.getMessage());
+=======
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains(message));
+>>>>>>> branch-2.5
         }
     }
 
@@ -571,7 +602,11 @@ public class PlanTestNoneDBBase {
     }
 
     public static String getFileContent(String fileName) throws Exception {
+<<<<<<< HEAD
         ClassLoader loader = MaterializedViewTPCHTest.class.getClassLoader();
+=======
+        ClassLoader loader = PlanTestNoneDBBase.class.getClassLoader();
+>>>>>>> branch-2.5
         System.out.println("file name:" + fileName);
         String content = "";
         try {

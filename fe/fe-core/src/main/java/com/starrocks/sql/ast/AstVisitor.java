@@ -207,7 +207,13 @@ public abstract class AstVisitor<R, C> {
         return visitBaseViewStatement(statement, context);
     }
 
+    // ---------------------------------------- Task Statement ---------------------------------------------------------
+
     public R visitSubmitTaskStatement(SubmitTaskStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropTaskStmt(DropTaskStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -694,6 +700,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateImageClause(CreateImageClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, C context) {
         return visitNode(clause, context);
     }
 

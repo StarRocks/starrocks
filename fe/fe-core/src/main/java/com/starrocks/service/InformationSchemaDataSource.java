@@ -38,6 +38,7 @@ import com.starrocks.thrift.TTableInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -46,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-
 public class InformationSchemaDataSource {
     
     private static final Logger LOG = LogManager.getLogger(InformationSchemaDataSource.class);
@@ -54,11 +54,12 @@ public class InformationSchemaDataSource {
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
     private static final long DEFAULT_EMPTY_NUM = -1L;
-    private static final String UTF8_GENERAL_CI = "utf8_general_ci";
+    public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
-    private static List<String> getAuthorizedDbs(TAuthInfo authInfo) throws TException {
+    @NotNull
+    private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
 
-        List<String> dbs = Lists.newArrayList();
+        List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         if (authInfo.isSetPattern()) {
             try {
@@ -73,7 +74,7 @@ public class InformationSchemaDataSource {
         List<String> dbNames = globalStateMgr.getDbNames();
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser = null;
+        UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
         } else {
@@ -84,13 +85,24 @@ public class InformationSchemaDataSource {
                 continue;
             }
 
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
-            if (matcher != null && !matcher.match(db)) {
+            final String db1 = ClusterNamespace.getNameFromFullName(fullName);
+            if (matcher != null && !matcher.match(db1)) {
                 continue;
             }
-            dbs.add(fullName);
+            authorizedDbs.add(fullName);
         }
-        return dbs;
+        AuthDbRequestResult result = new AuthDbRequestResult(authorizedDbs, currentUser);
+        return result;
+    }
+
+    private static class AuthDbRequestResult {
+        public final List<String> authorizedDbs;
+        public final UserIdentity currentUser;
+
+        public AuthDbRequestResult(List<String> authorizedDbs, UserIdentity currentUser) {
+            this.authorizedDbs = authorizedDbs;
+            this.currentUser = currentUser;
+        }
     }
 
     // tables_config
@@ -99,14 +111,21 @@ public class InformationSchemaDataSource {
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
+                                table.getName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
+
                         TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
@@ -122,15 +141,16 @@ public class InformationSchemaDataSource {
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         tList.add(tableConfigInfo);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
                 }                
             }            
-        });
+        }
         resp.tables_config_infos = tList;
         return resp;
     }
+
 
     private static Map<String, String> genProps(Table table) {
 
@@ -253,6 +273,7 @@ public class InformationSchemaDataSource {
             tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
         }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
+        tableConfigInfo.setTable_id(table.getId());
         return tableConfigInfo;
     }
 
@@ -261,20 +282,28 @@ public class InformationSchemaDataSource {
         
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
-        List<String> authorizedDbs = getAuthorizedDbs(request.getAuth_info());
-        authorizedDbs.forEach(dbName -> {
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
+                    for (Table table : allTables) {
+
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(result.currentUser, dbName,
+                                table.getName(), PrivPredicate.SHOW)) {
+                            continue;
+                        }
+
                         TTableInfo info = new TTableInfo();
 
                         info.setTable_catalog(DEF);
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
-                        info.setTable_type(transferTableTypeToAdaptMysql(table.getType()));
+                        info.setTable_type(table.getMysqlType());
                         info.setEngine(table.getEngine());
                         info.setVersion(DEFAULT_EMPTY_NUM);
                         // TABLE_ROWS (depend on the table type)
@@ -303,47 +332,22 @@ public class InformationSchemaDataSource {
                             // SCHEMA (use default)
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
-                            // BROKER (use default)                           
+                            // BROKER (use default)
                             genDefaultConfigInfo(info);
                         }
                         // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
-                    });
+                    }
                 } finally {
                     db.readUnlock();
                 }                
             }            
-        });    
+        }
         response.setTables_infos(infos);
         return response;
     }
 
-    private static String transferTableTypeToAdaptMysql(TableType tableType) {
-        // 'BASE TABLE','SYSTEM VERSIONED','PARTITIONED TABLE','VIEW','FOREIGN TABLE','MATERIALIZED VIEW','EXTERNAL TABLE'
-        switch (tableType) {
-            case MYSQL:
-            case HIVE:
-            case ICEBERG:
-            case HUDI:
-            case LAKE:
-            case ELASTICSEARCH:
-            case JDBC:
-                return "EXTERNAL TABLE";
-            case OLAP:
-            case OLAP_EXTERNAL:
-                return "BASE TABLE";
-            case MATERIALIZED_VIEW:
-            case VIEW:
-                return "VIEW";
-            default:
-                // SCHEMA
-                // INLINE_VIEW
-                // BROKER
-                return "BASE TABLE";
-        }
-    }
-
-    private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
+    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
         
         OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
@@ -372,7 +376,7 @@ public class InformationSchemaDataSource {
         return info;
     }
 
-    private static TTableInfo genDefaultConfigInfo(TTableInfo info) {
+    public static TTableInfo genDefaultConfigInfo(TTableInfo info) {
         info.setTable_rows(DEFAULT_EMPTY_NUM);
         info.setAvg_row_length(DEFAULT_EMPTY_NUM);
         info.setData_length(DEFAULT_EMPTY_NUM);

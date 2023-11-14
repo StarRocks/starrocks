@@ -301,6 +301,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
+<<<<<<< HEAD
+=======
+    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
+>>>>>>> branch-2.5
     touch $PATCHED_MARK
 fi
 cd -
@@ -361,6 +365,15 @@ if [ ! -f $PATCHED_MARK ] && [ $LIBRDKAFKA_SOURCE = "librdkafka-1.9.2" ]; then
 fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
+
+# patch roaring-bitmap
+cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $CROARINGBITMAP_SOURCE"
 
 # patch pulsar
 cd $TP_SOURCE_DIR/$PULSAR_SOURCE

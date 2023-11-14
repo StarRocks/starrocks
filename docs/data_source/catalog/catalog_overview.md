@@ -1,10 +1,12 @@
 # Overview
 
+<<<<<<< HEAD
 This topic describes what catalog is, and how to manage and query internal data and external data by using A catalog.
+=======
+This topic describes what a catalog is, and how to manage and query internal data and external data by using a catalog.
+>>>>>>> branch-2.5
 
-> **Note**
->
-> Only StarRocks 2.3 and later supports the catalog feature.
+StarRocks supports the catalog feature from v2.3 onwards. Catalogs enable you to manage internal and external data in one system and offer a flexible way for you to easily query and analyze data that is stored in various external systems.
 
 ## Basic concepts
 
@@ -13,7 +15,7 @@ This topic describes what catalog is, and how to manage and query internal data 
 
 ## Catalog
 
-Catalogs enable you to manage internal and external data in one system. They offer a flexible way for you to easily query and analyze data that is stored in various external systems. Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
+Currently, StarRocks provides two types of catalogs: internal catalog and external catalog.
 
 ![figure1](../../assets/3.8.1.png)
 
@@ -27,9 +29,9 @@ Catalogs enable you to manage internal and external data in one system. They off
 
   StarRocks interacts with the following two components of external data sources when you query external data:
 
-  - **Metadata service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
+  - **Metastore service**: used by the FEs to access the metadata of external data sources. The FEs generate a query execution plan based on the metadata.
   - **Data storage system**: used to store external data. Both distributed file systems and object
-  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations and then return the query result.
+  storage systems can be used as data storage systems to store data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target external data in parallel, perform calculations, and then return the query result.
 
 ## Query data
 

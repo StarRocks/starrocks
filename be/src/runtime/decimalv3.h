@@ -200,7 +200,8 @@ public:
     template <typename From, typename To>
     static inline bool from_float(FloatType<From> value, DecimalType<To> const& scale_factor,
                                   DecimalType<To>* dec_value) {
-        *dec_value = static_cast<To>(scale_factor * static_cast<double>(value));
+        double delta = value >= 0 ? 0.5 : -0.5; // go to the nearest integer
+        *dec_value = static_cast<To>(scale_factor * static_cast<double>(value) + delta);
         if constexpr (is_decimal32<To> || is_decimal64<To>) {
             // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
             // when overflow is happenning in casting.

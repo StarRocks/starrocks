@@ -15,16 +15,16 @@ alter_clause1[, alter_clause2, ...]
 
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - rollup: creates or drops a rollup index.
-- schema change: adds, drops, or reorder columns, or modify column type.
-- rename: renames a table, rollup index, or partition. **Note that column name cannot be modified.**
-- index: modifies index (only bitmap index can be modified.)
-- swap: atomic exchange of two tables
+- schema change: adds, drops, or reorders columns, or modifies column type.
+- rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
+- index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
 
 > **NOTE**
 >
-> - Schema change, rollup, and partition cannot be used in one ALTER TABLE statement.
-> - Schema change, rollup, and swap are asynchronous operations and are returned if the task is submitted successfully. User can use the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
-> - Partition, rename, and index are synchronous operations, and a command return indicates that the execution is finished.
+> - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
+> - Schema change and rollup are asynchronous operations and are returned if the task is submitted successfully. Users can run the [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md) command to check the progress.
+> - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 
 ### Modify partition
 
@@ -285,8 +285,8 @@ Note:
    - Convert TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL to VARCHAR. VARCHAR supports modification of maximum length.
    - Convert VARCHAR to TINTINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE.
    - Convert VARCHAR to DATE (currently support six formats: "%Y-%m-%d", "%y-%m-%d", "%Y%m%d", "%y%m%d", "%Y/%m/%d, "%y/%m/%d")
-   - Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` <--> `2019-12-09`)
-   - Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` <--> `2019-12-09 00:00:00`)
+   - Convert DATETIME to DATE(only year-month-day information is retained, i.e.  `2019-12-09 21:47:05` `<-->` `2019-12-09`)
+   - Convert DATE to DATETIME (set hour, minute, second to zero, For example: `2019-12-09` `<-->` `2019-12-09 00:00:00`)
    - Convert FLOAT to DOUBLE
    - Convert INT to DATE (If the INT data fails to convert, the original data remains the same)
 
@@ -683,3 +683,9 @@ SWAP WITH table_name;
     ```sql
     ALTER TABLE table1 SWAP WITH table2
     ```
+
+## References
+
+- [CREATE TABLE](CREATE%20TABLE.md)
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW ALTER TABLE](../data-manipulation/SHOW%20ALTER.md)

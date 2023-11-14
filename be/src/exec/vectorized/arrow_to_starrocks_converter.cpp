@@ -544,73 +544,137 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
         }
     }
 
-    static int64_t time_unit_divisor(arrow::TimeUnit::type unit) {
-        // StarRocks only supports seconds
-        switch (unit) {
-        case arrow::TimeUnit::type::SECOND: {
-            return 1L;
-        }
-        case arrow::TimeUnit::type::MILLI: {
-            return 1000L;
-        }
-        case arrow::TimeUnit::type::MICRO: {
-            return 1000000L;
-        }
-        case arrow::TimeUnit::type::NANO: {
-            return 1000000000L;
-        }
-        default:
-            return 0L;
-        }
-    }
-
-    static bool convert_one_datetime(CppType& datum, int64_t timestamp, const cctz::time_zone& ctz) {
+    static bool convert_one_datetime(CppType& datum, int64_t second, int64_t microsecond, const cctz::time_zone& ctz) {
         static_assert(at_is_datetime<AT>, "Invalid arrow type");
 
         DateTimeValue dtv;
-        if (UNLIKELY(!dtv.from_unixtime(timestamp, ctz))) {
+        if (UNLIKELY(!dtv.from_unixtime(second, microsecond, ctz))) {
             return true;
         }
         if constexpr (pt_is_date<PT>) {
             datum.from_date(dtv.year(), dtv.month(), dtv.day());
         } else if constexpr (pt_is_datetime<PT>) {
-            datum.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
+            datum.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                                 dtv.microsecond());
         }
         return false;
     }
 
-    template <bool no_divide>
-    static Status convert_datetime(CppType* data, const ArrowCppType* arrow_data, int num_elements,
-                                   const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data,
-                                   [[maybe_unused]] int divisor) {
+    static void fill_null(CppType* data, int num_elements, const uint8_t* null_data) {
         for (int i = 0; i < num_elements; ++i) {
             if constexpr (is_nullable) {
+                // When performing aggregation, for nullable column, we will first compare the null flag,
+                // then compare the data. We must make sure the data is consistent even for null value,
+                // In stream/broker load, the data for null date/datetime is DefaultValueGenerator,
+                // here we also set it to be DefaultValueGenerator for spark load, otherwise it will raise
+                // a problem in issue #9496
                 if (null_data[i] == DATUM_NULL) {
-                    // When performing aggregation, for nullable column, we will first compare the null flag,
-                    // then compare the data. We must make sure the data is consistent even for null value,
-                    // In stream/broker load, the data for null date/datetime is DefaultValueGenerator,
-                    // here we also set it to be DefaultValueGenerator for spark load, otherwise it will raise
-                    // a problem in issue #9496
                     if constexpr (pt_is_date<PT>) {
                         data[i] = DefaultValueGenerator<DateValue>::next_value();
                     } else if constexpr (pt_is_datetime<PT>) {
                         data[i] = DefaultValueGenerator<TimestampValue>::next_value();
                     }
+                }
+            }
+        }
+    }
+
+    static Status convert_datetime_from_second(CppType* data, const ArrowCppType* arrow_data, int num_elements,
+                                               const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data) {
+        for (int i = 0; i < num_elements; ++i) {
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
                     continue;
                 }
             }
-            bool fail;
-            if constexpr (no_divide) {
-                fail = convert_one_datetime(data[i], arrow_data[i], ctz);
-            } else {
-                fail = convert_one_datetime(data[i], arrow_data[i] / divisor, ctz);
-            }
-            if (fail) {
+
+            if (convert_one_datetime(data[i], arrow_data[i], 0, ctz)) {
                 return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
             }
         }
         return Status::OK();
     }
+
+    static Status convert_datetime_from_milisecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
+                                                   const cctz::time_zone& ctz,
+                                                   [[maybe_unused]] const uint8_t* null_data) {
+        for (int i = 0; i < num_elements; ++i) {
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
+                    continue;
+                }
+            }
+
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000, arrow_data[i] % 1000 * 1000, ctz)) {
+                return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
+            }
+        }
+        return Status::OK();
+    }
+
+    static Status convert_datetime_from_microsecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
+                                                    const cctz::time_zone& ctz,
+                                                    [[maybe_unused]] const uint8_t* null_data) {
+        for (int i = 0; i < num_elements; ++i) {
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
+                    continue;
+                }
+            }
+
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000000, arrow_data[i] % 1000000, ctz)) {
+                return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
+            }
+        }
+        return Status::OK();
+    }
+
+    static Status convert_datetime_from_nanosecond(CppType* data, const ArrowCppType* arrow_data, int num_elements,
+                                                   const cctz::time_zone& ctz,
+                                                   [[maybe_unused]] const uint8_t* null_data) {
+        for (int i = 0; i < num_elements; ++i) {
+            if constexpr (is_nullable) {
+                if (null_data[i] == DATUM_NULL) {
+                    continue;
+                }
+            }
+
+            if (convert_one_datetime(data[i], arrow_data[i] / 1000000000, arrow_data[i] % 1000000000 / 1000, ctz)) {
+                return Status::InternalError(strings::Substitute("Illegal timestamp value($0)", arrow_data[i]));
+            }
+        }
+        return Status::OK();
+    }
+
+    static Status convert_datetime(CppType* data, const ArrowCppType* arrow_data, int num_elements,
+                                   const cctz::time_zone& ctz, [[maybe_unused]] const uint8_t* null_data,
+                                   arrow::TimeUnit::type unit) {
+        switch (unit) {
+        case arrow::TimeUnit::type::SECOND: {
+            RETURN_IF_ERROR(convert_datetime_from_second(data, arrow_data, num_elements, ctz, null_data));
+            break;
+        }
+        case arrow::TimeUnit::type::MILLI: {
+            RETURN_IF_ERROR(convert_datetime_from_milisecond(data, arrow_data, num_elements, ctz, null_data));
+            break;
+        }
+        case arrow::TimeUnit::type::MICRO: {
+            RETURN_IF_ERROR(convert_datetime_from_microsecond(data, arrow_data, num_elements, ctz, null_data));
+            break;
+        }
+        case arrow::TimeUnit::type::NANO: {
+            RETURN_IF_ERROR(convert_datetime_from_nanosecond(data, arrow_data, num_elements, ctz, null_data));
+            break;
+        }
+        default:
+            return Status::InternalError(strings::Substitute("Not support TimeUnit($0)", unit));
+        }
+
+        fill_null(data, num_elements, null_data);
+
+        return Status::OK();
+    }
+
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
                         size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
                         [[maybe_unused]] uint8_t* filter_data, ArrowConvertContext* ctx) {
@@ -642,18 +706,10 @@ struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>,
             }
         } else if constexpr (at_is_datetime<AT>) {
             cctz::time_zone ctz;
-            int64_t divisor;
             if (!TimezoneUtils::find_cctz_time_zone(concrete_type->timezone(), ctz)) {
                 return Status::InternalError(strings::Substitute("Not found TimeZone($0)", concrete_type->timezone()));
             }
-            divisor = time_unit_divisor(concrete_type->unit());
-            if (divisor == 0) {
-                return Status::InternalError(strings::Substitute("Not support TimeUnit($0)", concrete_type->unit()));
-            }
-            if (divisor == 1) {
-                return convert_datetime<true>(data, arrow_data, num_elements, ctz, null_data, 1);
-            }
-            return convert_datetime<false>(data, arrow_data, num_elements, ctz, null_data, divisor);
+            return convert_datetime(data, arrow_data, num_elements, ctz, null_data, concrete_type->unit());
         }
         return Status::OK();
     }

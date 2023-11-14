@@ -394,4 +394,56 @@ public class RuntimeProfileTest {
         Assert.assertTrue(mergedProfile.getCounterMap().containsKey("count2_sub"));
         Assert.assertEquals(6, mergedProfile.getCounterMap().get("count2_sub").getValue());
     }
+
+    @Test
+    public void testConflictInfoString() {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+
+        RuntimeProfile profile1 = new RuntimeProfile("profile");
+        {
+            profile1.addInfoString("key1", "value1");
+            profiles.add(profile1);
+        }
+
+        RuntimeProfile profile2 = new RuntimeProfile("profile");
+        {
+            profile2.addInfoString("key1", "value2");
+            profiles.add(profile2);
+        }
+
+        RuntimeProfile profile3 = new RuntimeProfile("profile");
+        {
+            profile3.addInfoString("key1", "value1");
+            profiles.add(profile3);
+        }
+
+        RuntimeProfile profile4 = new RuntimeProfile("profile");
+        {
+            profile4.addInfoString("key1__DUP(1)", "value3");
+            profile4.addInfoString("key1", "value4");
+            profiles.add(profile4);
+        }
+
+        RuntimeProfile profile5 = new RuntimeProfile("profile");
+        {
+            profile5.addInfoString("key1", "value5");
+            profile5.addInfoString("key1__DUP(1)", "value6");
+            profiles.add(profile5);
+        }
+
+        RuntimeProfile.mergeIsomorphicProfiles(profiles);
+        RuntimeProfile mergedProfile = profiles.get(0);
+
+        Set<String> expectedValues = Sets.newHashSet("value1", "value2", "value3", "value4", "value5", "value6");
+        Set<String> actualValues = Sets.newHashSet();
+
+        actualValues.add(mergedProfile.getInfoString("key1"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(0)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(1)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(2)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(3)"));
+        actualValues.add(mergedProfile.getInfoString("key1__DUP(4)"));
+
+        Assert.assertEquals(expectedValues, actualValues);
+    }
 }

@@ -7,6 +7,7 @@ Column-to-row conversion is a common operation in ETL processing. Lateral is a s
 * Currently, Lateral Join is only used with unnest() to achieve column-to-row conversion. Other table functions and UDTFs will be supported later.
 * Currently, Lateral Join does not support subqueries.
 
+<<<<<<< HEAD
 ## Prerequisites
 
 To use Lateral Join, you must use the new version of optimizer:
@@ -14,6 +15,9 @@ To use Lateral Join, you must use the new version of optimizer:
 ~~~SQL
 set global enable_cbo = true;
 ~~~
+=======
+## Use Lateral Join
+>>>>>>> branch-2.5
 
 ## Use Lateral Join
 
@@ -38,11 +42,19 @@ The second syntax here is a shortened version of the first one, where the Latera
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > If you want to perform unnest on multiple volumns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
 
 The current version of StarRocks supports type conversion between Bitmap, String, Array, and Column.
 ![Some type conversions in Lateral Join](../assets/lateral_join_type_conversion.png)
 
+=======
+> If you want to perform unnest on multiple columns, you must specify an alias for each column, for example, `select v1, t1.unnest as v2, t2.unnest as v3 from lateral_test, unnest(v2) t1, unnest(v3) t2;`.
+
+StarRocks supports type conversion among BITMAP, STRING, ARRAY, and Column.
+![Some type conversions in Lateral Join](../assets/lateral_join_type_conversion.png)
+
+>>>>>>> branch-2.5
 ## Usage examples
 
 Together with unnest(), you can achieve the following column-to-row conversion features:
@@ -59,8 +71,12 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     DUPLICATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`) BUCKETS 1
     PROPERTIES (
+<<<<<<< HEAD
         "replication_num" = "1",
         "in_memory" = "false",
+=======
+        "replication_num" = "3",
+>>>>>>> branch-2.5
         "storage_format" = "DEFAULT"
     );
 
@@ -131,8 +147,12 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     DUPLICATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`) BUCKETS 1
     PROPERTIES (
+<<<<<<< HEAD
         "replication_num" = "1",
         "in_memory" = "false",
+=======
+        "replication_num" = "3",
+>>>>>>> branch-2.5
         "storage_format" = "DEFAULT"
     );
 

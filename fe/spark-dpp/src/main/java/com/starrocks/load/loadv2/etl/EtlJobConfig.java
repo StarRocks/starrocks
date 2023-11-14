@@ -442,6 +442,8 @@ public class EtlJobConfig implements Serializable {
         public List<Object> startKeys;
         @SerializedName(value = "endKeys")
         public List<Object> endKeys;
+        @SerializedName(value = "inKeys")
+        public List<List<Object>> inKeys;
         @SerializedName(value = "isMinPartition")
         public boolean isMinPartition;
         @SerializedName(value = "isMaxPartition")
@@ -456,6 +458,12 @@ public class EtlJobConfig implements Serializable {
             this.endKeys = endKeys;
             this.isMinPartition = isMinPartition;
             this.isMaxPartition = isMaxPartition;
+            this.bucketNum = bucketNum;
+        }
+
+        public EtlPartition(long partitionId, List<List<Object>> inKeys, int bucketNum) {
+            this.partitionId = partitionId;
+            this.inKeys = inKeys;
             this.bucketNum = bucketNum;
         }
 

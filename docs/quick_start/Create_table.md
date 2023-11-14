@@ -2,7 +2,7 @@
 
 This QuickStart tutorial will walk you through the necessary steps to create a table in StarRocks, and introduce some basic features of StarRocks.
 
-After the StarRocks instance is deployed (see [Deploy StarRocks](../quick_start/Deploy.md) for details), you need to create a database and a table to [load and query data](../quick_start/Import_and_query.md). Creating databases and tables requires corresponding [user privilege](../administration/User_privilege.md). In this QuickStart tutorial, you can perform the following steps with the default `root` user, which has the highest privileges on the StarRocks instance.
+After the StarRocks instance is deployed (see [Deploy StarRocks](../quick_start/deploy_with_docker.md) for details), you need to create a database and a table to [load and query data](../quick_start/Import_and_query.md). Creating databases and tables requires corresponding [user privilege](../administration/User_privilege.md). In this QuickStart tutorial, you can perform the following steps with the default `root` user, which has the highest privileges on the StarRocks instance.
 
 > **NOTE**
 >
@@ -52,10 +52,7 @@ PARTITION BY RANGE(reg_date)
     PARTITION p4 VALUES [('2022-03-16'), ('2022-03-17')),
     PARTITION p5 VALUES [('2022-03-17'), ('2022-03-18'))
 )
-DISTRIBUTED BY HASH(city_code)
-PROPERTIES(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(city_code);
 ```
 
 > **NOTE**
@@ -77,5 +74,5 @@ In addition to the features this tutorial has demonstrated, StarRocks also suppo
 - A variety of [data types](../sql-reference/sql-statements/data-types/BIGINT.md)
 - Multiple [table types](../table_design/table_types/table_types.md)
 - Flexible [partitioning strategies](../table_design/Data_distribution.md#dynamic-partition-management)
-- Classic database query indexes, including [bitmap index](../table_design/Bitmap_index.md) and [bloom filter index](../table_design/Bloomfilter_index.md)
+- Classic database query indexes, including [bitmap index](../using_starrocks/Bitmap_index.md) and [bloom filter index](../using_starrocks/Bloomfilter_index.md)
 - [Materialized view](../using_starrocks/Materialized_view.md)

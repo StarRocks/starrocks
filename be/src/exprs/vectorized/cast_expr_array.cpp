@@ -22,8 +22,8 @@ namespace starrocks::vectorized {
 
 static const char* kArrayDelimeter = ",";
 
-ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
-    ColumnPtr column = _children[0]->evaluate(context, ptr);
+StatusOr<ColumnPtr> VectorizedCastArrayExpr::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
     if (ColumnHelper::count_nulls(column) == column->size()) {
         return ColumnHelper::create_const_null_column(column->size());
     }
@@ -54,7 +54,7 @@ ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, vectorized::Ch
     auto column_ref = _cast_element_expr->get_child(0);
     SlotId slot_id = (reinterpret_cast<ColumnRef*>(column_ref))->slot_id();
     chunk->append_column(src_col, slot_id);
-    ColumnPtr dest_col = _cast_element_expr->evaluate(nullptr, chunk.get());
+    ASSIGN_OR_RETURN(ColumnPtr dest_col, _cast_element_expr->evaluate_checked(nullptr, chunk.get()));
     dest_col = ColumnHelper::unfold_const_column(column_ref->type(), chunk->num_rows(), dest_col);
 
     if (src_col->is_nullable() && !dest_col->is_nullable()) {
@@ -163,8 +163,8 @@ void array_delimeter_split(const Slice& src, std::vector<Slice>& res, std::vecto
 }
 
 // Cast string to array<ANY>
-ColumnPtr CastStringToArray::evaluate(ExprContext* context, vectorized::Chunk* input_chunk) {
-    ColumnPtr column = _children[0]->evaluate(context, input_chunk);
+StatusOr<ColumnPtr> CastStringToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
     }
@@ -230,7 +230,8 @@ ColumnPtr CastStringToArray::evaluate(ExprContext* context, vectorized::Chunk* i
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(elements, slot_id);
-        elements = ColumnHelper::cast_to_nullable_column(_cast_elements_expr->evaluate(context, chunk.get()));
+        ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
+        elements = ColumnHelper::cast_to_nullable_column(cast_res);
     }
 
     // 3. Assemble elements into array column
@@ -267,8 +268,8 @@ Slice CastStringToArray::_unquote(Slice slice) const {
     return slice;
 }
 
-ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* input_chunk) {
-    ColumnPtr column = _children[0]->evaluate(context, input_chunk);
+StatusOr<ColumnPtr> CastJsonToArray::evaluate_checked(ExprContext* context, vectorized::Chunk* input_chunk) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, input_chunk));
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
     }
@@ -309,7 +310,8 @@ ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* inp
         ChunkPtr chunk = std::make_shared<Chunk>();
         SlotId slot_id = down_cast<ColumnRef*>(_cast_elements_expr->get_child(0))->slot_id();
         chunk->append_column(elements, slot_id);
-        elements = ColumnHelper::cast_to_nullable_column(_cast_elements_expr->evaluate(context, chunk.get()));
+        ASSIGN_OR_RETURN(auto cast_res, _cast_elements_expr->evaluate_checked(context, chunk.get()));
+        elements = ColumnHelper::cast_to_nullable_column(cast_res);
     }
 
     // 3. Assemble elements into array column

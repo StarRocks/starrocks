@@ -45,6 +45,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -376,6 +377,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
+            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
             result.add(globalDict);
@@ -470,12 +472,20 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         dest.addChild(this);
     }
 
+    public void clearDestination() {
+        this.destNode = null;
+    }
+
     public DataPartition getDataPartition() {
         return dataPartition;
     }
 
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
+    }
+
+    public void clearOutputPartition() {
+        this.outputPartition = DataPartition.UNPARTITIONED;
     }
 
     public PlanNode getPlanRoot() {
@@ -623,14 +633,23 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public PlanNode getLeftMostLeafNode() {
-        PlanNode node = planRoot;
-        while (!node.getChildren().isEmpty()) {
+    public List<OlapScanNode> collectOlapScanNodes() {
+        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+        Queue<PlanNode> queue = Lists.newLinkedList();
+        queue.add(planRoot);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+
             if (node instanceof ExchangeNode) {
-                break;
+                continue;
             }
-            node = node.getChild(0);
+            if (node instanceof OlapScanNode) {
+                olapScanNodes.add((OlapScanNode) node);
+            }
+
+            queue.addAll(node.getChildren());
         }
-        return node;
+
+        return olapScanNodes;
     }
 }

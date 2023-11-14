@@ -6,7 +6,7 @@ Creates a new table in StarRocks.
 
 ## Syntax
 
-```Plain%20Text
+```plaintext
 CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 (column_definition1[, column_definition2, ...]
 [, index_definition1[, index_definition12,]])
@@ -77,7 +77,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
-- **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
+- **DEFAULT `<default_value>`**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
 ### index_definition
@@ -96,7 +96,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For MySQL, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
         "host" = "mysql_server_host",
         "port" = "mysql_server_port",
@@ -115,7 +115,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Elasticsearch, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
 
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
@@ -134,7 +134,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hive, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
 
         "database" = "hive_db_name",
@@ -147,7 +147,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For JDBC, specify the following properties:
 
-    ```Plain%20Text
+    ```plaintext
     PROPERTIES (
     "resource"="jdbc0",
     "table"="dest_tbl"
@@ -158,7 +158,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Iceberg, specify the following properties:
 
-   ```Plain%20Text
+   ```plaintext
     PROPERTIES (
     "resource" = "iceberg0", 
     "database" = "iceberg", 
@@ -170,7 +170,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 - For Hudi, specify the following properties:
 
-  ```Plain%20Text
+  ```plaintext
     PROPERTIES (
     "resource" = "hudi0", 
     "database" = "hudi", 
@@ -196,20 +196,30 @@ Data is sequenced in specified key columns and has different attributes for diff
 >
 > Value columns do not need to specify aggregation types when other key_type is used to create tables with the exception of AGGREGATE KEY.
 
+### COMMENT
+
+You can add a table comment when you create a table, optional. Note that COMMENT must be placed after `key_desc`. Otherwise, the table cannot be created.
+
 ### partition_desc
 
-Partition description can be used in the following three ways:
+Partition description can be used in the following ways:
 
-#### LESS THAN
+#### Create partitions dynamically
+
+[Dynamic partitioning](../../../table_design/dynamic_partitioning.md) provides a time-to-live (TTL) management for partitions. StarRocks automatically creates new partitions in advance and removes expired partitions to ensure data freshness. To enable this feature, you can configure Dynamic partitioning related properties at table creation.
+
+#### Create partitions one by one
+
+**Specify only the upper bound for a partition**
 
 Syntax:
 
-```Plain%20Text
-PARTITION BY RANGE (k1, k2, ...)
-(
-    PARTITION partition_name1 VALUES LESS THAN MAXVALUE|("value1", "value2", ...),
-    PARTITION partition_name2 VALUES LESS THAN MAXVALUE|("value1", "value2", ...)
-    ...
+```sql
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
+  PARTITION <partition1_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  [ ,
+  PARTITION <partition2_name> VALUES LESS THAN ("<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] )
+  , ... ] 
 )
 ```
 
@@ -218,26 +228,36 @@ Note:
 Please use specified key columns and specified value ranges for partitioning.
 
 - Partition name only supports [A-z0-9_]
-- Columns in Range partition only support the following types: TINYINT, SAMLLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
+- Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
 - Partition columns can either be single columns or multiple columns. The partition values are the default minimum values.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
+
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p1 VALUES LESS THAN ("20210102"),
+    PARTITION p2 VALUES LESS THAN ("20210103"),
+    PARTITION p3 VALUES LESS THAN MAXVALUE
+  )
+  ```
 
 Please note:
 
 - Partitions are often used for managing data related to time.
 - When data backtracking is needed, you may want to consider emptying the first partition for adding partitions later when necessary.
 
-#### Fixed Range
+**Specify both the lower and upper bounds for a partition**
 
 Syntax:
 
 ```SQL
-PARTITION BY RANGE (k1, k2, k3, ...)
+PARTITION BY RANGE ( <partitioning_column1> [, <partitioning_column2>, ... ] )
 (
-    PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
-    "k3-upper1-2", ...
+    PARTITION <partition_name1> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1?" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    [,
+    PARTITION <partition_name2> VALUES [( "<lower_bound_for_partitioning_column1>" [ , "<lower_bound_for_partitioning_column2>", ... ] ), ( "<upper_bound_for_partitioning_column1>" [ , "<upper_bound_for_partitioning_column2>", ... ] ) ) 
+    , ...]
 )
 ```
 
@@ -245,27 +265,54 @@ Note:
 
 - Fixed Range is more flexible than LESS THAN. You can customize the left and right partitions.
 - Fixed Range is the same as LESS THAN in the other aspects.
+- When only one column is specified as the partitioning column, you can set `MAXVALUE` as the upper bound for the partitioning column of the most recent partition.
 
-#### Create partitions in bulk
+  ```SQL
+  PARTITION BY RANGE (pay_dt) (
+    PARTITION p202101 VALUES [("20210101"), ("20210201")),
+    PARTITION p202102 VALUES [("20210201"), ("20210301")),
+    PARTITION p202103 VALUES [("20210301"), (MAXVALUE))
+  )
+  ```
+
+#### Create multiple partitions in a batch
 
 Syntax
 
+<<<<<<< HEAD
 ```Plain%20Text
 PARTITION BY RANGE (datekey) (
     START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
 )
 ```
+=======
+- If the partitioning column is of a date type.
+
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_date>") END ("<end_date>") EVERY (INTERVAL <N> <time_unit>)
+    )
+    ```
+
+- If the partitioning column is of an integer type.
+
+    ```sql
+    PARTITION BY RANGE (<partitioning_column>) (
+        START ("<start_integer>") END ("<end_integer>") EVERY (<partitioning_granularity>)
+    )
+    ```
+>>>>>>> branch-2.5
 
 Description
 
-You can specify the value for `START` and `END` and the expression in `EVERY` to create partitions in bulk .
+You can specify the start and end values in `START()` and `END()` and the time unit or partitioning granularity in `EVERY()` to create multiple partitions in a batch.
 
-- If `datekey` supports DATE and INTEGER data type, the data type of `START`, `END`, and `EVERY` must be the same as the data type of `datekey`.
-- If `datekey` only supports DATE data type, you need to use the `INTERVAL` keyword to specify the date interval. You can specify the date interval by day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
+- The partitioning column can be of a date or integer type.
+- If the partitioning column is of a date type, you need to use the `INTERVAL` keyword to specify the time interval. You can specify the time unit as hour (since v3.0), day, week, month, or year. The naming conventions of partitions are the same as those for dynamic partitions.
 
-For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
+For more information, see [Data distribution](../../../table_design/Data_distribution.md).
 
-### distribution_des
+### distribution_desc
 
 Syntax:
 
@@ -302,7 +349,7 @@ If the engine type is `olap`, you can specify storage medium, storage cooldown t
   >
   > `storage_cooldown_time` can be configured only when `storage_medium` is set to `SSD`. If you want to set `storage_medium` to SSD, make sure that your cluster uses SSD disks, that is, `storage_root_path` reported by BEs includes SSD. For more information about `storage_root_path`, see [Configuration](../../../administration/Configuration.md#configure-be-static-parameters).
 
-```Plain%20Text
+```plaintext
 PROPERTIES (
     "storage_medium" = "[SSD|HDD]",
     [ "storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss", ]
@@ -410,13 +457,13 @@ The valid values of `write_quorum` are:
 If your StarRocks cluster has multiple data replicas, you can specify the `replicated_storage` parameter in `PROPERTIES` to configure the data writing and replication mode among replicas.
 
 - `true` indicates "single leader replication", which means data is written only to the primary replica. Other replicas synchronize data from the primary replica. This mode significantly reduces CPU cost caused by data writing to multiple replicas. It is supported from v2.5.
-- `false` (**default value**) indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
+- `false` (**default in v2.5**) indicates "leaderless replication", which means data is directly written to multiple replicas, without differentiating primary and secondary replicas. The CPU cost is multiplied by the number of replicas.
 
 In most cases, using the default value gains better data writing performance. If you want to change the data writing and replication mode among replicas, run the ALTER TABLE command. Example:
 
 ```sql
     ALTER TABLE example_db.my_table
-    SET ("replicated_storage" = "false");
+    SET ("replicated_storage" = "true");
 ```
 
 #### Create rollup in bulk
@@ -665,7 +712,7 @@ The dynamic partitioning function must be enabled ("dynamic_partition.enable" = 
 
 This example creates partitions for the next three days and deletes partitions created three days ago. For example, if today is 2020-01-08, partitions with the following names will be created: p20200108, p20200109, p20200110, p20200111, and their ranges are:
 
-```Plain%20Text
+```plaintext
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )
 [types: [DATE]; keys: [2020-01-09]; ‥types: [DATE]; keys: [2020-01-10]; )
 [types: [DATE]; keys: [2020-01-10]; ‥types: [DATE]; keys: [2020-01-11]; )
@@ -701,6 +748,29 @@ PROPERTIES(
 );
 ```
 
+### Create a table where multiple partitions are created in a batch, and an integer type column is specified as partitioning column
+
+  In the following example, the partitioning column `datekey` is of the INT type. All the partitions are created by only one simple partition clause  `START ("1") END ("5") EVERY (1)`. The range of all the partitions starts from `1` and ends at `5`, with a partition granularity of `1`:
+  > **NOTE**
+  >
+  > The partitioning column values in **START()** and **END()** need to be wrapped in quotation marks, while the partition granularity in the **EVERY()** does not need to be wrapped in quotation marks.
+
+  ```SQL
+  CREATE TABLE site_access (
+      datekey INT,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  ENGINE=olap
+  DUPLICATE KEY(datekey, site_id, city_code, user_name)
+  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
+  )
+  DISTRIBUTED BY HASH(site_id)
+  PROPERTIES ("replication_num" = "3");
+  ```
+
 ### Create a Hive external table
 
 Before you create a Hive external table, you must have created a Hive resource and database. For more information, see [External table](../../../data_source/External_table.md#hive-external-table).
@@ -720,3 +790,11 @@ PROPERTIES
     "table" = "hive_table_name"
 );
 ```
+
+## References
+
+- [SHOW CREATE TABLE](../data-manipulation/SHOW%20CREATE%20TABLE.md)
+- [SHOW TABLES](../data-manipulation/SHOW%20TABLES.md)
+- [USE](USE.md)
+- [ALTER TABLE](ALTER%20TABLE.md)
+- [DROP TABLE](DROP%20TABLE.md)

@@ -4,17 +4,23 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.HashMap;
+import java.util.UUID;
 
 public class AnalyzeManagerTest extends PlanTestBase {
     @Test
@@ -54,5 +60,21 @@ public class AnalyzeManagerTest extends PlanTestBase {
         statisticAutoCollector = Deencapsulation.newInstance(StatisticAutoCollector.class);
         result = Deencapsulation.invoke(statisticAutoCollector, "checkoutAnalyzeTime", time);
         Assert.assertTrue(result);
+    }
+
+    @Test
+    public void testUpdateLoadRowsWithTableDropped() {
+        long dbId = 11111L;
+        long tableId = 22222L;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(new Database(dbId, "test"));
+        GlobalStateMgr.getCurrentState().getAnalyzeManager().addBasicStatsMeta(new BasicStatsMeta(dbId, tableId,
+                Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), new HashMap<>()));
+
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
+                requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
+        GlobalStateMgr.getCurrentState().getAnalyzeManager().updateLoadRows(transactionState);
     }
 }

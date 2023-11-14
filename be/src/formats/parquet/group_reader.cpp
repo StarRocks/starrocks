@@ -11,6 +11,7 @@
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_or_predicate.h"
 #include "utils.h"
 
 namespace starrocks::parquet {
@@ -132,8 +133,8 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 }
 
 void GroupReader::close() {
-    if (_param.shared_buffered_stream) {
-        _param.shared_buffered_stream->release_to_offset(_end_offset);
+    if (_param.sb_stream) {
+        _param.sb_stream->release_to_offset(_end_offset);
     }
     _column_readers.clear();
 }
@@ -144,7 +145,6 @@ Status GroupReader::_init_column_readers() {
     opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
-    opts.sb_stream = _param.shared_buffered_stream;
     opts.file = _param.file;
     opts.row_group_meta = _row_group_metadata.get();
     opts.context = _obj_pool.add(new ColumnReaderContext);
@@ -176,8 +176,10 @@ void GroupReader::_process_columns_and_conjunct_ctxs() {
     for (auto& column : _param.read_cols) {
         int chunk_index = column.col_idx_in_chunk;
         SlotId slot_id = column.slot_id;
+        const auto* parquet_field = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
+        DCHECK(parquet_field != nullptr);
         const tparquet::ColumnMetaData& column_metadata =
-                _row_group_metadata->columns[column.col_idx_in_parquet].meta_data;
+                _row_group_metadata->columns[parquet_field->physical_column_index].meta_data;
         if (_can_using_dict_filter(slots[chunk_index], conjunct_ctxs_by_slot, column_metadata)) {
             _use_as_dict_filter_column[read_col_idx] = true;
             _dict_filter_conjunct_ctxs[slot_id] = conjunct_ctxs_by_slot.at(slot_id);
@@ -217,33 +219,45 @@ vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& col
     return chunk;
 }
 
-void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
+void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
-        _collect_field_io_range(*schema_node, ranges, &end);
+        _collect_field_io_range(*schema_node, column.col_type_in_chunk, ranges, &end);
     }
     *end_offset = end;
 }
 
-void GroupReader::_collect_field_io_range(const ParquetField& field,
-                                          std::vector<SharedBufferedInputStream::IORange>* ranges,
+void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
+                                          std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
     // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
     // metadata (such as page offset and compressed_size) from _row_group_meta directly rather than file_metadata.
     // 2. For map or struct columns, the physical_column_index indicates the real column index in rows group meta,
-    // and it may not be equal to col_idx_in_chunk.
-    // 3. For array type, the physical_column_index is 0, we need to iterate the children and
-    // collect their io ranges.
-    if (field.type.type == PrimitiveType::TYPE_ARRAY || field.type.type == PrimitiveType::TYPE_STRUCT) {
-        for (auto& child : field.children) {
-            _collect_field_io_range(child, ranges, end_offset);
+    // and it may not be equal to col_idx_in_chunk. For array type, the physical_column_index is 0,
+    // we need to iterate the children and collect their io ranges.
+    // 3. For subfield pruning, we collect io range based on col_type which is pruned by fe.
+    if (field.type.type == PrimitiveType::TYPE_ARRAY) {
+        _collect_field_io_range(field.children[0], col_type.children[0], ranges, end_offset);
+    } else if (field.type.type == PrimitiveType::TYPE_STRUCT) {
+        std::vector<int32_t> subfield_pos(col_type.children.size());
+        ColumnReader::get_subfield_pos_with_pruned_type(field, col_type, _param.case_sensitive, subfield_pos);
+
+        for (size_t i = 0; i < col_type.children.size(); i++) {
+            if (subfield_pos[i] == -1) {
+                continue;
+            }
+            _collect_field_io_range(field.children[subfield_pos[i]], col_type.children[i], ranges, end_offset);
         }
     } else if (field.type.type == PrimitiveType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field.children[0].type.type == TYPE_STRUCT);
+        auto index = 0;
         for (auto& child : field.children[0].children) {
-            _collect_field_io_range(child, ranges, end_offset);
+            if ((!col_type.children[index].is_unknown_type())) {
+                _collect_field_io_range(child, col_type.children[index], ranges, end_offset);
+            }
+            ++index;
         }
     } else {
         auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
@@ -254,7 +268,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
         ranges->emplace_back(r);
         *end_offset = std::max(*end_offset, offset + size);
     }
@@ -271,18 +285,6 @@ bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotI
     SlotId slot_id = slot->id();
     if (conjunct_ctxs_by_slot.find(slot_id) == conjunct_ctxs_by_slot.end()) {
         return false;
-    }
-
-    // check is null or is not null
-    // is null or is not null conjunct should not eval dict value, this will always return empty set
-    for (ExprContext* ctx : conjunct_ctxs_by_slot.at(slot_id)) {
-        const Expr* root_expr = ctx->root();
-        if (root_expr->node_type() == TExprNodeType::FUNCTION_CALL) {
-            std::string is_null_str;
-            if (root_expr->is_null_scalar_function(is_null_str)) {
-                return false;
-            }
-        }
     }
 
     // check all data pages dict encoded
@@ -355,11 +357,17 @@ Status GroupReader::_rewrite_dict_column_predicates() {
     for (int col_idx : _dict_filter_column_indices) {
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
-        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
-        std::shared_ptr<vectorized::BinaryColumn> dict_value_column = vectorized::BinaryColumn::create();
-        dict_value_chunk->append_column(dict_value_column, slot_id);
 
+        // --------
+        // create dict value chunk for evaluation.
+        vectorized::ChunkPtr dict_value_chunk = std::make_shared<vectorized::Chunk>();
+        vectorized::ColumnPtr dict_value_column =
+                vectorized::ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        dict_value_chunk->append_column(dict_value_column, slot_id);
         RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(dict_value_column.get()));
+        // append a null value to check if null is ok or not.
+        dict_value_column->append_default();
+
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_dict_filter_conjunct_ctxs[slot_id], dict_value_chunk.get()));
         dict_value_chunk->check_or_die();
 
@@ -369,25 +377,51 @@ Status GroupReader::_rewrite_dict_column_predicates() {
             return Status::OK();
         }
 
-        // get dict codes
+        // ---------
+        // get dict codes according to dict values.
+        auto* dict_nullable_column = down_cast<vectorized::NullableColumn*>(dict_value_column.get());
+        auto* dict_value_binary_column =
+                down_cast<vectorized::BinaryColumn*>(dict_nullable_column->data_column().get());
         std::vector<int32_t> dict_codes;
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_codes(dict_value_column->get_data(), &dict_codes));
+        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_codes(dict_value_binary_column->get_data(),
+                                                                 *dict_nullable_column, &dict_codes));
 
         // eq predicate is faster than in predicate
         // TODO: improve not eq and not in
-        if (dict_codes.size() == 1) {
-            _dict_filter_preds[slot_id] = vectorized::new_column_eq_predicate(get_type_info(kDictCodeFieldType),
-                                                                              slot_id, std::to_string(dict_codes[0]));
+        if (dict_codes.size() == 0) {
+            _dict_filter_preds[slot_id] = nullptr;
+        } else if (dict_codes.size() == 1) {
+            _dict_filter_preds[slot_id] = _obj_pool.add(vectorized::new_column_eq_predicate(
+                    get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
         } else {
             std::vector<std::string> str_codes;
             str_codes.reserve(dict_codes.size());
             for (int code : dict_codes) {
                 str_codes.emplace_back(std::to_string(code));
             }
-            _dict_filter_preds[slot_id] =
-                    vectorized::new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes);
+            _dict_filter_preds[slot_id] = _obj_pool.add(
+                    vectorized::new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
         }
-        _obj_pool.add(_dict_filter_preds[slot_id]);
+
+        // check if NULL works or not.
+        if (dict_value_column->has_null()) {
+            vectorized::ColumnPredicate* old = _dict_filter_preds[slot_id];
+            // new = old or (is_null);
+            vectorized::ColumnPredicate* result = nullptr;
+            vectorized::ColumnPredicate* is_null_pred = _obj_pool.add(
+                    vectorized::new_column_null_predicate(get_type_info(kDictCodeFieldType), slot_id, true));
+
+            if (old != nullptr) {
+                vectorized::ColumnOrPredicate* or_pred =
+                        _obj_pool.add(new vectorized::ColumnOrPredicate(get_type_info(kDictCodeFieldType), slot_id));
+                or_pred->add_child(old);
+                or_pred->add_child(is_null_pred);
+                result = or_pred;
+            } else {
+                result = is_null_pred;
+            }
+            _dict_filter_preds[slot_id] = result;
+        }
     }
 
     return Status::OK();
@@ -506,12 +540,15 @@ Status GroupReader::_dict_decode(vectorized::ChunkPtr* chunk) {
         vectorized::ColumnPtr& dict_values = (*chunk)->get_column_by_slot_id(slot_id);
         dict_values->resize(0);
 
+        // decode dict code to dict values.
+        // note that in dict code, there could be null value.
         auto* codes_nullable_column = vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(dict_codes);
         auto* codes_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
                 codes_nullable_column->data_column());
-        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), dict_values.get()));
-
+        RETURN_IF_ERROR(_column_readers[slot_id]->get_dict_values(codes_column->get_data(), *codes_nullable_column,
+                                                                  dict_values.get()));
         DCHECK_EQ(dict_codes->size(), dict_values->size());
+
         if (slots[chunk_index]->is_nullable()) {
             auto* nullable_codes = down_cast<vectorized::NullableColumn*>(dict_codes.get());
             auto* nullable_values = down_cast<vectorized::NullableColumn*>(dict_values.get());

@@ -593,6 +593,8 @@ public class FileScanNode extends LoadScanNode {
             totalBytes += fileStatus.size;
         }
         long numInstances = bytesPerInstance == 0 ? 1 : (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
+        // totalBytes may be 0, so numInstances may be 0
+        numInstances = Math.max(numInstances, (long) 1);
 
         for (int i = 0; i < numInstances; ++i) {
             locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName(), brokerDesc.hasBroker()), 0L));

@@ -190,8 +190,12 @@ public:
     // for vector query engine
     virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
-    virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr);
-    virtual ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
+    // TODO: check error in expression and return error status, instead of return null column
+    virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) = 0;
+    virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
+
+    // TODO:(murphy) remove this unchecked evaluate
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
     // get the first column ref in expr
     vectorized::ColumnRef* get_column_ref();

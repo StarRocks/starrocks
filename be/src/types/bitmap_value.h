@@ -36,7 +36,9 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+#include "types/bitmap_value_detail.h"
 #include "util/coding.h"
+#include "util/phmap/phmap.h"
 #include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
 
@@ -72,6 +74,8 @@ public:
     explicit BitmapValue(const std::vector<uint64_t>& bits);
 
     void add(uint64_t value);
+
+    void add_many(size_t n_args, const uint32_t* vals);
 
     // Note: rhs BitmapValue is only readable after this method
     // Compute the union between the current bitmap and the provided bitmap.
@@ -153,5 +157,4 @@ private:
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
 };
-
 } // namespace starrocks

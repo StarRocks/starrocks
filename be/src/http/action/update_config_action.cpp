@@ -41,6 +41,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
+#include "storage/persistent_index_compaction_manager.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -89,6 +90,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
         });
+<<<<<<< HEAD
+=======
+        _config_callback.emplace("pindex_major_compaction_num_threads", [&]() {
+            PersistentIndexCompactionManager* mgr =
+                    StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
+            if (mgr != nullptr) {
+                (void)mgr->update_max_threads(config::pindex_major_compaction_num_threads);
+            }
+        });
+>>>>>>> branch-2.5
         _config_callback.emplace("update_memory_limit_percent", [&]() {
             StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
                     config::update_memory_limit_percent);
@@ -102,6 +113,28 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
         });
+<<<<<<< HEAD
+=======
+
+        _config_callback.emplace("alter_tablet_worker_count", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
+        });
+
+        _config_callback.emplace("get_pindex_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::get_pindex_worker_count > 0) {
+                max_thread_cnt = config::get_pindex_worker_count;
+            }
+            StorageEngine::instance()->update_manager()->get_pindex_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+        _config_callback.emplace("transaction_apply_worker_count", [&]() {
+            int max_thread_cnt = CpuInfo::num_cores();
+            if (config::transaction_apply_worker_count > 0) {
+                max_thread_cnt = config::transaction_apply_worker_count;
+            }
+            StorageEngine::instance()->update_manager()->apply_thread_pool()->update_max_threads(max_thread_cnt);
+        });
+>>>>>>> branch-2.5
     });
 
     Status s = config::set_config(name, value);

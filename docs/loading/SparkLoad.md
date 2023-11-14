@@ -1,8 +1,13 @@
-# Bulk load using Apache Spark™
+# Load data in bulk using Spark Load
 
 This load uses external Apache Spark™ resources to pre-process imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
 
 Spark load is an **asynchronous** import method that requires users to create Spark-type import jobs via the MySQL protocol and view the import results using `SHOW LOAD`.
+
+> **NOTICE**
+>
+> - Spark Load can not be used to load data into a Primary Key table.
+> -  In versions earlier than v2.5.9, the bucketing column of a StarRocks table cannot be of DATE, DATETIME, or DECIMAL type when Spark Load is used to load data into this table.
 
 ## Terminology explanation
 
@@ -74,7 +79,7 @@ The basic process of data pre-processing is as follows:
 
 If you continue to load data through Broker process, you must ensure that Broker process are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for Broker that are deployed in your StarRocks cluster. If no Broker are deployed, you must deploy Broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for Broker that are deployed in your StarRocks cluster. If no Broker are deployed, you must deploy Broker by following the instructions provided in [Deploy Broker](../deployment/deploy_broker.md).
 
 ### Configuring ETL Clusters
 

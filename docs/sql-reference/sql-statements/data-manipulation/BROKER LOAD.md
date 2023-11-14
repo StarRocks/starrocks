@@ -2,7 +2,7 @@
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to check the job result. For more information about the background information, prerequisites, principles, and supported data file formats of Broker Load, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to check the job result. For more information about the background information, prerequisites, principles, supported data file formats, supported external storage systems, and how to perform single-table loads and multi-table loads, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
 
 ## Syntax
 
@@ -26,7 +26,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ## Parameters
 
-### `database_name` and `label_name`
+### database_name and label_name
 
 `label_name` specifies the label of the load job.
 
@@ -36,7 +36,7 @@ Each load job has a label that is unique across the entire database. You can use
 
 For label naming conventions, see [System limits](../../../reference/System_limit.md).
 
-### `data_desc`
+### data_desc
 
 The description of a batch of data to be loaded. Each `data_desc` descriptor declares information such as the data source, ETL functions, destination StarRocks table, and destination partitions.
 
@@ -46,10 +46,13 @@ Broker Load supports loading multiple data files at a time. In one load job, you
 
 ```SQL
 DATA INFILE ("<file_path>"[, "<file_path>" ...])
-[NEGATIVE]INTO TABLE <table_name>
-[PARTITION (<partition_name>[, <partition_name> ...])]
-[FORMAT AS "CSV | Parquet | ORC"]
+[NEGATIVE]
+INTO TABLE <table_name>
+[PARTITION (<partition1_name>[, <partition2_name> ...])]
+[TEMPORARY PARTITION (<temporary_partition1_name>[, <temporary_partition2_name> ...])]
 [COLUMNS TERMINATED BY "<column_separator>"]
+[ROWS TERMINATED BY "<row_separator>"]
+[FORMAT AS "CSV | Parquet | ORC"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
 [SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
@@ -77,7 +80,8 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   - `hdfs_host`: the FS port of the NameNode host in the HDFS cluster. The default port number is `9000`.
 
   > **NOTICE**
-  > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
+  >
+  > Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path.
 
 - `INTO TABLE`
 
@@ -91,19 +95,23 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   > **NOTE**
   >
+<<<<<<< HEAD
   > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
+=======
+  > This parameter is valid only when the StarRocks table is an Aggregate table and all its value columns are computed by the `sum` function.
+>>>>>>> branch-2.5
 
 - `PARTITION`
 
    Specifies the partitions into which you want to load data. By default, if you do not specify this parameter, the source data will be loaded into all partitions of the StarRocks table.
 
-- `FORMAT AS`
+- `TEMPORARY_PARTITION`
 
-  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
+  Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
 - `COLUMNS TERMINATED BY`
 
-  Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify must be the same as the column separator used in the data file. Otherwise, the load job fails due to inadequate data quality, and its `State` is displayed as `CANCELLED`.
+  Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify using this parameter must be the same as the column separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality, and its `State` will be `CANCELLED`.
 
   Broker Load jobs are submitted according to the MySQL protocol. StarRocks and MySQL both escape characters in the load requests. Therefore, if the column separator is an invisible character such as tab, you must add a backslash (\) preceding the column separator. For example, you must input `\\t` if the column separator is `\t`, and you must input `\\n` if the column separator is `\n`. Apache Hive™ files use `\x01` as their column separator, so you must input `\\x01` if the data file is from Hive.
 
@@ -111,6 +119,19 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   >
   > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
   > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+<<<<<<< HEAD
+=======
+
+- `ROWS TERMINATED BY`
+
+  Specifies the row separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\n`, indicating line break. The row separator you specify using this parameter must be the same as the row separator that is actually used in the data file. Otherwise, the load job will fail due to inadequate data quality, and its `State` will be `CANCELLED`. This parameter is supported from v2.5.4 onwards.
+
+  For the usage notes about the row separator, see the usage notes for the preceding `COLUMNS TERMINATED BY` parameter.
+
+- `FORMAT AS`
+
+  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
+>>>>>>> branch-2.5
 
 - `column_list`
 
@@ -124,7 +145,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 - `COLUMNS FROM PATH AS`
 
-  Extracts the information about one or more partition fields from the file path you specify. This parameter is valid only when the file path contains partition fields. 
+  Extracts the information about one or more partition fields from the file path you specify. This parameter is valid only when the file path contains partition fields.
 
   For example, if the data file is stored in the path `/path/col_name=col_value/file1` in which `col_name` is a partition field and can be mapped onto a column of the StarRocks table, you can specify this parameter as `col_name`. As such, StarRocks extracts `col_value` values from the path and loads them into the StarRocks table column onto which `col_name` is mapped.
 
@@ -143,11 +164,15 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   Specifies the conditions based on which you want to filter the source data. StarRocks loads only the source data that meets the filter conditions specified in the WHERE clause.
 
-### `WITH BROKER`
+### WITH BROKER
 
 In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Load data from HDFS or cloud storage > Background information](../../../loading/BrokerLoad.md#background-information).
 
+<<<<<<< HEAD
 ### `StorageCredentialParams`
+=======
+### StorageCredentialParams
+>>>>>>> branch-2.5
 
 The authentication information used by StarRocks to access your storage system.
 
@@ -177,9 +202,9 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab = "/keytab/hive.keytab",
-    "kerberos_keytab_content = "YWFhYWFh"
+    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
+    "kerberos_keytab" = "/keytab/hive.keytab",
+    "kerberos_keytab_content" = "YWFhYWFh"
     ```
 
     The following table describes the parameters in `StorageCredentialParams`.
@@ -191,7 +216,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | kerberos_keytab                 | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content         | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
-    If you have configured multiple Kerberos users, you must deploy an independent broker and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the broker to read the **krb5.conf** file. Example:
+    If you have configured multiple Kerberos users, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the brokers to read the **krb5.conf** file. Example:
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
@@ -199,17 +224,24 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     > **NOTE**
     >
-    > In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If multiple brokers are deployed, you must modify the **start_broker.sh** file for each of these brokers and then restart the nodes that host the brokers to make the modifications take effect.
+    > - In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If the broker group consists of multiple brokers, you must modify the **start_broker.sh** file on each broker node and then restart the broker nodes to make the modifications take effect.
+    > - You can use the [SHOW BROKER](../Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
 
 - HA configuration
 
-  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following two scenarios:
+  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following scenarios:
 
-  - If you load data from a single HDFS cluster, you can perform broker-free loading. In this case, you need to place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE and each BE.
+  - If you load data from a single HDFS cluster that has one Kerberos user configured, both load-based loading and load-free loading are supported.
+  
+    - To perform load-based loading, make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
+  
+    - To perform load-free loading, place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE node and each BE node.
+  
+  - If you load data from a single HDFS cluster that has multiple Kerberos users configured, only broker-based loading is supported. Make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed, and place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves the HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the HDFS cluster nodes.
 
-  - If you load data from multiple HDFS clusters, you can perform broker-based loading. In this case, take one of the following actions to enable brokers to read information about the HDFS cluster nodes:
+  - If you load data from multiple HDFS clusters (regardless of whether one or multiple Kerberos users are configured), only broker-based loading is supported. Make sure that at least one independent [broker group](../../../deployment/deploy_broker.md) is deployed for each of these HDFS clusters, and take one of the following actions to enable the brokers to read information about the HDFS cluster nodes:
 
-    - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker for each HDFS cluster. As such, StarRocks will add the `{deploy_dir}/conf/` path to the environment variable `CLASSPATH` upon broker startup, allowing the broker to read information about the nodes in that HDFS cluster.
+    - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the broker node that serves each HDFS cluster. StarRocks will add the `{deploy}/conf` path to the environment variable `CLASSPATH` upon broker startup, allowing the brokers to read information about the nodes in that HDFS cluster.
 
     - Add the following HA configuration at job creation:
 
@@ -230,6 +262,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
       | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
       | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
 
+<<<<<<< HEAD
 #### AWS S3
 
 If you choose AWS S3 as your storage system, take one of the following actions:
@@ -242,6 +275,24 @@ If you choose AWS S3 as your storage system, take one of the following actions:
   ```
 
 - To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+=======
+  > **NOTE**
+  >
+  > You can use the [SHOW BROKER](../Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster.
+
+#### AWS S3
+
+If you choose AWS S3 as your storage system, take one of the following actions:
+
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
+>>>>>>> branch-2.5
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -249,7 +300,11 @@ If you choose AWS S3 as your storage system, take one of the following actions:
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
+<<<<<<< HEAD
 - To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+=======
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
+>>>>>>> branch-2.5
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -268,7 +323,11 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hive data by using a Hive catalog. |
 | aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Hive data by using a Hive catalog. |
 
+<<<<<<< HEAD
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+=======
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+>>>>>>> branch-2.5
 
 #### Google GCS
 
@@ -319,6 +378,17 @@ If you choose other S3-compatible storage system, such as MinIO, configure `Stor
 ```
 
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
+<<<<<<< HEAD
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
+| aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
+=======
+>>>>>>> branch-2.5
 
 | Parameter                        | Required | Description                                                  |
 | -------------------------------- | -------- | ------------------------------------------------------------ |
@@ -328,7 +398,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
 
-### `opt_properties`
+### opt_properties
 
 Specifies some optional parameters whose settings are applied to the entire load job. Syntax:
 
@@ -394,7 +464,7 @@ The following parameters are supported:
 
 - `priority`
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
+  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs in the task pool will be waiting to be scheduled based on their priorities.
 
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
@@ -539,7 +609,6 @@ If you want to load all data from `example5.csv` into `table5` with Kerberos aut
 LOAD LABEL test_db.label5
 (
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example5.csv")
-    NEGATIVE
     INTO TABLE table5
     COLUMNS TERMINATED BY "\t"
 )

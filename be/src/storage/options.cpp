@@ -22,6 +22,7 @@
 #include "storage/options.h"
 
 #include <algorithm>
+#include <filesystem>
 
 #include "common/config.h"
 #include "common/logging.h"
@@ -136,6 +137,35 @@ Status parse_conf_store_paths(const string& config_path, std::vector<StorePath>*
     if (paths->empty() || (path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
         LOG(WARNING) << "fail to parse storage_root_path config. value=[" << config_path << "]";
         return Status::InvalidArgument("Fail to parse storage_root_path");
+    }
+    return Status::OK();
+}
+
+Status parse_conf_block_cache_paths(const std::string& config_path, std::vector<std::string>* paths) {
+    if (config_path.empty()) {
+        return Status::OK();
+    }
+    std::vector<string> path_vec = strings::Split(config_path, ";", strings::SkipWhitespace());
+    for (auto& item : path_vec) {
+        if (item.empty()) {
+            continue;
+        }
+        // Remove last slash if it exists$
+        auto it = item.end() - 1;
+        if (*it == '/') {
+            item.erase(it);
+        }
+        // Check the parent path
+        std::filesystem::path local_path(item);
+        if (local_path.has_parent_path() && !std::filesystem::exists(local_path.parent_path())) {
+            LOG(WARNING) << "invalid block cache path. path=" << item;
+            continue;
+        }
+        paths->emplace_back(std::move(local_path.string()));
+    }
+    if ((path_vec.size() != paths->size() && !config::ignore_broken_disk)) {
+        LOG(WARNING) << "fail to parse block_cache_disk_path config. value=[" << config_path << "]";
+        return Status::InvalidArgument("fail to parse block_cache_disk_path");
     }
     return Status::OK();
 }

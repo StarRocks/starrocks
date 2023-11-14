@@ -71,16 +71,16 @@ public class Checkpoint extends LeaderDaemon {
     @Override
     protected void runAfterCatalogReady() {
         long imageVersion = 0;
-        long checkPointVersion = 0;
+        long checkpointVersion = 0;
         Storage storage = null;
         try {
             storage = new Storage(imageDir);
             // get max image version
             imageVersion = storage.getImageJournalId();
             // get max finalized journal id
-            checkPointVersion = journal.getFinalizedJournalId();
-            LOG.info("checkpoint imageVersion {}, checkPointVersion {}", imageVersion, checkPointVersion);
-            if (imageVersion >= checkPointVersion) {
+            checkpointVersion = journal.getFinalizedJournalId();
+            LOG.info("checkpoint imageVersion {}, checkpointVersion {}", imageVersion, checkpointVersion);
+            if (imageVersion >= checkpointVersion) {
                 return;
             }
         } catch (IOException e) {
@@ -90,16 +90,16 @@ public class Checkpoint extends LeaderDaemon {
 
         boolean success = false;
         if (belongToGlobalStateMgr) {
-            success = replayAndGenerateGlobalStateMgrImage(checkPointVersion);
+            success = replayAndGenerateGlobalStateMgrImage(checkpointVersion);
         } else {
-            success = replayAndGenerateStarMgrImage(checkPointVersion);
+            success = replayAndGenerateStarMgrImage(checkpointVersion);
         }
 
         if (!success) {
             return;
         }
 
-        // push image file to all the other non master nodes
+        // push image file to all the other non-leader nodes
         // DO NOT get other nodes from HaProtocol, because node may not in bdbje replication group yet.
         List<Frontend> allFrontends = GlobalStateMgr.getServingState().getFrontends(null);
         int successPushed = 0;
@@ -114,7 +114,7 @@ public class Checkpoint extends LeaderDaemon {
                 }
                 int port = Config.http_port;
 
-                String url = "http://" + host + ":" + port + "/put?version=" + checkPointVersion
+                String url = "http://" + host + ":" + port + "/put?version=" + checkpointVersion
                         + "&port=" + port + "&subdir=" + subDir;
                 LOG.info("Put image:{}", url);
 
@@ -126,14 +126,14 @@ public class Checkpoint extends LeaderDaemon {
                 }
             }
 
-            LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push successed {} nodes",
-                    checkPointVersion, subDir, otherNodesCount, successPushed);
+            LOG.info("push image.{} from subdir [{}] to other nodes. totally {} nodes, push succeeded {} nodes",
+                    checkpointVersion, subDir, otherNodesCount, successPushed);
         }
 
         // Delete old journals
         if (successPushed == otherNodesCount) {
             long minOtherNodesJournalId = Long.MAX_VALUE;
-            long deleteVersion = checkPointVersion;
+            long deleteVersion = checkpointVersion;
             if (successPushed > 0) {
                 for (Frontend fe : allFrontends) {
                     String host = fe.getHost();
@@ -171,14 +171,14 @@ public class Checkpoint extends LeaderDaemon {
                         }
                     }
                 }
-                deleteVersion = Math.min(minOtherNodesJournalId, checkPointVersion);
+                deleteVersion = Math.min(minOtherNodesJournalId, checkpointVersion);
             }
             journal.deleteJournals(deleteVersion + 1);
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
             }
             LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
-                    deleteVersion, journal.getPrefix(), checkPointVersion, minOtherNodesJournalId);
+                    deleteVersion, journal.getPrefix(), checkpointVersion, minOtherNodesJournalId);
         }
 
         // Delete old image files

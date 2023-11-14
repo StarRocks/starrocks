@@ -396,4 +396,16 @@ public class ScanTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "FROM `ods_order` WHERE (order_no NOT IN ('1', '2', '3'))");
     }
+
+    @Test
+    public void testImplicitCast() throws Exception {
+        String sql = "select count(distinct v1||v2) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(4: expr)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : (CAST(1: v1 AS BOOLEAN)) OR (CAST(2: v2 AS BOOLEAN))");
+    }
 }

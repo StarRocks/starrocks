@@ -83,6 +83,7 @@ struct TGlobalDict {
     1: optional i32 columnId
     2: optional list<binary> strings
     3: optional list<i32> ids
+    4: optional i64 version
 }
 
 // Statistic data for new planner 

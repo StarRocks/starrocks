@@ -11,11 +11,9 @@ SHOW TABLE STATUS
 [FROM db] [LIKE "pattern"]
 ```
 
-Note:
-
-```PLAIN TEXT
-1. 1. This statement is mainly compatible with MySQL grammar. At present, it only shows a few information, such as Comment. 
-```
+> Note
+>
+> This statement is mainly compatible with MySQL syntax. At present, it only shows a few information, such as Comment.
 
 ## Examples
 

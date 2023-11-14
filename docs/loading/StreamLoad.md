@@ -14,7 +14,7 @@ Stream Load is suitable for the following business scenarios:
   
   In most cases, we recommend that you use programs such as Apache Flink® to submit a load job, within which a series of tasks can be generated to continuously load streaming data in real time into StarRocks.
 
-Additionally, Stream Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
+Stream Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
 > **NOTE**
 >
@@ -67,7 +67,20 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ##### Data examples
 
+<<<<<<< HEAD
 1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+=======
+1. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
+
+   ```Plain
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
+   ```
+
+2. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+>>>>>>> branch-2.5
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -78,24 +91,20 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
-2. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
-
-   ```Plain
-   1,Lily,23
-   2,Rose,23
-   3,Alice,24
-   4,Julia,25
-   ```
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ##### Load data
 
 Run the following command to load the data of `example1.csv` into `table1`:
 
 ```Bash
-curl --location-trusted -u root: -H "label:123" \
+curl --location-trusted -u <username>:<password> -H "label:123" \
+    -H "Expect:100-continue" \
     -H "column_separator:," \
     -H "columns: id, name, score" \
     -T example1.csv -XPUT \
@@ -125,7 +134,17 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ##### Data examples
 
+<<<<<<< HEAD
 1. In your StarRocks database `test_db`, create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+=======
+1. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
+
+   ```JSON
+   {"name": "Beijing", "code": 2}
+   ```
+
+2. In your StarRocks database `test_db`, create a Primary Key table named `table2`. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+>>>>>>> branch-2.5
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`
@@ -135,21 +154,20 @@ MySQL [test_db]> SELECT * FROM table1;
    )
    ENGINE=OLAP
    PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   DISTRIBUTED BY HASH(`id`);
    ```
 
-2. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
-
-   ```JSON
-   {"name": "Beijing", "code": 2}
-   ```
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 ##### Load data
 
 Run the following command to load the data of `example2.json` into `table2`:
 
 ```Bash
-curl -v --location-trusted -u root: -H "strict_mode: true" \
+curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
+    -H "Expect:100-continue" \
     -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
     -H "columns: city,tmp_id, id = tmp_id * 100" \
     -T example2.json -XPUT \
@@ -197,16 +215,6 @@ Stream Load does not allow you to query the result of a load job by using the SH
 ### Cancel a load job
 
 Stream Load does not allow you to cancel a load job. If a load job times out or encounters errors, StarRocks automatically cancels the job.
-
-## Load streaming data
-
-Stream Load allows you to load streaming data into StarRocks in real time by using programs. For more information, see the following topics:
-
-- For information about how to run Stream Load jobs by using Flink, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
-
-- For information about how to run Stream Load jobs by using Java programs, visit [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load).
-
-- For information about how to run Stream Load jobs by using Apache Spark™, see [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md).
 
 ## Parameter configurations
 

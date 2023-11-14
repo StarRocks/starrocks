@@ -318,7 +318,9 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
 
 1. View all Colocation information of a cluster
 
-    `GET /api/colocate`
+    ~~~bash
+    curl --location-trusted -u<username>:<password> 'http://<fe_host>:<fe_http_port>/api/colocate'  
+    ~~~
 
     ~~~JSON
     // Returns the internal Colocation information in Json format.
@@ -380,6 +382,7 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
 
 2. Mark the Group as Stable or Unstable
 
+<<<<<<< HEAD
     * Mark as Stable
         `POST /api/colocate/group_stable?db_id=10005&group_id=10008`
 
@@ -390,6 +393,16 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
         `DELETE /api/colocate/group_stable?db_id=10005&group_id=10008`
 
         `Return: 200`
+=======
+    ~~~bash
+    # Mark as Stable
+    curl -XPOST --location-trusted -u<username>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_stable?db_id=<dbId>&group_id=<grpId>​'
+    # Mark as Unstable
+    curl -XPOST --location-trusted -u<username>:<password> ​'http://<fe_host>:<fe_http_port>/api/colocate/group_unstable?db_id=<dbId>&group_id=<grpId>​'
+    ~~~
+
+    If the returned result is `200`, the Group is successfully marked as Stable or Unstable.
+>>>>>>> branch-2.5
 
 3. Set the data distribution of a Group
 

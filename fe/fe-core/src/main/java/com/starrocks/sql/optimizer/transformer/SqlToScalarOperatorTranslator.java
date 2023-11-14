@@ -508,6 +508,11 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitInPredicate(InPredicate node, Context context)
                 throws SemanticException {
+            List<Expr> lhsSubQueries = Lists.newArrayList();
+            node.getChild(0).collect(Subquery.class, lhsSubQueries);
+            if (!lhsSubQueries.isEmpty()) {
+                throw new SemanticException("Subquery in left-side child of in-predicate is not supported");
+            }
             if (!(node.getChild(1) instanceof Subquery)) {
                 return new InPredicateOperator(node.isNotIn(),
                         node.getChildren().stream()
@@ -731,9 +736,9 @@ public final class SqlToScalarOperatorTranslator {
             ColumnRefSet outerUsedColumns = new ColumnRefSet();
             if (subqueryPlan.getCorrelation().isEmpty()) {
                 for (Expr outer : context.outerExprs) {
-                    outerUsedColumns.union(SqlToScalarOperatorTranslator
-                            .translate(outer, builder.getExpressionMapping(), columnRefFactory)
-                            .getUsedColumns());
+                    outerUsedColumns.union(
+                            SqlToScalarOperatorTranslator.translate(outer, expressionMapping, columnRefFactory)
+                                    .getUsedColumns());
                 }
             }
 

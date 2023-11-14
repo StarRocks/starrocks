@@ -22,7 +22,7 @@ Returns a JSON array.
 
 Example 1: Construct a JSON array that consists of values of different data types.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT json_array(1, true, 'starrocks', 1.1);
 
        -> [1, true, "starrocks", 1.1]
@@ -30,7 +30,7 @@ mysql> SELECT json_array(1, true, 'starrocks', 1.1);
 
 Example 2: Construct an empty JSON array.
 
-```Plain%20Text
+```plaintext
 mysql> SELECT json_array();
 
        -> []

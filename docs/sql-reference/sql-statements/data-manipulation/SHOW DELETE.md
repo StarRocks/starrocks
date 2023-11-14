@@ -20,7 +20,10 @@ Return fields:
 - DeleteCondition: the specified DELETE condition.
 - State: the status of the DELETE task.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> branch-2.5
 ## Examples
 
 Show all historical DELETE tasks of `database`.

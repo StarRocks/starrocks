@@ -5,7 +5,10 @@
 #include <utility>
 
 #include "exec/exec_node.h"
+#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
+#include "formats/orc/orc_min_max_decoder.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
@@ -112,7 +115,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             ColumnPtr max_col = max_chunk->columns()[i];
             DCHECK(!min_col->is_constant() && !max_col->is_constant());
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
-            Status st = _reader->decode_min_max_value(slot, stats, min_col, max_col, tz_offset_in_seconds);
+            Status st = OrcMinMaxDecoder::decode(slot, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
                 return false;
             }
@@ -163,13 +166,6 @@ bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
         }
     }
     return false;
-}
-
-// Hive ORC char type will pad trailing spaces.
-// https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
-static inline size_t remove_trailing_spaces(const char* s, size_t size) {
-    while (size > 0 && s[size - 1] == ' ') size--;
-    return size;
 }
 
 bool OrcRowReaderFilter::filterOnPickStringDictionary(
@@ -289,7 +285,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
-    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _scanner_params.scan_ranges[0]->file_length);
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
+                                                            _shared_buffered_input_stream.get());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
@@ -343,7 +340,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_reader->set_row_reader_filter(_orc_row_reader_filter);
     _orc_reader->set_read_chunk_size(runtime_state->chunk_size());
     _orc_reader->set_runtime_state(runtime_state);
-    _orc_reader->set_current_file_name(_scanner_params.scan_ranges[0]->relative_path);
+    _orc_reader->set_current_file_name(_file->filename());
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
@@ -352,7 +349,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
-        _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
+        RETURN_IF_ERROR(
+                _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector));
     }
     _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);
@@ -474,4 +472,5 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     // todo: build predicate hook and ranges hook.
     return Status::OK();
 }
+
 } // namespace starrocks::vectorized

@@ -1,6 +1,10 @@
 # Change data through loading
 
+<<<<<<< HEAD
 The [Primary Key table](../table_design/table_types/primary_key_table.md) provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, the Primary Key table does not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).
+=======
+[Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).
+>>>>>>> branch-2.5
 
 StarRocks also supports partial updates and conditional updates.
 
@@ -12,7 +16,11 @@ This topic uses CSV data as an example to describe how to make data changes to a
 
 ## Implementation
 
+<<<<<<< HEAD
 The Primary Key table of StarRocks supports UPSERT and DELETE operations and does not distinguish INSERT operations from UPDATE operations.
+=======
+Primary Key tables provided by StarRocks support UPSERT and DELETE operations and does not distinguish INSERT operations from UPDATE operations.
+>>>>>>> branch-2.5
 
 When you create a load job, StarRocks supports adding a field named `__op` to the job creation statement or command. The `__op` field is used to specify the type of operation you want to perform.
 
@@ -54,7 +62,7 @@ If you choose Routine Load, make sure that topics are created in your Apache Kaf
 
 ## Basic operations
 
-This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
 
 ### UPSERT
 
@@ -70,39 +78,47 @@ If the data file you want to load involves only UPSERT operations, you do not ne
 
 #### Data examples
 
-1. Create a StarRocks table in your StarRocks database `test_db`.
+1. Prepare a data file.
 
+<<<<<<< HEAD
    a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+=======
+   a. Create a CSV file named `example1.csv` in your local file system. The file consists of three columns, which represent user ID, user name, and user score in sequence.
+>>>>>>> branch-2.5
 
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table1`
-   (
-       `id` int(11) NOT NULL COMMENT "user ID",
-       `name` varchar(65533) NOT NULL COMMENT "user name",
-       `score` int(11) NOT NULL COMMENT "user score"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
+      ```Plain
+      101,Lily,100
+      102,Rose,100
+      ```
+
+   b. Publish the data of `example1.csv` to `topic1` of your Kafka cluster.
+
+2. Prepare a StarRocks table.
+
+   a. Create a Primary Key table named `table1` in your StarRocks database `test_db`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table1`
+      (
+          `id` int(11) NOT NULL COMMENT "user ID",
+          `name` varchar(65533) NOT NULL COMMENT "user name",
+          `score` int(11) NOT NULL COMMENT "user score"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **NOTE**
+      >
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Insert a record into `table1`.
 
-   ```SQL
-   MySQL [test_db]> INSERT INTO table1 VALUES
-       (101, 'Lily',80);
-   ```
-
-2. Create a data file in your local file system.
-
-   Create a CSV file named `example1.csv`. The file consists of three columns, which represent user ID, user name, and user score in sequence.
-
-   ```Plain
-   101,Lily,100
-   102,Rose,100
-   ```
-
-3. Publish the data of `example1.csv` to `topic1` of your Kafka cluster.
+      ```SQL
+      INSERT INTO table1 VALUES
+          (101, 'Lily',80);
+      ```
 
 #### Load data
 
@@ -113,21 +129,23 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
   - If you do not want to include the `__op` field, run the following command:
 
     ```Bash
-    curl --location-trusted -u root: \
+    curl --location-trusted -u <username>:<password> \
+        -H "Expect:100-continue" \
         -H "label:label1" \
         -H "column_separator:," \
-        -T example1.csv -XPUT\
+        -T example1.csv -XPUT \
         http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
     ```
 
   - If you want to include the `__op` field, run the following command:
 
     ```Bash
-    curl --location-trusted -u root: \
+    curl --location-trusted -u <username>:<password> \
+        -H "Expect:100-continue" \
         -H "label:label2" \
         -H "column_separator:," \
         -H "columns:__op ='upsert'" \
-        -T example1.csv -XPUT\
+        -T example1.csv -XPUT \
         http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
     ```
 
@@ -209,7 +227,7 @@ Run a load job to update the record whose `id` is `101` in `example1.csv` to `ta
 After the load is complete, query the data of `table1` to verify that the load is successful:
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table1;
+SELECT * FROM table1;
 +------+------+-------+
 | id   | name | score |
 +------+------+-------+
@@ -227,39 +245,47 @@ If the data file you want to load involves only DELETE operations, you must add 
 
 #### Data examples
 
-1. Create a StarRocks table in your StarRocks table `test_db`.
+1. Prepare a data file.
 
+<<<<<<< HEAD
    a. Create a table named `table2` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+=======
+   a. Create a CSV file named `example2.csv` in your local file system. The file consists of three columns, which represent user ID, user name, and user score in sequence.
+>>>>>>> branch-2.5
 
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table2`
-         (
-       `id` int(11) NOT NULL COMMENT "user ID",
-       `name` varchar(65533) NOT NULL COMMENT "user name",
-       `score` int(11) NOT NULL COMMENT "user score"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
+      ```Plain
+      101,Jack,100
+      ```
+
+   b. Publish the data of `example2.csv` to `topic2` of your Kafka cluster.
+
+2. Prepare a StarRocks table.
+
+   a. Create a Primary Key table named `table2` in your StarRocks table `test_db`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table2`
+            (
+          `id` int(11) NOT NULL COMMENT "user ID",
+          `name` varchar(65533) NOT NULL COMMENT "user name",
+          `score` int(11) NOT NULL COMMENT "user score"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **NOTE**
+      >
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Insert two records into `table2`.
 
-   ```SQL
-   MySQL [test_db]> INSERT INTO table2 VALUES
-   (101, 'Jack', 100),
-   (102, 'Bob', 90);
-   ```
-
-2. Create a data file in your local file system.
-
-   Create a CSV file named `example2.csv`. The file consists of three columns, which represent user ID, user name, and user score in sequence.
-
-   ```Plain
-   101,Jack,100
-   ```
-
-3. Publish the data of `example2.csv` to `topic2` of your Kafka cluster.
+      ```SQL
+      INSERT INTO table2 VALUES
+      (101, 'Jack', 100),
+      (102, 'Bob', 90);
+      ```
 
 #### Load data
 
@@ -268,11 +294,12 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
 - Run a Stream Load job.
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label3" \
       -H "column_separator:," \
       -H "columns:__op='delete'" \
-      -T example2.csv -XPUT\
+      -T example2.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
   ```
 
@@ -315,7 +342,7 @@ Run a load job to delete the record whose `id` is `101` in `example2.csv` from `
 After the load is complete, query the data of `table2` to verify that the load is successful:
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table2;
+SELECT * FROM table2;
 +------+------+-------+
 | id   | name | score |
 +------+------+-------+
@@ -332,41 +359,49 @@ If the data file you want to load involves both UPSERT and DELETE operations, yo
 
 #### Data examples
 
-1. Create a StarRocks table in your StarRocks database `test_db`.
+1. Prepare a data file.
 
+<<<<<<< HEAD
    a. Create a table named `table3` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+=======
+   a. Create a CSV file named `example3.csv` in your local file system. The file consists of four columns, which represent user ID, user name, user score, and operation type in sequence.
+>>>>>>> branch-2.5
 
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table3`
-   (
-       `id` int(11) NOT NULL COMMENT "user ID",
-       `name` varchar(65533) NOT NULL COMMENT "user name",
-       `score` int(11) NOT NULL COMMENT "user score"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
+      ```Plain
+      101,Tom,100,1
+      102,Sam,70,0
+      103,Stan,80,0
+      ```
+
+   b. Publish the data of `example3.csv` to `topic3` of your Kafka cluster.
+
+2. Prepare a StarRocks table.
+
+   a. Create a Primary Key table named `table3` in your StarRocks database `test_db`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table3`
+      (
+          `id` int(11) NOT NULL COMMENT "user ID",
+          `name` varchar(65533) NOT NULL COMMENT "user name",
+          `score` int(11) NOT NULL COMMENT "user score"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **NOTE**
+      >
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Insert two records into `table3`.
 
-   ```SQL
-   MySQL [test_db]> INSERT INTO table3 VALUES
-       (101, 'Tom', 100),
-       (102, 'Sam', 90);
-   ```
-
-2. Create a data file in your local file system.
-
-   Create a CSV file named `example3.csv`. The file consists of four columns, which represent user ID, user name, user score, and operation type in sequence.
-
-   ```Plain
-   101,Tom,100,1
-   102,Sam,70,0
-   103,Stan,80,0
-   ```
-
-3. Publish the data of `example3.csv` to `topic3` of your Kafka cluster.
+      ```SQL
+      INSERT INTO table3 VALUES
+          (101, 'Tom', 100),
+          (102, 'Sam', 90);
+      ```
 
 #### Load data
 
@@ -375,11 +410,16 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 - Run a Stream Load job:
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label4" \
       -H "column_separator:," \
       -H "columns: id, name, score, temp, __op = temp" \
+<<<<<<< HEAD
       -T example3.csv -XPUT\
+=======
+      -T example3.csv -XPUT \
+>>>>>>> branch-2.5
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
 
@@ -427,7 +467,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 After the load is complete, query the data of  `table3` to verify that the load is successful:
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table3;
+SELECT * FROM table3;
 +------+------+-------+
 | id   | name | score |
 +------+------+-------+
@@ -445,40 +485,48 @@ Since v2.2, StarRocks supports updating only the specified columns of a table th
 
 ### Data examples
 
-1. Create a StarRocks table in your StarRocks database `test_db`.
+1. Prepare a data file.
 
+   a. Create a CSV file named `example4.csv` in your local file system. The file consists of two columns, which represent user ID and user name in sequence.
+
+<<<<<<< HEAD
    a. Create a table named `table4` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+=======
+      ```Plain
+      101,Lily
+      102,Rose
+      103,Alice
+      ```
+>>>>>>> branch-2.5
 
-   ```SQL
-   MySQL [test_db]> CREATE TABLE `table4`
-   (
-       `id` int(11) NOT NULL COMMENT "user ID",
-       `name` varchar(65533) NOT NULL COMMENT "user name",
-       `score` int(11) NOT NULL COMMENT "user score"
-   )
-   ENGINE=OLAP
-   PRIMARY KEY(`id`)
-   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
-   ```
+   b. Publish the data of `example4.csv` to `topic4` of your Kafka cluster.
+
+2. Prepare a StarRocks table.
+
+   a. Create a Primary Key table named `table4` in your StarRocks database `test_db`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table4`
+      (
+          `id` int(11) NOT NULL COMMENT "user ID",
+          `name` varchar(65533) NOT NULL COMMENT "user name",
+          `score` int(11) NOT NULL COMMENT "user score"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+      > **NOTE**
+      >
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
    b. Insert a record into `table4`.
 
-   ```SQL
-   MySQL [test_db]> INSERT INTO table4 VALUES
-       (101, 'Tom',80);
-   ```
-
-2. Create a data file in your local file system.
-
-   Create a CSV file named `example4.csv`. The file consists of two columns, which represent user ID and user name in sequence.
-
-   ```Plain
-   101,Lily
-   102,Rose
-   103,Alice
-   ```
-
-3. Publish the data of `example4.csv` to `topic4` of your Kafka cluster.
+      ```SQL
+      INSERT INTO table4 VALUES
+          (101, 'Tom',80);
+      ```
 
 ### Load data
 
@@ -487,11 +535,12 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 - Run a Stream Load job:
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label7" -H "column_separator:," \
       -H "partial_update:true" \
       -H "columns:id,name" \
-      -T example4.csv -XPUT\
+      -T example4.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
   ```
 
@@ -547,7 +596,7 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
 After the load is complete, query the data of `table4` to verify that the load is successful:
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table4;
+SELECT * FROM table4;
 +------+-------+-------+
 | id   | name  | score |
 +------+-------+-------+
@@ -562,7 +611,11 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Conditional updates
 
+<<<<<<< HEAD
 From StarRocks v2.5 onwards, tables of the Primary Key table support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
+=======
+From StarRocks v2.5 onwards, Primary Key tables support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
+>>>>>>> branch-2.5
 
 The conditional update feature is designed to resolve data disorder. If the source data is disordered, you can use this feature to ensure that new data will not be overwritten by old data.
 
@@ -575,12 +628,27 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
 ### Data examples
 
-1. Create a StarRocks table in your StarRocks database `test_db`.
+1. Prepare a data file.
 
+   a. Create a CSV file named `example5.csv` in your local file system. The file consists of three columns, which represent user ID, version, and user score in sequence.
+
+      ```Plain
+      101,1,100
+      102,3,100
+      ```
+
+   b. Publish the data of `example5.csv` to `topic5` of your Kafka cluster.
+
+2. Prepare a StarRocks table.
+
+<<<<<<< HEAD
    a. Create a table named `table5` that uses the Primary Key table. The table consists of three columns: `id`, `version`, and `score`, of which `id` is the primary key.
+=======
+   a. Create a Primary Key table named `table5` in your StarRocks database `test_db`. The table consists of three columns: `id`, `version`, and `score`, of which `id` is the primary key.
+>>>>>>> branch-2.5
 
       ```SQL
-      MySQL [test_db]> CREATE TABLE `table5`
+      CREATE TABLE `table5`
       (
           `id` int(11) NOT NULL COMMENT "user ID", 
           `version` int NOT NULL COMMENT "version",
@@ -590,24 +658,17 @@ The conditional update feature is designed to resolve data disorder. If the sour
       PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 10;
       ```
 
+      > **NOTE**
+      >
+      > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
    b. Insert a record into `table5`.
 
       ```SQL
-      MySQL [test_db]> INSERT INTO table5 VALUES
+      INSERT INTO table5 VALUES
           (101, 2, 80),
           (102, 2, 90);
       ```
-
-2. Create a data file in your local file system.
-
-   Create a CSV file named `example5.csv`. The file consists of three columns, which represent user ID, version, and user score in sequence.
-
-   ```Plain
-   101,1,100
-   102,3,100
-   ```
-
-3. Publish the data of `example5.csv` to `topic5` of your Kafka cluster.
 
 ### Load data
 
@@ -616,11 +677,12 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
 - Run a Stream Load job:
 
   ```Bash
-  curl --location-trusted -u root: \
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
       -H "label:label10" \
       -H "column_separator:," \
       -H "merge_condition:version" \
-      -T example5.csv -XPUT\
+      -T example5.csv -XPUT \
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
   ```
 
@@ -647,7 +709,7 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
 After the load is complete, query the data of `table5` to verify that the load is successful:
 
 ```SQL
-MySQL [test_db]> SELECT * FROM table5;
+SELECT * FROM table5;
 +------+------+-------+
 | id   | version | score |
 +------+------+-------+

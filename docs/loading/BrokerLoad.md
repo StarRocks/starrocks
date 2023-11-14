@@ -4,9 +4,9 @@ StarRocks provides the loading method MySQL-based Broker Load to help you load a
 
 Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
 
-Broker Load supports loading one or more data files at a time and ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
+Broker Load supports single-table loads and multi-table loads. You can load one or multiple data files into one or multiple destination tables by running one Broker Load job. Broker Load ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
 
-Broker Load also supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
+Broker Load supports data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
 ## Background information
 
@@ -14,14 +14,11 @@ In v2.4 and earlier, StarRocks depends on brokers to set up connections between 
 
 From v2.5 onwards, StarRocks no longer depends on brokers to set up connections between your StarRocks cluster and your external storage system when it runs a Broker Load job. Therefore, you no longer need to specify a broker in the load statement, but you still need to retain the `WITH BROKER` keyword. This is called "broker-free loading."
 
-When your data is stored in HDFS, however, broker-free loading may not work and you can resort to broker-based loading:
-
-- If you load data from multiple HDFS clusters, you need to deploy and configure an independent broker for each of these HDFS clusters.
-- If you load data from a single HDFS cluster and you have configured multiple Kerberos users, you need to deploy one independent broker.
+When your data is stored in HDFS, you may encounter situations where broker-free loading does not work. This can happen when your data is stored across multiple HDFS clusters or when you have configured multiple Kerberos users. In these situations, you can resort to using broker-based loading instead. To do this successfully, make sure that at least one independent broker group is deployed. For information about how to specify authentication configuration and HA configuration in these situations, see [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs).
 
 > **NOTE**
 >
-> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
+> You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you can deploy brokers by following the instructions provided in [Deploy a broker](../deployment/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -54,22 +51,23 @@ Broker Load supports the following storage systems:
 
 ## How it works
 
-After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
+After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of available BEs and the size of the data file you want to load, and then assigns each portion of the query plan to an available BE. During the load, each involved BE pulls the data of the data file from your HDFS or cloud storage system, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1-en.png)
+![Workflow of Broker Load](../assets/broker_load_how-to-work_en.png)
 
 ## Basic operations
 
-### Create a load job
+### Create a multi-table load job
 
-This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+This topic uses CSV as an example to describe how to load multiple data files into multiple tables. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
 #### Data examples
 
+<<<<<<< HEAD
 1. In your StarRocks database `test_db`, create StarRocks tables.
 
    a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
@@ -100,23 +98,67 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    ```
 
 2. In your local file system, create CSV files.
+=======
+1. Create CSV files in your local file system.
+>>>>>>> branch-2.5
 
    a. Create a CSV file named `file1.csv`. The file consists of three columns, which represent user ID, user name, and user score in sequence.
 
-   ```Plain
-   1,Lily,23
-   2,Rose,23
-   3,Alice,24
-   4,Julia,25
-   ```
+      ```Plain
+      1,Lily,23
+      2,Rose,23
+      3,Alice,24
+      4,Julia,25
+      ```
 
    b. Create a CSV file named `file2.csv`. The file consists of two columns, which represent city ID and city name in sequence.
 
+<<<<<<< HEAD
    ```Plain
    200,'Beijing'
    ```
 
 3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
+=======
+      ```Plain
+      200,'Beijing'
+      ```
+
+2. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, to the `input` folder of your Google GCS bucket `bucket_gcs`, and to the `input` folder of your MinIO bucket `bucket_minio`.
+
+3. Create StarRocks tables in your StarRocks database `test_db`.
+
+   > **NOTE**
+   >
+   > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+
+   a. Create a Primary Key table named `table1`. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table1`
+      (
+          `id` int(11) NOT NULL COMMENT "user ID",
+          `name` varchar(65533) NULL DEFAULT "" COMMENT "user name",
+          `score` int(11) NOT NULL DEFAULT "0" COMMENT "user score"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+
+   b. Create a Primary Key table named `table2`. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+
+      ```SQL
+      CREATE TABLE `table2`
+      (
+          `id` int(11) NOT NULL COMMENT "city ID",
+          `city` varchar(65533) NULL DEFAULT "" COMMENT "city name"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`)
+      DISTRIBUTED BY HASH(`id`);
+      ```
+>>>>>>> branch-2.5
 
 #### Load data from HDFS
 
@@ -145,8 +187,15 @@ PROPERTIES
 );
 ```
 
+<<<<<<< HEAD
 #### Load data from AWS S3
 
+=======
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs).
+
+#### Load data from AWS S3
+
+>>>>>>> branch-2.5
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your AWS S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
 
 ```SQL
@@ -169,6 +218,11 @@ WITH BROKER
 > **NOTE**
 >
 > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
+<<<<<<< HEAD
+=======
+
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#aws-s3).
+>>>>>>> branch-2.5
 
 #### Load data from Google GCS
 
@@ -195,6 +249,11 @@ WITH BROKER
 >
 > Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
+<<<<<<< HEAD
+=======
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#google-gcs).
+
+>>>>>>> branch-2.5
 #### Load data from other S3-compatible storage system
 
 Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_gcs` into `table1` and `table2`, respectively:
@@ -218,6 +277,11 @@ WITH BROKER
 );
 ```
 
+<<<<<<< HEAD
+=======
+In the preceding example, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#other-s3-compatible-storage-system).
+
+>>>>>>> branch-2.5
 #### Query data
 
 After the load of data from your HDFS cluster, AWS S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
@@ -249,9 +313,13 @@ After the load of data from your HDFS cluster, AWS S3 bucket, or Google GCS buck
    4 rows in set (0.01 sec)
    ```
 
-#### Usage notes
+### Create a single-table load job
 
+<<<<<<< HEAD
 The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your AWS S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
+=======
+You can also load a single data file or all data files from a specified path into a single destination table. Suppose your AWS S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
+>>>>>>> branch-2.5
 
 To load `file1.csv` into `table1`, execute the following statement:
 
@@ -285,6 +353,8 @@ WITH BROKER
 );
 ```
 
+In the preceding examples, `StorageCredentialParams` represents a group of authentication parameters which vary depending on the authentication method you choose. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#aws-s3).
+
 ### View a load job
 
 Broker Load allows you to view a lob job by using the SHOW LOAD statement or the `curl` command.
@@ -298,14 +368,18 @@ For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manip
 The syntax is as follows:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
 ```
+
+> **NOTE**
+>
+> If you use an account for which no password is set, you need to input only `<username>:`.
 
 For example, you can run the following command to view the information about a load job, whose label is `label1`, in the `test_db` database:
 
 ```Bash
-curl --location-trusted -u root: \
+curl --location-trusted -u <username>:<password> \
     'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label1'
 ```
 
@@ -364,8 +438,8 @@ In most cases, only one `data_desc` is declared for each load job, each load job
 
 ## Usage notes
 
-The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size` specifies the task pool size, namely, the maximum number of tasks that can be concurrently run for Broker Load within a specific time period in your StarRocks cluster.
+The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
-In StarRocks v2.4 and earlier, if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
+In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
 
-Since StarRocks v2.5,  if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.
+Since StarRocks v2.5, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.

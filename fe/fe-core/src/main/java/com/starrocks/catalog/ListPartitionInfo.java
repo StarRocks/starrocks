@@ -2,6 +2,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.AnalysisException;
@@ -268,11 +270,17 @@ public class ListPartitionInfo extends PartitionInfo {
     }
 
     public String getValuesFormat(long partitionId) {
-        if (!this.idToLiteralExprValues.isEmpty()) {
-            return this.valuesToString(this.idToLiteralExprValues.get(partitionId));
+        if (!idToLiteralExprValues.isEmpty()) {
+            List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
+            if (literalExprs != null) {
+                return this.valuesToString(literalExprs);
+            }
         }
-        if (!this.idToMultiLiteralExprValues.isEmpty()) {
-            return this.multiValuesToString(this.idToMultiLiteralExprValues.get(partitionId));
+        if (!idToMultiLiteralExprValues.isEmpty()) {
+            List<List<LiteralExpr>> lists = idToMultiLiteralExprValues.get(partitionId);
+            if (lists != null) {
+                return this.multiValuesToString(lists);
+            }
         }
         return "";
     }
@@ -332,5 +340,17 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+    }
+
+    @Override
+    public Object clone() {
+        ListPartitionInfo info = (ListPartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToMultiValues = Maps.newHashMap(this.idToMultiValues);
+        info.idToMultiLiteralExprValues = Maps.newHashMap(this.idToMultiLiteralExprValues);
+        info.idToValues = Maps.newHashMap(this.idToValues);
+        info.idToLiteralExprValues = Maps.newHashMap(this.idToLiteralExprValues);
+        info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
+        return info;
     }
 }

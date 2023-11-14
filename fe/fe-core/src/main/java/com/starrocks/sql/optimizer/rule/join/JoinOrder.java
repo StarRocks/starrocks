@@ -23,14 +23,20 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatsConstants;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public abstract class JoinOrder {
+
+    private static final Logger LOGGER = LogManager.getLogger(JoinOrder.class);
+
     /**
      * Like {@link OptExpression} or {@link com.starrocks.sql.optimizer.GroupExpression} ,
      * Description of an expression in the join order environment
@@ -250,7 +256,7 @@ public abstract class JoinOrder {
         exprInfo.cost = cost;
     }
 
-    protected ExpressionInfo buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
+    protected Optional<ExpressionInfo> buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {
         ExpressionInfo leftExprInfo = leftGroup.bestExprInfo;
         ExpressionInfo rightExprInfo = rightGroup.bestExprInfo;
         Pair<ScalarOperator, ScalarOperator> predicates = buildInnerJoinPredicate(
@@ -296,14 +302,25 @@ public abstract class JoinOrder {
 
         // In StarRocks, we only support hash join.
         // So we always use small table as right child
+        OptExpression joinExpr;
         if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
-            OptExpression joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+            joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                     leftExprInfo.expr);
-            return new ExpressionInfo(joinExpr, rightGroup, leftGroup);
         } else {
-            OptExpression joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+            joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
                     rightExprInfo.expr);
-            return new ExpressionInfo(joinExpr, leftGroup, rightGroup);
+        }
+
+        if (!validateJoinExpr(joinExpr)) {
+            LOGGER.debug("the reorder result is not a valid plan.\n", joinExpr.explain());
+            return Optional.empty();
+        }
+
+
+        if (leftExprInfo.rowCount < rightExprInfo.rowCount) {
+            return Optional.of(new ExpressionInfo(joinExpr, rightGroup, leftGroup));
+        } else {
+            return Optional.of(new ExpressionInfo(joinExpr, leftGroup, rightGroup));
         }
     }
 
@@ -380,5 +397,14 @@ public abstract class JoinOrder {
 
     private boolean contains(BitSet left, BitSet right) {
         return right.stream().allMatch(left::get);
+    }
+
+    private boolean validateJoinExpr(OptExpression joinExpr) {
+        LogicalJoinOperator joinOperator = joinExpr.getOp().cast();
+        ColumnRefSet requiredCols = joinOperator.getRequiredChildInputColumns();
+        ColumnRefSet inputCols = new ColumnRefSet();
+        inputCols.union(joinExpr.inputAt(0).getOutputColumns());
+        inputCols.union(joinExpr.inputAt(1).getOutputColumns());
+        return  inputCols.containsAll(requiredCols);
     }
 }

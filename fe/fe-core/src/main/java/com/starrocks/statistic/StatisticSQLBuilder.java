@@ -3,6 +3,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import org.apache.velocity.VelocityContext;
@@ -99,6 +100,25 @@ public class StatisticSQLBuilder {
         }
 
         return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
+    }
+
+    public static String buildDropPartitionSQL(List<Long> pids) {
+        return "DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE " +
+                " PARTITION_ID IN (" +
+                pids.stream().map(String::valueOf).collect(Collectors.joining(", ")) +
+                ");";
+    }
+
+    public static String buildDropTableInvalidPartitionSQL(List<Long> tables, List<Long> partitions) {
+        Preconditions.checkState(!tables.isEmpty() && !partitions.isEmpty());
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE");
+        String tids = tables.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        String pids = partitions.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        sql.append(" TABLE_ID IN (").append(tids).append(")");
+        sql.append(" AND PARTITION_ID NOT IN (").append(pids).append(")");
+        return sql.toString();
     }
 
     public static String buildQueryHistogramStatisticsSQL(Long tableId, List<String> columnNames) {

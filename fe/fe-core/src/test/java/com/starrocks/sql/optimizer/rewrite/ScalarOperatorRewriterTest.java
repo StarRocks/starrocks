@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
@@ -92,5 +93,16 @@ public class ScalarOperatorRewriterTest {
 
         assertEquals(OperatorType.CALL, result.getChild(1).getChild(1).getOpType());
         assertEquals(Type.BOOLEAN, result.getChild(1).getChild(1).getType());
+    }
+
+    @Test
+    public void testRewrite3() {
+        ConstantOperator constFalse = ConstantOperator.FALSE;
+        assertEquals(ConstantOperator.TRUE, NegateFilterShuttle.getInstance().negateFilter(constFalse));
+        constFalse = ConstantOperator.TRUE;
+        assertEquals(ConstantOperator.FALSE, NegateFilterShuttle.getInstance().negateFilter(constFalse));
+        constFalse = ConstantOperator.NULL;
+        assertEquals(new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT, constFalse),
+                NegateFilterShuttle.getInstance().negateFilter(constFalse));
     }
 }

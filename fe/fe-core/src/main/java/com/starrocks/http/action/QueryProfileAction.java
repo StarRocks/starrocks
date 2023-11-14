@@ -29,8 +29,16 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.StringReader;
 
 public class QueryProfileAction extends WebBaseAction {
+
+    private static final Logger LOG = LogManager.getLogger(QueryProfileAction.class);
 
     public QueryProfileAction(ActionController controller) {
         super(controller);
@@ -64,7 +72,21 @@ public class QueryProfileAction extends WebBaseAction {
 
     private void appendQueryProfile(StringBuilder buffer, String queryProfileStr) {
         buffer.append("<pre id='profile'>");
-        buffer.append(queryProfileStr);
+
+        BufferedReader reader = new BufferedReader(new StringReader(queryProfileStr));
+        String line;
+        try {
+            while ((line = reader.readLine()) != null) {
+                if (line.contains(ProfileManager.SQL_STATEMENT)) {
+                    buffer.append(escapeHtmlInPreTag(line)).append("\n");
+                } else {
+                    buffer.append(line).append("\n");
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn("transform profile content error", e);
+        }
+
         buffer.append("</pre>");
     }
 

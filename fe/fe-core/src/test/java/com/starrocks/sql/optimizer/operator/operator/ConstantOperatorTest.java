@@ -1,12 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.sql.optimizer.operator.operator;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.math.BigInteger;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 
 public class ConstantOperatorTest {
     @Test
@@ -35,9 +50,9 @@ public class ConstantOperatorTest {
                 {"69-10-07 10:11:12", "2069-10-07T00:00", "2069-10-07T10:11:12"},
                 {"00-10-07 10:11:12", "2000-10-07T00:00", "2000-10-07T10:11:12"},
                 // YYYY-MM-dd HH:mm:ss.SSS
-                {"1997-10-07 10:11:12.123", "1997-10-07T10:11:12.000123", "1997-10-07T10:11:12.000123"},
-                {"0097-10-07 10:11:12.123", "0097-10-07T10:11:12.000123", "0097-10-07T10:11:12.000123"},
-                {"2020-02-29 10:11:12.123", "2020-02-29T10:11:12.000123", "2020-02-29T10:11:12.000123"}, // Leap year.
+                {"1997-10-07 10:11:12.123", "1997-10-07T00:00", "1997-10-07T10:11:12.000123"},
+                {"0097-10-07 10:11:12.123", "0097-10-07T00:00", "0097-10-07T10:11:12.000123"},
+                {"2020-02-29 10:11:12.123", "2020-02-29T00:00", "2020-02-29T10:11:12.000123"}, // Leap year.
         };
 
         for (String[] c : testCases) {
@@ -82,9 +97,6 @@ public class ConstantOperatorTest {
                 "2019-05-31 10:11:61.123",
                 "2019-05-31 10:11:12.1234567",
 
-                // Only support "YYYY-MM-dd HH:mm:ss", not "yy-MM-dd HH:mm:ss".
-                "97-10-07 10:11:12.123",
-
                 // Other invalid formats.
                 "2019-05-31-1",
                 "2019-05-31-1 10:11:12",
@@ -93,8 +105,67 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATE));
-            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATETIME));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATE));
+            Assert.assertThrows(in.getVarchar(), DateTimeParseException.class, () -> in.castTo(Type.DATETIME));
+        }
+    }
+
+    @Test
+    public void testDistance() {
+        {
+            // tinyint
+            ConstantOperator var1 = ConstantOperator.createTinyInt((byte) 10);
+            ConstantOperator var2 = ConstantOperator.createTinyInt((byte) 20);
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // smallint
+            ConstantOperator var1 = ConstantOperator.createSmallInt((short) 10);
+            ConstantOperator var2 = ConstantOperator.createSmallInt((short) 20);
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // int
+            ConstantOperator var1 = ConstantOperator.createInt(10);
+            ConstantOperator var2 = ConstantOperator.createInt(20);
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // long
+            ConstantOperator var1 = ConstantOperator.createBigint(10);
+            ConstantOperator var2 = ConstantOperator.createBigint(20);
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // large int
+            ConstantOperator var1 = ConstantOperator.createLargeInt(BigInteger.valueOf(10));
+            ConstantOperator var2 = ConstantOperator.createLargeInt(BigInteger.valueOf(20));
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // date
+            ConstantOperator var1 = ConstantOperator.createDate(LocalDateTime.of(2023, 10, 5, 0, 0, 0));
+            ConstantOperator var2 = ConstantOperator.createDate(LocalDateTime.of(2023, 10, 15, 0, 0, 0));
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
+        }
+
+        {
+            // datetime
+            ConstantOperator var1 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 0));
+            ConstantOperator var2 = ConstantOperator.createDatetime(LocalDateTime.of(2023, 10, 5, 0, 0, 10));
+            Assert.assertEquals(10, var1.distance(var2));
+            Assert.assertEquals(-10, var2.distance(var1));
         }
     }
 }

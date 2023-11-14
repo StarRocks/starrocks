@@ -14,6 +14,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -79,6 +80,7 @@ public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
+    private boolean forceReplicatedStorage = false;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -115,7 +117,7 @@ public class InsertPlanner {
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
-        try {
+        try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
@@ -124,7 +126,8 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-            LOG.info("property" + requiredPropertySet.toString());
+
+            LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
@@ -135,9 +138,12 @@ public class InsertPlanner {
             //7. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                     || insertStmt.getTargetTable() instanceof MysqlTable);
-            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            ExecPlan execPlan;
+            try (PlannerProfile.ScopedTimer ignore3 = PlannerProfile.getScopedTimer("PlanBuilder")) {
+                execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+            }
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
@@ -165,7 +171,7 @@ public class InsertPlanner {
 
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
                         insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
-                        olapTable.enableReplicatedStorage());
+                        forceReplicatedStorage ? true : olapTable.enableReplicatedStorage());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
@@ -432,6 +438,11 @@ public class InsertPlanner {
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
+
+        if (Config.eliminate_shuffle_load_by_replicated_storage) {
+            forceReplicatedStorage = true;
+            return new PhysicalPropertySet();
+        }
 
         shuffleServiceEnable = true;
 

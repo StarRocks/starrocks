@@ -14,6 +14,10 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> branch-2.5
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -26,6 +30,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
@@ -62,10 +67,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+=======
+        // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+>>>>>>> branch-2.5
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(connectContext);
 
@@ -85,7 +97,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<PlanTestBase>() {
             @Mock
+<<<<<<< HEAD
             boolean isIgnoreColRefIds() {
+=======
+            boolean isIgnoreExplicitColRefIds() {
+>>>>>>> branch-2.5
                 return true;
             }
         };
@@ -149,6 +165,25 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
+<<<<<<< HEAD
+=======
+        String empsTableWithoutConstraints = "" +
+                "CREATE TABLE emps_no_constraint\n" +
+                "(\n" +
+                "    empid      INT         NOT NULL,\n" +
+                "    deptno     INT         NOT NULL,\n" +
+                "    locationid INT         NOT NULL,\n" +
+                "    commission INT         NOT NULL,\n" +
+                "    name       VARCHAR(20) NOT NULL,\n" +
+                "    salary     DECIMAL(18, 2)\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`empid`)\n" +
+                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+
+>>>>>>> branch-2.5
         String empsWithBigintTable = "" +
                 "CREATE TABLE emps_bigint\n" +
                 "(\n" +
@@ -164,12 +199,37 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
+<<<<<<< HEAD
+=======
+        String nullableEmps = "create table emps_null (\n" +
+                "empid int null,\n" +
+                "deptno int null,\n" +
+                "name varchar(25) null,\n" +
+                "salary double\n" +
+                ")\n" +
+                "distributed by hash(`empid`) buckets 10\n" +
+                "properties (\"replication_num\" = \"1\");";
+        String nullableDepts = "create table depts_null (\n" +
+                "deptno int null,\n" +
+                "name varchar(25) null\n" +
+                ")\n" +
+                "distributed by hash(`deptno`) buckets 10\n" +
+                "properties (\"replication_num\" = \"1\");";
+
+>>>>>>> branch-2.5
         starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
+<<<<<<< HEAD
                 .withTable(empsWithBigintTable);
+=======
+                .withTable(empsWithBigintTable)
+                .withTable(empsTableWithoutConstraints)
+                .withTable(nullableEmps)
+                .withTable(nullableDepts);
+>>>>>>> branch-2.5
 
     }
 
@@ -187,14 +247,20 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private final String query;
         private String rewritePlan;
         private Exception exception;
+        private String properties;
 
         public MVRewriteChecker(String query) {
             this.query = query;
         }
 
         public MVRewriteChecker(String mv, String query) {
+            this(mv, query, null);
+        }
+
+        public MVRewriteChecker(String mv, String query, String properties) {
             this.mv = mv;
             this.query = query;
+            this.properties = properties;
         }
 
         public MVRewriteChecker rewrite() {
@@ -208,9 +274,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     LOG.info("start to create mv:" + mv);
                     ExecPlan mvPlan = getExecPlan(mv);
                     List<String> outputNames = mvPlan.getColNames();
+                    String properties = this.properties != null ? "PROPERTIES (\n" +
+                            this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
                             "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
-                            " AS " +
+                            properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
@@ -236,12 +304,24 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker match(String targetMV) {
+<<<<<<< HEAD
             Assert.assertTrue(this.exception == null);
             Assert.assertTrue(this.rewritePlan.contains(targetMV));
+=======
+            contains(targetMV);
+            Assert.assertTrue(this.exception == null);
+>>>>>>> branch-2.5
             return this;
         }
 
+        // there may be an exception
+        public MVRewriteChecker failed() {
+            return nonMatch("TABLE: mv0");
+        }
+
+        // check plan result without any exception
         public MVRewriteChecker nonMatch() {
+<<<<<<< HEAD
             return nonMatch("TABLE: mv0");
         }
 
@@ -259,6 +339,37 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 LOG.warn("expect: \n{}", expect);
             }
             Assert.assertTrue(contained);
+=======
+            Preconditions.checkState(exception == null);
+            return nonMatch("TABLE: mv0");
+        }
+
+        public MVRewriteChecker nonMatch(String targetMV) {
+            Assert.assertTrue(this.rewritePlan != null);
+            Assert.assertFalse(this.rewritePlan.contains(targetMV));
+            return this;
+        }
+
+        public MVRewriteChecker contains(String expect) {
+            Assert.assertTrue(this.rewritePlan != null);
+            boolean contained = this.rewritePlan.contains(expect);
+            if (!contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertTrue(contained);
+            return this;
+        }
+
+        public MVRewriteChecker notContain(String expect) {
+            Assert.assertTrue(this.rewritePlan != null);
+            boolean contained = this.rewritePlan.contains(expect);
+            if (contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertFalse(contained);
+>>>>>>> branch-2.5
             return this;
         }
 
@@ -280,15 +391,31 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected MVRewriteChecker sql(String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(query);
         return fixture.rewrite();
+<<<<<<< HEAD
+=======
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query);
+        return testRewriteOK(mv, query, null);
+>>>>>>> branch-2.5
+    }
+
+    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
         return fixture.rewrite().ok();
     }
 
+    protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
+        return fixture.rewrite().failed();
+    }
+
     protected MVRewriteChecker testRewriteFail(String mv, String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(mv, query);
+        return testRewriteFail(mv, query, null);
+    }
+
+    protected MVRewriteChecker testRewriteNonmatch(String mv, String query) {
+        MVRewriteChecker fixture = new MVRewriteChecker(mv, query, null);
         return fixture.rewrite().nonMatch();
     }
 
@@ -310,12 +437,24 @@ public class MaterializedViewTestBase extends PlanTestBase {
         MaterializedView mv = getMv(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        if (!taskManager.containTask(mvTaskName)) {
-            Task task = TaskBuilder.buildMvTask(mv, "test");
+        Task task = taskManager.getTask(mvTaskName);
+        if (task == null) {
+            task = TaskBuilder.buildMvTask(mv, dbName);
             TaskBuilder.updateTaskInfo(task, mv);
             taskManager.createTask(task, false);
         }
-        taskManager.executeTaskSync(mvTaskName);
+        taskManager.executeTaskSync(task);
+    }
+
+    protected static void createAndRefreshMV(String db, String sql) throws Exception {
+        Pattern createMvPattern = Pattern.compile("^create materialized view (\\w+) .*");
+        Matcher matcher = createMvPattern.matcher(sql.toLowerCase(Locale.ROOT));
+        if (!matcher.find()) {
+            throw new Exception("create materialized view syntax error.");
+        }
+        String tableName = matcher.group(1);
+        starRocksAssert.withMaterializedView(sql);
+        refreshMaterializedView(db, tableName);
     }
 
     protected static void createAndRefreshMV(String db, String sql) throws Exception {

@@ -13,10 +13,18 @@
 // limitations under the License.
 
 #include "types/bitmap_value.h"
+<<<<<<< HEAD
 #include "util/phmap/phmap.h"
 
 #include <gtest/gtest.h>
 
+=======
+
+#include <gtest/gtest.h>
+
+#include "util/phmap/phmap.h"
+
+>>>>>>> branch-2.5
 namespace starrocks {
 
 class BitmapTest : public testing::Test {};

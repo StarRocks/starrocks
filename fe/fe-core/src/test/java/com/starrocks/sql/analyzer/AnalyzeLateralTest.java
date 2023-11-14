@@ -64,7 +64,7 @@ public class AnalyzeLateralTest {
         StatementBase stmt =
                 analyzeSuccess("select * from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1, unnest_2)");
         QueryRelation queryRelation = ((QueryStatement) stmt).getQueryRelation();
-        Assert.assertEquals("[v1, v2, v3, v4, unnest_1, unnest_2]", queryRelation.getColumnOutputNames().toString());
+        Assert.assertEquals("[v1, v2, v3, v4, v5, unnest_1, unnest_2]", queryRelation.getColumnOutputNames().toString());
 
         analyzeFail("select * from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1)",
                 "table t has 1 columns available but 2 columns specified");

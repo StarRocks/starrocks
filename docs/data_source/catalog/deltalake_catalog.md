@@ -20,23 +20,23 @@ Before you create a Delta Lake catalog, make sure your StarRocks cluster can int
 
 ### AWS IAM
 
-If your Delta Lake cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable credential method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
+If your Delta Lake cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
 
-The following credential methods are recommended:
+The following authentication methods are recommended:
 
 - Instance profile
 - Assumed role
 - IAM user
 
-Of the above-mentioned three credential methods, instance profile is the most widely used.
+Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation about the credential in AWS IAM](../../integrations/authenticate_to_aws_resources.md).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
 
 ### HDFS
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by using the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
 - When you query Delta Lake data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
 
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
@@ -71,22 +71,22 @@ PROPERTIES
 
 ### Parameters
 
-#### `catalog_name`
+#### catalog_name
 
 The name of the Delta Lake catalog. The naming conventions are as follows:
 
-- The name can contain letters, digits 0 through 9, and underscores (_) and must start with a letter.
-- The name cannot exceed 64 characters in length.
+- The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
+- The name is case-sensitive and cannot exceed 1023 characters in length.
 
-#### `comment`
+#### comment
 
 The description of the Delta Lake catalog. This parameter is optional.
 
-#### `type`
+#### type
 
 The type of your data source. Set the value to `deltalake`.
 
-#### `MetastoreParams`
+#### MetastoreParams
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
@@ -95,6 +95,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
+"hive.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
@@ -106,13 +107,18 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter           | Required | Description                                                  |
 | ------------------- | -------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+=======
+| hive.metastore.type | Yes      | The type of metastore that you use for your Delta Lake cluster. Set the value to `hive`. |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+>>>>>>> branch-2.5
 
 ##### AWS Glue
 
 If you choose AWS Glue as the metastore of your data source, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the instance profile-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -120,7 +126,7 @@ If you choose AWS Glue as the metastore of your data source, take one of the fol
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the assumed role-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -129,9 +135,13 @@ If you choose AWS Glue as the metastore of your data source, take one of the fol
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
+<<<<<<< HEAD
+=======
+  "hive.metastore.type" = "glue",
+>>>>>>> branch-2.5
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -143,15 +153,23 @@ The following table describes the parameters you need to configure in `Metastore
 | Parameter                     | Required | Description                                                  |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.type           | Yes      | The type of metastore that you use for your Delta Lake cluster. Set the value to `glue`. |
+<<<<<<< HEAD
 | aws.glue.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
 | aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you choose assumed role as the credential method for accessing AWS Glue, you must specify this parameter. |
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. |
+=======
+| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
+| aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+>>>>>>> branch-2.5
 
-For information about how to choose a credential method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
-#### `StorageCredentialParams`
+#### StorageCredentialParams
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
@@ -163,14 +181,14 @@ If your Delta Lake cluster uses any other storage system, you can ignore `Storag
 
 If you choose AWS S3 as storage for your Delta Lake cluster, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -178,7 +196,7 @@ If you choose AWS S3 as storage for your Delta Lake cluster, take one of the fol
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -191,14 +209,47 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
 | aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
 | aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
+=======
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
+##### S3-compatible storage system
+
+Delta Lake catalogs support S3-compatible storage systems from v2.5 onwards.
+
+If you choose an S3-compatible storage system, such as MinIO, as storage for your Delta Lake cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+
+```SQL
+"aws.s3.enable_ssl" = "{true | false}",
+"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+>>>>>>> branch-2.5
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
+| aws.s3.access_key                | Yes      | The access key of your IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
+
+<<<<<<< HEAD
 ##### S3-compatible storage system
 
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Delta Lake cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
@@ -222,10 +273,13 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
 
 #### `MetadataUpdateParams`
+=======
+#### MetadataUpdateParams
+>>>>>>> branch-2.5
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
 
-StarRocks implements the automatic asynchronous update policy by default.
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
@@ -244,13 +298,27 @@ However, if the frequency of data updates in Delta Lake is high, you can tune th
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
-For more information, see the "[Understand automatic asynchronous update](../catalog/deltalake_catalog.md#appendix-understand-automatic-asynchronous-update)" section of this topic.
-
 ### Examples
 
 The following examples create a Delta Lake catalog named `deltalake_catalog_hms` or `deltalake_catalog_glue`, depending on the type of metastore you use, to query data from your Delta Lake cluster.
 
-#### If you choose instance profile-based credential
+#### HDFS
+
+If you use HDFS as storage, run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+);
+```
+
+#### AWS S3
+
+##### If you choose instance profile-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -259,9 +327,10 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -272,15 +341,15 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
-#### If you choose assumed role-based credential
+##### If you choose assumed role-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -289,10 +358,11 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -303,17 +373,17 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
-      "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "true",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
-#### If you choose IAM user-based credential
+##### If you choose IAM user-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -322,11 +392,12 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
-      "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "aws.s3.region" = "us-west-2"
   );
   ```
 
@@ -337,17 +408,36 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   PROPERTIES
   (
       "type" = "deltalake",
-      "aws.s3.use_instance_profile" = "false",
-      "aws.s3.access_key" = "<iam_user_access_key>",
-      "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
-      "aws.glue.region" = "us-west-2"
+      "aws.glue.region" = "us-west-2",
+      "aws.s3.use_instance_profile" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "us-west-2"
   );
   ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG deltalake_catalog_hms
+PROPERTIES
+(
+    "type" = "deltalake",
+    "hive.metastore.type" = "hive",
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
 
 ## View the schema of a Delta Lake table
 
@@ -393,11 +483,11 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM deltalake_table
 ```
 
-## Synchronize metadata updates
+## Manually or automatically update metadata cache
 
 ### Manual update
 
-By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+By default, StarRocks caches the metadata of Delta Lake and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Delta Lake table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
 
 ```SQL
 REFRESH EXTERNAL TABLE <table_name>
@@ -475,7 +565,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 | enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
 | hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
 
-## Appendix: Understand automatic asynchronous update
+## Appendix: Understand metadata automatic asynchronous update
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Delta Lake catalogs.
 

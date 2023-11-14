@@ -2,6 +2,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+>>>>>>> branch-2.5
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -43,7 +47,11 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+<<<<<<< HEAD
     public ColumnRefOperator rewriteViewToQuery(final ColumnRefOperator colRef) {
+=======
+    public ColumnRefOperator rewriteColumnViewToQuery(final ColumnRefOperator colRef) {
+>>>>>>> branch-2.5
         if (colRef == null) {
             return null;
         }
@@ -58,6 +66,26 @@ public class ColumnRewriter {
             return null;
         }
         return (ColumnRefOperator) target;
+<<<<<<< HEAD
+=======
+    }
+
+    public ScalarOperator rewriteViewToQuery(final ScalarOperator scalarOperator) {
+        if (scalarOperator == null) {
+            return null;
+        }
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .build();
+        ScalarOperator target = scalarOperator.accept(visitor, null);
+        if (target == null || target == scalarOperator) {
+            return null;
+        }
+        return target;
+>>>>>>> branch-2.5
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
@@ -100,6 +128,37 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+<<<<<<< HEAD
+=======
+    public ScalarOperator rewriteByEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteByViewEc(predicate);
+        } else {
+            return rewriteByQueryEc(predicate);
+        }
+    }
+
+    public ScalarOperator rewriteToTargetWithEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteViewToQueryWithViewEc(predicate);
+        } else {
+            return rewriteViewToQueryWithQueryEc(predicate);
+        }
+    }
+
+    public Pair<ScalarOperator, ScalarOperator> rewriteSrcTargetWithEc(ScalarOperator src,
+                                                                       ScalarOperator target,
+                                                                       boolean isQueryToMV) {
+        if (isQueryToMV) {
+            // for view, swap column by relation mapping and query ec
+            return Pair.create(rewriteByQueryEc(src), rewriteViewToQueryWithQueryEc(target));
+        } else {
+            return Pair.create(rewriteViewToQueryWithViewEc(src), rewriteByViewEc(target));
+        }
+
+    }
+
+>>>>>>> branch-2.5
     public class ColumnWriterBuilder {
         private RewriteContext rewriteContext;
         private boolean enableRelationRewrite;

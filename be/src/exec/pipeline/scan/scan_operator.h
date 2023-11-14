@@ -17,6 +17,7 @@ namespace pipeline {
 
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
+class PipelineDriver;
 
 class ScanOperator : public SourceOperator {
 public:
@@ -63,6 +64,18 @@ public:
     void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
+
+    virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
+    void begin_pull_chunk(ChunkPtr res) {
+        _op_pull_chunks += 1;
+        _op_pull_rows += res->num_rows();
+    }
+    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
+    virtual void begin_driver_process() {}
+    virtual void end_driver_process(PipelineDriver* driver) {}
+    virtual bool is_running_all_io_tasks() const;
+
+    virtual int64_t get_scan_table_id() const { return -1; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -124,16 +137,21 @@ protected:
 
     bool _is_finished = false;
 
+    mutable bool _unpluging = false;
+    std::atomic<int> _num_running_io_tasks = 0;
+
+    int64_t _op_pull_chunks = 0;
+    int64_t _op_pull_rows = 0;
+    int64_t _op_running_time_ns = 0;
+
 private:
     int32_t _io_task_retry_cnt = 0;
     workgroup::ScanExecutor* _scan_executor = nullptr;
-    std::atomic<int> _num_running_io_tasks = 0;
 
     mutable std::shared_mutex _task_mutex; // Protects the chunk-source from concurrent close and read
     std::vector<std::atomic<bool>> _is_io_task_running;
     std::vector<ChunkSourcePtr> _chunk_sources;
     int32_t _chunk_source_idx = -1;
-    mutable bool _unpluging = false;
 
     mutable SpinLock _scan_status_mutex;
     Status _scan_status;

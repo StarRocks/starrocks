@@ -121,6 +121,10 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
     return context;
 }
 
+bool FunctionContext::error_if_overflow() const {
+    return _impl != nullptr && _impl->_state != nullptr && _impl->_state->error_if_overflow();
+}
+
 FunctionContext::FunctionContext() : _impl(new starrocks::FunctionContextImpl(this)) {}
 
 FunctionContext::~FunctionContext() {

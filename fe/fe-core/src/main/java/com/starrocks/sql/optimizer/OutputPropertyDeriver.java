@@ -5,8 +5,11 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.SchemaTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.AnyDistributionSpec;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -40,6 +43,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -53,6 +58,8 @@ import java.util.stream.Collectors;
 // The output property of the node is calculated according to the attributes of the child node and itself.
 // Currently join node enforces a valid property for the child node that cannot meet the requirements.
 public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertySet, ExpressionContext> {
+
+    private static final Logger LOG = LogManager.getLogger(OutputPropertyDeriver.class);
     private final GroupExpression groupExpression;
 
     private final PhysicalPropertySet requirements;
@@ -89,27 +96,33 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         return mergeCTEProperty(PhysicalPropertySet.EMPTY);
     }
 
-    private PhysicalPropertySet computeColocateJoinOutputProperty(HashDistributionSpec leftScanDistributionSpec,
+    private PhysicalPropertySet computeColocateJoinOutputProperty(JoinOperator joinType,
+                                                                  HashDistributionSpec leftScanDistributionSpec,
                                                                   HashDistributionSpec rightScanDistributionSpec) {
+
+        HashDistributionSpec dominatedOutputSpec = joinType.isRightJoin() ?
+                rightScanDistributionSpec : leftScanDistributionSpec;
         DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
-        List<Integer> leftShuffleColumns = leftScanDistributionSpec.getShuffleColumns();
+
+        List<Integer> dominatedOutputCols = joinType.isRightJoin() ?
+                rightScanDistributionSpec.getShuffleColumns() : leftScanDistributionSpec.getShuffleColumns();
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
         long rightTableId = rightInfo.tableId;
 
         if (leftTableId == rightTableId && !colocateIndex.isSameGroup(leftTableId, rightTableId)) {
-            return createPropertySetByDistribution(leftScanDistributionSpec);
+            return createPropertySetByDistribution(dominatedOutputSpec);
         } else {
             Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
             if (!requiredShuffleDesc.isPresent()) {
-                return createPropertySetByDistribution(leftScanDistributionSpec);
+                return createPropertySetByDistribution(dominatedOutputSpec);
             }
 
             return createPropertySetByDistribution(
                     new HashDistributionSpec(
-                            new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.LOCAL),
+                            new HashDistributionDesc(dominatedOutputCols, HashDistributionDesc.SourceType.LOCAL),
                             leftScanDistributionSpec.getPropertyInfo()));
         }
     }
@@ -200,7 +213,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
                 return computeHashJoinDistributionPropertyInfo(node,
-                        computeColocateJoinOutputProperty(leftDistributionSpec, rightDistributionSpec),
+                        computeColocateJoinOutputProperty(node.getJoinType(), leftDistributionSpec, rightDistributionSpec),
                         leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
             } else if (leftDistributionDesc.isLocal() && rightDistributionDesc.isBucketJoin()) {
@@ -210,33 +223,46 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             } else if ((leftDistributionDesc.isShuffle() || leftDistributionDesc.isShuffleEnforce()) &&
                     (rightDistributionDesc.isShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
                 // shuffle join
-                return computeHashJoinDistributionPropertyInfo(node,
-                        computeShuffleJoinOutputProperty(leftDistributionDesc.getColumns()),
-                        leftOnPredicateColumns,
-                        rightOnPredicateColumns, context);
-            } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
-                // coordinator can not bucket shuffle data from left to right
-                Preconditions.checkState(false, "Children output property distribution error");
-                return PhysicalPropertySet.EMPTY;
+                PhysicalPropertySet outputProperty = computeShuffleJoinOutputProperty(node.getJoinType(),
+                        leftDistributionDesc.getColumns(), rightDistributionDesc.getColumns());
+                return computeHashJoinDistributionPropertyInfo(node, outputProperty,
+                        leftOnPredicateColumns, rightOnPredicateColumns, context);
             } else {
-                Preconditions.checkState(false, "Children output property distribution error");
-                return PhysicalPropertySet.EMPTY;
+                LOG.error("Children output property distribution error.left child property: {}, " +
+                                "right child property: {}, join node: {}",
+                        leftChildDistributionProperty, rightChildDistributionProperty, node);
+                throw new IllegalStateException("Children output property distribution error.");
             }
         } else {
-            Preconditions.checkState(false, "Children output property distribution error");
-            return PhysicalPropertySet.EMPTY;
+            LOG.error("Children output property distribution error.left child property: {}, " +
+                            "right child property: {}, join node: {}",
+                    leftChildDistributionProperty, rightChildDistributionProperty, node);
+            throw new IllegalStateException("Children output property distribution error.");
         }
     }
 
-    private PhysicalPropertySet computeShuffleJoinOutputProperty(List<Integer> leftShuffleColumns) {
+    private PhysicalPropertySet computeShuffleJoinOutputProperty(JoinOperator joinType,
+                                                                 List<Integer> leftShuffleColumns,
+                                                                 List<Integer> rightShuffleColumns) {
         Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleDesc();
         if (!requiredShuffleDesc.isPresent()) {
             return PhysicalPropertySet.EMPTY;
         }
-        HashDistributionSpec leftShuffleDistribution = DistributionSpec.createHashDistributionSpec(
-                new HashDistributionDesc(leftShuffleColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
-        return createPropertySetByDistribution(leftShuffleDistribution);
+        // Get required properties for children.
+        List<PhysicalPropertySet> requiredProperties =
+                computeShuffleJoinRequiredProperties(requirements, leftShuffleColumns, rightShuffleColumns);
+        Preconditions.checkState(requiredProperties.size() == 2);
+
+        // when it's a right join, we should use right input cols to derive the output property
+        int dominatedIdx = joinType.isRightJoin() ? 1 : 0;
+        List<Integer> dominatedOutputColumns =
+                ((HashDistributionSpec) requiredProperties.get(dominatedIdx).getDistributionProperty().getSpec())
+                        .getShuffleColumns();
+        HashDistributionSpec outputShuffleDistribution = DistributionSpec.createHashDistributionSpec(
+                new HashDistributionDesc(dominatedOutputColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
+
+        return createPropertySetByDistribution(outputShuffleDistribution);
     }
 
     private Optional<HashDistributionDesc> getRequiredShuffleDesc() {
@@ -403,7 +429,11 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
-        return createGatherPropertySet();
+        if (SchemaTable.isBeSchemaTable(node.getTable().getName())) {
+            return createPropertySetByDistribution(new AnyDistributionSpec());
+        } else {
+            return createGatherPropertySet();
+        }
     }
 
     @Override

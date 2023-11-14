@@ -5,6 +5,7 @@
 #include <memory>
 #include <queue>
 
+#include "column/binary_column.h"
 #include "gutil/stl_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
@@ -263,6 +264,8 @@ private:
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
+        } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
+            sort_column = std::make_unique<BinaryColumn>();
         }
         std::vector<std::unique_ptr<vector<RowSourceMask>>> rowsets_source_masks;
         uint16_t order = 0;

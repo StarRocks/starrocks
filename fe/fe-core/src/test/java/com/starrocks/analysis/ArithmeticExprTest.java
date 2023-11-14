@@ -26,11 +26,9 @@ public class ArithmeticExprTest {
         ScalarType decimal64p10s2 = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL64, 10, 2);
         ExpressionAnalyzer.analyzeExpressionIgnoreSlot(addExpr, ConnectContext.get());
         Assert.assertEquals(addExpr.type, decimal64p10s2);
-        Assert.assertTrue(addExpr.getChild(0) instanceof CastExpr);
-        Assert.assertTrue(addExpr.getChild(1) instanceof CastExpr);
-        Assert.assertEquals(addExpr.getChild(0).type, decimal64p10s2);
-        Assert.assertEquals(addExpr.getChild(1).type, decimal64p10s2);
-
+        Assert.assertNotNull(addExpr.getFn());
+        Assert.assertEquals(addExpr.getFn().getArgs()[0], decimal64p10s2);
+        Assert.assertEquals(addExpr.getFn().getArgs()[1], decimal64p10s2);
     }
 
     private ScalarType dec(int bits, int precision, int scale) {

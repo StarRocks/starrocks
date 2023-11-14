@@ -96,8 +96,6 @@ set(UTIL_FILES
   timezone_utils.cpp
   easy_json.cc
   mustache/mustache.cc
-  percentile_value.h
-  buffered_stream.cpp
   int96.cpp
   hdfs_util.cpp
   gc_helper.cpp

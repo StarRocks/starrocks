@@ -37,21 +37,23 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -62,14 +64,14 @@ import java.util.stream.Collectors;
 public class TabletChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
-    private GlobalStateMgr globalStateMgr;
-    private SystemInfoService infoService;
-    private TabletScheduler tabletScheduler;
-    private TabletSchedulerStat stat;
+    private final GlobalStateMgr globalStateMgr;
+    private final SystemInfoService infoService;
+    private final TabletScheduler tabletScheduler;
+    private final TabletSchedulerStat stat;
 
     // db id -> (tbl id -> PrioPart)
-    // priority of replicas of partitions in this table will be set to VERY_HIGH if not healthy
-    private com.google.common.collect.Table<Long, Long, Set<PrioPart>> prios = HashBasedTable.create();
+    // priority of replicas of partitions in this table will be set to VERY_HIGH if unhealthy
+    private com.google.common.collect.Table<Long, Long, Set<PrioPart>> urgentTable = HashBasedTable.create();
 
     // represent a partition which need to be repaired preferentially
     public static class PrioPart {
@@ -122,14 +124,14 @@ public class TabletChecker extends LeaderDaemon {
         this.stat = stat;
     }
 
-    private void addPrios(RepairTabletInfo repairTabletInfo, long timeoutMs) {
+    private void addToUrgentTable(RepairTabletInfo repairTabletInfo, long timeoutMs) {
         Preconditions.checkArgument(!repairTabletInfo.partIds.isEmpty());
         long currentTime = System.currentTimeMillis();
-        synchronized (prios) {
-            Set<PrioPart> parts = prios.get(repairTabletInfo.dbId, repairTabletInfo.tblId);
+        synchronized (urgentTable) {
+            Set<PrioPart> parts = urgentTable.get(repairTabletInfo.dbId, repairTabletInfo.tblId);
             if (parts == null) {
                 parts = Sets.newHashSet();
-                prios.put(repairTabletInfo.dbId, repairTabletInfo.tblId, parts);
+                urgentTable.put(repairTabletInfo.dbId, repairTabletInfo.tblId, parts);
             }
 
             for (long partId : repairTabletInfo.partIds) {
@@ -143,10 +145,23 @@ public class TabletChecker extends LeaderDaemon {
                 repairTabletInfo.partIds);
     }
 
-    private void removePrios(RepairTabletInfo repairTabletInfo) {
+    /**
+     * When setting a tablet to `bad` status manually, call this method to put the corresponding partition into
+     * the `urgentTable` so that the bad tablet can be repaired ASAP.
+     *
+     * @param dbId database id
+     * @param tableId table id
+     * @param partitionId partition to which the tablet belongs
+     */
+    public void setTabletForUrgentRepair(long dbId, long tableId, long partitionId) {
+        RepairTabletInfo repairTabletInfo = new RepairTabletInfo(dbId, tableId, Collections.singletonList(partitionId));
+        addToUrgentTable(repairTabletInfo, AdminStmtAnalyzer.DEFAULT_PRIORITY_REPAIR_TIMEOUT_SEC);
+    }
+
+    public void removeFromUrgentTable(RepairTabletInfo repairTabletInfo) {
         Preconditions.checkArgument(!repairTabletInfo.partIds.isEmpty());
-        synchronized (prios) {
-            Map<Long, Set<PrioPart>> tblMap = prios.row(repairTabletInfo.dbId);
+        synchronized (urgentTable) {
+            Map<Long, Set<PrioPart>> tblMap = urgentTable.row(repairTabletInfo.dbId);
             if (tblMap == null) {
                 return;
             }
@@ -181,7 +196,7 @@ public class TabletChecker extends LeaderDaemon {
 
         checkAllTablets();
 
-        removePriosIfNecessary();
+        cleanInvalidUrgentTable();
 
         stat.counterTabletCheckRound.incrementAndGet();
         LOG.info(stat.incrementalBrief());
@@ -192,15 +207,15 @@ public class TabletChecker extends LeaderDaemon {
      * so that they can be scheduled for repair at first place.
      */
     private void checkAllTablets() {
-        checkTabletsOnlyInPrios();
-        checkTabletsNotInPrios();
+        checkUrgentTablets();
+        checkNonUrgentTablets();
     }
 
-    private void checkTabletsOnlyInPrios() {
+    private void checkUrgentTablets() {
         doCheck(true);
     }
 
-    private void checkTabletsNotInPrios() {
+    private void checkNonUrgentTablets() {
         doCheck(false);
     }
 
@@ -226,7 +241,7 @@ public class TabletChecker extends LeaderDaemon {
         }
     }
 
-    private void doCheck(boolean checkInPrios) {
+    private void doCheck(boolean isUrgent) {
         long start = System.nanoTime();
         long totalTabletNum = 0;
         long unhealthyTabletNum = 0;
@@ -235,6 +250,7 @@ public class TabletChecker extends LeaderDaemon {
         long tabletNotReady = 0;
 
         long lockTotalTime = 0;
+        long waitTotalTime = 0;
         long lockStart;
         List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
         DATABASE:
@@ -265,14 +281,20 @@ public class TabletChecker extends LeaderDaemon {
                         continue;
                     }
 
-                    if ((checkInPrios && !isTableInPrios(dbId, table.getId())) ||
-                            (!checkInPrios && isTableInPrios(dbId, table.getId()))) {
+                    if ((isUrgent && !isUrgentTable(dbId, table.getId()))) {
                         continue;
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
+
+                        boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), partition.getId());
+                        boolean isUrgentPartitionHealthy = true;
+                        if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
+                            continue;
+                        }
+
                         if (partitionChecked % partitionBatchNum == 0) {
                             LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
@@ -291,6 +313,7 @@ public class TabletChecker extends LeaderDaemon {
                                 continue;
                             }
                         }
+
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
@@ -300,12 +323,6 @@ public class TabletChecker extends LeaderDaemon {
                         short replicaNum = globalStateMgr.getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                 partition.getId());
                         if (replicaNum == (short) -1) {
-                            continue;
-                        }
-
-                        boolean isPartitionInPrios = isPartitionInPrios(dbId, table.getId(), partition.getId());
-                        boolean prioPartIsHealthy = true;
-                        if ((checkInPrios && !isPartitionInPrios) || (!checkInPrios && isPartitionInPrios)) {
                             continue;
                         }
 
@@ -333,9 +350,9 @@ public class TabletChecker extends LeaderDaemon {
                                     // Only set last status check time when status is healthy.
                                     localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                                     continue;
-                                } else if (isPartitionInPrios) {
+                                } else if (isPartitionUrgent) {
                                     statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
-                                    prioPartIsHealthy = false;
+                                    isUrgentPartitionHealthy = false;
                                 }
 
                                 unhealthyTabletNum++;
@@ -358,23 +375,21 @@ public class TabletChecker extends LeaderDaemon {
                                     continue;
                                 }
 
-                                AddResult res = tabletScheduler.addTablet(tabletCtx, false /* not force */);
-                                if (res == AddResult.LIMIT_EXCEED) {
-                                    LOG.info("number of scheduling tablets in tablet scheduler"
-                                            + " exceed to limit. stop tablet checker");
-                                    break DATABASE;
-                                } else if (res == AddResult.ADDED) {
+                                Pair<Boolean, Long> result =
+                                        tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx, isPartitionUrgent);
+                                waitTotalTime += result.second;
+                                if (result.first) {
                                     addToSchedulerTabletNum++;
                                 }
                             }
                         } // indices
 
-                        if (prioPartIsHealthy && isPartitionInPrios) {
+                        if (isUrgentPartitionHealthy && isPartitionUrgent) {
                             // if all replicas in this partition are healthy, remove this partition from
                             // priorities.
-                            LOG.debug("partition is healthy, remove from prios: {}-{}-{}",
+                            LOG.debug("partition is healthy, remove from urgent table: {}-{}-{}",
                                     db.getId(), olapTbl.getId(), partition.getId());
-                            removePrios(new RepairTabletInfo(db.getId(),
+                            removeFromUrgentTable(new RepairTabletInfo(db.getId(),
                                     olapTbl.getId(), Lists.newArrayList(partition.getId())));
                         }
                     } // partitions
@@ -393,38 +408,38 @@ public class TabletChecker extends LeaderDaemon {
         stat.counterUnhealthyTabletNum.addAndGet(unhealthyTabletNum);
         stat.counterTabletAddToBeScheduled.addAndGet(addToSchedulerTabletNum);
 
-        LOG.info("finished to check tablets. checkInPrios: {}, " +
+        LOG.info("finished to check tablets. isUrgent: {}, " +
                         "unhealthy/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, " +
-                        "cost: {} ms, in lock time: {} ms",
-                checkInPrios, unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum,
-                tabletInScheduler, tabletNotReady, cost, lockTotalTime);
+                        "cost: {} ms, in lock time: {} ms, wait time: {}ms",
+                isUrgent, unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum,
+                tabletInScheduler, tabletNotReady, cost, lockTotalTime - waitTotalTime, waitTotalTime);
     }
 
-    private boolean isTableInPrios(long dbId, long tblId) {
-        synchronized (prios) {
-            return prios.contains(dbId, tblId);
+    public boolean isUrgentTable(long dbId, long tblId) {
+        synchronized (urgentTable) {
+            return urgentTable.contains(dbId, tblId);
         }
     }
 
-    private boolean isPartitionInPrios(long dbId, long tblId, long partId) {
-        synchronized (prios) {
-            if (isTableInPrios(dbId, tblId)) {
-                return prios.get(dbId, tblId).contains(new PrioPart(partId, -1, -1));
+    public boolean isPartitionUrgent(long dbId, long tblId, long partId) {
+        synchronized (urgentTable) {
+            if (isUrgentTable(dbId, tblId)) {
+                return Objects.requireNonNull(urgentTable.get(dbId, tblId)).contains(new PrioPart(partId, -1, -1));
             }
             return false;
         }
     }
 
-    // remove partition from prios if:
+    // remove partition from urgent table if:
     // 1. timeout
     // 2. meta not found
-    private void removePriosIfNecessary() {
-        com.google.common.collect.Table<Long, Long, Set<PrioPart>> copiedPrios = null;
-        synchronized (prios) {
-            copiedPrios = HashBasedTable.create(prios);
+    private void cleanInvalidUrgentTable() {
+        com.google.common.collect.Table<Long, Long, Set<PrioPart>> copiedUrgentTable;
+        synchronized (urgentTable) {
+            copiedUrgentTable = HashBasedTable.create(urgentTable);
         }
-        List<Pair<Long, Long>> deletedPrios = Lists.newArrayList();
-        Iterator<Map.Entry<Long, Map<Long, Set<PrioPart>>>> iter = copiedPrios.rowMap().entrySet().iterator();
+        List<Pair<Long, Long>> deletedUrgentTable = Lists.newArrayList();
+        Iterator<Map.Entry<Long, Map<Long, Set<PrioPart>>>> iter = copiedUrgentTable.rowMap().entrySet().iterator();
         while (iter.hasNext()) {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
@@ -436,13 +451,11 @@ public class TabletChecker extends LeaderDaemon {
 
             db.readLock();
             try {
-                Iterator<Map.Entry<Long, Set<PrioPart>>> jter = dbEntry.getValue().entrySet().iterator();
-                while (jter.hasNext()) {
-                    Map.Entry<Long, Set<PrioPart>> tblEntry = jter.next();
+                for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
                     OlapTable tbl = (OlapTable) db.getTable(tblId);
                     if (tbl == null) {
-                        deletedPrios.add(Pair.create(dbId, tblId));
+                        deletedUrgentTable.add(Pair.create(dbId, tblId));
                         continue;
                     }
 
@@ -450,7 +463,7 @@ public class TabletChecker extends LeaderDaemon {
                     parts = parts.stream().filter(p -> (tbl.getPartition(p.partId) != null && !p.isTimeout())).collect(
                             Collectors.toSet());
                     if (parts.isEmpty()) {
-                        deletedPrios.add(Pair.create(dbId, tblId));
+                        deletedUrgentTable.add(Pair.create(dbId, tblId));
                     }
                 }
 
@@ -461,55 +474,55 @@ public class TabletChecker extends LeaderDaemon {
                 db.readUnlock();
             }
         }
-        for (Pair<Long, Long> prio : deletedPrios) {
-            copiedPrios.remove(prio.first, prio.second);
+        for (Pair<Long, Long> prio : deletedUrgentTable) {
+            copiedUrgentTable.remove(prio.first, prio.second);
         }
-        prios = copiedPrios;
+        urgentTable = copiedUrgentTable;
     }
 
     /*
      * handle ADMIN REPAIR TABLE stmt send by user.
-     * This operation will add specified tables into 'prios', and tablets of this table will be set VERY_HIGH
+     * This operation will add specified tables into 'urgentTable', and tablets of this table will be set VERY_HIGH
      * when being scheduled.
      */
     public void repairTable(AdminRepairTableStmt stmt) throws DdlException {
         RepairTabletInfo repairTabletInfo =
                 getRepairTabletInfo(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions());
-        addPrios(repairTabletInfo, stmt.getTimeoutS());
+        addToUrgentTable(repairTabletInfo, stmt.getTimeoutS());
         LOG.info("repair database: {}, table: {}, partition: {}", repairTabletInfo.dbId, repairTabletInfo.tblId,
                 repairTabletInfo.partIds);
     }
 
     /*
      * handle ADMIN CANCEL REPAIR TABLE stmt send by user.
-     * This operation will remove the specified partitions from 'prios'
+     * This operation will remove the specified partitions from 'urgentTable'
      */
     public void cancelRepairTable(AdminCancelRepairTableStmt stmt) throws DdlException {
         RepairTabletInfo repairTabletInfo =
                 getRepairTabletInfo(stmt.getDbName(), stmt.getTblName(), stmt.getPartitions());
-        removePrios(repairTabletInfo);
+        removeFromUrgentTable(repairTabletInfo);
         LOG.info("cancel repair database: {}, table: {}, partition: {}", repairTabletInfo.dbId, repairTabletInfo.tblId,
                 repairTabletInfo.partIds);
     }
 
     public int getPrioPartitionNum() {
         int count = 0;
-        synchronized (prios) {
-            for (Set<PrioPart> set : prios.values()) {
+        synchronized (urgentTable) {
+            for (Set<PrioPart> set : urgentTable.values()) {
                 count += set.size();
             }
         }
         return count;
     }
 
-    public List<List<String>> getPriosInfo() {
+    public List<List<String>> getUrgentTableInfo() {
         List<List<String>> infos = Lists.newArrayList();
-        synchronized (prios) {
-            for (Cell<Long, Long, Set<PrioPart>> cell : prios.cellSet()) {
-                for (PrioPart part : cell.getValue()) {
+        synchronized (urgentTable) {
+            for (Cell<Long, Long, Set<PrioPart>> cell : urgentTable.cellSet()) {
+                for (PrioPart part : Objects.requireNonNull(cell.getValue())) {
                     List<String> row = Lists.newArrayList();
-                    row.add(cell.getRowKey().toString());
-                    row.add(cell.getColumnKey().toString());
+                    row.add(Objects.requireNonNull(cell.getRowKey()).toString());
+                    row.add(Objects.requireNonNull(cell.getColumnKey()).toString());
                     row.add(String.valueOf(part.partId));
                     row.add(String.valueOf(part.timeoutMs - (System.currentTimeMillis() - part.addTime)));
                     infos.add(row);
@@ -528,7 +541,7 @@ public class TabletChecker extends LeaderDaemon {
         }
 
         long dbId = db.getId();
-        long tblId = -1;
+        long tblId;
         List<Long> partIds = Lists.newArrayList();
         db.readLock();
         try {

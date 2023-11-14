@@ -53,7 +53,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
@@ -769,13 +768,8 @@ public class SystemInfoService {
         if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                db.readLock();
-                try {
-                    atomicLong.set(newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-                } finally {
-                    db.readUnlock();
-                }
+                atomicLong.set(newReportVersion);
+                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }
@@ -849,7 +843,7 @@ public class SystemInfoService {
         this.idToReportVersionRef = null;
     }
 
-    public static Pair<String, Integer> validateHostAndPort(String hostPort) throws AnalysisException {
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
             throw new AnalysisException("Invalid host port: " + hostPort);
@@ -868,7 +862,7 @@ public class SystemInfoService {
         int heartbeatPort = -1;
         try {
             // validate host
-            if (!InetAddressValidator.getInstance().isValid(host) && !FrontendOptions.isUseFqdn()) {
+            if (resolveHost && !InetAddressValidator.getInstance().isValid(host)) {
                 // maybe this is a hostname
                 // if no IP address for the host could be found, 'getByName'
                 // will throw
@@ -1010,7 +1004,7 @@ public class SystemInfoService {
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 
-    private long getClusterAvailableCapacityB() {
+    public long getClusterAvailableCapacityB() {
         List<Backend> clusterBackends = getBackends();
         long capacity = 0L;
         for (Backend backend : clusterBackends) {
@@ -1062,17 +1056,17 @@ public class SystemInfoService {
     /*
      * Check if the specified disks' capacity has reached the limit.
      * bePathsMap is (BE id -> list of path hash)
-     * If floodStage is true, it will check with the floodStage threshold.
+     * If usingHardLimit is true, it will check with the usingHardLimit threshold.
      *
      * return Status.OK if not reach the limit
      */
-    public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean floodStage) {
+    public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean usingHardLimit) {
         LOG.debug("pathBeMap: {}", bePathsMap);
         ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
         for (Long beId : bePathsMap.keySet()) {
             for (Long pathHash : bePathsMap.get(beId)) {
                 DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
-                if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
+                if (diskInfo != null && diskInfo.exceedLimit(usingHardLimit)) {
                     return new Status(TStatusCode.CANCELLED,
                             "disk " + pathHash + " on backend " + beId + " exceed limit usage");
                 }

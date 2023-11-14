@@ -2,6 +2,8 @@
 
 #include "runtime/sender_queue.h"
 
+#include <atomic>
+
 #include "column/chunk.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -604,9 +606,10 @@ template <bool keep_order>
 Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                         ::google::protobuf::Closure** done) {
     if (keep_order) {
-        DCHECK(!request.has_is_pipeline_level_shuffle() || !request.is_pipeline_level_shuffle());
+        DCHECK(!request.has_is_pipeline_level_shuffle() && !request.is_pipeline_level_shuffle());
     }
-    bool use_pass_through = request.use_pass_through();
+    const bool use_pass_through = request.use_pass_through();
+    DCHECK(!(keep_order && use_pass_through));
     DCHECK(request.chunks_size() > 0 || use_pass_through);
     if (_is_cancelled || _num_remaining_senders <= 0) {
         return Status::OK();
@@ -687,30 +690,30 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             ++max_processed_sequence;
         }
     } else {
-        // remove the short-circuited chunks
-        ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-        std::lock_guard<Mutex> l(_lock);
-        wait_timer.stop();
-
         if (_is_cancelled) {
             LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
             return Status::OK();
         }
 
+        // remove the short-circuited chunks
         for (auto iter = chunks.begin(); iter != chunks.end();) {
-            if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {
+            if (_is_pipeline_level_shuffle &&
+                // First check here for short circuit compatibility without introducing a critical section
+                _chunk_queue_states[iter->driver_sequence].is_short_circuited.load(std::memory_order_relaxed)) {
                 total_chunk_bytes -= iter->chunk_bytes;
                 chunks.erase(iter++);
                 continue;
             }
             iter++;
         }
+
         if (!chunks.empty() && done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
             chunks.back().closure = *done;
             chunks.back().queue_enter_time = MonotonicNanos();
             COUNTER_UPDATE(_recvr->_closure_block_counter, 1);
             *done = nullptr;
         }
+
         for (auto& chunk : chunks) {
             int index = _is_pipeline_level_shuffle ? chunk.driver_sequence : 0;
             size_t chunk_bytes = chunk.chunk_bytes;
@@ -718,6 +721,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             _chunk_queues[index].enqueue(std::move(chunk));
             _chunk_queue_states[index].blocked_closure_num += closure != nullptr;
             _total_chunks++;
+            // Double check here for short circuit compatibility without introducing a critical section
+            if (_chunk_queue_states[index].is_short_circuited.load(std::memory_order_relaxed)) {
+                short_circuit(index);
+            }
             _recvr->_num_buffered_bytes += chunk_bytes;
         }
     }
@@ -726,9 +733,8 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
 }
 
 void DataStreamRecvr::PipelineSenderQueue::short_circuit(const int32_t driver_sequence) {
-    std::lock_guard<Mutex> l(_lock);
     auto& chunk_queue_state = _chunk_queue_states[driver_sequence];
-    chunk_queue_state.is_short_circuited = true;
+    chunk_queue_state.is_short_circuited.store(true, std::memory_order_relaxed);
     if (_is_pipeline_level_shuffle) {
         auto& chunk_queue = _chunk_queues[driver_sequence];
         ChunkItem item;

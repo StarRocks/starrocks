@@ -24,7 +24,7 @@ class MockExpr : public starrocks::Expr {
 public:
     explicit MockExpr(const TExprNode& dummy, ColumnPtr result) : Expr(dummy), _column(std::move(result)) {}
 
-    ColumnPtr evaluate(ExprContext*, Chunk*) override { return _column; }
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override { return _column; }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockExpr(*this)); }
 
@@ -36,6 +36,10 @@ class MockCostExpr : public Expr {
 public:
     explicit MockCostExpr(const TExprNode& t) : Expr(t) {}
 
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext*, Chunk*) override {
+        DCHECK(false);
+        return nullptr;
+    }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MockCostExpr(*this)); }
 
     int64_t cost_ns() { return _ns; }
@@ -71,7 +75,7 @@ public:
     MockVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
             : MockCostExpr(t), size(size), value(value) {}
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
         ColumnPtr col;
         if constexpr (pt_is_decimal<Type>) {
@@ -99,7 +103,7 @@ public:
     MockMultiVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> num1, RunTimeCppType<Type> num2)
             : MockCostExpr(t), size(size), num1(num1), num2(num2) {}
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
         auto col = RunTimeColumnType<Type>::create();
         col->reserve(size);
@@ -129,7 +133,7 @@ public:
     MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value, bool only_null)
             : MockCostExpr(t), only_null(only_null), flag(0), size(size), value(value) {}
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
         if (only_null) {
             return ColumnHelper::create_const_null_column(1);
@@ -175,7 +179,7 @@ public:
         col = ColumnHelper::create_const_column<Type>(value, 1);
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         start();
         stop();
         return col;

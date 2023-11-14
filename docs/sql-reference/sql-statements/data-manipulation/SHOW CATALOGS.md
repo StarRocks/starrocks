@@ -18,27 +18,30 @@ SHOW CATALOGS
 +----------+--------+----------+
 ```
 
-The following table describes the parameters returned by this statement.
+The following table describes the fields returned by this statement.
 
-| **Parameter** | **Description**                                              |
+| **Field** | **Description**                                              |
 | ------------- | ------------------------------------------------------------ |
 | Catalog       | The catalog name.                                            |
-| Type          | The catalog type.                                            |
-| Comment       | The comments of a catalog.StarRocks does not support adding comments to an external catalog. Therefore, the parameter value is `NULL` for an external catalog. If the returned catalog is `default_catalog`, the parameter value is `Internal Catalog`. `default_catalog` is the only internal catalog in a StarRocks cluster. |
+| Type          | The catalog type. `Internal` is returned if the catalog is `default_catalog`. The corresponding catalog type is returned if the catalog is an external catalog, such as `Hive`, `Hudi`, or `Iceberg`. |
+| Comment       | The comments of a catalog. StarRocks does not support adding comments to an external catalog. Therefore, the value is `NULL` for an external catalog. If the catalog is `default_catalog`, the comment is `An internal catalog contains this cluster's self-managed tables.` by default. `default_catalog` is the only internal catalog in a StarRocks cluster. |
 
 ## Examples
 
 Query all catalogs in the current cluster.
 
 ```SQL
-SHOW CATALOGS;
-
-+---------------------------------------------------+----------+------------------+
-| Catalog                                           | Type     | Comment          |
-+---------------------------------------------------+----------+------------------+
-| default_catalog                                   | Internal | Internal Catalog |
-| hive_catalog_1acaac1c_19e0_11ed_9ca4_00163e0e550b | hive     | NULL             |
-| hudi_catalog_dfd748ce_18a2_11ed_9f50_00163e0e550b | hudi     | NULL             |
-| iceberg_catalog                                   | iceberg  | NULL             |
-+---------------------------------------------------+----------+------------------+
+SHOW CATALOGS\G
+*************************** 1. row ***************************
+Catalog: default_catalog
+   Type: Internal
+Comment: An internal catalog contains this cluster's self-managed tables.
+*************************** 2. row ***************************
+Catalog: hudi_catalog
+   Type: Hudi
+Comment: NULL
+*************************** 3. row ***************************
+Catalog: iceberg_catalog
+   Type: Iceberg
+Comment: NULL
 ```

@@ -292,7 +292,7 @@ public class AgentTaskQueue {
             }
         }
 
-        LOG.info("get task num with type[{}] in backend[{}]: {}. isFailed: {}",
+        LOG.debug("get task num with type[{}] in backend[{}]: {}. isFailed: {}",
                 type.name(), backendId, taskNum, isFailed);
         return taskNum;
     }

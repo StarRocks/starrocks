@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -236,7 +237,11 @@ public class JoinAssociativityRule extends TransformationRule {
             }
 
             OptExpression topJoin = OptExpression.create(topJoinOperator, left, newRightChildJoin);
-            return Lists.newArrayList(topJoin);
+            if (JoinHelper.validateJoinExpr(topJoin)) {
+                return Lists.newArrayList(topJoin);
+            } else {
+                return Collections.emptyList();
+            }
         } else {
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
@@ -247,7 +252,11 @@ public class JoinAssociativityRule extends TransformationRule {
             }
 
             OptExpression topJoin = OptExpression.create(topJoinOperator, leftChild1, newRightChildJoin);
-            return Lists.newArrayList(topJoin);
+            if (JoinHelper.validateJoinExpr(topJoin)) {
+                return Lists.newArrayList(topJoin);
+            } else {
+                return Collections.emptyList();
+            }
         }
     }
 }

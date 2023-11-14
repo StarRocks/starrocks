@@ -152,6 +152,7 @@ public:
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
+    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
     workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
     workgroup::ScanExecutor* connector_scan_executor_without_workgroup() {
@@ -283,6 +284,7 @@ private:
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 
     PriorityThreadPool* _thread_pool = nullptr;
+    ThreadPool* _streaming_load_thread_pool = nullptr;
 
     workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;
     workgroup::ScanExecutor* _scan_executor_with_workgroup = nullptr;

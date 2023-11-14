@@ -82,7 +82,7 @@ public:
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
-        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
@@ -214,7 +214,7 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
         auto version = i + 2;
-        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        auto st = _tablet->rowset_commit(version, rowsets[i], 0);
         ASSERT_TRUE(st.ok()) << st.to_string();
         // Ensure that there is at most one thread doing the version apply job.
         ASSERT_LE(pool->num_threads(), 1);
@@ -250,7 +250,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     RowsetSharedPtr rowset = create_rowset(_tablet, keys);
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     auto version = 2;
-    auto st = _tablet->rowset_commit(version, rowset);
+    auto st = _tablet->rowset_commit(version, rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_LE(pool->num_threads(), 1);
     ASSERT_EQ(version, _tablet->updates()->max_version());
@@ -297,7 +297,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     CHECK_OK(writer->flush_chunk(*chunk));
     RowsetSharedPtr new_rowset = *writer->build();
     version = 3;
-    st = _tablet->rowset_commit(version, new_rowset);
+    st = _tablet->rowset_commit(version, new_rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_LE(pool->num_threads(), 1);
     ASSERT_EQ(version, _tablet->updates()->max_version());

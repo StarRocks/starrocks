@@ -42,7 +42,9 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -52,9 +54,11 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -64,6 +68,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -323,7 +328,8 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode());
@@ -432,6 +438,7 @@ public class UtFrameUtils {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
                     connectContext.getGlobalStateMgr().getLocalMetastore(),
                     connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    connectContext.getGlobalStateMgr().getResourceMgr(),
                     replayDumpInfo.getHmsTableMap(),
                     replayDumpInfo.getTableStatisticsMap());
             connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
@@ -520,23 +527,52 @@ public class UtFrameUtils {
         }
     }
 
-    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
+    private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
+            throws Exception {
+
+        Map<String, String> optHints = null;
+        SessionVariable sessionVariableBackup = connectContext.getSessionVariable();
+        if (statement.getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        }
+
+        if (optHints != null) {
+            SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setVar(sessionVariable,
+                        new SetVar(key, new StringLiteral(optHints.get(key))), true);
+            }
+            connectContext.setSessionVariable(sessionVariable);
+        }
+
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                .transform((statement).getQueryRelation());
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                connectContext,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        LogicalPlan logicalPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transform((statement).getQueryRelation());
 
-        ExecPlan execPlan = new PlanFragmentBuilder()
-                .createPhysicalPlan(optimizedPlan, connectContext,
-                        logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
-                        TResultSinkType.MYSQL_PROTOCAL, true);
+        }
+
+        OptExpression optimizedPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Optimizer")) {
+            Optimizer optimizer = new Optimizer();
+            optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+
+        ExecPlan execPlan;
+        try (PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Builder")) {
+            execPlan = PlanFragmentBuilder
+                    .createPhysicalPlan(optimizedPlan, connectContext,
+                            logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
+                            TResultSinkType.MYSQL_PROTOCAL, true);
+        }
 
         return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
@@ -549,11 +585,21 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
         Map<String, Database> dbs = null;
         try {
-            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
-                    connectContext.getSessionVariable()).get(0);
-            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            StatementBase statementBase;
+            try (PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse")) {
+                statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
+                        connectContext.getSessionVariable()).get(0);
+                if (statementBase instanceof QueryStatement) {
+                    replaceTableCatalogName(statementBase);
+                }
+            }
+
+            try (PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Analyze")) {
+                com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            }
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);
@@ -569,6 +615,17 @@ public class UtFrameUtils {
         } finally {
             unLock(dbs);
             tearMockEnv();
+        }
+    }
+
+    private static void replaceTableCatalogName(StatementBase statementBase) {
+        List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(statementBase);
+        for (TableRelation tableRelation : tableRelations) {
+            if (tableRelation.getName().getCatalog() != null) {
+                String catalogName = tableRelation.getName().getCatalog();
+                tableRelation.getName().setCatalog(
+                        CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
+            }
         }
     }
 
@@ -674,6 +731,7 @@ public class UtFrameUtils {
         protected static synchronized void setUp() {
             assert (fakeJournalWriter == null);
             GlobalStateMgr.getCurrentState().setEditLog(new EditLog(masterJournalQueue));
+            GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
 
             // simulate the process of master journal synchronizing to the follower
             fakeJournalWriter = new Thread(new Runnable() {

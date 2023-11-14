@@ -32,6 +32,12 @@ public class LogicalWindowOperator extends LogicalOperator {
      */
     private final ImmutableList<Ordering> enforceSortColumns;
 
+    /**
+     * For window functions with only partition by column but without order by column,
+     * we can perform hash-based partition according to hint.
+     */
+    private final boolean useHashBasedPartition;
+
     private LogicalWindowOperator(Builder builder) {
         super(OperatorType.LOGICAL_WINDOW, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.windowCall = ImmutableMap.copyOf(builder.windowCall);
@@ -39,6 +45,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.orderByElements = ImmutableList.copyOf(builder.orderByElements);
         this.analyticWindow = builder.analyticWindow;
         this.enforceSortColumns = ImmutableList.copyOf(builder.enforceSortColumns);
+        this.useHashBasedPartition = builder.useHashBasedPartition;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -59,6 +66,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public List<Ordering> getEnforceSortColumns() {
         return enforceSortColumns;
+    }
+
+    public boolean isUseHashBasedPartition() {
+        return useHashBasedPartition;
     }
 
     @Override
@@ -97,12 +108,14 @@ public class LogicalWindowOperator extends LogicalOperator {
         return Objects.equals(windowCall, that.windowCall)
                 && Objects.equals(partitionExpressions, that.partitionExpressions)
                 && Objects.equals(orderByElements, that.orderByElements)
-                && Objects.equals(analyticWindow, that.analyticWindow);
+                && Objects.equals(analyticWindow, that.analyticWindow)
+                && Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), windowCall);
+        return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
+                useHashBasedPartition);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
@@ -111,6 +124,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         private List<Ordering> orderByElements = Lists.newArrayList();
         private AnalyticWindow analyticWindow;
         private List<Ordering> enforceSortColumns = Lists.newArrayList();
+        private boolean useHashBasedPartition = false;
 
         @Override
         public LogicalWindowOperator build() {
@@ -126,6 +140,7 @@ public class LogicalWindowOperator extends LogicalOperator {
             this.orderByElements = windowOperator.orderByElements;
             this.analyticWindow = windowOperator.analyticWindow;
             this.enforceSortColumns = windowOperator.enforceSortColumns;
+            this.useHashBasedPartition = windowOperator.useHashBasedPartition;
             return this;
         }
 
@@ -152,6 +167,11 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setEnforceSortColumns(List<Ordering> enforceSortColumns) {
             this.enforceSortColumns = enforceSortColumns;
+            return this;
+        }
+
+        public Builder setUseHashBasedPartition(boolean useHashBasedPartition) {
+            this.useHashBasedPartition = useHashBasedPartition;
             return this;
         }
     }

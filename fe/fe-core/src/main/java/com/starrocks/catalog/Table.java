@@ -124,9 +124,16 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "comment")
     protected String comment = "";
 
-    // not serialized field
     // record all materialized views based on this Table
-    private Set<MvId> relatedMaterializedViews;
+    @SerializedName(value = "mvs")
+    protected Set<MvId> relatedMaterializedViews;
+
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    protected List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    protected List<ForeignKeyConstraint> foreignKeyConstraints;
 
     public Table(TableType type) {
         this.type = type;
@@ -223,6 +230,10 @@ public class Table extends MetaObject implements Writable {
     // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();
+    }
+
+    public boolean isNativeTableOrMaterializedView() {
+        return isOlapOrLakeTable() || isMaterializedView();
     }
 
     public List<Column> getFullSchema() {
@@ -405,20 +416,33 @@ public class Table extends MetaObject implements Writable {
     }
 
     public String getMysqlType() {
-        if (this instanceof View) {
-            return "VIEW";
+        switch (type) {
+            case INLINE_VIEW:
+            case VIEW:
+            case MATERIALIZED_VIEW:
+                return "VIEW";
+            case SCHEMA:
+                return "SYSTEM VIEW";
+            default:
+                // external table also returns "BASE TABLE" for BI compatibility
+                return "BASE TABLE";
         }
-        if (this instanceof MaterializedView) {
-            return "VIEW";
-        }
-        return "BASE TABLE";
     }
 
     public String getComment() {
         if (!Strings.isNullOrEmpty(comment)) {
             return comment;
         }
-        return type.name();
+        return "";
+    }
+
+    // Attention: cause the remove escape character in parser phase, when you want to print the
+    // comment, you need add the escape character back
+    public String getDisplayComment() {
+        if (!Strings.isNullOrEmpty(comment)) {
+            return CatalogUtils.addEscapeCharacter(comment);
+        }
+        return "";
     }
 
     public void setComment(String comment) {
@@ -542,4 +566,28 @@ public class Table extends MetaObject implements Writable {
     public boolean supportsUpdate() {
         return false;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return this.uniqueConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return this.foreignKeyConstraints;
+    }
+>>>>>>> branch-2.5
 }

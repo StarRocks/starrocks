@@ -7,12 +7,12 @@
 
 namespace starrocks::vectorized {
 
-ColumnPtr GroupingSetsFunctions::grouping_id(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GroupingSetsFunctions::grouping_id(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     return columns[0];
 }
 
-ColumnPtr GroupingSetsFunctions::grouping(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GroupingSetsFunctions::grouping(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     return columns[0];
 }

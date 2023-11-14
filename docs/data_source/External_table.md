@@ -1,8 +1,17 @@
-# External tables
+# (To be deprecated) External table
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, Elasticsearch, Hive, StarRocks, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
+<<<<<<< HEAD
 From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Local Cache](Block_cache.md).
+=======
+> **NOTICE**
+>
+> * From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+> * From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+
+From 2.5 onwards, StarRocks provides the Data Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Data Cache](data_cache.md).
+>>>>>>> branch-2.5
 
 ## MySQL external table
 
@@ -151,6 +160,7 @@ The following table describes the parameters.
 ##### Columnar scan for faster queries
 
 If you set `enable_docvalue_scan` to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:
+<<<<<<< HEAD
 
 * **Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.
 * **Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).
@@ -253,6 +263,110 @@ However, if you have set `enable_keyword_sniff` to `true`, StarRocks will conver
 
 `k4.keyword` is of the KEYWORD type. Therefore, the data is written into Elasticsearch as a complete term, allowing for successful matching.
 
+=======
+
+* **Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.
+* **Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).
+
+> **NOTE**
+>
+> * Columnar storage is unavailable for TEXT-type fields in Elasticsearch. Therefore, if you query fields containing TEXT-type values, StarRocks obtains the values of the fields from `_source`.
+> * If you query a large number (greater than or equal to 25) of fields, reading field values from `docvalue` does not show noticeable benefits compared with reading field values from `_source`.
+
+##### Sniff KEYWORD-type fields
+
+If you set `enable_keyword_sniff` to `true`, Elasticsearch allows direct data ingestion without an index because it will automatically create an index after ingestion. For STRING-type fields, Elasticsearch will create a field with both TEXT and KEYWORD types. This is how the Multi-Field feature of Elasticsearch works. The mapping is as follows:
+
+~~~SQL
+"k4": {
+   "type": "text",
+   "fields": {
+      "keyword": {   
+         "type": "keyword",
+         "ignore_above": 256
+      }
+   }
+}
+~~~
+
+For example, to conduct "=" filtering on `k4`, StarRocks on Elasticsearch will convert the filtering operation into an Elasticsearch TermQuery.
+
+The original SQL filter is as follows:
+
+~~~SQL
+k4 = "StarRocks On Elasticsearch"
+~~~
+
+The converted Elasticsearch query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+
+}
+~~~
+
+The first field of `k4` is TEXT, and it will be tokenized by the analyzer configured for `k4` (or by the standard analyzer if no analyzer has been configured for `k4`) after data ingestion. As a result, the first field will be tokenized into three terms: `StarRocks`, `On`, and `Elasticsearch`. The details are as follows:
+
+~~~SQL
+POST /_analyze
+{
+  "analyzer": "standard",
+  "text": "StarRocks On Elasticsearch"
+}
+~~~
+
+The tokenization results are as follows:
+
+~~~SQL
+{
+   "tokens": [
+      {
+         "token": "starrocks",
+         "start_offset": 0,
+         "end_offset": 5,
+         "type": "<ALPHANUM>",
+         "position": 0
+      },
+      {
+         "token": "on",
+         "start_offset": 6,
+         "end_offset": 8,
+         "type": "<ALPHANUM>",
+         "position": 1
+      },
+      {
+         "token": "elasticsearch",
+         "start_offset": 9,
+         "end_offset": 11,
+         "type": "<ALPHANUM>",
+         "position": 2
+      }
+   ]
+}
+~~~
+
+Suppose you conduct a query as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+}
+~~~
+
+There is no term in the dictionary that matches the term `StarRocks On Elasticsearch`, and therefore no result will be returned.
+
+However, if you have set `enable_keyword_sniff` to `true`, StarRocks will convert `k4 = "StarRocks On Elasticsearch"` to `k4.keyword = "StarRocks On Elasticsearch"` to match the SQL semantics. The converted `StarRocks On Elasticsearch` query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4.keyword": "StarRocks On Elasticsearch"
+}
+~~~
+
+`k4.keyword` is of the KEYWORD type. Therefore, the data is written into Elasticsearch as a complete term, allowing for successful matching.
+
+>>>>>>> branch-2.5
 #### Mapping of column data types
 
 When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
@@ -284,14 +398,14 @@ StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsear
 
 |   SQL syntax  |   ES syntax  |
 | :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL  |
+|  `=`   |  term query   |
+|  `in`   |  terms query   |
+|  `>=,  <=, >, <`   |  range   |
+|  `and`   |  bool.filter   |
+|  `or`   |  bool.should   |
+|  `not`   |  bool.must_not   |
+|  `not in`   |  bool.must_not + terms   |
+|  `esquery`   |  ES Query DSL  |
 
 ### Examples
 
@@ -459,8 +573,8 @@ create external table jdbc_tbl (
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
 properties (
-    "resource"="jdbc0",
-    "table"="dest_tbl"
+    "resource" = "jdbc0",
+    "table" = "dest_tbl"
 );
 ~~~
 
@@ -574,6 +688,8 @@ The mapping between the target database and StarRocks varies based on the type o
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
 ## Hive external table
+
+Before using Hive external tables, make sure JDK 1.8 has been installed on your servers.
 
 ### Create a Hive resource
 
@@ -690,8 +806,9 @@ Query the total number of rows of `profile_wos_p7`.
 select count(*) from profile_wos_p7;
 ~~~
 
-### Configuration
+### Update cached Hive table metadata
 
+<<<<<<< HEAD
 * The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with viewfs, you need to put the `core-site.xml` under `fe/conf`.
 * The path of the BE configuration file is `be/conf`, to which configuration file can be added if you need to customize the Hadoop cluster. For example, HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with viewfs, you need to put `core-site.xml` under `be/conf`.
 * The machine where BE is located need to configure JAVA_HOME as a jdk environment rather than a jre environment
@@ -700,6 +817,26 @@ select count(*) from profile_wos_p7;
   2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.
   3. Add **Djava.security.krb5.conf:/etc/krb5.conf** to the **JAVA_OPTS/JAVA_OPTS_FOR_JDK_9** option of the **fe/conf/fe.conf** file. **/etc/krb5.conf** is the path of the **krb5.conf** file. You can adjust the path based on your operating system.
   4. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file*.*
+=======
+* Hive partition information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
+  * The cached data can also be refreshed manually.
+    1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
+    2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
+    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or removing columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
+* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
+
+### Access object storage
+
+* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: If the HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with ViewFs, you need to put the `core-site.xml` under `fe/conf`.
+* The path of the BE configuration file is `be/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example, if the HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with ViewFs, you need to put `core-site.xml` under `be/conf`.
+* On the machine where BE is located, configure JAVA_HOME as a JDK environment rather than a JRE environment in the BE **startup script** `bin/start_be.sh`, for example, `export JAVA_HOME = <JDK path>`. You must add this configuration at the beginning of the script and restart the BE for the configuration to take effect.
+* Configure Kerberos support:
+  1. To log in with `kinit -kt keytab_path principal` to all FE/BE machines, you need to have access to Hive and HDFS. The kinit command login is only good for a period of time and needs to be put into crontab to be executed regularly.
+  2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.
+  3. Add `-Djava.security.krb5.conf=/etc/krb5.conf` to the value of the `JAVA_OPTS` option in the **$FE_HOME/conf/fe.conf** file. **/etc/krb5.conf** is the save path of the **krb5.conf** file. You can change the path based on your operating system.
+  4. Directly add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$BE_HOME/conf/be.conf** file. **/etc/krb5.conf** is the save path of the **krb5.conf** file. You can change the path based on your operating system.
+  5. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file.
+>>>>>>> branch-2.5
 
 * Configure support for AWS S3: Add the following configuration to `fe/conf/core-site.xml` and `be/conf/core-site.xml`.
 
@@ -729,16 +866,7 @@ select count(*) from profile_wos_p7;
    3. `fs.s3a.endpoint`: the AWS S3 endpoint to connect to.
    4. `fs.s3a.connection.maximu``m`: the maximum number of concurrent connections from StarRocks to S3. If an error `Timeout waiting for connection from poll` occurs during a query, you can set this parameter to a larger value.
 
-### Metadata caching strategy
-
-* Hive partitions information and the related file information are cached in StarRocks. The cache is refreshed at intervals specified by `hive_meta_cache_refresh_interval_s`. The default value is 7200.  `hive_meta_cache_ttl_s` specifies the timeout duration of the cache and the default value is 86400.
-  * The cached data can also be refreshed manually.
-    1. If a partition is added or deleted from a table in Hive, you must run the `REFRESH EXTERNAL TABLE hive_t` command to refresh the table metadata cached in StarRocks. `hive_t` is the name of the Hive external table in StarRocks.
-    2. If data in some Hive partitions is updated, you must refresh the cached data in StarRocks by running the `REFRESH EXTERNAL TABLE hive_t PARTITION ('k1=01/k2=02', 'k1=03/k2=04')` command. `hive_t` is the name of the Hive external table in StarRocks. `'k1=01/k2=02'` and `'k1=03/k2=04'` are the names of Hive partitions whose data is updated.
-    3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or remove columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
-* When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
-
-## Apache Iceberg external table
+## (Deprecated) Iceberg external table
 
 From v2.1.0, StarRocks allows you to query data from Apache Iceberg by using external tables. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
 
@@ -771,7 +899,10 @@ For example, create a resource named `iceberg0` and set the catalog type to `HIV
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg0" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="HIVE", "iceberg.catalog.hive.metastore.uris"="thrift://192.168.0.81:9083" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "HIVE",
+   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
 );
 ~~~
 
@@ -791,7 +922,10 @@ For example, create a resource named `iceberg1` and set the catalog type to `CUS
 
 ~~~SQL
 CREATE EXTERNAL RESOURCE "iceberg1" 
-PROPERTIES ( "type" = "iceberg", "iceberg.catalog.type"="CUSTOM", "iceberg.catalog-impl"="com.starrocks.IcebergCustomCatalog" 
+PROPERTIES (
+   "type" = "iceberg",
+   "iceberg.catalog.type" = "CUSTOM",
+   "iceberg.catalog-impl" = "com.starrocks.IcebergCustomCatalog" 
 );
 ~~~
 
@@ -800,7 +934,7 @@ The following table describes the related parameters.
 | **Parameter**          | **Description**                                              |
 | ---------------------- | ------------------------------------------------------------ |
 | type                   | The resource type. Set the value to `iceberg`.               |
-| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`.If you specify a custom catalog, set the value to `CUSTOM`. |
+| iceberg.catalog.type | The catalog type of the resource. Both Hive catalog and custom catalog are supported. If you specify a Hive catalog, set the value to `HIVE`. If you specify a custom catalog, set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg external table. |
 
 You can modify `hive.metastore.uris` and `iceberg.catalog-impl`of a Iceberg resource in StarRocks 2.3 and later versions. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
@@ -946,7 +1080,7 @@ The following table describes the parameters.
 | Parameter           | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
-| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the <IP address of the Hive metastore\>:<Port number of the Hive metastore\> format. The default port number is 9083. |
+| hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the `<IP address of the Hive metastore>:<Port number of the Hive metastore>` format. The default port number is 9083. |
 
 From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
 

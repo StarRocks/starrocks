@@ -4,24 +4,27 @@ package com.starrocks.service;
 
 import com.google.gson.Gson;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TTableConfigInfo;
+import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,7 +32,18 @@ public class InformationSchemaDataSourceTest {
     
     @Mocked
     ExecuteEnv exeEnv;
-    
+
+    private static StarRocksAssert starRocksAssert;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        Config.enable_experimental_mv = true;
+    }
+
     @Test
     public void testGetTablesConfig() throws Exception {
 
@@ -40,13 +54,7 @@ public class InformationSchemaDataSourceTest {
             }
         };
 
-        UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
-
-        StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withEnableMV().withDatabase("db1").useDatabase("db1");
-        Config.enable_experimental_mv = true;
         String createTblStmtStr = "CREATE TABLE db1.tbl1 (`k1` int,`k2` int,`k3` int,`v1` int,`v2` int,`v3` int) " +
                                   "ENGINE=OLAP " + "PRIMARY KEY(`k1`, `k2`, `k3`) " +
                                   "COMMENT \"OLAP\" " +
@@ -66,7 +74,10 @@ public class InformationSchemaDataSourceTest {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
         TAuthInfo authInfo = new TAuthInfo();
-        authInfo.setPattern("db1");
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        authInfo.setCurrent_user_ident(userIdentity);
         req.setAuth_info(authInfo);
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
         TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);
@@ -91,30 +102,79 @@ public class InformationSchemaDataSourceTest {
     }
 
     @Test
-    public void testTransferTableTypeToAdaptMysql() throws NoSuchMethodException, 
-                                                            SecurityException, 
-                                                            IllegalAccessException,
-                                                            IllegalArgumentException, 
-                                                            InvocationTargetException, 
-                                                            ClassNotFoundException {
+    public void testGetTablesConfigBasic() throws Exception {
 
-        Class<?> clazz = Class.forName(InformationSchemaDataSource.class.getName());
-        Method m = clazz.getDeclaredMethod("transferTableTypeToAdaptMysql", TableType.class);
-        m.setAccessible(true);
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.MYSQL));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HIVE));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ICEBERG));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HUDI));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.LAKE));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ELASTICSEARCH));
-        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.JDBC));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL));
-        Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW));
-        Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.VIEW));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.INLINE_VIEW));
-        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.BROKER));
+        starRocksAssert.withEnableMV().withDatabase("db2").useDatabase("db2");
+        String createTblStmtStr = "CREATE TABLE db2.`unique_table_with_null` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` datetime  COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\",\n" +
+                "  `k4` varchar(20)  COMMENT \"\",\n" +
+                "  `k5` boolean  COMMENT \"\",\n" +
+                "  `v1` tinyint(4)  COMMENT \"\",\n" +
+                "  `v2` smallint(6)  COMMENT \"\",\n" +
+                "  `v3` int(11)  COMMENT \"\",\n" +
+                "  `v4` bigint(20)  COMMENT \"\",\n" +
+                "  `v5` largeint(40)  COMMENT \"\",\n" +
+                "  `v6` float  COMMENT \"\",\n" +
+                "  `v7` double  COMMENT \"\",\n" +
+                "  `v8` decimal128(27, 9)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"V2\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db2");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);
+        Assert.assertEquals("db2", tableConfig.getTable_schema());
+        Assert.assertEquals("unique_table_with_null", tableConfig.getTable_name());
+        Assert.assertEquals("OLAP", tableConfig.getTable_engine());
+        Assert.assertEquals("UNIQUE_KEYS", tableConfig.getTable_model());
+        Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getPrimary_key());
+        Assert.assertEquals("", tableConfig.getPartition_key());
+        Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getDistribute_key());
+        Assert.assertEquals("HASH", tableConfig.getDistribute_type());
+        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assert.assertEquals("`k1`, `k2`, `k3`, `k4`, `k5`", tableConfig.getSort_key());
+    }
+
+    @Test
+    public void testGetInformationSchemaTable() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setPattern(InfoSchemaDb.DATABASE_NAME);
+        request.setAuth_info(authInfo);
+        TGetTablesInfoResponse response = impl.getTablesInfo(request);
+        boolean checkTables = false;
+        for (TTableInfo tablesInfo : response.tables_infos) {
+            if (tablesInfo.getTable_name().equalsIgnoreCase("tables")) {
+                checkTables = true;
+                Assert.assertEquals("SYSTEM VIEW", tablesInfo.getTable_type());
+            }
+        }
+        Assert.assertTrue(checkTables);
     }
 
     @Test

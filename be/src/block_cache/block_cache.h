@@ -38,7 +38,9 @@ public:
     size_t block_size() const { return _block_size; }
 
 private:
-    BlockCache();
+#ifndef BE_TEST
+    BlockCache() = default;
+#endif
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;

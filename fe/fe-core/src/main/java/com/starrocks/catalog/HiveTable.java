@@ -421,6 +421,19 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    @Override
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    @Override
+>>>>>>> branch-2.5
     public int hashCode() {
         return Objects.hashCode(getCatalogName(), hiveDbName, getTableIdentifier());
     }

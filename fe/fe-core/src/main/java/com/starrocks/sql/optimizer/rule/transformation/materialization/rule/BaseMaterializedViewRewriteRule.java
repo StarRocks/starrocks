@@ -24,6 +24,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -74,6 +77,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         final ScalarOperator queryPartitionPredicate =
                 MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
         if (queryPartitionPredicate == null) {
+            logMVRewrite(context, this, "Query partition compensate from partition prune failed.");
             return Lists.newArrayList();
         }
         ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
@@ -81,6 +85,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+<<<<<<< HEAD
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext =
@@ -94,7 +99,28 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     mvContext.addMatchedGroup(currentRootGroupId);
                 }
                 results.add(candidate);
+=======
+        List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        for (MaterializationContext mvContext : mvCandidateContexts) {
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                    queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
+            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
+            OptExpression candidate = mvRewriter.rewrite();
+            if (candidate == null) {
+                continue;
             }
+
+            candidate = postRewriteMV(context, mvRewriteContext, candidate);
+            if (queryExpression.getGroupExpression() != null) {
+                int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                mvContext.addMatchedGroup(currentRootGroupId);
+>>>>>>> branch-2.5
+            }
+
+            results.add(candidate);
+            mvContext.updateMVUsedCount();
         }
 
         return results;

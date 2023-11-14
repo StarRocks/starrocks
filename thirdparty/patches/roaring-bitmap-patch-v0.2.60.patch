@@ -1,0 +1,125 @@
+diff --git a/include/roaring/containers/containers.h b/include/roaring/containers/containers.h
+index 2e54e07..b796735 100644
+--- a/include/roaring/containers/containers.h
++++ b/include/roaring/containers/containers.h
+@@ -2276,8 +2276,7 @@ static inline void *container_add_range(void *container, uint8_t type,
+                 *result_type = RUN_CONTAINER_TYPE_CODE;
+                 return run;
+             } else {
+-                *result_type = BITSET_CONTAINER_TYPE_CODE;
+-                return bitset_container_from_run_range(run, min, max);
++                return container_from_run_range(run, min, max, result_type);
+             }
+         }
+         default:
+diff --git a/include/roaring/containers/convert.h b/include/roaring/containers/convert.h
+index cbacc3b..6fd4e8f 100644
+--- a/include/roaring/containers/convert.h
++++ b/include/roaring/containers/convert.h
+@@ -50,10 +50,10 @@ void *convert_run_to_efficient_container_and_free(run_container_t *c,
+                                                   uint8_t *typecode_after);
+ 
+ /**
+- * Create new bitset container which is a union of run container and
++ * Create new container which is a union of run container and
+  * range [min, max]. Caller is responsible for freeing run container.
+  */
+-bitset_container_t *bitset_container_from_run_range(const run_container_t *run,
+-                                                    uint32_t min, uint32_t max);
++void *container_from_run_range(const run_container_t *run,
++                                                    uint32_t min, uint32_t max, uint8_t *typecode_after);
+ 
+ #endif /* INCLUDE_CONTAINERS_CONVERT_H_ */
+diff --git a/src/containers/convert.c b/src/containers/convert.c
+index 54abc82..c619721 100644
+--- a/src/containers/convert.c
++++ b/src/containers/convert.c
+@@ -291,10 +291,11 @@ void *convert_run_optimize(void *c, uint8_t typecode_original,
+         return NULL;
+     }
+ }
+-
+-bitset_container_t *bitset_container_from_run_range(const run_container_t *run,
+-                                                    uint32_t min, uint32_t max) {
++void *container_from_run_range(const run_container_t *run,
++                                                    uint32_t min, uint32_t max, uint8_t *typecode_after) {
++    // We expect most of the time to end up with a bitset container
+     bitset_container_t *bitset = bitset_container_create();
++    *typecode_after = BITSET_CONTAINER_TYPE_CODE;
+     int32_t union_cardinality = 0;
+     for (int32_t i = 0; i < run->n_runs; ++i) {
+         uint32_t rle_min = run->runs[i].value;
+@@ -306,5 +307,12 @@ bitset_container_t *bitset_container_from_run_range(const run_container_t *run,
+     union_cardinality -= bitset_lenrange_cardinality(bitset->array, min, max-min);
+     bitset_set_lenrange(bitset->array, min, max - min);
+     bitset->cardinality = union_cardinality;
++    if(bitset->cardinality <= DEFAULT_MAX_SIZE) {
++        // we need to convert to an array container
++        array_container_t * array = array_container_from_bitset(bitset);
++        *typecode_after = ARRAY_CONTAINER_TYPE_CODE;
++        bitset_container_free(bitset);
++        return array;
++    }
+     return bitset;
+ }
+diff --git a/tests/toplevel_unit.c b/tests/toplevel_unit.c
+index 09c1bd6..70b3463 100644
+--- a/tests/toplevel_unit.c
++++ b/tests/toplevel_unit.c
+@@ -86,6 +86,48 @@ void can_copy_empty(bool copy_on_write) {
+ 
+ 
+ 
++bool check_serialization(roaring_bitmap_t *bitmap) {
++    const int32_t size = roaring_bitmap_portable_size_in_bytes(bitmap);
++    char *data = (char *)malloc(size);
++    roaring_bitmap_portable_serialize(bitmap, data);
++    roaring_bitmap_t *deserializedBitmap = roaring_bitmap_portable_deserialize(data);
++    bool ret = roaring_bitmap_equals(bitmap, deserializedBitmap);
++    roaring_bitmap_free(deserializedBitmap);
++    free(data);
++    return ret;
++}
++
++
++void issue245() {
++    roaring_bitmap_t *bitmap = roaring_bitmap_create();
++    const uint32_t targetEntries = 2048;
++    const int32_t runLength = 8;
++    int32_t offset = 0;
++    // Add a single run more than 2 extents longs.
++    roaring_bitmap_add_range_closed(bitmap, offset, offset + runLength);
++    offset += runLength + 2;
++    // Add 2047 non-contiguous bits.
++    for (uint32_t count = 1; count < targetEntries; count++, offset += 2) {
++        roaring_bitmap_add_range_closed(bitmap, offset, offset);
++    }
++    
++    if (!check_serialization(bitmap)) {
++        printf("Bitmaps do not match at 2048 entries\n");
++        abort();
++    }
++    
++    // Add one more, forcing it to become a bitset
++    offset += 2;
++    roaring_bitmap_add_range_closed(bitmap, offset, offset);
++    
++    if (!check_serialization(bitmap)) {
++        printf("Bitmaps do not match at 2049 entries\n");
++        abort();
++    }
++    roaring_bitmap_free(bitmap);
++}
++
++
+ void can_copy_empty_true() {
+   can_copy_empty(true);
+ }
+@@ -3975,6 +4017,7 @@ void test_frozen_serialization_max_containers() {
+ 
+ int main() {
+     const struct CMUnitTest tests[] = {
++        cmocka_unit_test(issue245),
+         cmocka_unit_test(range_contains),
+         cmocka_unit_test(inplaceorwide),
+         cmocka_unit_test(test_contains_range),

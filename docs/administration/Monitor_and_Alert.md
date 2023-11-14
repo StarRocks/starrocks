@@ -91,6 +91,7 @@ The available metrics are:
 |disk_io_svctm|Ms|average| Disk IO service time |
 |disk_io_util|percentage|average| Disk usage |
 |disk_used|bytes|average| Used disk capacity |
+|starrocks_fe_meta_log_count|pcs|Instantaneous|The number of Edit Logs without a checkpoint. A value within `100000` is considered reasonable.|
 |starrocks_fe_query_resource_group|pcs|cumulative|The number of queries for each resource group|
 |starrocks_fe_query_resource_group_latency|second|average|the query latency percentile for each resource group|
 |starrocks_fe_query_resource_group_err|pcs|cumulative|The number of incorrect queries for each resource group|
@@ -252,7 +253,7 @@ This command runs Prometheus in the background and specifies its web port as 909
 
 **4.** Accessing Prometheus
 
-Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (<http://fe_host:fe_http_port/metrics> or <http://be_host:be_http_port/metrics>) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
+Prometheus can be accessed via BUI. You simply need to open port 9090 in your browser. Go to`Status -> Targets` to see the monitored host nodes for all grouped jobs. Under normal circumstances, all nodes should be `UP`. If the node status is not `UP`, you can visit the StarRocks metrics (`http://fe_host:fe_http_port/metrics` or `http://be_host:be_http_port/metrics`) interface first to check if it is accessible, or check the Prometheus documentation for troubleshooting.
 
 ![8.10.2-6](../assets/8.10.2-6.png)
 
@@ -292,7 +293,7 @@ nohup ./bin/grafana-server \
 
 #### DashBoard Configuration
 
-Log in to Grafana through the address configured in the previous step <http://grafana_host:8000> with the default username/password (i.e. admin/admin).
+Log in to Grafana through the address configured in the previous step `http://grafana_host:8000` with the default username,password (i.e. admin,admin).
 
 **1.** Add a data source.
 
@@ -303,7 +304,7 @@ Data Source Configuration Introduction
 ![8.10.2-2](../assets/8.10.2-2.png)
 
 * Name: Name of the data source. Can be customized, e.g. starrocks_monitor
-* URL: The web address of Prometheus, e.g. <http://prometheus_host:9090>
+* URL: The web address of Prometheus, e.g. `http://prometheus_host:9090`
 * Access: Select the Server method, i.e., the server where Grafana is located for Prometheus to access.
 The rest of the options are default.
 
@@ -323,9 +324,9 @@ Download a dashboard.
 
 Dashboard templates will be updated from time to time.
 
-After confirming the data source is available, click on the `+` sign to add a new Dashboard, here we use the StarRocks Dashboard template downloaded above. Go to Import -> Upload Json File`to import the downloaded json file.
+After confirming the data source is available, click on the `+` sign to add a new Dashboard, here we use the StarRocks Dashboard template downloaded above. Go to Import -> Upload Json File to load the downloaded json file.
 
-After importing, you can name the Dashboard. The default name is StarRocks Overview. Then select`starrocks_monitor`as the data source.
+After loading, you can name the Dashboard. The default name is StarRocks Overview. Then select`starrocks_monitor`as the data source.
 Click`Import` to complete the import. Then you should see the Dashboard.
 
 #### Dashboard Description

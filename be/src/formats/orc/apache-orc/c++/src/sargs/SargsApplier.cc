@@ -73,10 +73,14 @@ bool SargsApplier::pickRowGroups(uint64_t rowsInStripe, const std::unordered_map
     mNextSkippedRows.resize(groupsInStripe);
     mTotalRowsInStripe = rowsInStripe;
 
+    // NOTE(yanz): We can skip following steps if rowIndexes.empty.
+    // Because we have to set right values into `mNextSkippedRows` and
+    // those values will be used in `hasSelectedFrom`.
+
     // row indexes do not exist, simply read all rows
-    if (rowIndexes.empty()) {
-        return true;
-    }
+    // if (rowIndexes.empty()) {
+    //     return true;
+    // }
 
     if (mRowReaderFilter) {
         mRowReaderFilter->onStartingPickRowGroups();

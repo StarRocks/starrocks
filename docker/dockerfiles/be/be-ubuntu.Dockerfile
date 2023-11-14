@@ -21,6 +21,7 @@ COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
+RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
 
 
 FROM ubuntu:22.04
@@ -34,13 +35,34 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
 RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 ENV JAVA_HOME=/lib/jvm/default-java
 
+<<<<<<< HEAD
+=======
+RUN touch /.dockerenv
+
+>>>>>>> branch-2.5
 WORKDIR $STARROCKS_ROOT
 
+# Run as starrocks user
+ARG USER=starrocks
+ARG GROUP=starrocks
+RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
+             --shell /usr/sbin/nologin $USER  && \
+    chown -R $USER:$GROUP $STARROCKS_ROOT
+USER $USER
+
 # Copy all artifacts to the runtime container image
-COPY --from=artifacts /release/be_artifacts/ $STARROCKS_ROOT/
+COPY --from=artifacts --chown=starrocks:starrocks /release/be_artifacts/ $STARROCKS_ROOT/
 
 # Copy be k8s scripts to the runtime container image
-COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
+COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage, create cn symbolic link to be
+RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+
+<<<<<<< HEAD
+# Create directory for BE storage, create cn symbolic link to be
 RUN touch /.dockerenv && mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+=======
+# run as root by default
+USER root
+>>>>>>> branch-2.5

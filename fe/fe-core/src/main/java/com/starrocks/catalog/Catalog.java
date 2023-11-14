@@ -54,6 +54,10 @@ public class Catalog implements Writable {
         return comment;
     }
 
+    public String getDisplayComment() {
+        return CatalogUtils.addEscapeCharacter(comment);
+    }
+
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(this.getName(), config.get(CATALOG_TYPE), this.getComment()));
     }

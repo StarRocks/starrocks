@@ -79,6 +79,10 @@ public class MysqlProto {
         context.setAuthDataSalt(randomString);
         if (Config.enable_auth_check) {
             context.setCurrentUserIdentity(currentUserIdentity.get(0));
+        } else {
+            // When authentication is disabled, mostly because user forgot its password, we set
+            // current user as root to have all the privileges and make user can change root password smoothly.
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
         }
         context.setQualifiedUser(user);
         return true;
