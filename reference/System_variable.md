@@ -189,6 +189,12 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 您也可以通过添加 `skew` hint 来开启 count distinct 列的分桶优化，例如 `select a,count(distinct [skew] b) from t group by a;`。
 
+### enable_group_level_query_queue （3.1.4 及以后）
+
+是否开启资源组粒度的[查询队列](../administration/query_queues.md)。
+
+默认值：false，表示不开启。
+
 ### enable_insert_strict
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
