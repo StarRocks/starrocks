@@ -171,6 +171,7 @@ public enum RuleType {
     TF_PRUNE_EMPTY_DIRECT,
 
     TF_DERIVE_RANGE_JOIN_PREDICATE,
+    TF_SKEW_JOIN_OPTIMIZE_RULE,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
