@@ -273,6 +273,9 @@ DEFINE_SCOPED_FAIL_POINT(mem_alloc_error);
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
+    if (UNLIKELY(size == 0)) {
+        return nullptr;
+    }
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);

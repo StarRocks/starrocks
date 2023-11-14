@@ -453,6 +453,7 @@ public:
             if (bthread_tls_thread_status == nullptr) {
                 // @TODO current thread may populate tls var, need refactor
                 // tls_is_thread_status_init = false;
+                // @TODO seems not set init?
                 tls_thread_status.set_is_init(false);
                 LOG(INFO) << "switch to bthread_local, create CurrentThread for bthread: " << bthread_self();
                 bthread_tls_thread_status = new CurrentThread();
