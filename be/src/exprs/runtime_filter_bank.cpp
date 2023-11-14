@@ -420,7 +420,6 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
 void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
                                                             RuntimeBloomFilterEvalContext& eval_context) {
-    auto& selection = eval_context.running_context.selection;
     eval_context.running_context.use_merged_selection = false;
     eval_context.running_context.compatibility =
             _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
@@ -434,44 +433,70 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             continue;
         }
 
-        auto is_existent_slot_ref = [&](ExprContext* expr) {
-            auto* root = expr->root();
-            if (!root->is_slotref()) {
-                return false;
-            }
+        auto only_reference_existent_slots = [&](ExprContext* expr) {
+            std::vector<SlotId> slot_ids;
+            int n = expr->root()->get_slot_ids(&slot_ids);
+            DCHECK(slot_ids.size() == n);
 
-            auto* col_ref = down_cast<ColumnRef*>(root);
-            return partial_chunk->is_slot_exist(col_ref->slot_id());
+            for (auto slot_id : slot_ids) {
+                if (!partial_chunk->is_slot_exist(slot_id)) {
+                    return false;
+                }
+            }
+            return true;
         };
 
         auto* probe_expr = rf_desc->probe_expr_ctx();
         auto* partition_by_exprs = rf_desc->partition_by_expr_contexts();
 
-        bool can_use_rf_on_partial_chunk = is_existent_slot_ref(probe_expr);
-        for (auto* part_by_expr : *partition_by_exprs) {
-            can_use_rf_on_partial_chunk &= is_existent_slot_ref(part_by_expr);
-        }
-
-        // skip runtime filter that references a non-existent column for the partial chunk
-        if (!can_use_rf_on_partial_chunk) {
+        // skip runtime filter if probe expr references a non-existent column for the partial chunk
+        if (!only_reference_existent_slots(probe_expr)) {
             continue;
         }
 
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
-        // for colocate grf
-        compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
-        filter->evaluate(column.get(), &eval_context.running_context);
+        bool can_use_part_by_exprs = true;
+        for (auto* part_by_expr : *partition_by_exprs) {
+            can_use_part_by_exprs &= only_reference_existent_slots(part_by_expr);
+        }
 
-        auto true_count = SIMD::count_nonzero(selection);
-        eval_context.run_filter_nums += 1;
+        if (can_use_part_by_exprs) {
+            ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
+            // for colocate grf
+            compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
+            filter->evaluate(column.get(), &eval_context.running_context);
 
-        if (true_count == 0) {
+            auto true_count = SIMD::count_nonzero(eval_context.running_context.selection);
+            eval_context.run_filter_nums += 1;
+
+            if (true_count == 0) {
+                partial_chunk->set_num_rows(0);
+                return;
+            } else {
+                partial_chunk->filter(eval_context.running_context.selection);
+            }
+        } else {
+            ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
+            // traverse every partial RF
+            auto number_of_partitions = filter->compute_num_partitions(rf_desc->layout());
+            for (int i = 0; i < number_of_partitions; i++) {
+                eval_context.running_context.hash_values.assign(partial_chunk->num_rows(), i);
+                filter->evaluate(column.get(), &eval_context.running_context);
+                auto true_count = SIMD::count_nonzero(eval_context.running_context.selection);
+                eval_context.run_filter_nums += 1;
+
+                // return early if any partial RF cannot filter the partial chunk
+                if (true_count != 0) {
+                    return;
+                }
+            }
+
+            // partial chunk can be filtered by all partial RFs
             partial_chunk->set_num_rows(0);
             return;
-        } else {
-            partial_chunk->filter(selection);
         }
     }
+
+    CHECK(false) << "unreachable";
 }
 
 void RuntimeFilterProbeCollector::init_counter() {

@@ -311,6 +311,9 @@ public:
 
     virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
                                          RunningContext* ctx) const = 0;
+
+    virtual int compute_num_partitions(const RuntimeFilterLayout& layout) const = 0;
+
     virtual void evaluate(Column* input_column, RunningContext* ctx) const = 0;
 
     size_t size() const { return _size; }
@@ -441,6 +444,43 @@ struct WithModuloArg {
             }
         }
     };
+};
+
+template <TRuntimeFilterLayoutMode::type M>
+struct PartitionNumberCompute {
+    int operator()(const RuntimeFilterLayout& layout, size_t real_num_partitions) const {
+        if constexpr (layout_is_singleton<M>) {
+            return 1;
+        }
+        if constexpr (layout_is_shuffle<M>) {
+            [[maybe_unused]] const auto num_instances = layout.num_instances();
+            [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
+            [[maybe_unused]] const auto num_partitions = num_instances * num_drivers_per_instance;
+            if constexpr (layout_is_pipeline_shuffle<M>) {
+                return num_drivers_per_instance;
+            } else if constexpr (layout_is_global_shuffle_1l<M>) {
+                return real_num_partitions;
+            } else if constexpr (layout_is_global_shuffle_2l<M>) {
+                return num_instances * num_drivers_per_instance;
+            }
+        } else if (layout_is_bucket<M>) {
+            [[maybe_unused]] const auto& bucketseq_to_instance = layout.bucketseq_to_instance();
+            [[maybe_unused]] const auto& bucketseq_to_driverseq = layout.bucketseq_to_driverseq();
+            [[maybe_unused]] const auto& bucketseq_to_partition = layout.bucketseq_to_partition();
+            [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
+            if constexpr (layout_is_pipeline_bucket<M>) {
+                return bucketseq_to_driverseq.size();
+            } else if constexpr (layout_is_pipeline_bucket_lx<M>) {
+                return num_drivers_per_instance;
+            } else if constexpr (layout_is_global_bucket_1l<M>) {
+                return bucketseq_to_instance.size();
+            } else if constexpr (layout_is_global_bucket_2l<M>) {
+                return bucketseq_to_partition.size();
+            } else if constexpr (layout_is_global_bucket_2l_lx<M>) {
+                return bucketseq_to_instance.size() * num_drivers_per_instance;
+            }
+        }
+    }
 };
 
 // The join runtime filter implement by bloom filter
@@ -732,6 +772,10 @@ public:
             dispatch_layout<WithModuloArg<ModuloOp>::HashValueCompute>(_global, layout, columns, num_rows,
                                                                        _hash_partition_bf.size(), _hash_values);
         }
+    }
+
+    int compute_num_partitions(const RuntimeFilterLayout& layout) const override {
+        return dispatch_layout<PartitionNumberCompute>(_global, layout, _hash_partition_bf.size());
     }
 
 private:
