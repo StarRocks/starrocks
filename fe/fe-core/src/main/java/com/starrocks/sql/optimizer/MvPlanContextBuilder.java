@@ -17,13 +17,12 @@ package com.starrocks.sql.optimizer;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
-import com.starrocks.sql.optimizer.rule.RuleType;
 
 public class MvPlanContextBuilder {
     public MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+<<<<<<< HEAD
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
@@ -38,5 +37,8 @@ public class MvPlanContextBuilder {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(
                 ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
         return mvOptimizer.optimize(mv, connectContext, optimizerConfig);
+=======
+        return mvOptimizer.optimize(mv, new ConnectContext());
+>>>>>>> 536efe49a3 ([BugFix] fix query_excluding_mv_names and query_including_mv_names bugs (#34873))
     }
 }
