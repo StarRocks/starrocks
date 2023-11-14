@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.14
+
+Release date: November 14, 2023
+
+### Improvements
+
+- The `COLUMNS` table in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The error `java.lang.IllegalStateException: null` is reported if the ON condition is nested with a subquery. [#30876](https://github.com/StarRocks/starrocks/pull/30876)
+- The result of COUNT(*) is inconsistent among replicas if COUNT(*) is run immediately after `INSERT INTO SELECT ... LIMIT` is successfully executed. [#24435](https://github.com/StarRocks/starrocks/pull/24435)
+- BE may crash for specific data types if the target data type specified in CAST is the same as the original data type. [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- An error is reported if specific path formats are used during data loading via Broker Load: `msg:Fail to parse columnsFromPath, expected: [rec_dt]`. [#32721](https://github.com/StarRocks/starrocks/issues/32721)
+- During an upgrade to 3.x, if some column types are also upgraded (for example, Decimal is upgraded to Decimal v3), BEs crash when Compaction is performed on tables with specific characteristics. [#31626](https://github.com/StarRocks/starrocks/pull/31626)
+- When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP and Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- Adding BITMAP columns to a Primary Key table fails with the following error: `Analyze columnDef error: No aggregate function specified for 'userid'`. [#31763](https://github.com/StarRocks/starrocks/pull/31763)
+- Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- The query result is incorrect when Query Cache is enabled. [#32778](https://github.com/StarRocks/starrocks/pull/32778)
+- Specifying a nullable Sort Key when creating a Primary Key table causes compaction to fail. [#29225](https://github.com/StarRocks/starrocks/pull/29225)
+- The error "StarRocks planner use long time 10000 ms in logical phase" occassionally occurs for complex Join queries. [#34177](https://github.com/StarRocks/starrocks/pull/34177)
+
 ## 2.5.13
 
 Release date: September 28, 2023
@@ -161,7 +186,7 @@ Release date: June 14, 2023
 ### New features
 
 - Inactive materialized views can be manually activated using `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. You can use this SQL command to activate materialized views whose base tables were dropped and then recreated. For more information, see [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md). [#24001](https://github.com/StarRocks/starrocks/pull/24001)
-- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](../table_design/Data_distribution.md#determine-the-number-of-tablets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](../table_design/Data_distribution.md#determine-the-number-of-buckets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### Improvements
 
@@ -356,7 +381,7 @@ Release date: January 22, 2023
 
 ### New Features
 
-- Supports querying Merge On Read tables using [Hudi catalogs](../data_source/catalog/hudi_catalog.md) and [Hudi external tables](../data_source/External_table.md#hudi-external-table). [#6780](https://github.com/StarRocks/starrocks/pull/6780)
+- Supports querying Merge On Read tables using [Hudi catalogs](../data_source/catalog/hudi_catalog.md) and [Hudi external tables](../data_source/External_table.md#deprecated-hudi-external-table). [#6780](https://github.com/StarRocks/starrocks/pull/6780)
 - Supports querying STRUCT and MAP data using [Hive catalogs](../data_source/catalog/hive_catalog.md), Hudi catalogs, and [Iceberg catalogs](../data_source/catalog/iceberg_catalog.md). [#10677](https://github.com/StarRocks/starrocks/issues/10677)
 - Provides [Data Cache](../data_source/data_cache.md) to improve access performance of hot data stored in external storage systems, such as HDFS. [#11597](https://github.com/StarRocks/starrocks/pull/11579)
 - Supports creating [Delta Lake catalogs](../data_source/catalog/deltalake_catalog.md), which allow direct queries on data from Delta Lake. [#11972](https://github.com/StarRocks/starrocks/issues/11972)
@@ -379,10 +404,10 @@ Release date: January 22, 2023
 ### Improvements
 
 - Optimized the metadata access performance when you query external data using [Hive catalogs](../data_source/catalog/hive_catalog.md), [Hudi catalogs](../data_source/catalog/hudi_catalog.md), and [Iceberg catalogs](../data_source/catalog/iceberg_catalog.md). [#11349](https://github.com/StarRocks/starrocks/issues/11349)
-- Supports querying ARRAY data using [Elasticsearch external tables](../data_source/External_table.md#elasticsearch-external-table). [#9693](https://github.com/StarRocks/starrocks/pull/9693)
+- Supports querying ARRAY data using [Elasticsearch external tables](../data_source/External_table.md#deprecated-elasticsearch-external-table). [#9693](https://github.com/StarRocks/starrocks/pull/9693)
 - Optimized the following aspects of materialized views:
-  - Asynchronous materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#about-async-refresh-mechanisms-for-materialized-views). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
-  - Asynchronous materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#enable-query-rewrite-based-on-async-materialized-views). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
+  - Asynchronous materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
+  - Asynchronous materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#manually-refresh-an-asynchronous-materialized-view). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - The efficiency of refreshing materialized views is improved. [#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - Optimized the following aspects of data loading:
   - Optimized loading performance in multi-replica scenarios by supporting the "single leader replication" mode. Data loading gains a one-fold performance lift. For more information about "single leader replication", see `replicated_storage` in [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md). [#10138](https://github.com/StarRocks/starrocks/pull/10138)
