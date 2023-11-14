@@ -53,7 +53,12 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Map.Entry;
+=======
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
+>>>>>>> 5cc830cc1d ([BugFix] fix expensive Partition.equals (#34961))
 
 /**
  * Internal representation of partition-related metadata.
@@ -473,7 +478,7 @@ public class Partition extends MetaObject implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(visibleVersion, baseIndex, distributionInfo);
+        return Objects.hashCode(id, visibleVersion, baseIndex, distributionInfo);
     }
 
     @Override
@@ -486,24 +491,11 @@ public class Partition extends MetaObject implements Writable {
         }
 
         Partition partition = (Partition) obj;
-        if (idToVisibleRollupIndex != partition.idToVisibleRollupIndex) {
-            if (idToVisibleRollupIndex.size() != partition.idToVisibleRollupIndex.size()) {
-                return false;
-            }
-            for (Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
-                long key = entry.getKey();
-                if (!partition.idToVisibleRollupIndex.containsKey(key)) {
-                    return false;
-                }
-                if (!entry.getValue().equals(partition.idToVisibleRollupIndex.get(key))) {
-                    return false;
-                }
-            }
-        }
-
-        return (visibleVersion == partition.visibleVersion)
+        return (id == partition.id)
+                && (visibleVersion == partition.visibleVersion)
                 && (baseIndex.equals(partition.baseIndex)
-                && distributionInfo.equals(partition.distributionInfo));
+                && distributionInfo.equals(partition.distributionInfo))
+                && Objects.equal(idToVisibleRollupIndex, partition.idToVisibleRollupIndex);
     }
 
     @Override
