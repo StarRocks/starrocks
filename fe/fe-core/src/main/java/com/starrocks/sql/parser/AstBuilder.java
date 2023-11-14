@@ -5435,10 +5435,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private static void addArgumentUseTypeInt(Expr value, List<Expr> exprs) {
         // IntLiteral may use TINYINT/SMALLINT/INT/BIGINT type
         // but time_slice only support INT type when executed in BE
-        if (value instanceof IntLiteral) {
-            exprs.add(new IntLiteral(((IntLiteral) value).getValue(), Type.INT));
-        } else {
-            exprs.add(value);
+        try {
+            if (value instanceof IntLiteral) {
+                exprs.add(new IntLiteral(((IntLiteral) value).getValue(), Type.INT));
+            } else {
+                exprs.add(value);
+            }
+        } catch (Exception e) {
+            throw  new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
         }
     }
 
