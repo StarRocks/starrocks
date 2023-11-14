@@ -14,16 +14,18 @@
 
 #pragma once
 
+#include <aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <aws/s3/S3Client.h>
 
 #include "io/output_stream.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks::io {
 
 class S3OutputStream : public OutputStream {
 public:
     explicit S3OutputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object,
-                            int64_t max_single_part_size, int64_t min_upload_part_size);
+                            int64_t max_single_part_size, int64_t min_upload_part_size, bool background_write = true);
 
     ~S3OutputStream() override = default;
 
@@ -51,18 +53,38 @@ public:
 
 private:
     Status create_multipart_upload();
-    Status multipart_upload();
-    Status singlepart_upload();
     Status complete_multipart_upload();
+
+    Status upload_part(std::vector<uint8_t> buffer);
 
     std::shared_ptr<Aws::S3::S3Client> _client;
     const Aws::String _bucket;
     const Aws::String _object;
     const int64_t _max_single_part_size;
     const int64_t _min_upload_part_size;
-    Aws::String _buffer;
+    std::vector<uint8_t> _buffer;
     Aws::String _upload_id;
+    int _part_id{1}; // starts at 1
+
+    const bool _background_write;
+    PriorityThreadPool* _io_executor;
+
+    std::mutex _mutex; // guards following
     std::vector<Aws::String> _etags;
+    int _completed_parts{0};
+    Status _io_status;
+    std::condition_variable _cv;
+};
+
+// A non-copying iostream.
+// See https://stackoverflow.com/questions/35322033/aws-c-sdk-uploadpart-times-out
+// https://stackoverflow.com/questions/13059091/creating-an-input-stream-from-constant-memory
+class StringViewStream : Aws::Utils::Stream::PreallocatedStreamBuf, public std::iostream {
+public:
+    StringViewStream(const void* data, int64_t nbytes)
+            : Aws::Utils::Stream::PreallocatedStreamBuf(reinterpret_cast<unsigned char*>(const_cast<void*>(data)),
+                                                        static_cast<size_t>(nbytes)),
+              std::iostream(this) {}
 };
 
 } // namespace starrocks::io
