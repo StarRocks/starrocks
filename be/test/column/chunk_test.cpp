@@ -5,6 +5,11 @@
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"
+<<<<<<< HEAD
+=======
+#include "column/chunk_extra_data.h"
+#include "column/column_helper.h"
+>>>>>>> 3aca5c9b52 ([Refactor] Refactor the code of nest loop join for later optimization (#34804))
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -107,6 +112,18 @@ TEST_F(ChunkTest, test_chunk_downgrade) {
     ASSERT_FALSE(chunk->has_large_column());
     ASSERT_TRUE(ret.ok());
     ASSERT_FALSE(chunk->has_large_column());
+}
+
+// NOLINTNEXTLINE
+TEST_F(ChunkTest, test_is_column_nullable) {
+    Chunk chunk;
+    auto c1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
+    auto c2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    chunk.append_column(c1, 1);
+    chunk.append_column(c2, 2);
+
+    ASSERT_FALSE(chunk.is_column_nullable(1));
+    ASSERT_TRUE(chunk.is_column_nullable(2));
 }
 
 // NOLINTNEXTLINE
