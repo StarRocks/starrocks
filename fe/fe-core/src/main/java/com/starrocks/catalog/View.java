@@ -129,11 +129,11 @@ public class View extends Table {
             }
 
             QueryStatement stmt = (QueryStatement) node;
+            Analyzer.analyze(stmt, ConnectContext.get());
 
             if (ConnectContext.get().cannotReuseViewDef()) {
                 return stmt;
             }  else {
-                Analyzer.analyze(stmt, ConnectContext.get());
                 analyzedCache.compareAndSet(null, stmt);
             }
         }
