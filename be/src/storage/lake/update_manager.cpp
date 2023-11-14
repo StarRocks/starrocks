@@ -530,9 +530,15 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
 
     // 2. update primary index, and generate delete info.
+<<<<<<< HEAD
     TRACE_COUNTER_INCREMENT("output_rowsets_size", compaction_state.pk_cols.size());
     for (size_t i = 0; i < compaction_state.pk_cols.size(); i++) {
         RETURN_IF_ERROR(compaction_state.load_segments(output_rowset.get(), this, *tablet_schema, i));
+=======
+    TRACE_COUNTER_INCREMENT("output_rowsets_size", output_rowset->num_segments());
+    for (size_t i = 0; i < output_rowset->num_segments(); i++) {
+        RETURN_IF_ERROR(compaction_state.load_segments(output_rowset.get(), this, tablet_schema, i));
+>>>>>>> 6b3f0ab34b ([BugFix] fix lake pk table compaction when compaction state cache not exist (#34955))
         TRACE_COUNTER_INCREMENT("state_bytes", compaction_state.memory_usage());
         auto& pk_col = compaction_state.pk_cols[i];
         total_rows += pk_col->size();
@@ -676,6 +682,13 @@ bool UpdateManager::TEST_check_compaction_cache_absent(uint32_t tablet_id, int64
     } else {
         _compaction_cache.release(compaction_entry);
         return false;
+    }
+}
+
+void UpdateManager::TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn_id) {
+    auto compaction_entry = _compaction_cache.get(cache_key(tablet_id, txn_id));
+    if (compaction_entry != nullptr) {
+        _compaction_cache.remove(compaction_entry);
     }
 }
 
