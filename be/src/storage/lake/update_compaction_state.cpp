@@ -21,6 +21,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_manager.h"
+#include "util/trace.h"
 
 namespace starrocks::lake {
 
