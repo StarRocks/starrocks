@@ -738,12 +738,12 @@ Status JsonReader::_read_file_broker() {
         if (!res.ok()) {
             return res.status();
         }
-        _file_broker_buffer_size = sz;
+        _file_broker_buffer_size = res.value();
 
         if (res.value() <= 0) {
             return Status::EndOfFile("EOF of reading file");
         }
-        _state->update_num_bytes_scan_from_source(sz);
+        _state->update_num_bytes_scan_from_source(_file_broker_buffer_size);
     }
     _payload = _file_broker_buffer.get();
     _payload_size = _file_broker_buffer_size;
