@@ -18,19 +18,14 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Rule;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Future;
 
 /*
  *
@@ -94,22 +89,9 @@ public class RewriteTreeTask extends OptimizerTask {
             deriveLogicalProperty(root);
         }
 
-        List<Future<?>> futures = new ArrayList<>();
         // prune cte column depend on prune right child first
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
-            OptExpression finalRoot = root;
-            int finalI = i;
-            Future<?> future = Optimizer.executor.submit(() -> {
-                rewrite(finalRoot, finalI, finalRoot.getInputs().get(finalI));
-            });
-            futures.add(future);
-        }
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (Exception e) {
-                throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
-            }
+            rewrite(root, i, root.getInputs().get(i));
         }
     }
 

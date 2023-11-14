@@ -21,7 +21,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -94,7 +93,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
@@ -107,10 +105,6 @@ public class Optimizer {
     private static final Logger LOG = LogManager.getLogger(Optimizer.class);
     private OptimizerContext context;
     private final OptimizerConfig optimizerConfig;
-
-    public static ExecutorService executor =
-            ThreadPoolManager.newDaemonFixedThreadPool(5, 256, "optimizer", true);
-
 
     private long updateTableId = -1;
 
