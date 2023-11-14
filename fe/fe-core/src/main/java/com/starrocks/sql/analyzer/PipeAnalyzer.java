@@ -116,7 +116,7 @@ public class PipeAnalyzer {
                     }
                     if (value < 0) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                                PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                                PROPERTY_BATCH_SIZE + " should be greater than 0");
                     }
                     break;
                 }

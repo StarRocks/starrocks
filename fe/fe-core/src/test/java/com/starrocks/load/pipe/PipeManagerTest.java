@@ -487,6 +487,37 @@ public class PipeManagerTest {
     }
 
     @Test
+    public void testTaskExecution() {
+        PipeTaskDesc task = new PipeTaskDesc(1, "task", "test", "sql", null);
+
+        // normal success
+        {
+            CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+            future.complete(Constants.TaskRunState.SUCCESS);
+            task.setFuture(future);
+            Assert.assertFalse(task.isFinished());
+            Assert.assertFalse(task.isTaskRunning());
+        }
+
+        // exceptional
+        {
+            CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+            future.completeExceptionally(new RuntimeException("task failure"));
+            task.setFuture(future);
+            Assert.assertFalse(task.isFinished());
+            Assert.assertFalse(task.isTaskRunning());
+        }
+
+        // running
+        {
+            CompletableFuture<Constants.TaskRunState> future = new CompletableFuture<>();
+            task.setFuture(future);
+            Assert.assertFalse(task.isFinished());
+            Assert.assertTrue(task.isTaskRunning());
+        }
+    }
+
+    @Test
     public void resumeAfterError() throws Exception {
         final String pipeName = "p3";
         String sql = "create pipe p3 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
