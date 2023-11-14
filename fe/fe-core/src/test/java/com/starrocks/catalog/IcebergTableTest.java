@@ -5,6 +5,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -33,6 +34,22 @@ public class IcebergTableTest {
     String resourceName;
     private List<Column> columns;
     private Map<String, String> properties;
+=======
+import com.starrocks.connector.iceberg.TableTestBase;
+import com.starrocks.server.IcebergTableFactory;
+import mockit.Mocked;
+import org.apache.iceberg.Table;
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static com.starrocks.catalog.Type.INT;
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+>>>>>>> d7be916838 ([BugFix] fix resource name from stmt propery instead of catalog recast (#34844))
 
     @Before
     public void setUp() {
@@ -179,5 +196,32 @@ public class IcebergTableTest {
         properties.remove("table");
         new IcebergTable(1000, "iceberg_table", columns1, properties);
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testCreateTableResourceName(@Mocked Table icebergNativeTable) throws DdlException {
+
+        String resourceName = "Iceberg_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
+
+        IcebergTable.Builder tableBuilder = IcebergTable.builder()
+                .setId(1000)
+                .setSrTableName("supplier")
+                .setCatalogName("iceberg_catalog")
+                .setRemoteDbName("iceberg_oss_tpch_1g_parquet_gzip")
+                .setRemoteTableName("supplier")
+                .setResourceName(resourceName)
+                .setFullSchema(new ArrayList<>())
+                .setNativeTable(icebergNativeTable)
+                .setIcebergProperties(new HashMap<>());
+        IcebergTable oTable = tableBuilder.build();
+        IcebergTable.Builder newBuilder = IcebergTable.builder();
+        IcebergTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
+        IcebergTable table = newBuilder.build();
+        Assert.assertEquals(table.getResourceName(), resourceName);
     }
 }

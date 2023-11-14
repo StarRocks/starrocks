@@ -28,6 +28,7 @@ import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.HiveTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactory;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -42,9 +43,16 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.HashMap;
+>>>>>>> d7be916838 ([BugFix] fix resource name from stmt propery instead of catalog recast (#34844))
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HiveTableTest {
     private static ConnectContext connectContext;
@@ -167,4 +175,122 @@ public class HiveTableTest {
         com.starrocks.catalog.Table table = TableFactory.createTable(createTableStmt, com.starrocks.catalog.Table.TableType.HIVE);
         Assert.fail("No exception throws.");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testHasBoolPartitionColumn() {
+        Table msTable = hiveClient.getTable("hive_db", "hive_table");
+        HiveTable oTable = HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
+        Assert.assertFalse(oTable.hasBooleanTypePartitionColumn());
+    }
+
+    // create a hive table with specific storage format
+    private HiveTable createExternalTableByFormat(String format) throws Exception {
+        String inputFormatClass = HiveStorageFormat.get(format).getInputFormat();
+        String outputFormatClass = HiveStorageFormat.get(format).getOutputFormat();
+
+        String serde = HiveStorageFormat.get(format).getSerde();
+        SerDeInfo serDeInfo = new SerDeInfo();
+        serDeInfo.setSerializationLib(serde);
+
+        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
+        List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+        String hdfsPath = "hdfs://127.0.0.1:10000/hive";
+        StorageDescriptor sd = new StorageDescriptor();
+        sd.setInputFormat(inputFormatClass);
+        sd.setOutputFormat(outputFormatClass);
+        sd.setSerdeInfo(serDeInfo);
+
+        sd.setCols(unPartKeys);
+        sd.setLocation(hdfsPath);
+        Table msTable = new Table();
+        msTable.setPartitionKeys(partKeys);
+        msTable.setSd(sd);
+        msTable.setTableType("MANAGED_TABLE");
+
+        //        String tableName = format.toLowerCase() + "_table";
+        String tableName = "hive_table";
+        msTable.setTableName(tableName);
+        msTable.setDbName("hive_db");
+        int createTime = (int) System.currentTimeMillis();
+        msTable.setCreateTime(createTime);
+
+        HiveTable oTable =
+                HiveMetastoreApiConverter.toHiveTable(msTable, getResourceMappingCatalogName("hive0", "hive"));
+        return oTable;
+    }
+
+    @Test
+    public void testCreateExternalTableWithStorageFormat(@Mocked MetadataMgr metadataMgr) throws Exception {
+
+        List<String> targetFormats = new ArrayList<>();
+        targetFormats.add("AVRO");
+        targetFormats.add("RCBINARY");
+        targetFormats.add("RCTEXT");
+        targetFormats.add("SEQUENCE");
+
+        for (String targetFormat : targetFormats) {
+            HiveTable oTable = createExternalTableByFormat(targetFormat);
+            String inputFormatClass = HiveStorageFormat.get(targetFormat).getInputFormat();
+            String serde = HiveStorageFormat.get(targetFormat).getSerde();
+
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState().getMetadataMgr();
+                    result = metadataMgr;
+                    minTimes = 0;
+
+                    metadataMgr.getTable(anyString, anyString, anyString);
+                    result = oTable;
+                }
+            };
+
+            String createTableSql =
+                    "create external table if not exists  db.hive_tbl (col1 int, col2 int) engine=hive properties " +
+                            "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
+            CreateTableStmt createTableStmt =
+                    (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+            com.starrocks.catalog.Table table = createTable(createTableStmt);
+
+            Assert.assertTrue(table instanceof HiveTable);
+            HiveTable hiveTable = (HiveTable) table;
+            List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
+            TTableDescriptor tTableDescriptor = hiveTable.toThrift(partitions);
+
+            Assert.assertEquals(tTableDescriptor.getHdfsTable().getInput_format(), inputFormatClass);
+            Assert.assertEquals(tTableDescriptor.getHdfsTable().getSerde_lib(), serde);
+            Assert.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_names(), "col2");
+            Assert.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_types(), "INT");
+        }
+    }
+
+    @Test
+    public void testCreateTableResourceName() throws DdlException {
+
+        String resourceName = "Hive_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
+        HiveTable.Builder tableBuilder = HiveTable.builder()
+                .setId(1000)
+                .setTableName("supplier")
+                .setCatalogName("hice_catalog")
+                .setHiveDbName("hive_oss_tpch_1g_parquet_gzip")
+                .setHiveTableName("supplier")
+                .setResourceName(resourceName)
+                .setTableLocation("")
+                .setFullSchema(new ArrayList<>())
+                .setDataColumnNames(new ArrayList<>())
+                .setPartitionColumnNames(Lists.newArrayList())
+                .setStorageFormat(null);
+        HiveTable oTable = tableBuilder.build();
+        HiveTable.Builder newBuilder = HiveTable.builder();
+        HiveTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
+        HiveTable table = newBuilder.build();
+        Assert.assertEquals(table.getResourceName(), resourceName);
+    }
+>>>>>>> d7be916838 ([BugFix] fix resource name from stmt propery instead of catalog recast (#34844))
 }
