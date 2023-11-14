@@ -1129,4 +1129,7 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
+CONF_mBool(use_lake_pk_index_loader, "true");
+CONF_mInt32(lake_pk_index_loader_thread, "10");
+
 } // namespace starrocks::config

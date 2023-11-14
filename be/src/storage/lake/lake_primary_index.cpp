@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/pk_index_loader.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
@@ -51,6 +52,11 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadat
 bool LakePrimaryIndex::is_load(int64_t base_version) {
     std::lock_guard<std::mutex> lg(_lock);
     return _loaded && _data_version >= base_version;
+}
+
+Status LakePrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
+    std::lock_guard<std::mutex> lg(_mutex);
+    return PrimaryIndex::insert(rssid, rowids, pks);
 }
 
 Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
@@ -124,42 +130,51 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
     }
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.
     // The delvecs we need are stored in delvec file by base_version and current MetaFileBuilder's cache.
-    for (auto& rowset : *rowsets) {
-        auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
-        if (!res.ok()) {
-            return res.status();
+    if (config::use_lake_pk_index_loader) {
+        auto future = ExecEnv::GetInstance()->lake_pk_index_loader()->load(tablet, *rowsets, pkey_schema, base_version,
+                                                                           builder, this);
+        auto st = future.get();
+        if (!st.ok()) {
+            return st;
         }
-        auto& itrs = res.value();
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        for (size_t i = 0; i < itrs.size(); i++) {
-            auto itr = itrs[i].get();
-            if (itr == nullptr) {
-                continue;
+    } else {
+        for (auto& rowset : *rowsets) {
+            auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
+            if (!res.ok()) {
+                return res.status();
             }
-            while (true) {
-                chunk->reset();
-                rowids.clear();
-                auto st = itr->get_next(chunk, &rowids);
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    Column* pkc = nullptr;
-                    if (pk_column) {
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = chunk->columns()[0].get();
-                    }
-                    auto st = insert(rowset->id() + i, rowids, *pkc);
-                    if (!st.ok()) {
+            auto& itrs = res.value();
+            CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+            for (size_t i = 0; i < itrs.size(); i++) {
+                auto itr = itrs[i].get();
+                if (itr == nullptr) {
+                    continue;
+                }
+                while (true) {
+                    chunk->reset();
+                    rowids.clear();
+                    auto st = itr->get_next(chunk, &rowids);
+                    if (st.is_end_of_file()) {
+                        break;
+                    } else if (!st.ok()) {
                         return st;
+                    } else {
+                        Column* pkc = nullptr;
+                        if (pk_column) {
+                            pk_column->reset_column();
+                            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                            pkc = pk_column.get();
+                        } else {
+                            pkc = chunk->columns()[0].get();
+                        }
+                        auto st = insert(rowset->id() + i, rowids, *pkc);
+                        if (!st.ok()) {
+                            return st;
+                        }
                     }
                 }
+                itr->close();
             }
-            itr->close();
         }
     }
     auto cost_ns = watch.elapsed_time();

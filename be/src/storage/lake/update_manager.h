@@ -26,7 +26,6 @@
 #include "util/dynamic_cache.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 

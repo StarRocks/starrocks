@@ -76,6 +76,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/pk_index_loader.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -487,6 +488,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         });
         config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
     }
+    _lake_pk_index_loader = new lake::PkIndexLoader();
+    status = _lake_pk_index_loader->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "lake pk index loader init failed." << status.get_error_msg();
+        exit(-1);
+    }
 
 #elif defined(BE_TEST)
     _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
@@ -494,6 +501,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_pk_index_loader = new lake::PkIndexLoader();
+    status = _lake_pk_index_loader->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "lake pk index loader init failed." << status.get_error_msg();
+        exit(-1);
+    }
 #endif
 
     _agent_server = new AgentServer(this, false);
