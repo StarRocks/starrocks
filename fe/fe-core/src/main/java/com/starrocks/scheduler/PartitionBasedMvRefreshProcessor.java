@@ -1208,7 +1208,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             boolean isConvertToDate = PartitionUtil.isConvertToDate(partitionExpr, partitionTableAndColumn.second);
             if (isConvertToDate && partitionExpr instanceof FunctionCallExpr
                     && !sourceTablePartitionRange.isEmpty() && MvUtils.isDateRange(sourceTablePartitionRange.get(0))) {
-                FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+                Optional<FunctionCallExpr> functionCallExprOpt = getStr2DateExpr(partitionExpr);
+                if (!functionCallExprOpt.isPresent()) {
+                    LOG.warn("invalid partition expr:{}", partitionExpr);
+                    return null;
+                }
+                FunctionCallExpr functionCallExpr = functionCallExprOpt.get();
                 Preconditions.checkState(functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE));
                 String dateFormat = ((StringLiteral) functionCallExpr.getChild(1)).getStringValue();
                 List<Range<PartitionKey>> converted = Lists.newArrayList();
@@ -1247,6 +1252,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     "partition slot {} is not supported yet: {}", partitionSlot, mvPartitionInfo);
             return null;
         }
+    }
+
+    private Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
+        List<Expr> matches = Lists.newArrayList();
+        partitionExpr.collect(expr -> isStr2Date(expr), matches);
+        if (matches.size() != 1) {
+            return Optional.empty();
+        }
+        return  Optional.of(matches.get(0).cast());
+    }
+
+    private boolean isStr2Date(Expr expr) {
+        return expr instanceof FunctionCallExpr
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 
     private boolean checkBaseTablePartitionChange() {
