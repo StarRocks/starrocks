@@ -420,6 +420,7 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
 void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
                                                             RuntimeBloomFilterEvalContext& eval_context) {
+    auto& selection = eval_context.running_context.selection;
     eval_context.running_context.use_merged_selection = false;
     eval_context.running_context.compatibility =
             _runtime_state->func_version() <= 3 || !_runtime_state->enable_pipeline_engine();
@@ -459,44 +460,47 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             can_use_part_by_exprs &= only_reference_existent_slots(part_by_expr);
         }
 
+        // if partition_by expression can work on partial chunk, use it to compute hash value
         if (can_use_part_by_exprs) {
             ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
             // for colocate grf
             compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
             filter->evaluate(column.get(), &eval_context.running_context);
 
-            auto true_count = SIMD::count_nonzero(eval_context.running_context.selection);
+            auto true_count = SIMD::count_nonzero(selection);
             eval_context.run_filter_nums += 1;
 
             if (true_count == 0) {
                 partial_chunk->set_num_rows(0);
                 return;
-            } else {
-                partial_chunk->filter(eval_context.running_context.selection);
             }
         } else {
+            // otherwise traverse all partial RFs by enumerating any possible hash values
             ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
-            // traverse every partial RF
             auto number_of_partitions = filter->compute_num_partitions(rf_desc->layout());
+            bool all_partial_rf_negative = true;
+
             for (int i = 0; i < number_of_partitions; i++) {
                 eval_context.running_context.hash_values.assign(partial_chunk->num_rows(), i);
                 filter->evaluate(column.get(), &eval_context.running_context);
-                auto true_count = SIMD::count_nonzero(eval_context.running_context.selection);
+                auto true_count = SIMD::count_nonzero(selection);
                 eval_context.run_filter_nums += 1;
 
-                // return early if any partial RF cannot filter the partial chunk
                 if (true_count != 0) {
-                    return;
+                    all_partial_rf_negative = false;
+                    break;
                 }
             }
 
-            // partial chunk can be filtered by all partial RFs
-            partial_chunk->set_num_rows(0);
-            return;
+            // all partial RFs test negative
+            if (all_partial_rf_negative) {
+                partial_chunk->set_num_rows(0);
+                return;
+            }
         }
-    }
 
-    CHECK(false) << "unreachable";
+        // try the next RF if any
+    }
 }
 
 void RuntimeFilterProbeCollector::init_counter() {
