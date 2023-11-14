@@ -163,7 +163,7 @@
     + [Overview of privileges](./administration/privilege_overview.md)
     + [Privileges](./administration/privilege_item.md)
     + [Manage user privileges](./administration/User_privilege.md)
-    + [Manage permissions with Apache Ranger](./administration/range_plugin.md)
+    + [Manage permissions with Apache Ranger](./administration/ranger_plugin.md)
     + [Authentication](./administration/Authentication.md)
     + [Privilege FAQ](./administration/privilege_faq.md)
   + Performance Tuning
