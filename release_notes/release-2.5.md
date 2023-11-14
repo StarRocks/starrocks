@@ -1,5 +1,30 @@
 # StarRocks version 2.5
 
+## 2.5.14
+
+发布日期：2023 年 11 月 14 日
+
+### 功能优化
+
+- `INFORMATION_SCHEMA.COLUMNS` 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+### 问题修复
+
+修复了如下问题：
+
+- 某些场景下 ON 条件中包含子查询会报错：`java.lang.IllegalStateException: null`。 [#30876](https://github.com/StarRocks/starrocks/pull/30876)
+- INSERT INTO SELECT ... LIMIT 执行成功后立刻使用 COUNT(*) 查询时，不同副本返回的结果不一致。 [#24435](https://github.com/StarRocks/starrocks/pull/24435)
+- 当数据类型转换前后类型一致，某些类型下会导致 BE crash。 [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- Broker Load 导入数据时某些路径形式下会报错 `msg:Fail to parse columnsFromPath, expected: [rec_dt]`。 [#32721](https://github.com/StarRocks/starrocks/issues/32721)
+- 升级到 3.x 版本时，如果有的列类型也升级了（比如 Decimal 升级到 Decimal v3），某些特定特征的表在 Compaction 时会导致 BE crash。 [#31626](https://github.com/StarRocks/starrocks/pull/31626)
+- 使用 Flink Connector 导入数据时，如果并发高且 HTTP 和 Scan 线程数受限，会发生卡死。 [#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- 调用 libcurl 时会引起 BE Crash。 [#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- 向主键模型表增加 BITMAP 类型的列时报错：`Analyze columnDef error: No aggregate function specified for 'userid'`。 [#31763](https://github.com/StarRocks/starrocks/pull/31763)
+- 长时间向持久化索引打开的主键模型表高频导入，可能会引起 BE crash。 [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- Query Cache 开启后查询结果有错。 [#32778](https://github.com/StarRocks/starrocks/pull/32778)
+- 主键模型创建时如果 ORDER BY 后的字段为 NULL，则 Compaction 不执行。 [#29225](https://github.com/StarRocks/starrocks/pull/29225)
+- 查询时间较长的复杂 Join，偶尔会报错：“StarRocks planner use long time 10000 ms in logical phase”。 [#34177](https://github.com/StarRocks/starrocks/pull/34177)
+
 ## 2.5.13
 
 发布日期：2023 年 9 月 28 日
