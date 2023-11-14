@@ -39,7 +39,11 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
         mockedJDBCMetadata.initPartitions();
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b4c7c216ec ([BugFix] Fix partition resolve bug for materialized view (#34880))
     @Test
     public void testStr2DateMVRefreshRewrite_InnerJoin_FullRefresh() throws Exception {
         String mvName = "test_mv1";

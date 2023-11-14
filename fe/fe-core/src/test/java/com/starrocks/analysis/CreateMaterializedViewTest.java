@@ -1249,7 +1249,8 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error from line 3, column 11 to line 3, column 32. " +
-                    "Detail message: Materialized view partition function date_trunc check failed.", e.getMessage());
+                    "Detail message: Materialized view partition function date_trunc check failed: " +
+                    "date_trunc('month', `k2`).", e.getMessage());
         }
     }
 
@@ -1286,7 +1287,7 @@ public class CreateMaterializedViewTest {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error from line 3, column 16 to line 3, column 28. " +
-                    "Detail message: Materialized view partition function sqrt is not support.", e.getMessage());
+                    "Detail message: Materialized view partition function sqrt is not support: sqrt(`k1`).", e.getMessage());
         }
     }
 
@@ -3569,6 +3570,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateSynchronousMVOnAnotherMV() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -3580,6 +3582,286 @@ public class CreateMaterializedViewTest {
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
         });
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
+=======
+    public void testCreateMaterializedViewWithSelectStar1() {
+        // sort key by default
+        String sql = "create materialized view test_mv1 " +
+                "partition by c_1_3 " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select * from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithSelectStar2() {
+        // sort key by default
+        String sql = "create materialized view test_mv2 " +
+                "partition by c_1_3 " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select * from t1 union all select * from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithSelectStar3() {
+        // sort key by default
+        String sql = "create materialized view test_mv1 " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select * from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithSelectStar4() {
+        // sort key by default
+        String sql = "create materialized view test_mv2 " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select * from t1 union all select * from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithSelectStar5() {
+        // sort key by default
+        String sql = "create materialized view test_mv2 " +
+                "partition by date_trunc('day', c_1_3) " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select * from t1 union all select * from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithSelectStar6() {
+        // sort key by default
+        String sql = "create materialized view test_mv2 " +
+                "partition by date_trunc('month', c_1_3) " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select * from t1 union all select * from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
+        Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
+        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_Partitioned_1() {
+        // sort key by default
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "partition by c_1_3 " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_3, c_1_0, c_1_4, c_1_5 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_Partitioned_2() {
+        // random distribution : double key is in the first
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "partition by c_1_3 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_3, c_1_0 , c_1_4, c_1_5 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_Partitioned_3() {
+        // random distribution : double key is in the first
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "partition by c_1_3 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_Partitioned_4() {
+        // order by with double columns
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "partition by c_1_3 " +
+                "distributed by random " +
+                "order by (c_1_0, c_1_3)  " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_Partitioned_5() {
+        // random distribution : double key is in the first, c_1_10 is varchar
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "partition by c_1_3 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_5, c_1_10, c_1_3, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_10"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_Partitioned_6() {
+        // random distribution : double key is in the first, c_1_10 is varchar
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "partition by c_1_3 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_3, c_1_10, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_UnPartitioned_1() {
+        // sort key by default
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "distributed by hash(c_1_3, c_1_0) buckets 10 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_3, c_1_0, c_1_4, c_1_5 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_UnPartitioned_2() {
+        // random distribution : double key is in the first
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_3, c_1_0 , c_1_4, c_1_5 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_UnPartitioned_3() {
+        // random distribution : double key is in the first
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_0"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_UnPartitioned_4() {
+        // order by with double columns
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "distributed by random " +
+                "order by (c_1_0, c_1_3)  " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_5, c_1_3, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_3"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_UnPartitioned_5() {
+        // random distribution : double key is in the first, c_1_10 is varchar
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_5, c_1_10, c_1_3, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_10"));
+    }
+
+    @Test
+    public void testCreateMaterializedViewWithoutSortKeys_UnPartitioned_6() {
+        // random distribution : double key is in the first, c_1_10 is varchar
+        String sql = "create materialized view test_mv_sort_key1 " +
+                "distributed by random " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ") " +
+                "as select c_1_4, c_1_3, c_1_10, c_1_0 from t1";
+        List<Column> keyColumns = getMaterializedViewKeysChecked(sql);
+        Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_3"));
+        Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_10"));
+    }
+
+    @Test
+    public void createDeltaLakeMV() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_deltalake " +
+                " refresh manual" +
+                " as select * from deltalake_catalog.deltalake_db.tbl");
+>>>>>>> b4c7c216ec ([BugFix] Fix partition resolve bug for materialized view (#34880))
     }
 
     @Test
