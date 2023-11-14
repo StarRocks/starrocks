@@ -7,7 +7,7 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
 **User guide:** You can use the following methods to deploy StarRocks clusters on Kubernetes:
 
 - [Directly use StarRocks CRD to deploy StarRocks clusters](https://docs.starrocks.io/docs/deployment/sr_operator/)
-- [Deploying both the Operator and StarRocks clusters by using the Helm chart](https://docs.starrocks.io/zh/docs/deployment/helm/)
+- [Deploying both the Operator and StarRocks clusters by using the Helm Chart](https://docs.starrocks.io/zh/docs/deployment/helm/)
 
 **Source codes:**
 
@@ -18,15 +18,13 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
 
 - **URL prefix**:
 
-    ```Plaintext
-    https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v${operator_version}/${resource_name}
-    ```
+    `https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v${operator_version}/${resource_name}`
 
 - **Resource name**
 
-  - CRD StarRocksCluster: `starrocks.com_starrocksclusters.yaml`
+  - StarRocksCluster CRD: `starrocks.com_starrocksclusters.yaml`
   - Default configuration file for StarRocks Operator: `operator.yaml`
-  - Helm chart, including kube-starrocks chart `kube-starrocks-${chart_version}.tgz`. The `kube-starrocks` chart is divided into two sub-charts: StarRocks cluster `starrocks-${chart_version}.tgz` and operator `operator-${chart_version}.tgz`.
+  - Helm Chart, including `kube-starrocks` Chart `kube-starrocks-${chart_version}.tgz`. The `kube-starrocks` Chart is divided into two subcharts: `starrocks` Chart `starrocks-${chart_version}.tgz` and `operator` Chart `operator-${chart_version}.tgz`.
 
 For example, the download URL for kube-starrocks chart v1.8.6 is: [kube-starrocks](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.8.6/kube-starrocks-1.8.6.tgz)
 
@@ -57,14 +55,14 @@ Fixed the following issue:
 
 **Improvements**
 
-- **[Helm Chart] The** **`annotations`** **and** **`labels`** **can be customized for the service account of the operator:** The Operator creates a service account named `starrocks` by default, and users can customize the annotations and labels for the service account `starrocks` of the operator by specifying the `annotations` and `labels` fields in `serviceAccount` in **values.yaml**. The `operator.global.rbac.serviceAccountName` field is deprecated. [#291](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/291)
-- **[Operator]** **FE** **service supports explicit protocol selection for Istio:** When Istio is installed in the Kubernetes enviroment, Istio needs to determine the protocol of the traffic from the StarRocks cluster, in order to provide additional functionality such as routing and rich metrics. So FE service explicitly defines its protocol as MySQL in the `appProtocol` field. This improvement is particularly important because the MySQL protocol is a server-first protocol that is incompatible with automatic protocol detection and sometimes may incur connection failures. [#288](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/288)
+- **[Helm Chart] The `annotations` *and `labels` can be customized for the service account of the operator**: The Operator creates a service account named `starrocks` by default, and users can customize the annotations and labels for the service account `starrocks` of the operator by specifying the `annotations` and `labels` fields in `serviceAccount` in **values.yaml**. The `operator.global.rbac.serviceAccountName` field is deprecated. [#291](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/291)
+- **[Operator] FE service supports explicit protocol selection for Istio**: When Istio is installed in the Kubernetes environment, Istio needs to determine the protocol of the traffic from the StarRocks cluster, in order to provide additional functionality such as routing and rich metrics. So FE service explicitly defines its protocol as MySQL in the `appProtocol` field. This improvement is particularly important because the MySQL protocol is a server-first protocol that is incompatible with automatic protocol detection and sometimes may incur connection failures. [#288](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/288)
 
 **Bug Fixes**
 
 - **[Helm Chart]** The root user's password in StarRocks may not be initialized successfully when `starrocks.initPassword.enabled` is true and the value of `starrocks.starrocksCluster.name` is specified. It is caused by the wrong FE service domain name used by the initpwd pod to connect FE service. More specifically, in this scenario, FE service domain name uses the value specified in `starrocks.starrocksCluster.name`, while the initpwd pod still uses the value of the `starrocks.nameOverride` field to form the FE service domain name. ([#292](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/292))
 
-**Upgrade notes** 
+**Upgrade notes**
 
 - **[Helm Chart]** When the value specified in `starrocks.starrocksCluster.name` is different from the value of `starrocks.nameOverride`, the old configmaps for FE, BE, and CN will be deleted. New configmaps with the new name for FE, BE, and CN will be created. **This may result in the restart of FE/BE/CN pods.**
 
@@ -91,9 +89,9 @@ Fixed the following issue:
 
 **1.8.3**
 
-**Upgrade notes** 
+**Upgrade notes**
 
-- **[Helm Chart]** Add `JAVA_OPTS_FOR_JDK_11` to the default **fe.conf** file. When the default **fe.conf** file is used and the helm chart is upgraded to v1.8.3, **FE** **Pods may restart**. [#257](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/257)
+- **[Helm Chart]** Add `JAVA_OPTS_FOR_JDK_11` to the default **fe.conf** file. When the default **fe.conf** file is used and the helm chart is upgraded to v1.8.3, **FE Pods may restart**. [#257](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/257)
 
 **Features**
 
@@ -127,9 +125,9 @@ Fixed the following issue:
 
 - **[Operator]** To upgrade the StarRocksCluster CRD and operator you need to manually apply the new StarRocksCluster CRD **starrocks.com_starrocksclusters.yaml** and **operator.yaml.**
 
-- **[helm chart]**
+- **[Helm Chart]**
 
-  - To upgrade the Helm chart, you need to perform the following: 
+  - To upgrade the Helm Chart, you need to perform the following:
 
     1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section.  You can get help information of this tool by running the` migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
 
@@ -137,7 +135,7 @@ Fixed the following issue:
        migrate-chart-value --input values.yaml --target-version v1.8.0 --output ./values-v1.8.0.yaml
        ```
 
-    2. Update the Helm chart repo.
+    2. Update the Helm Chart repo.
 
        ```Bash
        helm repo update
@@ -153,11 +151,11 @@ Fixed the following issue:
 
 **Features**
 
-- **[Helm Chart] Multiple StarRocks clusters in a Kubernetes cluster.** Support deploying multiple StarRocks clusters in different namespaces in a Kubernetes cluster by installing the starrocks helm subchart.  [#199](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/199)
+- **[Helm Chart] Multiple StarRocks clusters in a Kubernetes cluster**. Support deploying multiple StarRocks clusters in different namespaces in a Kubernetes cluster by installing the `starrocks` Helm subchart.  [#199](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/199)
 - **[Helm Chart]** Support to [configure the initial password of StarRocks cluster's root users](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md) when executing the `helm install` command. Note that, the `helm upgrade` command does not support this feature.
 - **[Helm Chart] Integration with Datadog:** Integrated with Datadog to collect StarRocks clusters' metrics and logs. To enable this feature, you need to configure the datadog related fields in the **values.yaml** file. For the detailed user guide, see [Integration with Datadog](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/integration/integration-with-datadog.md). [#197](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/197) [#208](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/208)
 - **[Operator] Run pods as a non-root user**. Add the runAsNonRoot field to allow pods to run as non-root users, which can enhance security. [#195](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/195)
-- **[Operator]** **FE** **proxy.** Add the FE proxy to allow external clients and data load tools that support Stream Load protocol to access StarRocks clusters in Kubernetes. This way, you can use the load job based on Stream Load to load data into StarRocks clusters in Kubernetes. [#211](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/211)
+- **[Operator] FE proxy.** Add the FE proxy to allow external clients and data load tools that support Stream Load protocol to access StarRocks clusters in Kubernetes. This way, you can use the load job based on Stream Load to load data into StarRocks clusters in Kubernetes. [#211](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/211)
 
 **Improvements**
 
