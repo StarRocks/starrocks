@@ -145,8 +145,14 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listPartitionNames(String databaseName, String tableName) {
+        // refresh materialized view will trigger this
+        OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
+        OdpsTable table = get(tableCache, odpsTableName);
+        if (table.isUnPartitioned()) {
+            return Collections.emptyList();
+        }
         // TODO: perhaps not good to support users to fetch whole tables?
-        return get(partitionCache, OdpsTableName.of(databaseName, tableName)).stream()
+        return get(partitionCache, odpsTableName).stream()
                 .map(p -> p.toString(false, true)).collect(
                         Collectors.toList());
     }
@@ -154,6 +160,9 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
+        if (partitionValues.isEmpty()) {
+            return listPartitionNames(databaseName, tableName);
+        }
         List<PartitionSpec> partitionSpecs = get(partitionCache, OdpsTableName.of(databaseName, tableName));
         List<String> keys = new ArrayList<>(partitionSpecs.get(0).keys());
         ImmutableList.Builder<String> builder = ImmutableList.builder();
@@ -176,8 +185,9 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     private List<PartitionSpec> loadPartitions(OdpsTableName odpsTableName) {
+        com.aliyun.odps.Table odpsTable = odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
         List<Partition> partitions =
-                odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName()).getPartitions();
+                odpsTable.getPartitions();
         return partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
     }
 
