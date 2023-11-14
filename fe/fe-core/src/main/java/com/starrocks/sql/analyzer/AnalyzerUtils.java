@@ -92,7 +92,6 @@ import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
@@ -100,7 +99,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -1341,138 +1339,6 @@ public class AnalyzerUtils {
         return null;
     }
 
-    private static class SlotRefResolverFactory {
-        public static class AstVisitors {
-            public AstVisitor<Expr, Relation> exprShuttle;
-            public AstVisitor<Expr, SlotRef> slotRefResolver;
-        }
-
-        public static AstVisitors createAstVisitors() {
-            AstVisitors visitors = new AstVisitors();
-
-            visitors.exprShuttle = new AstVisitor<Expr, Relation>() {
-                @Override
-                public Expr visitExpression(Expr expr, Relation node) {
-                    expr = expr.clone();
-                    for (int i = 0; i < expr.getChildren().size(); i++) {
-                        Expr child = expr.getChild(i);
-                        expr.setChild(i, child.accept(this, node));
-                    }
-                    return expr;
-                }
-
-                @Override
-                public Expr visitSlot(SlotRef slotRef, Relation node) {
-                    String tableName = slotRef.getTblNameWithoutAnalyzed().getTbl();
-                    if (node.getAlias() != null && !node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
-                        return slotRef;
-                    }
-                    return node.accept(visitors.slotRefResolver, slotRef);
-                }
-            };
-
-            visitors.slotRefResolver = new AstVisitor<Expr, SlotRef>() {
-                @Override
-                public Expr visitSelect(SelectRelation node, SlotRef slot) {
-                    for (SelectListItem selectListItem : node.getSelectList().getItems()) {
-                        TableName tableName = slot.getTblNameWithoutAnalyzed();
-                        if (selectListItem.getAlias() == null) {
-                            if (selectListItem.getExpr() instanceof SlotRef) {
-                                SlotRef result = (SlotRef) selectListItem.getExpr();
-                                if (result.getColumnName().equalsIgnoreCase(slot.getColumnName())
-                                        && (tableName == null || tableName.equals(result.getTblNameWithoutAnalyzed()))) {
-                                    return selectListItem.getExpr().accept(visitors.exprShuttle, node.getRelation());
-                                }
-                            }
-                        } else {
-                            if (tableName != null && tableName.isFullyQualified()) {
-                                continue;
-                            }
-                            if (selectListItem.getAlias().equalsIgnoreCase(slot.getColumnName())) {
-                                return selectListItem.getExpr().accept(visitors.exprShuttle, node.getRelation());
-                            }
-                        }
-                    }
-                    return node.getRelation().accept(this, slot);
-                }
-                @Override
-                public Expr visitSubquery(SubqueryRelation node, SlotRef slot) {
-                    String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
-                    if (!node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
-                        return null;
-                    }
-                    slot = (SlotRef) slot.clone();
-                    slot.setTblName(null); //clear table name here, not check it inside
-                    return node.getQueryStatement().getQueryRelation().accept(this, slot);
-                }
-                @Override
-                public Expr visitTable(TableRelation node, SlotRef slot) {
-                    TableName tableName = slot.getTblNameWithoutAnalyzed();
-                    if (node.getName().equals(tableName)) {
-                        return slot;
-                    }
-                    if (tableName != null && !node.getResolveTableName().equals(tableName)) {
-                        return null;
-                    }
-                    slot = (SlotRef) slot.clone();
-                    slot.setTblName(node.getName());
-                    return slot;
-                }
-                @Override
-                public Expr visitView(ViewRelation node, SlotRef slot) {
-                    TableName tableName = slot.getTblNameWithoutAnalyzed();
-                    if (tableName != null && !node.getResolveTableName().equals(tableName)) {
-                        return null;
-                    }
-                    slot = (SlotRef) slot.clone();
-                    slot.setTblName(null); //clear table name here, not check it inside
-                    return node.getQueryStatement().getQueryRelation().accept(this, slot);
-                }
-                @Override
-                public Expr visitJoin(JoinRelation node, SlotRef slot) {
-                    Relation leftRelation = node.getLeft();
-                    Expr leftExpr = leftRelation.accept(this, slot);
-                    if (leftExpr != null) {
-                        return leftExpr;
-                    }
-                    Relation rightRelation = node.getRight();
-                    Expr rightExpr = rightRelation.accept(this, slot);
-                    if (rightExpr != null) {
-                        return rightExpr;
-                    }
-                    return null;
-                }
-
-                @Override
-                public Expr visitSetOp(SetOperationRelation node, SlotRef slot) {
-                    for (Relation relation : node.getRelations()) {
-                        Expr resolved = relation.accept(this, slot);
-                        if (resolved != null) {
-                            return resolved;
-                        }
-                    }
-                    return null;
-                }
-
-                @Override
-                public SlotRef visitValues(ValuesRelation node, SlotRef slot) {
-                    return null;
-                }
-            };
-
-            return visitors;
-        }
-    }
-
-    public static Expr resolveSlotRef(SlotRef slotRef, QueryStatement queryStatement) {
-        SlotRefResolverFactory.AstVisitors visitors = SlotRefResolverFactory.createAstVisitors();
-        return queryStatement.getQueryRelation().accept(visitors.slotRefResolver, slotRef);
-    }
-    public static Expr resolveExpr(Expr expr, QueryStatement queryStatement) {
-        SlotRefResolverFactory.AstVisitors visitors = SlotRefResolverFactory.createAstVisitors();
-        return expr.accept(visitors.exprShuttle, queryStatement.getQueryRelation());
-    }
-
     public static boolean containsIgnoreCase(List<String> list, String soughtFor) {
         for (String current : list) {
             if (current.equalsIgnoreCase(soughtFor)) {
@@ -1482,4 +1348,27 @@ public class AnalyzerUtils {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    // rename slotRef in expr to newColName
+    public static Expr renameSlotRef(Expr expr, String newColName) {
+        if (expr instanceof FunctionCallExpr) {
+            for (int i = 0; i < expr.getChildren().size(); i++) {
+                Expr child = expr.getChildren().get(i);
+                if (child instanceof SlotRef) {
+                    expr.setChild(i, new SlotRef(null, newColName));
+                    break;
+                }
+            }
+            return expr;
+        } else if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                return renameSlotRef(child, newColName);
+            }
+        }
+        return expr;
+    }
+>>>>>>> b4c7c216ec ([BugFix] Fix partition resolve bug for materialized view (#34880))
 }
