@@ -38,6 +38,7 @@ import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -78,6 +79,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
             ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+        if (!RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+            return Collections.emptyList();
+        }
         List<TabletSchedCtx> alternativeTablets;
         String balanceType = "";
         do {
