@@ -3356,6 +3356,19 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testPipeUseDatabase() throws Exception {
+        starRocksAssert.withDatabase("test_implicit_priv");
+        ctxToTestUser();
+        verifyGrantRevoke(
+                "use test_implicit_priv",
+                "grant ALL on ALL PIPES in ALL DATABASES to test",
+                "revoke ALL on ALL PIPES in ALL DATABASES from test",
+                "Access denied; you need (at least one of) the ANY privilege(s) on DATABASE " +
+                        "test_implicit_priv for this operation"
+        );
+    }
+
+    @Test
     public void testPolicyRewrite() throws Exception {
         Config.access_control = "ranger";
         ConnectContext context = starRocksAssert.getCtx();
