@@ -391,7 +391,8 @@ public class TransactionState implements Writable {
     }
 
     public boolean isRunning() {
-        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.COMMITTED;
+        return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.PREPARED ||
+                transactionStatus == TransactionStatus.COMMITTED;
     }
 
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
