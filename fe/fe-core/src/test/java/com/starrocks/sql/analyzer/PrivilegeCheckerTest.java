@@ -3286,6 +3286,7 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
                         "for this operation");
 
+        grantRevokeSqlAsRoot("revoke INSERT on tbl_pipe from test");
         starRocksAssert.dropTable("tbl_pipe");
         starRocksAssert.getCtx().setDatabase(null);
     }
