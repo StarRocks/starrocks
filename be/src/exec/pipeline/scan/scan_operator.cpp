@@ -83,11 +83,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    if (_num_running_io_tasks > 0) {
-        LOG(WARNING) << print_id(CurrentThread::current().fragment_instance_id())
-                     << " fragment close scan but remain IO tasks " << _num_running_io_tasks << " from submit tasks "
-                     << _submit_task_counter->value();
-    }
     set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
@@ -223,6 +218,12 @@ void ScanOperator::_detach_chunk_sources() {
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
     std::lock_guard guard(_task_mutex);
+    LOG(ERROR) << "set_finishing scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
+               << " driver " << CurrentThread::current().get_driver_id() << " _num_running_io_tasks"
+               << _num_running_io_tasks << " _submit_task_counter " << _submit_task_counter->value()
+               << " _morsels_counter  " << _morsels_counter->value() << " _peak_io_tasks_counter "
+               << _peak_io_tasks_counter->value();
+
     _detach_chunk_sources();
     _is_finished = true;
     return Status::OK();
@@ -272,6 +273,8 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         return Status::OK();
     }
     if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
+        LOG(WARNING) << "scan next() fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id() << " early return 1";
         return Status::OK();
     }
     // Avoid uneven distribution when io tasks execute very fast, so we start
@@ -306,6 +309,8 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         int idx = to_sched[i];
         RETURN_IF_ERROR(_pickup_morsel(state, idx));
     }
+    LOG(ERROR) << "scan next() fragment " << print_id(CurrentThread::current().fragment_instance_id()) << " driver "
+               << CurrentThread::current().get_driver_id() << " pick tasks to run " << size;
 
     _peak_io_tasks_counter->set(_num_running_io_tasks);
     return Status::OK();
@@ -404,7 +409,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(WARNING) << get_name() << " Scan tasks error: " << status.to_string();
+                LOG(ERROR) << "scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                           << " driver " << CurrentThread::current().get_driver_id() << get_name()
+                           << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -420,6 +427,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     };
 
     if (_scan_executor->submit(std::move(task))) {
+        LOG(ERROR) << "scan fragment " << print_id(CurrentThread::current().fragment_instance_id()) << " driver "
+                   << CurrentThread::current().get_driver_id() << " submit tasks";
         _io_task_retry_cnt = 0;
     } else {
         _chunk_sources[chunk_source_index]->unpin_chunk_token();
@@ -501,6 +510,9 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
         }
         need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
+    } else {
+        LOG(ERROR) << "scan pickup morsel fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                   << " driver " << CurrentThread::current().get_driver_id() << " pick null morsel";
     }
 
     return Status::OK();
