@@ -19,7 +19,11 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
+=======
+import com.starrocks.common.util.TimeUtils;
+>>>>>>> ea7ebdcdcf ([Enhancement] set grace period for mv checker (#34850))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +39,8 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -248,14 +254,14 @@ public class AlterMaterializedViewTest {
         starRocksAssert.dropTable(baseTableName);
         Assert.assertFalse(mv.isActive());
         Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
-        checker.runForTest();
+        checker.runForTest(true);
         Assert.assertFalse(mv.isActive());
         Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
 
         // create the table again, and activate it
         connectContext.setThreadLocalInfo();
         starRocksAssert.withTable(createTableSql);
-        checker.runForTest();
+        checker.runForTest(true);
         Assert.assertTrue(mv.isActive());
 
         // activate before refresh
@@ -270,10 +276,67 @@ public class AlterMaterializedViewTest {
         // manually set to inactive
         mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         Assert.assertFalse(mv.isActive());
-        checker.runForTest();
+        checker.runForTest(true);
         Assert.assertFalse(mv.isActive());
         Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
 
         checker.start();
+        starRocksAssert.dropTable(baseTableName);
+        starRocksAssert.dropMaterializedView(mv.getName());
+    }
+
+    @Test
+    public void testActiveGracePeriod() throws Exception {
+        PlanTestBase.mockDml();
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        String baseTableName = "base_tbl_active";
+        String createTableSql =
+                "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
+        starRocksAssert.withTable(createTableSql);
+        starRocksAssert.withMaterializedView("create materialized view mv_active " +
+                " refresh manual as select * from base_tbl_active");
+        MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
+        Assert.assertTrue(mv.isActive());
+
+        // drop the base table and try to activate it
+        starRocksAssert.dropTable(baseTableName);
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals("base-table dropped: base_tbl_active", mv.getInactiveReason());
+        checker.runForTest(false);
+        for (int i = 0; i < 10; i++) {
+            checker.runForTest(false);
+            Assert.assertFalse(mv.isActive());
+        }
+
+        // create the table, but in grace period, could not activate it
+        connectContext.setThreadLocalInfo();
+        starRocksAssert.withTable(createTableSql);
+        for (int i = 0; i < 10; i++) {
+            checker.runForTest(false);
+            Assert.assertFalse(mv.isActive());
+        }
+
+        // clear the grace period and active it again
+        checker.runForTest(true);
+        Assert.assertTrue(mv.isActive());
+
+        checker.start();
+        starRocksAssert.dropTable(baseTableName);
+    }
+
+    @Test
+    public void testActiveCheckerBackoff() {
+        MVActiveChecker.MvActiveInfo activeInfo = MVActiveChecker.MvActiveInfo.firstFailure();
+        Assert.assertTrue(activeInfo.isInGracePeriod());
+
+        LocalDateTime start = LocalDateTime.now(TimeUtils.getSystemTimeZone().toZoneId());
+        for (int i = 0; i < 10; i++) {
+            activeInfo.next();
+        }
+        Assert.assertTrue(activeInfo.isInGracePeriod());
+        Duration d = Duration.between(start, activeInfo.getNextActive());
+        Assert.assertEquals(d.toMinutes(), MVActiveChecker.MvActiveInfo.MAX_BACKOFF_MINUTES);
     }
 }
