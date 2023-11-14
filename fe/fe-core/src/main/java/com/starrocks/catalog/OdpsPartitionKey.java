@@ -13,19 +13,19 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.odps;
+package com.starrocks.catalog;
 
-import com.starrocks.connector.hive.HiveTableName;
+import com.google.common.collect.ImmutableList;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
-public class OdpsTableName extends HiveTableName {
-    public OdpsTableName(String databaseName, String tableName) {
-        super(databaseName, tableName);
+import java.util.List;
+
+public class OdpsPartitionKey extends PartitionKey implements NullablePartitionKey {
+    public OdpsPartitionKey() {
+        super();
     }
 
-    public static OdpsTableName of(String databaseName, String tableName) {
-        return new OdpsTableName(databaseName, tableName);
+    @Override
+    public List<String> nullPartitionValueList() {
+        return ImmutableList.of(JDBCTable.PARTITION_NULL_VALUE);
     }
 }

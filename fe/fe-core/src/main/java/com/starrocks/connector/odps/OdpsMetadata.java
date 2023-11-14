@@ -73,7 +73,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(OdpsMetadata.class);
     private static final long DEFAULT_EXPIRES_TIME = 24;
     private static final long DEFAULT_REFRESH_TIME = 0;
-    private static final long DEFAULT_CACHE_SIZE = 200;
+    private static final long DEFAULT_CACHE_SIZE = 1000;
 
     private final Odps odps;
     private final String catalogName;
