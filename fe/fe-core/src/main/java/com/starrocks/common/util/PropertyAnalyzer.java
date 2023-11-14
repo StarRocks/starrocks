@@ -1091,7 +1091,11 @@ public class PropertyAnalyzer {
             return null;
         }
         properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
-        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        try {
+            return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        } catch (DateTimeParseException ex) {
+            throw new AnalysisException(ex.getMessage());
+        }
     }
 
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
