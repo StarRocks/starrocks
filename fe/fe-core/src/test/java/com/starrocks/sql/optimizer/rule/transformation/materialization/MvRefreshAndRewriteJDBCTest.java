@@ -21,7 +21,6 @@ import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -39,10 +38,6 @@ public class MvRefreshAndRewriteJDBCTest extends MvRewriteTestBase {
         MockedJDBCMetadata mockedJDBCMetadata =
                 (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
         mockedJDBCMetadata.initPartitions();
-    }
-
-    @AfterClass
-    public static void tearDown() throws Exception {
     }
 
     @Test
