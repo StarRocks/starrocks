@@ -1556,6 +1556,46 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    // The status of stateBach is VISIBLE or ABORTED
+    // isReplay must be true
+    public void unprotectSetTransactionStateBatch(TransactionStateBatch stateBatch, boolean isReplay) {
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            if (idToRunningTransactionState.remove(transactionState.getTransactionId()) != null) {
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
+                    runningRoutineLoadTxnNums--;
+                } else {
+                    runningTxnNums--;
+                }
+            }
+            transactionGraph.remove(transactionState.getTransactionId());
+            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
+            finalStatusTransactionStateDeque.add(transactionState);
+            updateTxnLabels(transactionState);
+        }
+    }
+
+    private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
+        Table table = db.getTable(transactionStateBatch.getTableId());
+        if (table == null) {
+            return true;
+        }
+        TransactionLogApplier applier = txnLogApplierFactory.create(table);
+        ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
+        return true;
+    }
+
+    public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        writeLock();
+        try {
+            LOG.info("replay a transaction state batch{}", transactionStateBatch);
+            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
+            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            unprotectSetTransactionStateBatch(transactionStateBatch, true);
+        } finally {
+            writeUnlock();
+        }
+    }
+
     public List<List<String>> getDbTransStateInfo() {
         List<List<String>> infos = Lists.newArrayList();
         readLock();
