@@ -340,13 +340,13 @@ public class ArrayTypeTest extends PlanTestBase {
         {
             String sql = "select array_append([[1,2,3]], [])";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : array_append([[1,2,3]], [])");
+            assertContains(plan, "<slot 2> : array_append([[1,2,3]], CAST([] AS ARRAY<TINYINT>))");
         }
         {
             String sql = "select array_append([[1,2,3]], [null])";
             String plan = getFragmentPlan(sql);
             assertContains(plan,
-                    "<slot 2> : array_append([[1,2,3]], [NULL])");
+                    "<slot 2> : array_append([[1,2,3]], CAST([NULL] AS ARRAY<TINYINT>))");
         }
         {
             starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
@@ -728,8 +728,7 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testEmptyArrayOlap() throws Exception {
         String sql = "select arrays_overlap([[],[]],[])";
         String plan = getVerboseExplain(sql);
-        assertCContains(plan, "arrays_overlap[([[],[]], []); " +
-                "args: INVALID_TYPE,INVALID_TYPE; " +
-                "result: BOOLEAN; args nullable: true; result nullable: true]");
+        assertCContains(plan, "arrays_overlap[([[],[]], cast([] as ARRAY<ARRAY<BOOLEAN>>)); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: BOOLEAN; args nullable: true; result nullable: true]");
     }
 }
