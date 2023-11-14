@@ -22,7 +22,6 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.HudiTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -37,12 +36,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HudiTableTest {
     private static ConnectContext connectContext;
@@ -195,84 +190,4 @@ public class HudiTableTest {
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testToThrift(
-            @Mocked ConnectorMgr connectorMgr,
-            @Mocked CatalogConnector catalogConnector,
-            @Mocked ConnectorMetadata connectorMetadata,
-            @Mocked HoodieTableMetaClient hoodieTableMetaClient) {
-        new Expectations() {
-            {
-                connectorMgr.getConnector(anyString);
-                result = catalogConnector;
-            }
-
-            {
-                catalogConnector.getMetadata();
-                result = connectorMetadata;
-            }
-
-            {
-                connectorMetadata.getCloudConfiguration();
-                result = new CloudConfiguration();
-                times = 1;
-            }
-        };
-
-        List<Column> columns = Lists.newArrayList();
-        columns.add(new Column("col1", Type.INT, true));
-        columns.add(new Column("col2", Type.INT, true));
-        long createTime = System.currentTimeMillis();
-
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("hudi.table.base.path", "hdfs://127.0.0.1:10000/hudi");
-        HudiTable.Builder tableBuilder = HudiTable.builder()
-                .setId(2)
-                .setTableName("table0")
-                .setCatalogName("catalog")
-                .setHiveDbName("db0")
-                .setHiveTableName("table0")
-                .setResourceName("catalog")
-                .setFullSchema(columns)
-                .setPartitionColNames(Lists.newArrayList("col1"))
-                .setCreateTime(createTime)
-                .setHudiProperties(properties);
-        HudiTable table = tableBuilder.build();
-
-        TTableDescriptor tTableDescriptor = table.toThrift(ImmutableList.of());
-        Assert.assertEquals("db0", tTableDescriptor.getDbName());
-        Assert.assertEquals("table0", tTableDescriptor.getTableName());
-    }
-
-    @Test
-    public void testCreateTableResourceName() throws DdlException {
-        String resourceName = "Hudi_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
-        Map<String, String> properties = new HashMap() {
-            {
-                put(RESOURCE, resourceName);
-            }
-        };
-        HudiTable.Builder tableBuilder = HudiTable.builder()
-                .setId(1000)
-                .setTableName("supplier")
-                .setCatalogName("hudi_catalog")
-                .setHiveDbName("hudi_oss_tpch_1g_parquet_gzip")
-                .setHiveTableName("supplier")
-                .setResourceName(resourceName)
-                .setFullSchema(new ArrayList<>())
-                .setDataColNames(new ArrayList<>())
-                .setPartitionColNames(Lists.newArrayList())
-                .setCreateTime(10)
-                .setHudiProperties(new HashMap<>());
-        HudiTable oTable = tableBuilder.build();
-
-        HudiTable.Builder newBuilder = HudiTable.builder();
-        HudiTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
-        HudiTable table = newBuilder.build();
-        Assert.assertEquals(table.getResourceName(), resourceName);
-    }
->>>>>>> d7be916838 ([BugFix] fix resource name from stmt propery instead of catalog recast (#34844))
 }

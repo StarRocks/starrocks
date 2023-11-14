@@ -49,7 +49,6 @@ public class HiveTableFactory extends ExternalTableFactory {
                 .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
                 .setDataColumnNames(catalogTable.getDataColumnNames())
                 .setTableLocation(catalogTable.getTableLocation())
-                .setStorageFormat(catalogTable.getStorageFormat())
                 .setCreateTime(catalogTable.getCreateTime())
                 .setProperties(catalogTable.getProperties());
     }
@@ -75,20 +74,8 @@ public class HiveTableFactory extends ExternalTableFactory {
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(tableId)
                 .setTableName(tableName)
-<<<<<<< HEAD
-                .setCatalogName(oHiveTable.getCatalogName())
-                .setResourceName(oHiveTable.getResourceName())
-                .setHiveDbName(oHiveTable.getDbName())
-                .setHiveTableName(oHiveTable.getTableName())
-                .setPartitionColumnNames(oHiveTable.getPartitionColumnNames())
-                .setDataColumnNames(oHiveTable.getDataColumnNames())
-                .setFullSchema(columns)
-                .setTableLocation(oHiveTable.getTableLocation())
-                .setCreateTime(oHiveTable.getCreateTime());
-=======
                 .setFullSchema(columns);
         copyFromCatalogTable(tableBuilder, oHiveTable, properties);
->>>>>>> d7be916838 ([BugFix] fix resource name from stmt propery instead of catalog recast (#34844))
 
         HiveTable hiveTable = tableBuilder.build();
 
