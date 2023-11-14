@@ -303,31 +303,34 @@ Construct a streaming read of data from a CSV file and load data into the StarRo
         .getOrCreate()
    
     # 1. Create a DataFrame from CSV.
-    schema = StructType([ \
-            StructField("id", IntegerType()), \
-            StructField("name", StringType()), \
-            StructField("score", IntegerType()) \
+    schema = StructType([
+            StructField("id", IntegerType()),
+            StructField("name", StringType()),
+            StructField("score", IntegerType())
         ])
-    df = spark.readStream \
-            .option("sep", ",") \
-            .schema(schema) \
-            .format("csv") \
-            # Replace it with your path to the directory "csv-data".
-            .load("/path/to/csv-data")
+    df = (
+        spark.readStream
+        .option("sep", ",")
+        .schema(schema)
+        .format("csv")
+        # Replace it with your path to the directory "csv-data".
+        .load("/path/to/csv-data")
+    )
 
     # 2. Write to StarRocks by configuring the format as "starrocks" and the following options. 
     # You need to modify the options according your own environment.
-    query = df.writeStream.format("starrocks") \
-            .option("starrocks.fe.http.url", "127.0.0.1:8030") \
-            .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030") \
-            .option("starrocks.table.identifier", "test.score_board") \
-            .option("starrocks.user", "root") \
-            .option("starrocks.password", "") \
-            # replace it with your checkpoint directory
-            .option("checkpointLocation", "/path/to/checkpoint") \
-            .outputMode("append") \
-            .start()
-        )
+    query = (
+        df.writeStream.format("starrocks")
+        .option("starrocks.fe.http.url", "127.0.0.1:8030")
+        .option("starrocks.fe.jdbc.url", "jdbc:mysql://127.0.0.1:9030")
+        .option("starrocks.table.identifier", "test.score_board")
+        .option("starrocks.user", "root")
+        .option("starrocks.password", "")
+        # replace it with your checkpoint directory
+        .option("checkpointLocation", "/path/to/checkpoint")
+        .outputMode("append")
+        .start()
+    )
     ```
 
 3. Query data in the StarRocks table.
