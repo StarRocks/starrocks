@@ -53,12 +53,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-import java.util.Map.Entry;
-=======
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
->>>>>>> 5cc830cc1d ([BugFix] fix expensive Partition.equals (#34961))
 
 /**
  * Internal representation of partition-related metadata.

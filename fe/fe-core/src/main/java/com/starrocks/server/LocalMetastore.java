@@ -1386,14 +1386,8 @@ public class LocalMetastore implements ConnectorMetadata {
                             checkExistPartitionName);
 
             // build partitions
-<<<<<<< HEAD
-            ArrayList<Partition> partitionList = new ArrayList<>(partitionMap.keySet());
-            buildPartitions(db, copiedTable, partitionList);
-=======
             List<Partition> partitionList = newPartitions.stream().map(x -> x.first).collect(Collectors.toList());
-            buildPartitions(db, copiedTable, partitionList.stream().map(Partition::getSubPartitions)
-                    .flatMap(p -> p.stream()).collect(Collectors.toList()));
->>>>>>> 5cc830cc1d ([BugFix] fix expensive Partition.equals (#34961))
+            buildPartitions(db, copiedTable, partitionList);
 
             // check again
             if (!db.writeLockAndCheckExist()) {
