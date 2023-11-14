@@ -93,12 +93,12 @@ You can set the capacity of a query queue and the maximum timeout of queries in 
 
 ## Configure dynamic adjustment of query concurrency
 
-Starting from version v3.1.4, for queries managed by the query queue and run by the Pipeline Engine, StarRocks can dynamically adjust the query concurrency `pipeline_dop` for new incoming queries based on the current number of running queries `num_running_queries`, the number of fragments `num_fragments`, and the query concurrency `pipeline_dop`. This allows you to dynamically control query concurrency while minimizing scheduling overhead, ensuring optimal BE resource utilization. For more information about fragments and query concurrency `pipeline_dop`, see [Query Management - Adjusting Query Concurrency](./Query_management.md).
+Starting from version v3.1.4, for queries managed by the query queue and run by the Pipeline Engine, StarRocks can dynamically adjust the query concurrency `pipeline_dop` for incoming queries based on the current number of running queries `num_running_queries`, the number of fragments `num_fragments`, and the query concurrency `pipeline_dop`. This allows you to dynamically control query concurrency while minimizing scheduling overhead, ensuring optimal BE resource utilization. For more information about fragments and query concurrency `pipeline_dop`, see [Query Management - Adjusting Query Concurrency](./Query_management.md).
 
 For each query under a query queue, StarRocks maintains a concept of drivers, which represent the concurrent fragments of a query on a single BE. Its logical value `num_drivers`, which represents the total concurrency of all fragments of that query on a single BE, is equal to `num_fragments * pipeline_dop`. When a new query arrives, StarRocks adjusts the query concurrency `pipeline_dop` based on the following rules:
 
 - The more the number of running drivers `num_drivers` exceeds the low water limit of concurrent drivers `query_queue_driver_low_water`, the lower the query concurrency `pipeline_dop` is adjusted to.
-- StarRocks restrains the number of running drivers `num_drivers` below the high water limit of concurrent drivers for queries `query_queue_driver_high_water` as far as possible.
+- StarRocks restrains the number of running drivers `num_drivers` below the high water limit of concurrent drivers for queries `query_queue_driver_high_water`.
 
 You can configure the dynamic adjustment of query concurrency `pipeline_dop` using the following global session variables:
 
@@ -139,7 +139,7 @@ mysql> SHOW PROCESSLIST;
 
 ### FE audit log
 
-You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` indicates the time that a query is in a queue, and its unit is milliseconds.
+You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` indicates the time a query spent waiting in a queue, and its unit is milliseconds.
 
 ### FE metrics
 
