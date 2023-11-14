@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -22,7 +23,9 @@ import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.UniqueConstraint;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ShowResultSet;
@@ -40,6 +43,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.SQLException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -2082,5 +2086,108 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView("mv_agg_1");
         starRocksAssert.dropMaterializedView("mv_agg_2");
+    }
+
+    @Test
+    public void testIsDateRange() throws AnalysisException {
+        {
+            LocalDate date1 = LocalDate.now();
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Assert.assertTrue(MvUtils.isDateRange(upRange));
+        }
+        {
+            LocalDate date1 = LocalDate.now();
+            PartitionKey low = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Assert.assertTrue(MvUtils.isDateRange(lowRange));
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 1);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            LocalDate date2 = LocalDate.of(2023, 9, 1);
+            PartitionKey low = PartitionKey.ofDate(date2);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> range = upRange.intersection(lowRange);
+            Assert.assertTrue(MvUtils.isDateRange(range));
+        }
+        {
+            Range<PartitionKey> unboundRange = Range.all();
+            Assert.assertFalse(MvUtils.isDateRange(unboundRange));
+        }
+    }
+
+    @Test
+    public void testConvertToVarcharRange() throws AnalysisException {
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(upRange, "%Y-%m-%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-10-10", range.upperEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey low = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(lowRange, "%Y-%m-%d");
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-10-10", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            LocalDate date2 = LocalDate.of(2023, 9, 10);
+            PartitionKey low = PartitionKey.ofDate(date2);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> dateRange = upRange.intersection(lowRange);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(dateRange, "%Y-%m-%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-10-10", range.upperEndpoint().getKeys().get(0).getStringValue());
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-09-10", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(upRange, "%Y%m%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20231010", range.upperEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey low = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(lowRange, "%Y%m%d");
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20231010", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            LocalDate date2 = LocalDate.of(2023, 9, 10);
+            PartitionKey low = PartitionKey.ofDate(date2);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> dateRange = upRange.intersection(lowRange);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(dateRange, "%Y%m%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20231010", range.upperEndpoint().getKeys().get(0).getStringValue());
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20230910", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
     }
 }
