@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
@@ -111,8 +110,6 @@ public class HudiTableTest {
         Assert.fail("No exception throws.");
     }
 
-
-
     @Test(expected = DdlException.class)
     public void testNoDb() throws Exception {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
@@ -176,7 +173,7 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
                 ScalarType.createDefaultExternalTableString());
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
-                Schema.createArray(Schema.create(Schema.Type.INT))),
+                        Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createFixed("FIXED", "FIXED", "F", 1)),
