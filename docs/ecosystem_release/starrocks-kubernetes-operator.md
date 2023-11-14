@@ -30,9 +30,8 @@ For example, the download URL for kube-starrocks chart v1.8.6 is: [kube-starrock
 
 **Version requirements**
 
-Kubernetes: 1.18 or later
-
-Go: 1.19 or later
+- Kubernetes: 1.18 or later
+- Go: 1.19 or later
 
 ## **Release note**
 
@@ -44,11 +43,11 @@ Go: 1.19 or later
 
 Fixed the following issue:
 
-- An error  `sendfile() failed (32: Broken pipe) while sending request to upstream` is return during a Stream Load job. After Nginx sends the request body to FE, FE then redirects the request to BE. At this point, the data cached in Nginx may already be lost. [#303](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/303)
+- An error  `sendfile() failed (32: Broken pipe) while sending request to upstream` is returned during a Stream Load job. After Nginx sends the request body to FE, the FE then redirects the request to the BE. At this point, the data cached in Nginx may already be lost. [#303](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/303)
 
 **Doc**
 
-- [Load data from outside the K8s network to StarRocks through FE proxy](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/load_data_using_stream_load_howto.md)
+- [Load data from outside the Kubernetes network to StarRocks through FE proxy](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/load_data_using_stream_load_howto.md)
 - [Update the root user's password using Helm](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md)
 
 **1.8.5**
@@ -64,7 +63,7 @@ Fixed the following issue:
 
 **Upgrade notes**
 
-- **[Helm Chart]** When the value specified in `starrocks.starrocksCluster.name` is different from the value of `starrocks.nameOverride`, the old configmaps for FE, BE, and CN will be deleted. New configmaps with the new name for FE, BE, and CN will be created. **This may result in the restart of FE/BE/CN pods.**
+- **[Helm Chart]** When the value specified in `starrocks.starrocksCluster.name` is different from the value of `starrocks.nameOverride`, the old configmaps for FE, BE, and CN will be deleted. New configmaps with new names for the FE, BE, and CN will be created. **This may result in the restart of the FE, BE, and CN pods.**
 
 **1.8.4**
 
@@ -91,7 +90,7 @@ Fixed the following issue:
 
 **Upgrade notes**
 
-- **[Helm Chart]** Add `JAVA_OPTS_FOR_JDK_11` to the default **fe.conf** file. When the default **fe.conf** file is used and the helm chart is upgraded to v1.8.3, **FE Pods may restart**. [#257](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/257)
+- **[Helm Chart]** Add `JAVA_OPTS_FOR_JDK_11` to the default **fe.conf** file. When the default **fe.conf** file is used and the helm chart is upgraded to v1.8.3, **FE pods may restart**. [#257](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/257)
 
 **Features**
 
