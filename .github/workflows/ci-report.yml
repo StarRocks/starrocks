@@ -119,6 +119,7 @@ jobs:
           check_name: 'FE UT Report'
           detailed_summary: true
           fail_on_failure: true
+          update_check: true
           commit: ${{ github.event.workflow_run.head_sha }}
           report_paths: ./fe/fe-core/target/surefire-reports/*.xml
 

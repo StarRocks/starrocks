@@ -132,6 +132,7 @@ jobs:
           check_name: 'FE UT Report'
           detailed_summary: true
           fail_on_failure: true
+          update_check: true
           report_paths: ./fe/fe-core/target/surefire-reports/*.xml
 
       - name: Clean ENV
