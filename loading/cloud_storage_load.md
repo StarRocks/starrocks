@@ -16,16 +16,6 @@ Broker Load 能够保证单次导入事务的原子性，即单次导入的多�
 
 本文主要介绍如何使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 从云存储系统导入数据。
 
-## 背景信息
-
-在 v2.4 及以前版本，StarRocks 在执行 Broker Load 时需要借助 Broker 才能访问外部存储系统，称为“有 Broker 的导入”。导入语句中需要通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
-
-自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。导入语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
-
-> **说明**
->
-> 您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/deployment/deploy_broker.md)完成 Broker 部署。
-
 ## 支持的数据文件格式
 
 Broker Load 支持如下数据文件格式：
