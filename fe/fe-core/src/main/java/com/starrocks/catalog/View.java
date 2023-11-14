@@ -97,7 +97,7 @@ public class View extends Table {
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
     // store the parsed result
-    private QueryStatement viewDefCache;
+    private AtomicReference<QueryStatement> viewDefCache = new AtomicReference<>();
 
     // store the analyzed result based on a new parsed queryStatement
     private AtomicReference<QueryStatement> analyzedCache = new AtomicReference<>();
@@ -145,7 +145,11 @@ public class View extends Table {
     }
 
     public QueryStatement getViewDefCache() {
-        return viewDefCache;
+        if (viewDefCache.get() == null) {
+            QueryStatement stmt = (QueryStatement) com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
+            viewDefCache.compareAndSet(null, stmt);
+        }
+        return viewDefCache.get();
     }
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
@@ -183,8 +187,7 @@ public class View extends Table {
             throw new UserException(String.format("View %s without query statement. Its definition is:%n%s",
                     name, inlineViewDef));
         }
-        viewDefCache = (QueryStatement) node;
-        return viewDefCache;
+        return  (QueryStatement) node;
     }
 
     public void clearAnalyzedCache() {
@@ -193,7 +196,7 @@ public class View extends Table {
 
     public synchronized List<TableName> getTableRefs() {
         if (this.tableRefsCache.isEmpty()) {
-            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(viewDefCache);
+            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTableAndView(getViewDefCache());
             this.tableRefsCache = Lists.newArrayList(allTables.keySet());
         }
 
