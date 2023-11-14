@@ -49,8 +49,7 @@ public class HiveTableFactory extends ExternalTableFactory {
                 .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
                 .setDataColumnNames(catalogTable.getDataColumnNames())
                 .setTableLocation(catalogTable.getTableLocation())
-                .setCreateTime(catalogTable.getCreateTime())
-                .setProperties(catalogTable.getProperties());
+                .setCreateTime(catalogTable.getCreateTime());
     }
 
     @Override
