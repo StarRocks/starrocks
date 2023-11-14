@@ -179,7 +179,6 @@ public class OptOlapPartitionPruner {
             if (null != lowerBound) {
                 lowerBind = false;
                 PartitionKey min = new PartitionKey();
-                // TODO: take care `isConvertToDate` for olap table
                 min.pushColumn(pcf.getLowerBound(), column.getPrimitiveType());
                 int cmp = minRange.compareTo(min);
                 if (cmp > 0 || (0 == cmp && pcf.lowerBoundInclusive)) {
@@ -190,7 +189,6 @@ public class OptOlapPartitionPruner {
             if (null != upperBound) {
                 upperBind = false;
                 PartitionKey max = new PartitionKey();
-                // TODO: take care `isConvertToDate` for olap table
                 max.pushColumn(upperBound, column.getPrimitiveType());
                 int cmp = maxRange.compareTo(max);
                 if (cmp < 0 || (0 == cmp && pcf.upperBoundInclusive)) {
