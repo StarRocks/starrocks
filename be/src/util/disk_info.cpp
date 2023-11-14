@@ -43,29 +43,48 @@ int DiskInfo::_s_num_datanode_dirs;
 void DiskInfo::get_device_names() {
     // Format of this file is:
     //    major, minor, #blocks, name
-    // We are only interesting in name which is formatted as device_name<partition #>
-    // The same device will show up multiple times for each partition (e.g. sda1, sda2).
+    // We are only want to get unique device name from /proc/partitions.
+    // The same device may show up multiple times for each partition (e.g. sda1, sda2), in this case, we only use sda for device name.
+    // In another case like nvme0n1, this device only show up once in /proc/partitions, then we use nvme0n1 for device name.
+    std::map<std::string, int> disk_prefix_count;
     std::ifstream partitions("/proc/partitions", std::ios::in);
 
     while (partitions.good() && !partitions.eof()) {
         std::string line;
         getline(partitions, line);
         boost::trim(line);
-
         std::vector<std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
-
         if (fields.size() != 4) {
             continue;
         }
-
         std::string name = fields[3];
-
         if (name == "name") {
             continue;
         }
+        std::string prefix = name.substr(0, name.find_last_not_of("0123456789") + 1);
+        disk_prefix_count[prefix]++;
+    }
 
-        // Remove the partition# from the name.  e.g. sda2 --> sda
-        boost::trim_right_if(name, boost::is_any_of("0123456789"));
+    // Read /proc/partitions again to get more detail information.
+    partitions.clear();
+    partitions.seekg(0, std::ios::beg);
+
+    while (partitions.good() && !partitions.eof()) {
+        std::string line;
+        getline(partitions, line);
+        boost::trim(line);
+        std::vector<std::string> fields = strings::Split(line, " ", strings::SkipWhitespace());
+        if (fields.size() != 4) {
+            continue;
+        }
+        std::string name = fields[3];
+        if (name == "name") {
+            continue;
+        }
+        std::string prefix = name.substr(0, name.find_last_not_of("0123456789") + 1);
+        if (disk_prefix_count[prefix] > 1) {
+            name = prefix;
+        }
 
         // Create a mapping of all device ids (one per partition) to the disk id.
         int major_dev_id = atoi(fields[0].c_str());
@@ -192,6 +211,13 @@ Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::se
                 continue;
             }
             std::string dev(basename(dev_path));
+
+            // for device name like nvme0n1
+            if (_s_disk_name_to_disk_id.find(dev) != std::end(_s_disk_name_to_disk_id)) {
+                max_mount_size = mount_size;
+                match_dev = dev;
+            }
+            // for device name like vda
             boost::trim_right_if(dev, boost::is_any_of("0123456789"));
             if (_s_disk_name_to_disk_id.find(dev) != std::end(_s_disk_name_to_disk_id)) {
                 max_mount_size = mount_size;
