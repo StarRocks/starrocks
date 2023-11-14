@@ -1056,9 +1056,9 @@ public class ShowExecutor {
                     // Auto_increment
                     row.add(null);
                     // Create_time
-                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(table.getCreateTime(), currentTimeZoneId));
                     // Update_time
-                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(info.getUpdate_time(), currentTimeZoneId));
                     // Check_time
                     row.add(null);
                     // Collation
