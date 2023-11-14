@@ -20,6 +20,14 @@ SHOW VARIABLES;
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
+## 变量层级和类型
+
+StarRocks 支持三种类型（层级）的变量：全局变量、Session 变量和 `SET_VAR` Hint。它们的层级关系如下：
+
+* 全局变量在全局级别生效，可以被 Session 变量和 `SET_VAR` Hint 覆盖。
+* Session 变量仅在当前会话中生效，可以被 `SET_VAR` Hint 覆盖。
+* `SET_VAR` Hint 仅在当前查询语句中生效。
+
 ## 设置变量
 
 ### 设置变量全局生效或在会话中生效
