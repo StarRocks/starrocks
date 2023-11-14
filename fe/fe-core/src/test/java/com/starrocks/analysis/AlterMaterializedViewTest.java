@@ -19,11 +19,8 @@ import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
-<<<<<<< HEAD
 import com.starrocks.common.DdlException;
-=======
 import com.starrocks.common.util.TimeUtils;
->>>>>>> ea7ebdcdcf ([Enhancement] set grace period for mv checker (#34850))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
