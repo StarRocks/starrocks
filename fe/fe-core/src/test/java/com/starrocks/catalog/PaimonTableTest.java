@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.connector.ColumnTypeConverter;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.paimon.options.CatalogOptions;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -59,8 +61,11 @@ public class PaimonTableTest {
                 result = partitions;
             }
         };
-        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema, "filesystem", null,
-                "file:///home/wgcn", paimonNativeTable, 100L);
+        Options options = new Options();
+        options.set(CatalogOptions.METASTORE, "filesystem");
+        options.set(CatalogOptions.WAREHOUSE, "file:///home/wgcn");
+        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema,
+                options, paimonNativeTable, 100L);
         List<String> keys = new ArrayList<>();
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
         Assertions.assertThat(partitionColumns).hasSameElementsAs(expections);
