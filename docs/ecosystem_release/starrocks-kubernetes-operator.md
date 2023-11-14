@@ -33,7 +33,7 @@ For example, the download URL for kube-starrocks chart v1.8.6 is: [kube-starrock
 - Kubernetes: 1.18 or later
 - Go: 1.19 or later
 
-## **Release note**
+## **Release notes**
 
 ## 1.8
 
