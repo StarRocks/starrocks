@@ -140,7 +140,7 @@ Fixed the following issue:
        helm repo update
        ```
 
-    3. Execute the `helm upgrade`command to apply the adjusted **values.yaml** file to the StarRocks helm chart kube-starrocks.
+    3. Execute the `helm upgrade` command to apply the adjusted **values.yaml** file to the StarRocks helm chart kube-starrocks.
 
        ```Bash
        helm upgrade <release-name> starrocks-community/kube-starrocks -f values-v1.8.0.yaml
