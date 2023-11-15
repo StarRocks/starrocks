@@ -376,7 +376,7 @@ public class ArrayTypeTest extends PlanTestBase {
                 "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 14> : array_map(<slot 5> -> 1, 8: c1)");
+                "  |  <slot 10> : array_map(<slot 5> -> 1, 2: c1)");
 
         sql = "WITH `CASE_006` AS\n" +
                 "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
@@ -387,7 +387,7 @@ public class ArrayTypeTest extends PlanTestBase {
                 "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 14> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 8: c1)");
+                "  |  <slot 10> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 2: c1)");
     }
 
     @Test
