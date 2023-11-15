@@ -504,14 +504,8 @@ struct THudiTable {
 }
 
 struct TPaimonTable {
-    // paimon table catalog type
-    1: optional string catalog_type
-
-    // paimon table metastore URI
-    2: optional string metastore_uri
-
-    // paimon table warehouse path
-    3: optional string warehouse_path
+    // paimon table options
+    1: optional string paimon_options
 }
 
 struct TDeltaLakeTable {
