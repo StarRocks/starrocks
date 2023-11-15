@@ -1,4 +1,4 @@
-# Spark connector
+#  Releases of StarRocks Connector for Spark
 
 ## **Notifications**
 

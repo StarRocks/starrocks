@@ -1,4 +1,4 @@
-# Flink connector
+# Releases of StarRocks Connector for Flink
 
 ## **Notifications**
 
@@ -35,7 +35,7 @@
 
 ### 1.2
 
-**1.2.8**
+#### 1.2.8
 
 This release includes some improvements and bug fixes. The notable changes are as follows:
 
