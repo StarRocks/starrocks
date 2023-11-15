@@ -331,6 +331,7 @@ public class TransactionState implements Writable {
     private long checkerCreationTime = 0;
     private Span txnSpan = null;
     private String traceParent = null;
+    @SerializedName("tci")
     private Set<TabletCommitInfo> tabletCommitInfos = null;
 
     public TransactionState() {
@@ -396,10 +397,18 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
+    public void clearTabletCommitInfos() {
+        this.tabletCommitInfos = null;
+    }
+
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
-        if (this.tabletCommitInfos == null || this.tabletCommitInfos.contains(info)) {
+        if (this.tabletCommitInfos == null) {
             // if tabletCommitInfos is null, skip this check and return true
+            LOG.warn("tabletCommitInfos is null in TransactionState, tabletid {} backendid {} transid {}",
+                tabletId, backendId, transactionId);
+            return true;
+        } else if (this.tabletCommitInfos.contains(info)) {
             return true;
         } else {
             return false;

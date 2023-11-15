@@ -411,9 +411,6 @@ public class DatabaseTransactionMgr {
         if (transactionState.getWriteEndTimeMs() < 0) {
             transactionState.setWriteEndTimeMs(System.currentTimeMillis());
         }
-        if (!tabletCommitInfos.isEmpty()) {
-            transactionState.setTabletCommitInfos(tabletCommitInfos);
-        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
@@ -1032,6 +1029,8 @@ public class DatabaseTransactionMgr {
                 transactionState.setFinishTime(System.currentTimeMillis());
                 transactionState.clearErrorMsg();
                 transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
+                // clear tablet commit info to save meta space
+                transactionState.clearTabletCommitInfos();
                 unprotectUpsertTransactionState(transactionState, false);
                 transactionState.notifyVisible();
                 txnOperated = true;
@@ -1306,6 +1305,7 @@ public class DatabaseTransactionMgr {
         boolean txnOperated = false;
         writeLock();
         try {
+            transactionState.clearTabletCommitInfos();
             txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
         } finally {
             writeUnlock();

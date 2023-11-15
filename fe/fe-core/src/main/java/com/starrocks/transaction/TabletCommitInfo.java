@@ -36,6 +36,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 import com.starrocks.thrift.TTabletCommitInfo;
 
@@ -47,7 +48,9 @@ import javax.validation.constraints.NotNull;
 
 public class TabletCommitInfo implements Writable {
 
+    @SerializedName("tabletId")
     private long tabletId;
+    @SerializedName("backendId")
     private long backendId;
 
     // For low cardinality string column with global dict
