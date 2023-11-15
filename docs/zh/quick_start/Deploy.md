@@ -189,7 +189,7 @@ ReplayedJournalId: 1303
 
 ### 部署 FE 节点的高可用集群
 
-StarRocks 的 FE 节点支持 HA 模型部署，以保证集群的高可用。详细设置方式参考 [FE 高可用集群部署](/administration/Deployment.md)。
+StarRocks 的 FE 节点支持 HA 模型部署，以保证集群的高可用。详细设置方式参考 [FE 高可用集群部署](../administration/Deployment.md)。
 
 ### 停止 FE 节点
 

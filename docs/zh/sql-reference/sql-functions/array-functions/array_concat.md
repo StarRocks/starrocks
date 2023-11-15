@@ -14,7 +14,7 @@ array_concat(input0, input1, ...)
 
 ## 参数说明
 
-`input`：表示不限数量、具有相同元素类型的数组。数组支持的元素数据类型，请参见[ARRAY](/sql-reference/sql-statements/data-types/Array.md)。
+`input`：表示不限数量、具有相同元素类型的数组。数组支持的元素数据类型，请参见[ARRAY](../../sql-statements/data-types/Array.md)。
 
 ## 返回值说明
 
