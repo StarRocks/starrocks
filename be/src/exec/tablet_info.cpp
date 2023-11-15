@@ -97,6 +97,10 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             col_param->short_key_column_count = p_index.column_param().short_key_column_count();
             index->column_param = col_param;
         }
+
+        if (p_index.has_schema_version()) {
+            index->schema_version = p_index.schema_version();
+        }
         _indexes.emplace_back(index);
     }
 
@@ -143,6 +147,9 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
         }
         if (t_index.__isset.where_clause) {
             RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
+        }
+        if (t_index.__isset.schema_version) {
+            index->schema_version = t_index.schema_version;
         }
         _indexes.emplace_back(index);
     }

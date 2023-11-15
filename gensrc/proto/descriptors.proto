@@ -74,6 +74,7 @@ message POlapTableIndexSchema {
     repeated string columns = 2;
     required int32 schema_hash = 3;
     optional POlapTableColumnParam column_param = 4;
+    optional int32 schema_version = 5;
 };
 
 message POlapTableSchemaParam {

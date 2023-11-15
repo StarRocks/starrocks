@@ -544,11 +544,13 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
         if (ptable_schema_param.indexes(i).id() == index_id) break;
     }
     if (i < ptable_schema_param.indexes_size()) {
-        if (ptable_schema_param.indexes_size() > 0 && ptable_schema_param.indexes(i).has_column_param() &&
-            ptable_schema_param.indexes(i).column_param().columns_desc_size() != 0 &&
-            ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0) {
+        auto& index = ptable_schema_param.indexes(i);
+        if (index.has_column_param() && index.column_param().columns_desc_size() != 0 &&
+            index.column_param().columns_desc(0).unique_id() >= 0 && index.has_schema_version() &&
+            index.schema_version() > _tablet_schema->schema_version()) {
             RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(
-                    index_id, ptable_schema_param.version(), ptable_schema_param.indexes(i), ori_tablet_schema));
+                    index_id, ptable_schema_param.indexes(i).schema_version(), index,
+                    ori_tablet_schema));
         }
     }
 

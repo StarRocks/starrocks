@@ -47,6 +47,8 @@ struct OlapTableIndexSchema {
     int32_t schema_hash;
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
+    int32_t schema_version = -1;
+    ;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };

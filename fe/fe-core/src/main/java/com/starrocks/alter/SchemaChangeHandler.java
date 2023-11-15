@@ -2289,6 +2289,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 // Must get all columns including invisible columns.
                 // Because in alter process, all columns must be considered.
                 List<Column> alterSchema = indexSchemaMap.get(alterIndexId);
+                List<Column> originSchema = olapTable.getSchemaByIndexId(alterIndexId);
+                // 0. check if unchanged
+                if (originSchema.equals(alterSchema)) {
+                    continue;
+                }
 
                 LOG.debug("index[{}] is changed. start checking...", alterIndexId);
                 // 1. check order: a) has key; b) value after key
@@ -2370,9 +2375,10 @@ public class SchemaChangeHandler extends AlterHandler {
             indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
             Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             Boolean hasMv = !olapTable.getRelatedMaterializedViews().isEmpty();
-            for (long idx : indexIds) {
-                List<Column> indexSchema = indexSchemaMap.get(idx);
-                MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx);
+            for (Map.Entry<Long, List<Column>> entry : changedIndexIdToSchema.entrySet()) {
+                Long alterIndexId = entry.getKey();
+                List<Column> indexSchema = entry.getValue();
+                MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(alterIndexId);
                 List<Column> originSchema = currentIndexMeta.getSchema();
                 if (hasMv && indexSchema.size() < originSchema.size()) {
                     // drop column
@@ -2402,9 +2408,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
                 int newSchemaVersion = currentSchemaVersion + 1;
                 currentIndexMeta.setSchemaVersion(newSchemaVersion);
-                schemaChangeJob.addIndexSchema(idx, idx, olapTable.getIndexNameById(idx), newSchemaVersion,
-                                               currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
-                                               indexSchema);
+                schemaChangeJob.addIndexSchema(alterIndexId, alterIndexId, olapTable.getIndexNameById(alterIndexId), 
+                                               newSchemaVersion, currentIndexMeta.getSchemaHash(), 
+                                               currentIndexMeta.getShortKeyColumnCount(), indexSchema);
             }
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
