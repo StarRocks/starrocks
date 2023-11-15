@@ -38,6 +38,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
+import org.apache.commons.collections4.ListUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -297,27 +298,21 @@ public class Authorizer {
         Preconditions.checkNotNull(db, "db should not null");
         AccessController controller = getInstance().getAccessControlOrDefault(catalogName);
 
-        // Check privilege on database
-        try {
-            controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
-            return;
-        } catch (AccessDeniedException e) {
-            if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                throw new AccessDeniedException();
-            }
-        }
-
-        // Check privilege on other objects
-        List<AccessControlChecker> checkers = ImmutableList.of(
-                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db),
+        List<AccessControlChecker> basicCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db)
+        );
+        List<AccessControlChecker> extraCheckers = ImmutableList.of(
                 () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
         );
+        List<AccessControlChecker> appliedCheckers = CatalogMgr.isInternalCatalog(catalogName) ?
+                ListUtils.union(basicCheckers, extraCheckers) : basicCheckers;
 
         AccessDeniedException lastExcepton = null;
-        for (AccessControlChecker checker : checkers) {
+        for (AccessControlChecker checker : appliedCheckers) {
             try {
                 checker.check();
                 return;
