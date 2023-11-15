@@ -35,6 +35,7 @@ import software.amazon.awssdk.services.glue.GlueClientBuilder;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
@@ -117,12 +118,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
     private StsAssumeRoleCredentialsProvider getAssumeRoleCredentialsProvider(AwsCredentialsProvider baseCredentials,
                                                                               String iamRoleArn, String externalId,
-                                                                              String region) {
+                                                                              Region region) {
         // Build sts client
         StsClientBuilder stsClientBuilder = StsClient.builder().credentialsProvider(baseCredentials);
-        if (!region.isEmpty()) {
-            stsClientBuilder.region(Region.of(region));
-        }
+        stsClientBuilder.region(region);
 
         // Build AssumeRoleRequest
         AssumeRoleRequest.Builder assumeRoleBuilder = AssumeRoleRequest.builder();
@@ -147,19 +146,17 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 getBaseAWSCredentialsProvider(s3UseAWSSDKDefaultBehavior, s3UseInstanceProfile, s3AccessKey,
                         s3SecretKey, s3SessionToken);
         S3ClientBuilder s3ClientBuilder = S3Client.builder();
+
+        Region region = tryToResolveRegion(s3Region);
+
         if (!s3IamRoleArn.isEmpty()) {
             s3ClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
-                    s3IamRoleArn, s3ExternalId, s3Region));
+                    s3IamRoleArn, s3ExternalId, region));
         } else {
             s3ClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
         }
 
-        if (!s3Region.isEmpty()) {
-            s3ClientBuilder.region(Region.of(s3Region));
-        } else {
-            Region region = tryToResolveRegion();
-            s3ClientBuilder.region(region);
-        }
+        s3ClientBuilder.region(region);
 
         // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
         // 'scheme', we will add https scheme.
@@ -176,19 +173,17 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 getBaseAWSCredentialsProvider(glueUseAWSSDKDefaultBehavior, glueUseInstanceProfile, glueAccessKey,
                         glueSecretKey, glueSessionToken);
         GlueClientBuilder glueClientBuilder = GlueClient.builder();
+
+        Region region = tryToResolveRegion(glueRegion);
+
         if (!glueIamRoleArn.isEmpty()) {
             glueClientBuilder.credentialsProvider(getAssumeRoleCredentialsProvider(baseAWSCredentialsProvider,
-                    glueIamRoleArn, glueExternalId, glueRegion));
+                    glueIamRoleArn, glueExternalId, region));
         } else {
             glueClientBuilder.credentialsProvider(baseAWSCredentialsProvider);
         }
 
-        if (!glueRegion.isEmpty()) {
-            glueClientBuilder.region(Region.of(glueRegion));
-        } else {
-            Region region = tryToResolveRegion();
-            glueClientBuilder.region(region);
-        }
+        glueClientBuilder.region(region);
 
         // To prevent the 'glueClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
         // 'scheme', we will add https scheme.
@@ -242,7 +237,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         return URI.create(HTTPS_SCHEME + endpoint);
     }
 
-    public static Region tryToResolveRegion() {
+    public static Region tryToResolveRegion(String strRegion) {
+        if (!strRegion.isEmpty()) {
+            return Region.of(strRegion);
+        }
         Region region = null;
         try {
             DefaultAwsRegionProviderChain providerChain = DefaultAwsRegionProviderChain.builder()
