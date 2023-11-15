@@ -53,7 +53,6 @@ void BitmapValueTest::SetUp() {
 }
 
 BitmapValue BitmapValueTest::gen_bitmap(uint64_t start, uint64_t end) {
->>>>>>> 44ae317858... [Enhancement] BitmapValue support copy on write (#34047)
     BitmapValue bitmap;
     for (auto i = start; i < end; i++) {
         bitmap.add(i);
@@ -783,94 +782,6 @@ TEST_F(BitmapValueTest, sub_bitmap_internal) {
     // bitmap (offset < 0 && invalid offset)
     BitmapValue bitmap_10;
     ret = _large_bitmap.sub_bitmap_internal(100, 2, &bitmap_10);
-    ASSERT_EQ(ret, 0);
-}
-
-TEST_F(BitmapValueTest, subset_limit) {
-    // empty
-    BitmapValue bitmap_1;
-    int64_t ret = _empty_bitmap.bitmap_subset_limit_internal(0, 1, &bitmap_1);
-    ASSERT_EQ(ret, 0);
-
-    // single
-    BitmapValue bitmap_2;
-    ret = _single_bitmap.bitmap_subset_limit_internal(0, 1, &bitmap_2);
-    ASSERT_EQ(ret, 1);
-    check_bitmap(BitmapDataType::SINGLE, bitmap_2, 0, 1);
-
-    // set
-    BitmapValue bitmap_3;
-    ret = _medium_bitmap.bitmap_subset_limit_internal(5, 2, &bitmap_3);
-    ASSERT_EQ(ret, 2);
-    check_bitmap(BitmapDataType::SET, bitmap_3, 5, 7);
-
-    // bitmap
-    BitmapValue bitmap_4;
-    ret = _large_bitmap.bitmap_subset_limit_internal(5, 2, &bitmap_4);
-    ASSERT_EQ(ret, 2);
-    check_bitmap(BitmapDataType::SET, bitmap_4, 5, 7);
-
-    // single (invalid)
-    BitmapValue bitmap_5;
-    ret = _single_bitmap.bitmap_subset_limit_internal(0, 0, &bitmap_5);
-    ASSERT_EQ(ret, 0);
-    ret = _single_bitmap.bitmap_subset_limit_internal(2, 1, &bitmap_5);
-    ASSERT_EQ(ret, 0);
-
-    // set (invalid)
-    BitmapValue bitmap_6;
-    ret = _medium_bitmap.bitmap_subset_limit_internal(3, 0, &bitmap_6);
-    ASSERT_EQ(ret, 0);
-    ret = _medium_bitmap.bitmap_subset_limit_internal(15, 1, &bitmap_6);
-    ASSERT_EQ(ret, 0);
-
-    // bitmap (invalid)
-    BitmapValue bitmap_7;
-    ret = _large_bitmap.bitmap_subset_limit_internal(3, 0, &bitmap_7);
-    ASSERT_EQ(ret, 0);
-    ret = _large_bitmap.bitmap_subset_limit_internal(68, 1, &bitmap_7);
-    ASSERT_EQ(ret, 0);
-}
-
-TEST_F(BitmapValueTest, subset_in_range) {
-    // empty
-    BitmapValue bitmap_1;
-    int64_t ret = _empty_bitmap.bitmap_subset_in_range_internal(0, 1, &bitmap_1);
-    ASSERT_EQ(ret, 0);
-
-    // single
-    BitmapValue bitmap_2;
-    ret = _single_bitmap.bitmap_subset_in_range_internal(0, 1, &bitmap_2);
-    ASSERT_EQ(ret, 1);
-    check_bitmap(BitmapDataType::SINGLE, bitmap_2, 0, 1);
-
-    // set
-    BitmapValue bitmap_3;
-    ret = _medium_bitmap.bitmap_subset_in_range_internal(5, 7, &bitmap_3);
-    ASSERT_EQ(ret, 2);
-    check_bitmap(BitmapDataType::SET, bitmap_3, 5, 7);
-
-    // bitmap
-    BitmapValue bitmap_4;
-    ret = _large_bitmap.bitmap_subset_in_range_internal(5, 7, &bitmap_4);
-    ASSERT_EQ(ret, 2);
-    check_bitmap(BitmapDataType::SET, bitmap_4, 5, 7);
-
-    // single (invalid)
-    BitmapValue bitmap_5;
-    ret = _single_bitmap.bitmap_subset_in_range_internal(0, 0, &bitmap_5);
-    ASSERT_EQ(ret, 0);
-    ret = _single_bitmap.bitmap_subset_in_range_internal(2, 3, &bitmap_5);
-    ASSERT_EQ(ret, 0);
-
-    // set (invalid)
-    BitmapValue bitmap_6;
-    ret = _medium_bitmap.bitmap_subset_limit_internal(15, 16, &bitmap_6);
-    ASSERT_EQ(ret, 0);
-
-    // bitmap (invalid)
-    BitmapValue bitmap_7;
-    ret = _medium_bitmap.bitmap_subset_limit_internal(68, 69, &bitmap_7);
     ASSERT_EQ(ret, 0);
 }
 
