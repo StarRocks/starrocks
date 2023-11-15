@@ -16,18 +16,24 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.thrift.TTableDescriptor;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.paimon.options.CatalogOptions;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.RowType;
 import org.assertj.core.api.Assertions;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PaimonTableTest {
 
@@ -40,7 +46,7 @@ public class PaimonTableTest {
         List<Column> fullSchema = new ArrayList<>(fields.size());
         ArrayList<String> partitions = Lists.newArrayList("b", "c");
 
-        ArrayList<Column> expections = new ArrayList<>();
+        ArrayList<Column> partitionSchema = new ArrayList<>();
         for (DataField field : fields) {
             String fieldName = field.name();
             DataType type = field.type();
@@ -48,7 +54,7 @@ public class PaimonTableTest {
             Column column = new Column(fieldName, fieldType, true);
             fullSchema.add(column);
             if (partitions.contains(fieldName)) {
-                expections.add(column);
+                partitionSchema.add(column);
             }
         }
         new Expectations() {
@@ -59,11 +65,52 @@ public class PaimonTableTest {
                 result = partitions;
             }
         };
-        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema, "filesystem", null,
-                "file:///home/wgcn", paimonNativeTable, 100L);
-        List<String> keys = new ArrayList<>();
+        Options options = new Options();
+        options.set(CatalogOptions.METASTORE, "filesystem");
+        options.set(CatalogOptions.WAREHOUSE, "file:///home/wgcn");
+        PaimonTable paimonTable = new PaimonTable("testCatalog", "testDB", "testTable", fullSchema,
+                options, paimonNativeTable, 100L);
         List<Column> partitionColumns = paimonTable.getPartitionColumns();
-        Assertions.assertThat(partitionColumns).hasSameElementsAs(expections);
+        Assertions.assertThat(partitionColumns).hasSameElementsAs(partitionSchema);
+    }
+
+    @Test
+    public void testToThrift(@Mocked AbstractFileStoreTable paimonNativeTable) {
+        RowType rowType =
+                RowType.builder().field("a", DataTypes.INT()).field("b", DataTypes.INT()).field("c", DataTypes.INT())
+                        .build();
+        List<DataField> fields = rowType.getFields();
+        List<Column> fullSchema = new ArrayList<>(fields.size());
+        ArrayList<String> partitions = Lists.newArrayList("b", "c");
+        new Expectations() {
+            {
+                paimonNativeTable.rowType();
+                result = rowType;
+                paimonNativeTable.partitionKeys();
+                result = partitions;
+            }
+        };
+        Options options = new Options();
+        options.set(CatalogOptions.METASTORE, "filesystem");
+        options.set(CatalogOptions.WAREHOUSE, "hdfs://host/warehouse");
+        String dbName = "testDB";
+        String tableName = "testTable";
+        PaimonTable paimonTable = new PaimonTable("testCatalog", dbName, tableName, fullSchema,
+                options, paimonNativeTable, 100L);
+
+        TTableDescriptor tTableDescriptor = paimonTable.toThrift(null);
+        Assert.assertEquals(tTableDescriptor.getDbName(), dbName);
+        Assert.assertEquals(tTableDescriptor.getTableName(), tableName);
+        String optionString = tTableDescriptor.getPaimonTable().getPaimon_options();
+        String[] optionArray = optionString.split(",");
+        Map<String, String> optionMap = new HashMap<>();
+        for (String s : optionArray) {
+            String[] kv = s.split("=");
+            optionMap.put(kv[0], kv[1]);
+        }
+        for (String key : options.keySet()) {
+            Assert.assertEquals(optionMap.get(key), options.get(key));
+        }
     }
 
 }

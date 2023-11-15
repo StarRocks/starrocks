@@ -67,6 +67,8 @@ public:
               _schema(std::move(schema)),
               _output_stream(std::move(writable_file)){};
 
+    virtual ~OrcChunkWriter() = default;
+
     Status set_compression(const TCompressionType::type& compression_type);
 
     Status write(Chunk* chunk);
