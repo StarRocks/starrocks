@@ -342,21 +342,34 @@ public class CompactionScheduler extends Daemon {
         return tasks;
     }
 
+    private long getCompactionWorkerGroupId() throws BeginTransactionException {
+        String warehouseName = Config.lake_compaction_warehouse;
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new BeginTransactionException("warehouse " + warehouseName + " not exist");
+        }
+        if (!warehouse.isAvailable()) {
+            throw new BeginTransactionException("warehouse " + warehouseName + " is not available");
+        }
+        return warehouse.getAnyAvailableCluster().getWorkerGroupId();
+    }
+
     @NotNull
-    private Map<Long, List<Long>> collectPartitionTablets(Partition partition) {
+    private Map<Long, List<Long>> collectPartitionTablets(Partition partition)
+            throws BeginTransactionException {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        Map<Long, List<Long>> nodeToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseBackend((LakeTablet) tablet);
-                if (beId == null) {
-                    beToTablets.clear();
-                    return beToTablets;
+                Long nodeId = Utils.chooseBackend((LakeTablet) tablet, getCompactionWorkerGroupId());
+                if (nodeId == null) {
+                    nodeToTablets.clear();
+                    return nodeToTablets;
                 }
-                beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+                nodeToTablets.computeIfAbsent(nodeId, k -> Lists.newArrayList()).add(tablet.getId());
             }
         }
-        return beToTablets;
+        return nodeToTablets;
     }
 
     // REQUIRE: has acquired the exclusive lock of Database.
@@ -370,17 +383,9 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
-        String warehouseName = Config.lake_compaction_warehouse;
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
-        if (warehouse == null) {
-            throw new BeginTransactionException("warehouse " + warehouseName + " not exist");
-        }
-        if (!warehouse.isAvailable()) {
-            throw new BeginTransactionException("warehouse " + warehouseName + " is not available");
-        }
 
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, TXN_TIMEOUT_SECOND, warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                loadJobSourceType, TXN_TIMEOUT_SECOND, getCompactionWorkerGroupId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
