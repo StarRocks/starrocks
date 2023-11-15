@@ -36,7 +36,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
 
     @Override
     public void executeTasks(TaskContext context) {
-        long timeout = 50000000;
+        long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
         long watch = context.getOptimizerContext().getCostTimeMs();
         while (!tasks.empty()) {
             if (timeout > 0 && watch > timeout) {
