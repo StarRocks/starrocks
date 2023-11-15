@@ -518,6 +518,61 @@ TEST_F(VecMathFunctionsTest, BinTest) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, OctTest) {
+    {
+        Columns columns;
+
+        auto tc1 = Int64Column::create();
+
+        int64_t ints[] = {1, 8, 256};
+
+        std::string res[] = {"1", "10", "400"};
+
+        for (long i : ints) {
+            tc1->append(i);
+        }
+
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::oct(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], v->get_data()[i].to_string());
+        }
+    }
+}
+
+TEST_F(VecMathFunctionsTest, OctLenTest) {
+    {
+        Columns columns;
+
+        auto tc1 = Int64Column::create();
+
+        int64_t ints[] = {1, 8, 256};
+
+        // std::string res[] = {"1", "10", "400"};
+        int32_t res[] = {1, 2, 3};
+
+        for (long i : ints) {
+            tc1->append(i);
+        }
+
+        columns.emplace_back(tc1);
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::oct_length(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+
+        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+            ASSERT_EQ(res[i], v->get_data()[i]);
+        }
+    }
+}
+
 TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
     Columns columns;
 

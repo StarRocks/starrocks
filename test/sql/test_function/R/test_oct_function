@@ -1,0 +1,41 @@
+-- name: test oct function
+select oct(0);
+-- result:
+0
+-- !result
+select oct(190);
+-- result:
+276
+-- !result
+select oct(1234567);
+-- result:
+4553207
+-- !result
+select oct(-22);
+-- result:
+1777777777777777777752
+-- !result
+select oct();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 11. Detail message: No matching function with signature: oct().')
+-- !result
+select oct_length(0);
+-- result:
+1
+-- !result
+select oct_length(190);
+-- result:
+3
+-- !result
+select oct_length(1234567);
+-- result:
+7
+-- !result
+select oct_length(-22);
+-- result:
+22
+-- !result
+select oct_length();
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 18. Detail message: No matching function with signature: oct_length().')
+-- !result
