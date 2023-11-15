@@ -43,7 +43,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotRef;
@@ -92,6 +91,8 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -1662,7 +1663,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     private void sendClearAlterTask(Database db, OlapTable olapTable) {
         AgentBatchTask batchTask = new AgentBatchTask();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (Partition partition : olapTable.getPartitions()) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -1679,7 +1681,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         AgentTaskExecutor.submit(batchTask);
@@ -1691,12 +1693,13 @@ public class SchemaChangeHandler extends AlterHandler {
             throws DdlException {
         List<Partition> partitions = Lists.newArrayList();
         OlapTable olapTable;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             olapTable = (OlapTable) db.getTable(tableName);
             partitions.addAll(olapTable.getPartitions());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         boolean metaValue = false;
@@ -1744,11 +1747,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -1762,7 +1765,8 @@ public class SchemaChangeHandler extends AlterHandler {
         BinlogConfig newBinlogConfig;
         boolean hasChanged = false;
         boolean isModifiedSuccess = true;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             olapTable = (OlapTable) db.getTable(tableId);
             if (olapTable == null) {
@@ -1776,7 +1780,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 newBinlogConfig = new BinlogConfig(olapTable.getCurBinlogConfig());
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // judge whether the attribute has changed
@@ -1810,7 +1814,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return true;
         }
 
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         // check for concurrent modifications by version
         if (olapTable.getBinlogVersion() != newBinlogConfig.getVersion()) {
             // binlog config has been modified,
@@ -1840,7 +1844,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.warn("update binlog config of table {} failed", olapTable.getName());
             isModifiedSuccess = false;
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // TODO optimize by asynchronous rpc
@@ -1867,7 +1871,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                              List<String> partitionNames,
                                              Map<String, String> properties) throws DdlException {
         OlapTable olapTable;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             olapTable = (OlapTable) db.getTable(tableName);
             for (String partitionName : partitionNames) {
@@ -1878,7 +1883,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         boolean isInMemory = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_INMEMORY));
@@ -1909,7 +1914,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                                 TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id,schemaHash>
         Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
@@ -1929,7 +1935,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletIdWithHash.keySet().size();
@@ -1992,7 +1998,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                           TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id,schemaHash>
         Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
@@ -2014,7 +2021,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletIdWithHash.keySet().size();
@@ -2068,7 +2075,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
     public void updateTableConstraint(Database db, String tableName, Map<String, String> properties)
             throws DdlException {
-        if (!db.readLockAndCheckExist()) {
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.READ)) {
             throw new DdlException(String.format("db:%s does not exists.", db.getFullName()));
         }
         TableProperty tableProperty;
@@ -2081,7 +2089,7 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable = (OlapTable) table;
             tableProperty = olapTable.getTableProperty();
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         boolean hasChanged = false;
@@ -2131,11 +2139,11 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!hasChanged) {
             return;
         }
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             GlobalStateMgr.getCurrentState().modifyTableConstraint(db, tableName, properties);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -2154,7 +2162,8 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         AlterJobV2 schemaChangeJobV2 = null;
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -2179,7 +2188,7 @@ public class SchemaChangeHandler extends AlterHandler {
                         "Table[" + tableName + "] is under SCHEMA_CHANGE but job does not exits.");
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // alter job v2's cancel must be called outside the database lock
@@ -2252,7 +2261,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                             Map<Long, LinkedList<Column>> indexSchemaMap,
                                             List<Index> indexes, long jobId, long txnId, boolean isReplay)
             throws DdlException, NotImplementedException {
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             LOG.debug("indexSchemaMap:{}, indexes:{}", indexSchemaMap, indexes);
             if (olapTable.getState() == OlapTableState.ROLLUP) {
@@ -2443,7 +2453,7 @@ public class SchemaChangeHandler extends AlterHandler {
             LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -2461,8 +2471,9 @@ public class SchemaChangeHandler extends AlterHandler {
         Preconditions.checkArgument(table instanceof OlapTable,
                 "Target of light schema change must be olap table");
         OlapTable olapTable = (OlapTable) table;
+        Locker locker = new Locker();
         try {
-            db.writeLock();
+            locker.lockDatabase(db, LockType.WRITE);
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(), true);
         } catch (DdlException e) {
             // should not happen
@@ -2470,7 +2481,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } catch (NotImplementedException e) {
             LOG.error("InternalError", e);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 }

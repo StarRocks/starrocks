@@ -37,6 +37,8 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
@@ -963,7 +965,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return 0;
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
@@ -999,7 +1002,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             return cnt;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1302,9 +1305,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (db == null) {
             return result;
         }
-
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
@@ -1370,7 +1373,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         return result;
@@ -1383,9 +1386,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (db == null) {
             return false;
         }
-
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tabletMeta.getTableId());
             if (table == null) {
                 return false;
@@ -1420,7 +1423,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             return statusPair.first == LocalTablet.TabletStatus.HEALTHY;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1462,7 +1465,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // set the config to a local variable to avoid config params changed.
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             lockStart = System.nanoTime();
             try {
                 TABLE:
@@ -1489,8 +1493,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
                             LOG.debug("partition checked reached batch value, release lock");
-                            db.readUnlock();
-                            db.readLock();
+                            locker.unLockDatabase(db, LockType.READ);
+                            locker.lockDatabase(db, LockType.READ);
                             LOG.debug("balancer get lock again");
                             lockStart = System.nanoTime();
                             if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
@@ -1588,7 +1592,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -1616,7 +1620,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
                     // check table is olap table or colocate table
@@ -1637,7 +1642,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 

@@ -106,6 +106,8 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -304,7 +306,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
@@ -463,7 +464,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         if (db != null) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
@@ -522,7 +524,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return result;
@@ -662,7 +664,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
         boolean caseSensitive = CaseSensibility.TABLE.getCaseSensibility();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (Table table : db.getTables()) {
                 if (table.isMaterializedView()) {
@@ -704,7 +707,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
@@ -1009,8 +1012,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Database db = metadataMgr.getDb(catalogName, params.db);
 
         if (db != null) {
+            Locker locker = new Locker();
             try {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
                 Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
@@ -1023,7 +1027,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return result;
@@ -1044,9 +1048,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
+                Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     try {
-                        db.readLock();
+                        locker.lockDatabase(db, LockType.READ);
                         Table table = db.getTable(tableName);
                         if (table == null) {
                             continue;
@@ -1061,7 +1066,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
-                        db.readUnlock();
+                        locker.unLockDatabase(db, LockType.READ);
                     }
                     if (reachLimit) {
                         return;
@@ -1703,7 +1708,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new UserException("unknown database, database=" + dbName);
         }
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
-        if (!db.tryReadLock(timeoutMs, TimeUnit.MILLISECONDS)) {
+        Locker locker = new Locker();
+        if (!locker.tryLockDatabase(db, LockType.READ, timeoutMs)) {
             throw new UserException("get database read lock timeout, database=" + dbName);
         }
         try {
@@ -1753,7 +1759,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             return plan;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1982,6 +1988,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
+        Locker locker = new Locker();
         Table table = db.getTable(tableId);
         if (table == null) {
             errorStatus.setError_msgs(
@@ -2023,12 +2030,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
             try {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             if (mutablePartitions.size() <= 1) {
                 GlobalStateMgr.getCurrentState().addSubPartitions(db, olapTable.getName(), partition, 1);
@@ -2046,7 +2053,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             long mutablePartitionNum = 0;
             try {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2062,7 +2069,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     buildTablets(physicalPartition, tablets, olapTable);
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         result.setPartitions(partitions);
@@ -2236,7 +2243,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
-            PartitionDesc partitionDesc =  addPartitionClause.getPartitionDesc();
+            PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             if (partitionDesc instanceof RangePartitionDesc) {
                 partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
             } else if (partitionDesc instanceof ListPartitionDesc) {

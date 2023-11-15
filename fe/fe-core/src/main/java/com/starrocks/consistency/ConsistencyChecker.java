@@ -51,6 +51,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.CheckConsistencyTask;
@@ -276,7 +278,8 @@ public class ConsistencyChecker extends FrontendDaemon {
         try {
             while ((chosenOne = dbQueue.poll()) != null) {
                 Database db = (Database) chosenOne;
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     // sort tables
                     List<Table> tables = db.getTables();
@@ -365,7 +368,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                         } // end while partitionQueue
                     } // end while tableQueue
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             } // end while dbQueue
         } finally {
@@ -394,7 +397,8 @@ public class ConsistencyChecker extends FrontendDaemon {
             LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
             return;
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
             if (table == null) {
@@ -427,7 +431,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
             tablet.setIsConsistent(info.isConsistent());
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

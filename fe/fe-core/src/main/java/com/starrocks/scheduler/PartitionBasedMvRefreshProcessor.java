@@ -64,6 +64,8 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -146,7 +148,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private static final int MAX_RETRY_NUM = 10;
 
-    private Database database;
+    private Database db;
     private MaterializedView materializedView;
     private MvTaskRunContext mvContext;
     // table id -> <base table info, snapshot table>
@@ -215,7 +217,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             syncPartitions(context);
             // refresh external table meta cache before check the partition changed
             refreshExternalTable(context);
-            database.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 // the following steps should be done in the same lock:
                 // 1. check base table partitions change
@@ -285,7 +288,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 LOG.warn("Refresh mv {} failed: {}", materializedView.getName(), e);
                 throw e;
             } finally {
-                database.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -443,13 +446,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void updateMeta(Set<String> mvRefreshedPartitions,
                             ExecPlan execPlan,
                             Map<Table, Set<String>> refTableAndPartitionNames) {
+        Locker locker = new Locker();
         // update the meta if succeed
-        if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("update meta failed. database:" + database.getFullName() + " not exist");
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
             // check
-            Table mv = database.getTable(materializedView.getId());
+            Table mv = db.getTable(materializedView.getId());
             if (mv == null) {
                 throw new DmlException(
                         "update meta failed. materialized view:" + materializedView.getName() + " not exist");
@@ -508,7 +512,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("update final meta failed after mv refreshed:", e);
             throw e;
         } finally {
-            database.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -624,12 +628,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> properties = context.getProperties();
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
-        database = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
-        if (database == null) {
+        db = GlobalStateMgr.getCurrentState().getDb(context.ctx.getDatabase());
+        if (db == null) {
             LOG.warn("database {} do not exist when refreshing materialized view:{}", context.ctx.getDatabase(), mvId);
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
-        Table table = database.getTable(mvId);
+        Table table = db.getTable(mvId);
         if (table == null) {
             LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                     context.ctx.getDatabase());
@@ -706,7 +710,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         RangePartitionDiff rangePartitionDiff = null;
 
-        database.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         Map<String, Range<PartitionKey>> mvRangePartitionMap = materializedView.getRangePartitionMap();
         Map<String, Range<PartitionKey>> refBaseTablePartitionMap;
         Map<String, Set<String>> refBaseTableMVPartitionMap = Maps.newHashMap();
@@ -731,14 +736,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
         } finally {
-            database.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         Map<String, Range<PartitionKey>> deletes = rangePartitionDiff.getDeletes();
 
         // Delete old partitions and then add new partitions because the old and new partitions may overlap
         for (String mvPartitionName : deletes.keySet()) {
-            dropPartition(database, materializedView, mvPartitionName);
+            dropPartition(db, materializedView, mvPartitionName);
         }
         LOG.info("The process of synchronizing materialized view [{}] delete partitions range [{}]",
                 materializedView.getName(), deletes);
@@ -747,7 +752,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> partitionProperties = getPartitionProperties(materializedView);
         DistributionDesc distributionDesc = getDistributionDesc(materializedView);
         Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
-        addRangePartitions(database, materializedView, adds, partitionProperties, distributionDesc);
+        addRangePartitions(db, materializedView, adds, partitionProperties, distributionDesc);
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
             mvRangePartitionMap.put(mvPartitionName, addEntry.getValue());
@@ -775,7 +780,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, List<List<String>>> baseListPartitionMap;
 
         Map<String, List<List<String>>> listPartitionMap = materializedView.getListPartitionMap();
-        database.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             baseListPartitionMap = PartitionUtil.getPartitionList(partitionBaseTable, partitionColumn);
             listPartitionDiff = SyncPartitionUtils.getListPartitionDiff(baseListPartitionMap, listPartitionMap);
@@ -783,7 +789,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
         } finally {
-            database.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         Map<String, List<List<String>>> deletes = listPartitionDiff.getDeletes();
@@ -792,7 +798,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // because the old and new partitions may overlap
 
         for (String mvPartitionName : deletes.keySet()) {
-            dropPartition(database, materializedView, mvPartitionName);
+            dropPartition(db, materializedView, mvPartitionName);
         }
         LOG.info("The process of synchronizing materialized view [{}] delete partitions range [{}]",
                 materializedView.getName(), deletes);
@@ -800,7 +806,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Map<String, String> partitionProperties = getPartitionProperties(materializedView);
         DistributionDesc distributionDesc = getDistributionDesc(materializedView);
         Map<String, List<List<String>>> adds = listPartitionDiff.getAdds();
-        addListPartitions(database, materializedView, adds, partitionProperties, distributionDesc);
+        addListPartitions(db, materializedView, adds, partitionProperties, distributionDesc);
 
         LOG.info("The process of synchronizing materialized view [{}] add partitions list [{}]",
                 materializedView.getName(), adds);
@@ -1241,7 +1247,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (db == null) {
                 return true;
             }
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 Table table = baseTableInfo.getTable();
                 if (table == null) {
@@ -1308,7 +1315,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 LOG.warn("Materialized view compute partition change failed", e);
                 return true;
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return false;
@@ -1359,7 +1366,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 if (table.isOlapTable()) {
                     Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
@@ -1377,7 +1385,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     tables.put(table.getId(), Pair.create(baseTableInfo, table));
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -1479,14 +1487,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
     }
 
-    private void dropPartition(Database database, MaterializedView materializedView, String mvPartitionName) {
+    private void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
-        if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("drop partition failed. database:" + database.getFullName() + " not exist");
+        Locker locker = new Locker();
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("drop partition failed. database:" + db.getFullName() + " not exist");
         }
         try {
             // check
-            Table mv = database.getTable(materializedView.getId());
+            Table mv = db.getTable(materializedView.getId());
             if (mv == null) {
                 throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
             }
@@ -1496,13 +1505,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             }
 
             GlobalStateMgr.getCurrentState().dropPartition(
-                    database, materializedView,
+                    db, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                    database.getFullName(), materializedView.getName());
+                    db.getFullName(), materializedView.getName());
         } finally {
-            database.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

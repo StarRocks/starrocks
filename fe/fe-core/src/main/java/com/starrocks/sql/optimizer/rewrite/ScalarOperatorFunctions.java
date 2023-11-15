@@ -60,6 +60,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -1180,14 +1182,14 @@ public class ScalarOperatorFunctions {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                     tableName + " is not materialized view");
         }
+        Locker locker = new Locker();
         try {
-            dbTable.getLeft().readLock();
-
+            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
-            dbTable.getLeft().readUnlock();
+            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
         }
     }
 
@@ -1205,8 +1207,9 @@ public class ScalarOperatorFunctions {
             mayDb = Optional.empty();
         }
 
+        Locker locker = new Locker();
         try {
-            mayDb.ifPresent(Database::readLock);
+            mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
@@ -1224,7 +1227,7 @@ public class ScalarOperatorFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
-            mayDb.ifPresent(Database::readUnlock);
+            mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
         }
     }
 

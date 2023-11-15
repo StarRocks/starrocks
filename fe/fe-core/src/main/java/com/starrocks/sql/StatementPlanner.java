@@ -22,6 +22,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -74,8 +76,9 @@ public class StatementPlanner {
         boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
+        Locker locker = new Locker();
         try {
-            lock(dbs);
+            lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -90,7 +93,7 @@ public class StatementPlanner {
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-                unLock(dbs);
+                unLock(locker, dbs);
                 needWholePhaseLock = false;
                 return planQuery(stmt, resultSinkType, session, true);
             }
@@ -106,7 +109,7 @@ public class StatementPlanner {
             }
         } finally {
             if (needWholePhaseLock) {
-                unLock(dbs);
+                unLock(locker, dbs);
             }
         }
 
@@ -186,9 +189,10 @@ public class StatementPlanner {
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
 
+            Locker locker = new Locker();
             try {
                 // Need lock to avoid olap table metas ConcurrentModificationException
-                lock(dbs);
+                lock(locker, dbs);
                 AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
 
                 // Only need to re analyze and re transform when schema isn't valid
@@ -196,7 +200,7 @@ public class StatementPlanner {
                     Analyzer.analyze(queryStmt, session);
                 }
             } finally {
-                unLock(dbs);
+                unLock(locker, dbs);
             }
 
             LogicalPlan logicalPlan;
@@ -258,24 +262,24 @@ public class StatementPlanner {
     }
 
     // Lock all database before analyze
-    private static void lock(Map<String, Database> dbs) {
+    private static void lock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
         dbList.sort(Comparator.comparingLong(Database::getId));
         for (Database db : dbList) {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
         }
     }
 
     // unLock all database after analyze
-    private static void unLock(Map<String, Database> dbs) {
+    private static void unLock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         for (Database db : dbs.values()) {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

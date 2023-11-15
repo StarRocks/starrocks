@@ -90,6 +90,8 @@ import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -1655,7 +1657,8 @@ public class StmtExecutor {
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
-        Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        Database db = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        Locker locker = new Locker();
         Table table = insertStmt.getTargetTable();
         if (!(table instanceof OlapTable)) {
             LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
@@ -1663,9 +1666,9 @@ public class StmtExecutor {
         }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
-                insertStmt, database.getId(), olapTable.getId());
-        if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("database:%s does not exist.", database.getFullName());
+                insertStmt, db.getId(), olapTable.getId());
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
             // add an edit log
@@ -1673,7 +1676,7 @@ public class StmtExecutor {
                     job.getTargetDbId(), job.getTargetTableId(), job.getSourcePartitionIds());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            database.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();

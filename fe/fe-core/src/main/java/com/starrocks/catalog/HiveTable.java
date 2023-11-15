@@ -57,6 +57,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -269,8 +271,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             this.fullSchema.clear();
             this.nameToColumn.clear();
@@ -285,7 +287,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
