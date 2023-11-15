@@ -776,10 +776,19 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "regexp('abc123', 'abc*')");
 
         sql = "select regexp_extract('1a 2b 14m', '\\d+');";
-        assertPlanContains(sql, "regexp_extract('1a 2b 14m', '\\\\d+', 0)");
+        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 3> : regexp_extract('1a 2b 14m', '\\\\d+', 0)");
 
         sql = "select regexp_extract('1abb 2b 14m', '[a-z]+');";
-        assertPlanContains(sql, "regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 0)");
+
+        sql = "select regexp_extract('1abb 2b 14m', '[a-z]+', 1);";
+        assertPlanContains(sql, "if(3: regexp_extract = '', NULL, 3: regexp_extract)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 3> : regexp_extract('1abb 2b 14m', '[a-z]+', 1)");
     }
 
     @Test
