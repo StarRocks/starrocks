@@ -143,6 +143,39 @@ TEST_F(CompactionManagerTest, test_candidates) {
     }
 }
 
+TEST_F(CompactionManagerTest, test_candidates_exceede) {
+    config::max_compaction_candidate_num = 10;
+    std::vector<CompactionCandidate> candidates;
+    DataDir data_dir("./data_dir");
+    for (int i = 0; i < 20; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        tablet->set_tablet_state(TABLET_RUNNING);
+
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = i;
+        candidates.push_back(candidate);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(candidates.begin(), candidates.end(), g);
+
+    _engine->compaction_manager()->update_candidates(candidates);
+
+    config::max_compaction_candidate_num = 40960;
+    {
+        ASSERT_EQ(10, _engine->compaction_manager()->candidates_size());
+        CompactionCandidate candidate_1;
+        _engine->compaction_manager()->pick_candidate(&candidate_1);
+        ASSERT_EQ(19, candidate_1.tablet->tablet_id());
+    }
+}
+
 class MockCompactionTask : public CompactionTask {
 public:
     MockCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}

@@ -172,6 +172,12 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
                 _compaction_candidates.emplace(std::move(candidate));
             }
         }
+        // if candidates size exceed max, remove the last one which has the lowest score
+        // too many candidates will cause too many resources occupied and make priority queue adjust too slow
+        while (_compaction_candidates.size() > config::max_compaction_candidate_num &&
+               !_compaction_candidates.empty()) {
+            _compaction_candidates.erase(std::prev(_compaction_candidates.end()));
+        }
     }
     _notify();
 }

@@ -848,10 +848,6 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     }
     auto st = _add_tablet_unlocked(tablet, update_meta, force);
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
-    // no concurrent access here
-    if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
-    }
 
     return st;
 }
