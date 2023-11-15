@@ -549,8 +549,7 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
             index.column_param().columns_desc(0).unique_id() >= 0 && index.has_schema_version() &&
             index.schema_version() > _tablet_schema->schema_version()) {
             RETURN_IF_ERROR(_tablet_schema->build_current_tablet_schema(
-                    index_id, ptable_schema_param.indexes(i).schema_version(), index,
-                    ori_tablet_schema));
+                    index_id, ptable_schema_param.indexes(i).schema_version(), index, ori_tablet_schema));
         }
     }
 
