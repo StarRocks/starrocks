@@ -113,7 +113,7 @@ public class PriorityLeaderTaskExecutor {
     public void setPoolSize(int poolSize) {
         // corePoolSize and maximumPoolSize are same.
         // setCorePoolSize and setMaximumPoolSize() will throw IllegalArgumentException
-        int prePoolSize = executor.getMaximumPoolSize();
+        int prePoolSize = executor.getCorePoolSize();
         if (poolSize < prePoolSize) {
             executor.setCorePoolSize(poolSize);
             executor.setMaximumPoolSize(poolSize);
