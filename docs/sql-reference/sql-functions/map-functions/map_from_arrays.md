@@ -4,7 +4,7 @@
 
 Creates a MAP value from the given pair of key item array and value item array.
 
-This function is supported from v3.1 onwards.
+This function is supported from v3.0 onwards.
 
 ## Syntax
 
