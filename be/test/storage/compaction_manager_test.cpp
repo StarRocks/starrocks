@@ -18,7 +18,7 @@
 
 namespace starrocks {
 
-TEST(CompactionManagerTest, test_candidates) {
+TEST_F(CompactionManagerTest, test_candidates) {
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i <= 10; i++) {
