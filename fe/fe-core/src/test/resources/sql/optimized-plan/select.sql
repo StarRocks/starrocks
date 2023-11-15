@@ -74,13 +74,13 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[1: v1, 2: v2, 3: v3]] having [null
 [sql]
 with t0 as (select * from t1) select * from test.t0
 [result]
-SCAN (columns[4: v1, 5: v2, 6: v3] predicate[null])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 with t0 as (select * from t1) select * from t0
 [result]
-SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+SCAN (columns[1: v4, 2: v5, 3: v6] predicate[null])
 [end]
 
 [sql]

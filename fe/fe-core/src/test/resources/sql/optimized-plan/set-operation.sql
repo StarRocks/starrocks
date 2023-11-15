@@ -72,9 +72,9 @@ INTERSECT
 with testC (v) as (select v1 from t0 union all select v4 from t1 union all select v7 from t2) select * from testC;
 [result]
 UNION
-    SCAN (columns[11: v1] predicate[null])
-    SCAN (columns[14: v4] predicate[null])
-    SCAN (columns[17: v7] predicate[null])
+    SCAN (columns[1: v1] predicate[null])
+    SCAN (columns[4: v4] predicate[null])
+    SCAN (columns[7: v7] predicate[null])
 [end]
 
 [sql]
