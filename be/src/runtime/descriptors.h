@@ -299,18 +299,14 @@ public:
     PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~PaimonTableDescriptor() override = default;
     bool has_partition() const override { return false; }
-    const std::string& get_catalog_type() const;
-    const std::string& get_metastore_uri() const;
-    const std::string& get_warehouse_path() const;
     const std::string& get_database_name() const;
     const std::string& get_table_name() const;
+    const std::string& get_paimon_options() const;
 
 private:
-    std::string _catalog_type;
-    std::string _metastore_uri;
-    std::string _warehouse_path;
     std::string _database_name;
     std::string _table_name;
+    std::string _paimon_options;
 };
 
 // ===========================================
