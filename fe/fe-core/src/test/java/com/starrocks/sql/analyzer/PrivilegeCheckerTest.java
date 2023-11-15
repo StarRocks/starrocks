@@ -3366,6 +3366,8 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the ANY privilege(s) on DATABASE " +
                         "test_implicit_priv for this operation"
         );
+        ctxToRoot();
+        starRocksAssert.dropDatabase("test_implicit_priv");
     }
 
     @Test

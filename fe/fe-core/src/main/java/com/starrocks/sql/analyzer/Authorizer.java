@@ -295,13 +295,12 @@ public class Authorizer {
     public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
         Preconditions.checkNotNull(db, "db should not null");
-        AccessController controller =
-                getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        AccessController controller = getInstance().getAccessControlOrDefault(catalogName);
 
         // Check privilege on database
         try {
-            getInstance().getAccessControlOrDefault(catalogName)
-                    .checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
+            controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
+            return;
         } catch (AccessDeniedException e) {
             if (!CatalogMgr.isInternalCatalog(catalogName)) {
                 throw new AccessDeniedException();
@@ -310,17 +309,18 @@ public class Authorizer {
 
         // Check privilege on other objects
         List<AccessControlChecker> checkers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db),
                 () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
         );
+
         AccessDeniedException lastExcepton = null;
         for (AccessControlChecker checker : checkers) {
             try {
                 checker.check();
-                // Pass any checker could return
-                break;
+                return;
             } catch (AccessDeniedException e) {
                 lastExcepton = e;
             }
