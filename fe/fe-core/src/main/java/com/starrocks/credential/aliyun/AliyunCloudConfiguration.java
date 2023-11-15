@@ -34,6 +34,10 @@ public class AliyunCloudConfiguration extends CloudConfiguration {
         this.aliyunCloudCredential = aliyunCloudCredential;
     }
 
+    public AliyunCloudCredential getAliyunCloudCredential() {
+        return aliyunCloudCredential;
+    }
+
     // reuse aws client logic of BE
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
