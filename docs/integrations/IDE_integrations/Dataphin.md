@@ -229,7 +229,7 @@ Dataphin can present and display information based on metadata, including table 
 
 Parameters are described as follows:
 
-- **JDBC URL**: JDBC connection string, which is divided into two parts. For more information, see [MySQL JDBC URL format](https://dev.mysql.com/doc/connector-j/8.1/en/connector-j-reference-jdbc-url-format.html).
+- **JDBC URL**: JDBC connection string, which is divided into two parts:
 
   - Part I: The format is `jdbc:mysql://<Host>:<Port>/`. `Host` is the IP address of the FE host in the StarRocks cluster. `Port` is the query Port of FE. Default value: `9030`.
 
