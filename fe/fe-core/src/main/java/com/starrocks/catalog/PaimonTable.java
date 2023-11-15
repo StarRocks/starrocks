@@ -15,7 +15,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -116,7 +115,6 @@ public class PaimonTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        Preconditions.checkNotNull(partitions);
         TPaimonTable tPaimonTable = new TPaimonTable();
         StringBuilder sb = new StringBuilder();
         for (String key : this.paimonOptions.keySet()) {
