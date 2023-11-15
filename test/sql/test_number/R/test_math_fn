@@ -11,3 +11,19 @@ select width_bucket(11, 0.024, 10.06, 5);
 -- result:
 6
 -- !result
+select width_bucket(null, 0.024, 10.06, 5);
+-- result:
+None
+-- !result
+select width_bucket(11, null, 10.06, 5);
+-- result:
+None
+-- !result
+select width_bucket(11, 0.024, null, 5);
+-- result:
+None
+-- !result
+select width_bucket(11, 0.024, 10.06, null);
+-- result:
+None
+-- !result

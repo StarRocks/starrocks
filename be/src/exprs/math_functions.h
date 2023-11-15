@@ -496,7 +496,8 @@ public:
     }
 
     /**
-    * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_FLOAT, TYPE_DOUBLE
+    * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_FLOAT,
+    *           TYPE_DOUBLE, TYPE_DECIMALV2, TYPE_DECIMALV3
     * @param: [TypeColumn, TypeColumn, TypeColumn, BigIntColumn]
     * @return: BigIntColumn
     */
@@ -517,17 +518,38 @@ public:
             }
             auto min_value = min_col.value(row);
             auto max_value = max_col.value(row);
+            if (min_value == max_value) {
+                return Status::InvalidArgument("min_value should not equal to max_value");
+            }
             auto input_value = input_col.value(row);
             auto bucket_num = bucket_col.value(row);
-            if (input_value < min_value) {
-                result.append(0);
-            } else if (input_value >= max_value) {
-                result.append(bucket_num + 1);
+
+            if (min_value < max_value) {
+                auto lower = min_value;
+                auto upper = max_value;
+                if (input_value < lower) {
+                    result.append(0);
+                } else if (input_value >= upper) {
+                    result.append(bucket_num + 1);
+                } else {
+                    auto range_size = static_cast<double>(upper - lower);
+                    auto dist_from_min = static_cast<double>(input_value - lower);
+                    int64_t ret = static_cast<int64_t>(dist_from_min / (range_size / bucket_num));
+                    result.append(ret + 1);
+                }
             } else {
-                auto range_size = max_value - min_value;
-                auto dist_from_min = input_value - min_value;
-                int64_t ret = dist_from_min / (range_size / bucket_num);
-                result.append(ret + 1);
+                auto lower = max_value;
+                auto upper = min_value;
+                if (input_value > upper) {
+                    result.append(0);
+                } else if (input_value <= lower) {
+                    result.append(bucket_num + 1);
+                } else {
+                    auto range_size = static_cast<double>(upper - lower);
+                    auto dist_from_min = static_cast<double>(upper - input_value);
+                    int64_t ret = static_cast<int64_t>(dist_from_min / (range_size / bucket_num));
+                    result.append(ret + 1);
+                }
             }
         }
 
