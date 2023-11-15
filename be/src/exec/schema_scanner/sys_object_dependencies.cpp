@@ -25,10 +25,12 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SysObjectDependencies::_s_columns[] = {
         {"OBJECT_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"OBJECT_NAME", TYPE_BIGINT, sizeof(StringValue), false},
         {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
 
         {"REF_OBJECT_ID", TYPE_VARCHAR, sizeof(int64_t), true},
+        {"REF_OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
         {"REF_OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"REF_OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
 };
