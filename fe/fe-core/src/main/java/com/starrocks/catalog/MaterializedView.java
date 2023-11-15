@@ -80,25 +80,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         INCREMENTAL
     }
 
-<<<<<<< HEAD
     public enum PlanMode {
         VALID,
         INVALID,
         UNKNOWN
-=======
-    public enum RefreshMoment {
-        IMMEDIATE,
-        DEFERRED
-    }
-
-    @Override
-    public Boolean getUseLightSchemaChange() {
-        return false;
-    }
-
-    @Override
-    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
->>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
     }
 
     public static class BasePartitionInfo {

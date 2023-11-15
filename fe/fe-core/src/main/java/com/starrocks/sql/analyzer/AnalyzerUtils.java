@@ -28,13 +28,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.ListPartitionInfo;
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
->>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -71,11 +65,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
-<<<<<<< HEAD
-=======
-import java.util.Collections;
 import java.util.HashMap;
->>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
