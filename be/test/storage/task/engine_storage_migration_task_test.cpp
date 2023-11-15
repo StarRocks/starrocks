@@ -51,10 +51,17 @@ class EngineStorageMigrationTaskTest : public testing::Test {
 public:
     static void SetUpTestCase() { init(); }
 
-    static void TearDownTestCase() {}
+    static void TearDownTestCase() { config::enable_event_based_compaction_framework = true; }
 
     static void init() {
+<<<<<<< HEAD
         // create tablet first
+=======
+        config::enable_event_based_compaction_framework = false;
+        /*
+            create duplicated key tablet
+        */
+>>>>>>> 1089eb0b6e ([Enhancement] Remove the mechanism that triggers compaction at startup and limit the maximum compaction candidate (#34618))
         TCreateTabletReq request;
         set_default_create_tablet_request(&request);
         auto res = StorageEngine::instance()->create_tablet(request);
