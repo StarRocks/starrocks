@@ -19,27 +19,29 @@
 
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
-#include "storage/lake/rowset.h"
-#include "storage/lake/tablet.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/column_iterator.h"
-#include "storage/rowset/segment.h"
 
 #ifdef BE_TEST
 #define DECL_FINAL
+#define UT_VIRTUAL virtual
 #else
 #define DECL_FINAL final
+#define UT_VIRTUAL
 #endif
 
 namespace starrocks {
-// Params for MetaReader
-// mainly include tablet
+class TabletSchema;
+
 struct LakeMetaReaderParams : MetaReaderParams {
     LakeMetaReaderParams() = default;
-    StatusOr<lake::Tablet> tablet;
-    std::shared_ptr<const TabletSchema> tablet_schema;
 };
+
+namespace lake {
+class Rowset;
+class VersionedTablet;
+} // namespace lake
 
 // MetaReader will implements
 // 1. read meta info from segment footer
@@ -47,26 +49,18 @@ struct LakeMetaReaderParams : MetaReaderParams {
 class LakeMetaReader DECL_FINAL : public MetaReader {
 public:
     LakeMetaReader();
-    ~LakeMetaReader() override = default;
+    ~LakeMetaReader() override;
 
-    virtual Status init(const LakeMetaReaderParams& read_params);
-
-    lake::Tablet tablet() { return _tablet.value(); }
+    UT_VIRTUAL Status init(const LakeMetaReaderParams& read_params);
 
     Status do_get_next(ChunkPtr* chunk) override;
 
 private:
-    StatusOr<lake::Tablet> _tablet;
-    std::shared_ptr<const TabletSchema> _tablet_schema;
-    std::vector<lake::Rowset> _rowsets;
+    Status _build_collect_context(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& read_params);
 
-    Status _init_params(const LakeMetaReaderParams& read_params);
+    Status _init_seg_meta_collecters(const lake::VersionedTablet& tablet, const LakeMetaReaderParams& read_params);
 
-    Status _build_collect_context(const LakeMetaReaderParams& read_params);
-
-    Status _init_seg_meta_collecters(const LakeMetaReaderParams& read_params);
-
-    Status _get_segments(lake::Tablet tablet, const Version& version, std::vector<SegmentSharedPtr>* segments);
+    Status _get_segments(const lake::VersionedTablet& tablet, std::vector<SegmentSharedPtr>* segments);
 };
 
 } // namespace starrocks

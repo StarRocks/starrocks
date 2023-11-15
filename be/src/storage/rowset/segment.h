@@ -108,12 +108,34 @@ public:
 
     uint64_t id() const { return _segment_id; }
 
-    // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
-    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(uint32_t id, ColumnAccessPath* path = nullptr,
-                                                                  const TabletSchemaCSPtr& tablet_schema = nullptr);
+    // Creates a new iterator for a specific column in a segment.
+    //
+    // This function initializes a new iterator object that can be used to traverse
+    // the elements in a column of a segment. The iterator starts from the beginning
+    // of the column.
+    //
+    // @param id The unique identifier of the column.
+    // @param path A pointer to the access path of the column.
+    // @return A new iterator object for the specified column, or NotFound if the segment does not have the column.
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator(ColumnUID id, ColumnAccessPath* path);
 
-    [[nodiscard]] Status new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options,
-                                                   BitmapIndexIterator** iter, const TabletSchemaCSPtr& tablet_schema);
+    // Creates a new iterator for a specific column in a segment.
+    //
+    // The main difference from `new_iterator` is, if the segment does not have the
+    // column, `new_column_iterator_or_default` will return an iterator that can read
+    // the default value of the column, if there is one.
+    //
+    // Note: If this column does not have a default value defined, but is nullable, then
+    // NULL will be used as the default value.
+    //
+    // @param id The unique identifier of the column.
+    // @param path A pointer to the access path of the column.
+    // @return A new iterator object for the specified column. If the segment does not have the column and the
+    // column does not hava a default value, an error will be returned.
+    StatusOr<std::unique_ptr<ColumnIterator>> new_column_iterator_or_default(const TabletColumn& column,
+                                                                             ColumnAccessPath* path);
+
+    Status new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** iter);
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
@@ -148,6 +170,10 @@ public:
         return _column_readers.count(unique_id) > 0 ? _column_readers.at(unique_id).get() : nullptr;
     }
 
+    const ColumnReader* column_with_uid(size_t uid) const {
+        return _column_readers.count(uid) > 0 ? _column_readers.at(uid).get() : nullptr;
+    }
+
     FileSystem* file_system() const { return _fs.get(); }
 
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
@@ -165,9 +191,7 @@ public:
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
-    size_t mem_usage() const {
-        return _basic_info_mem_usage() + _short_key_index_mem_usage() + _column_index_mem_usage();
-    }
+    size_t mem_usage() const;
 
     int64_t get_data_size() {
         auto res = _fs->get_file_size(_fname);
@@ -237,8 +261,6 @@ private:
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
-    void _prepare_adapter_info();
-
     bool _use_segment_zone_map_filter(const SegmentReadOptions& read_options);
 
     friend class SegmentIterator;
@@ -261,11 +283,6 @@ private:
     PageHandle _sk_index_handle;
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
-
-    // Actual storage type for each column, used to rewrite the input readoptions
-    std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
-    // When reading old type format data this will be set to true.
-    bool _needs_chunk_adapter = false;
 
     // for cloud native tablet
     lake::TabletManager* _tablet_manager = nullptr;

@@ -416,6 +416,7 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
                 }
 
                 if (dcgs.size() == 0) {
+                    ++idx;
                     continue;
                 }
 

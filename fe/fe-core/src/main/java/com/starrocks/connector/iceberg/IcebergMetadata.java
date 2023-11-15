@@ -421,7 +421,10 @@ public class IcebergMetadata implements ConnectorMetadata {
             statisticProvider.updateIcebergFileStats(
                     icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
 
-            IcebergSplitScanTask icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate);
+            FileScanTask icebergSplitScanTask = scanTask;
+            if (enableCollectColumnStatistics()) {
+                icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate);
+            }
             icebergScanTasks.add(icebergSplitScanTask);
 
             String filePath = icebergSplitScanTask.file().path().toString();

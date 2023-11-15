@@ -55,7 +55,7 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status CacheLibWrapper::write_cache(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+Status CacheLibWrapper::write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
     //  Simulate the behavior of skipping if exists
     if (options && !options->overwrite && _cache->find(key)) {
         return Status::AlreadyExist("the cache item already exists");
@@ -70,8 +70,8 @@ Status CacheLibWrapper::write_cache(const std::string& key, const IOBuffer& buff
     return Status::OK();
 }
 
-Status CacheLibWrapper::read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                                   ReadCacheOptions* options) {
+Status CacheLibWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                                    ReadCacheOptions* options) {
     // TODO:
     // 1. check chain item
     // 2. replace with async methods
@@ -87,7 +87,7 @@ Status CacheLibWrapper::read_cache(const std::string& key, size_t off, size_t si
     return Status::OK();
 }
 
-Status CacheLibWrapper::remove_cache(const std::string& key) {
+Status CacheLibWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
@@ -95,6 +95,15 @@ Status CacheLibWrapper::remove_cache(const std::string& key) {
 std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
     return navy_stats;
+}
+
+Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,
+                                     std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+    return Status::NotSupported("not supported write object in cachelib");
+}
+
+Status CacheLibWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+    return Status::NotSupported("not supported read object in cachelib");
 }
 
 void CacheLibWrapper::record_read_remote(size_t size, int64_t lateny_us) {}

@@ -54,7 +54,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -234,10 +233,6 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     public long getShardGroupId() {
         return this.shardGroupId;
-    }
-
-    public void setShardGroupId(long newShardGroupId) {
-        this.shardGroupId = newShardGroupId;
     }
 
     public void setName(String newName) {
@@ -582,7 +577,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(visibleVersion, baseIndex, distributionInfo);
+        return Objects.hashCode(id, visibleVersion, baseIndex, distributionInfo);
     }
 
     @Override
@@ -595,24 +590,11 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         }
 
         Partition partition = (Partition) obj;
-        if (idToVisibleRollupIndex != partition.idToVisibleRollupIndex) {
-            if (idToVisibleRollupIndex.size() != partition.idToVisibleRollupIndex.size()) {
-                return false;
-            }
-            for (Entry<Long, MaterializedIndex> entry : idToVisibleRollupIndex.entrySet()) {
-                long key = entry.getKey();
-                if (!partition.idToVisibleRollupIndex.containsKey(key)) {
-                    return false;
-                }
-                if (!entry.getValue().equals(partition.idToVisibleRollupIndex.get(key))) {
-                    return false;
-                }
-            }
-        }
-
-        return (visibleVersion == partition.visibleVersion)
+        return (id == partition.id)
+                && (visibleVersion == partition.visibleVersion)
                 && (baseIndex.equals(partition.baseIndex)
-                && distributionInfo.equals(partition.distributionInfo));
+                && distributionInfo.equals(partition.distributionInfo))
+                && Objects.equal(idToVisibleRollupIndex, partition.idToVisibleRollupIndex);
     }
 
     @Override

@@ -52,8 +52,8 @@ static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRp
     doris::PBackendService_Stub* stub = nullptr;
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
-        if (auto res = BrpcStubCache::create_http_stub(dest); res.ok()) {
-            stub = res.value().release();
+        if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {
+            stub = res.value();
         }
     } else {
         stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(dest);
@@ -62,11 +62,6 @@ static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRp
         LOG(WARNING) << strings::Substitute("The brpc stub of {}: {} is null.", dest.hostname, dest.port);
         return;
     }
-    DeferOp defer([&]() {
-        if (via_http) {
-            delete stub;
-        }
-    });
 
     rpc_closure->ref();
     rpc_closure->cntl.Reset();

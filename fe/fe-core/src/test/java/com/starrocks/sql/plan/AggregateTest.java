@@ -1560,55 +1560,59 @@ public class AggregateTest extends PlanTestBase {
 
     @Test
     public void testGroupByConstantWithAggPrune() throws Exception {
-        connectContext.getSessionVariable().setNewPlanerAggStage(4);
         FeConstants.runningUnitTest = true;
 
         String sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (merge finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY");
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         sql = "select count(distinct L_ORDERKEY) from lineitem group by 1.0001, 2.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (merge finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY");
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         sql = "select count(distinct L_ORDERKEY), count(L_PARTKEY) from lineitem group by 1.0001";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: L_ORDERKEY), sum(21: count)\n" +
                 "  |  group by: 18: expr\n" +
                 "  |  \n" +
-                "  3:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(21: count)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: L_PARTKEY)\n" +
                 "  |  group by: 18: expr, 1: L_ORDERKEY\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(2: L_PARTKEY)\n" +
-                "  |  group by: 18: expr, 1: L_ORDERKEY");
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  <slot 18> : 1.0001\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
 
         FeConstants.runningUnitTest = false;
-        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test
@@ -2189,6 +2193,17 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(*), sum(2: t1b)\n" +
                 "  |  group by: 11: expr\n" +
                 "  |  having: dround(0.09733420538671422) IS NULL");
+    }
+
+    @Test
+    public void testPruneGroupByKeysRule4() throws Exception {
+        String sql = "select v1, rand_col, v2, v3, count(1) from (select v1, UUID() v2," +
+                " case when v1 in (1, 6) then round(rand() * 100) else 1 end as rand_col," +
+                " v1 > v1 + 1 or v1 > rand() v3 from t0) a group by 1, 2, 3, 4;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 1: v1, 5: case, 4: uuid, 6: expr");
     }
 
     @Test

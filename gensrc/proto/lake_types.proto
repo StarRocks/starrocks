@@ -62,6 +62,7 @@ message RowsetMetadataPB {
 // the type is is to make it upgradable for compatibility.
 enum PersistentIndexTypePB {
     LOCAL = 0;
+    CLOUD_NATIVE = 1;
 }
 
 message TabletMetadataPB {

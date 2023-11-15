@@ -35,6 +35,7 @@ import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
@@ -198,6 +199,15 @@ public class SetStmtAnalyzer {
                         EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
                                 "supported list is %s", rewriteModeName, supportedList));
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
+            String baseType = resolvedExpression.getStringValue();
+            if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
+                        "supported list is {varchar, decimal}", baseType));
             }
         }
 

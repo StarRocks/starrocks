@@ -217,10 +217,10 @@ public class SetTest extends PlanTestBase {
                 "  5:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
-        Assert.assertTrue(plan.contains("  12:Project\n" +
+        Assert.assertTrue(plan.contains("13:Project\n" +
                 "  |  <slot 7> : 499\n" +
                 "  |  \n" +
-                "  11:UNION\n" +
+                "  12:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL"));
         Assert.assertTrue(plan.contains("0:EXCEPT"));

@@ -28,10 +28,10 @@ import com.starrocks.sql.optimizer.RequiredPropertyDeriver;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.EmptyDistributionProperty;
+import com.starrocks.sql.optimizer.base.EmptySortProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
-import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -457,7 +457,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                  * because repartition require sort again
                  */
                 PhysicalPropertySet newProperty =
-                        new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+                        new PhysicalPropertySet(EmptyDistributionProperty.INSTANCE, EmptySortProperty.INSTANCE,
                                 outputProperty.getCteProperty());
                 groupExpression.getGroup().replaceBestExpressionProperty(outputProperty, newProperty,
                         groupExpression.getCost(outputProperty));

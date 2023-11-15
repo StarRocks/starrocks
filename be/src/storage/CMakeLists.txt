@@ -106,7 +106,6 @@ add_library(Storage STATIC
     rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
-    rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
@@ -194,6 +193,7 @@ add_library(Storage STATIC
     lake/rowset_update_state.cpp
     lake/meta_file.cpp
     lake/lake_primary_index.cpp
+    lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
     binlog_util.cpp

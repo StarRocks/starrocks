@@ -32,7 +32,7 @@ Output Exprs:1: ps_partkey | 18: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-31:MERGING-EXCHANGE
+32:MERGING-EXCHANGE
 distribution type: GATHER
 cardinality: 1600000
 column statistics:
@@ -44,9 +44,9 @@ PLAN FRAGMENT 1(F05)
 
 Input Partition: HASH_PARTITIONED: 1: ps_partkey
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 31
+OutPut Exchange Id: 32
 
-30:SORT
+31:SORT
 |  order by: [18, DECIMAL128(38,2), true] DESC
 |  offset: 0
 |  cardinality: 1600000
@@ -55,7 +55,7 @@ OutPut Exchange Id: 31
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-29:Project
+30:Project
 |  output columns:
 |  1 <-> [1: ps_partkey, INT, true]
 |  18 <-> [18: sum, DECIMAL128(38,2), true]
@@ -64,7 +64,7 @@ OutPut Exchange Id: 31
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |
-28:NESTLOOP JOIN
+29:NESTLOOP JOIN
 |  join op: INNER JOIN
 |  other join predicates: cast([18: sum, DECIMAL128(38,2), true] as DOUBLE) > cast([37: expr, DECIMAL128(38,12), true] as DOUBLE)
 |  cardinality: 1600000
@@ -73,19 +73,19 @@ OutPut Exchange Id: 31
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-|----27:EXCHANGE
+|----28:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 1
 |
-11:AGGREGATE (update finalize)
-|  aggregate: sum[([17: expr, DECIMAL128(24,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
+12:AGGREGATE (merge finalize)
+|  aggregate: sum[([18: sum, DECIMAL128(38,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  group by: [1: ps_partkey, INT, true]
 |  cardinality: 3200000
 |  column statistics:
 |  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 3200000.0] ESTIMATE
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |
-10:EXCHANGE
+11:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [1: ps_partkey, INT, true]
 cardinality: 3200000
@@ -94,30 +94,30 @@ PLAN FRAGMENT 2(F11)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 27
+OutPut Exchange Id: 28
 
-26:ASSERT NUMBER OF ROWS
+27:ASSERT NUMBER OF ROWS
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-25:Project
+26:Project
 |  output columns:
 |  37 <-> [36: sum, DECIMAL128(38,2), true] * 0.0001000000
 |  cardinality: 1
 |  column statistics:
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-24:AGGREGATE (merge finalize)
+25:AGGREGATE (merge finalize)
 |  aggregate: sum[([36: sum, DECIMAL128(38,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
 |  * expr-->[1.0E-4, 999.9000000000001, 0.0, 16.0, 1.0] ESTIMATE
 |
-23:EXCHANGE
+24:EXCHANGE
 distribution type: GATHER
 cardinality: 1
 
@@ -125,15 +125,15 @@ PLAN FRAGMENT 3(F06)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 23
+OutPut Exchange Id: 24
 
-22:AGGREGATE (update serialize)
+23:AGGREGATE (update serialize)
 |  aggregate: sum[(cast([22: ps_supplycost, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast([21: ps_availqty, INT, true] as DECIMAL128(9,0))); args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * sum-->[1.0, 9999000.0, 0.0, 16.0, 1.0] ESTIMATE
 |
-21:Project
+22:Project
 |  output columns:
 |  21 <-> [21: ps_availqty, INT, true]
 |  22 <-> [22: ps_supplycost, DECIMAL64(15,2), true]
@@ -142,7 +142,7 @@ OutPut Exchange Id: 23
 |  * ps_availqty-->[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE
 |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
-20:HASH JOIN
+21:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [20: ps_suppkey, INT, true] = [24: s_suppkey, INT, true]
 |  build runtime filters:
@@ -156,11 +156,11 @@ OutPut Exchange Id: 23
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * expr-->[1.0, 9999000.0, 0.0, 16.0, 99864.0] ESTIMATE
 |
-|----19:EXCHANGE
+|----20:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 40000
 |
-12:HdfsScanNode
+13:HdfsScanNode
 TABLE: partsupp
 NON-PARTITION PREDICATES: 20: ps_suppkey IS NOT NULL
 partitions=1/1
@@ -177,16 +177,16 @@ PLAN FRAGMENT 4(F07)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 19
+OutPut Exchange Id: 20
 
-18:Project
+19:Project
 |  output columns:
 |  24 <-> [24: s_suppkey, INT, true]
 |  cardinality: 40000
 |  column statistics:
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
 |
-17:HASH JOIN
+18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [27: s_nationkey, INT, true] = [31: n_nationkey, INT, true]
 |  build runtime filters:
@@ -198,11 +198,11 @@ OutPut Exchange Id: 19
 |  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
-|----16:EXCHANGE
+|----17:EXCHANGE
 |       distribution type: BROADCAST
 |       cardinality: 1
 |
-13:HdfsScanNode
+14:HdfsScanNode
 TABLE: supplier
 NON-PARTITION PREDICATES: 24: s_suppkey IS NOT NULL
 partitions=1/1
@@ -218,16 +218,16 @@ PLAN FRAGMENT 5(F08)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 16
+OutPut Exchange Id: 17
 
-15:Project
+16:Project
 |  output columns:
 |  31 <-> [31: n_nationkey, INT, true]
 |  cardinality: 1
 |  column statistics:
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 |
-14:HdfsScanNode
+15:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 32: n_name = 'PERU'
 MIN/MAX PREDICATES: 32: n_name <= 'PERU', 32: n_name >= 'PERU'
@@ -242,8 +242,17 @@ PLAN FRAGMENT 6(F00)
 
 Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 1: ps_partkey
-OutPut Exchange Id: 10
+OutPut Exchange Id: 11
 
+10:AGGREGATE (update serialize)
+|  STREAMING
+|  aggregate: sum[([17: expr, DECIMAL128(24,2), true]); args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
+|  group by: [1: ps_partkey, INT, true]
+|  cardinality: 3200000
+|  column statistics:
+|  * ps_partkey-->[1.0, 2.0E7, 0.0, 8.0, 3200000.0] ESTIMATE
+|  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
+|
 9:Project
 |  output columns:
 |  1 <-> [1: ps_partkey, INT, true]
@@ -351,4 +360,3 @@ column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 1.0] ESTIMATE
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 [end]
-

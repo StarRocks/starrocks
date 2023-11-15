@@ -135,6 +135,7 @@
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
     + [Dataphin](./integrations/IDE_integrations/Dataphin.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
+    + [Jupyter](./integrations/IDE_integrations/jupysql.md)
   + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Management
@@ -162,8 +163,9 @@
     + [Overview of privileges](./administration/privilege_overview.md)
     + [Privileges](./administration/privilege_item.md)
     + [Manage user privileges](./administration/User_privilege.md)
-    + [Privilege FAQ](./administration/privilege_faq.md)
+    + [Manage permissions with Apache Ranger](./administration/ranger_plugin.md)
     + [Authentication](./administration/Authentication.md)
+    + [Privilege FAQ](./administration/privilege_faq.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
     + [Analyze query profile](./administration/query_profile.md)
@@ -420,6 +422,7 @@
       + [array_concat](./sql-reference/sql-functions/array-functions/array_concat.md)
       + [array_contains](./sql-reference/sql-functions/array-functions/array_contains.md)
       + [array_contains_all](./sql-reference/sql-functions/array-functions/array_contains_all.md)
+      + [array_contains_seq](./sql-reference/sql-functions/array-functions/array_contains_seq.md)
       + [array_cum_sum](./sql-reference/sql-functions/array-functions/array_cum_sum.md)
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
@@ -739,6 +742,7 @@
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
       + [isnotnull](./sql-reference/sql-functions/utility-functions/isnotnull.md)
+      + [is_role_in_session](./sql-reference/sql-functions/utility-functions/is_role_in_session.md)
       + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
       + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)

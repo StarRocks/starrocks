@@ -65,15 +65,15 @@ struct TTupleDescriptor {
 enum THdfsFileFormat {
   TEXT = 0,
   LZO_TEXT = 1,
-  RC_FILE = 2,
-  SEQUENCE_FILE = 3,
+  RC_BINARY = 2,
+  RC_TEXT = 3,
   AVRO = 4,
   PARQUET = 5,
   ORC = 6,
+  SEQUENCE_FILE = 7,
 
   UNKNOWN = 100
 }
-
 
 // Text file desc
 struct TTextFileDesc {
@@ -268,6 +268,7 @@ struct TOlapTableIndexSchema {
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
+    5: optional Exprs.TExpr where_clause
 }
 
 struct TOlapTableSchemaParam {
@@ -372,6 +373,18 @@ struct THdfsTable {
 
     // The prefixes of locations of partitions in this table
     5: optional list<string> partition_prefixes
+
+    // hive table hive_column_names
+    6: optional string hive_column_names
+
+    // hive table hive_column_types
+    7: optional string hive_column_types
+
+    // hive table input_format
+    8: optional string input_format
+
+    // hive table serde_lib
+    9: optional string serde_lib
 }
 
 struct TFileTable {
@@ -380,6 +393,14 @@ struct TFileTable {
 
     // Schema columns
     2: optional list<TColumn> columns
+
+    3: optional string hive_column_names
+
+    4: optional string hive_column_types
+
+    5: optional string input_format
+
+    6: optional string serde_lib
 }
 
 struct TTableFunctionTable {

@@ -113,6 +113,29 @@ TEST_F(FragmentMgrTest, CancelNormal) {
     ASSERT_TRUE(mgr.cancel(params.params.fragment_instance_id).ok());
 }
 
+TEST_F(FragmentMgrTest, CloseNornaml) {
+    FragmentMgr mgr(ExecEnv::GetInstance());
+    TExecPlanFragmentParams params;
+    params.params.fragment_instance_id = TUniqueId();
+    params.params.fragment_instance_id.__set_hi(100);
+    params.params.fragment_instance_id.__set_lo(200);
+    ASSERT_TRUE(mgr.exec_plan_fragment(params).ok());
+
+    // Close after add, no dead lock
+    mgr.close();
+
+    // error when adding fragment after close()
+    {
+        TExecPlanFragmentParams params;
+        params.params.fragment_instance_id = TUniqueId();
+        params.params.fragment_instance_id.__set_hi(200);
+        params.params.fragment_instance_id.__set_lo(300);
+        auto st = mgr.exec_plan_fragment(params);
+        EXPECT_FALSE(st.ok());
+        EXPECT_TRUE(st.is_cancelled()) << "exec_plan_fragment() failed with error:" << st;
+    }
+}
+
 TEST_F(FragmentMgrTest, CancelWithoutAdd) {
     FragmentMgr mgr(ExecEnv::GetInstance());
     TExecPlanFragmentParams params;

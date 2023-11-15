@@ -77,7 +77,6 @@ protected:
     OlapReaderStatistics _stats;
 
     void SetUp() override {
-        _page_cache_mem_tracker = std::make_unique<MemTracker>();
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;
@@ -101,7 +100,6 @@ protected:
         ASSERT_TRUE(fs::create_directories(rowset_dir).ok());
         ASSERT_TRUE(fs::create_directories(config::storage_root_path + "/data/rowset_test_seg").ok());
         ASSERT_TRUE(fs::create_directories(config::storage_root_path + "/data/rowset_test_delete").ok());
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
         i++;
     }
 
@@ -112,7 +110,7 @@ protected:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
-        StoragePageCache::release_global_cache();
+        StoragePageCache::instance()->prune();
         config::storage_root_path = _default_storage_root_path;
     }
 
@@ -242,7 +240,6 @@ protected:
     void test_final_merge(bool has_merge_condition);
 
 private:
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
     std::string _default_storage_root_path;
 };
 

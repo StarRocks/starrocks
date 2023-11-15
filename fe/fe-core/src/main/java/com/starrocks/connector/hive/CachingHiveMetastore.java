@@ -307,6 +307,9 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public void addPartitions(String dbName, String tableName, List<HivePartitionWithStats> partitions) {
         try {
             metastore.addPartitions(dbName, tableName, partitions);
+        } catch (Exception e) {
+            LOG.warn(e);
+            throw e;
         } finally {
             if (!(metastore instanceof CachingHiveMetastore)) {
                 List<HivePartitionName> partitionNames = partitions.stream()

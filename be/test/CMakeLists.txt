@@ -291,6 +291,7 @@ set(EXEC_FILES
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
+        ./storage/meta_reader_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -339,6 +340,7 @@ set(EXEC_FILES
         ./util/brpc_stub_cache_test.cpp
         ./util/bthreads/future_test.cpp
         ./util/bthreads/promise_test.cpp
+        ./util/bthreads/semaphore_test.cpp
         ./util/bthreads/shared_mutex_test.cpp
         ./util/bthreads/shared_future_test.cpp
         ./util/c_string_test.cpp

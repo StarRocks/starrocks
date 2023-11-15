@@ -73,6 +73,7 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("smallint", TypeValue.SHORT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("float", TypeValue.FLOAT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("bigint", TypeValue.LONG);
@@ -95,6 +96,11 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.STRUCT, "struct");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.MAP, "map");
         PRIMITIVE_TYPE_VALUE_STRING_MAPPING.put(TypeValue.ARRAY, "array");
+
+        // varchar and char for hive, must put after PRIMITIVE_TYPE_VALUE_STRING_MAPPING is generated
+        // so it won't trouble hudi reader to map hudi type to hive type
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("varchar", TypeValue.STRING);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("char", TypeValue.STRING);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BOOLEAN, 1);
@@ -184,7 +190,7 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p = scanner.indexOf('<', ',', '>');
+        int p = scanner.indexOf('<', ',', '>', '(', ')');
         int end = scanner.indexOf(')') + 1;
         String t = scanner.substr(p);
         if (t.startsWith("decimal")) {
@@ -280,7 +286,8 @@ public class ColumnType {
     }
 
     public boolean isDecimal() {
-        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 || typeValue == TypeValue.DECIMAL64 ||
+        return typeValue == TypeValue.DECIMALV2 || typeValue == TypeValue.DECIMAL32 ||
+                typeValue == TypeValue.DECIMAL64 ||
                 typeValue == TypeValue.DECIMAL128;
     }
 

@@ -903,7 +903,7 @@ public class StmtExecutor {
                             PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
                 }
             }
-            killCtx.kill(killStmt.isConnectionKill(), "killed by kiil statement : " + originStmt);
+            killCtx.kill(killStmt.isConnectionKill(), "killed by kill statement : " + originStmt);
         }
         context.getState().setOk();
     }
@@ -1138,7 +1138,12 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
-        executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        try {
+            executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        } finally {
+            ConnectContext.remove();
+        }
+
     }
 
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
@@ -2010,7 +2015,7 @@ public class StmtExecutor {
                 String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable ||
-                            targetTable instanceof HiveTable)) {
+                            targetTable instanceof HiveTable || targetTable instanceof TableFunctionTable)) {
                         // schema table and iceberg table does not need txn
                         mgr.abortTransaction(database.getId(), transactionId, errorMsg);
                     }

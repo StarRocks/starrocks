@@ -46,7 +46,7 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser) {
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
@@ -104,7 +104,7 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser) {
 
     std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
@@ -165,7 +165,7 @@ PARALLEL_TEST(JsonParserTest, test_json_document_stream_parser_with_jsonroot) {
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
@@ -226,7 +226,7 @@ PARALLEL_TEST(JsonParserTest, test_json_array_parser_with_jsonroot) {
 
     std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
@@ -287,7 +287,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_document_stream_parser_with_jso
 
     std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
@@ -349,7 +349,7 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_array_parser_with_jsonroot) {
 
     std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(&simdjson_parser, jsonroot));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
     ASSERT_TRUE(st.ok());
 
     simdjson::ondemand::object row;
@@ -406,7 +406,7 @@ PARALLEL_TEST(JsonParserTest, test_illegal_document_stream) {
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     simdjson::ondemand::object row;
 
@@ -437,7 +437,7 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
 
     std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+    auto st = parser->parse(input.data(), size, padded_size);
 
     ASSERT_TRUE(st.ok());
 
@@ -465,8 +465,7 @@ PARALLEL_TEST(JsonParserTest, test_big_value) {
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), input.size(),
-                            input.size() + simdjson::SIMDJSON_PADDING);
+    auto st = parser->parse(input.data(), input.size(), input.size() + simdjson::SIMDJSON_PADDING);
 
     ASSERT_TRUE(st.ok());
 
@@ -488,8 +487,7 @@ PARALLEL_TEST(JsonParserTest, test_big_json) {
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 
-    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), input.size(),
-                            input.size() + simdjson::SIMDJSON_PADDING);
+    auto st = parser->parse(input.data(), input.size(), input.size() + simdjson::SIMDJSON_PADDING);
 
     ASSERT_TRUE(st.ok());
 

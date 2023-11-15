@@ -164,84 +164,84 @@ select t.map3, s.map4 from map_test t join map_test s where s.map3 <= t.map4 ord
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 60 to line 1, column 72. Detail message: Column type map<varchar(65533),map<int(11),varchar(30)>> does not support binary predicate operation with type map<int(11),json>.')
 -- !result
-select map0 from map_test t where exists (select 1 from map_test s where t.map0 = s.map3);
+select map0 from map_test t where exists (select 1 from map_test s where t.map0 = s.map3) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
 -- !result
-select map1 from map_test t where exists (select 1 from map_test s where t.map1 = s.map3);
+select map1 from map_test t where exists (select 1 from map_test s where t.map1 = s.map3) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<decimal64(16, 3),varchar(30)> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
 -- !result
-select map2 from map_test t where exists (select 1 from map_test s where t.map2 = s.map3);
+select map2 from map_test t where exists (select 1 from map_test s where t.map2 = s.map3) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<int(11),array<varchar(65533)>> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
 -- !result
-select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3);
+select map3 from map_test t where exists (select 1 from map_test s where t.map3 = s.map3) order by t.pk;
 -- result:
-{"11":{1:"abc"},"":{2:null}}
 {"1":{1:"abc"}}
+{"11":{1:"abc"},"":{2:null}}
 {null:{null:null}}
 {"3":{3:"a33c"},null:null}
 -- !result
-select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3);
+select map5 from map_test t where exists (select 1 from map_test s where t.map5 < s.map3) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 73 to line 1, column 84. Detail message: Column type map<int(11),struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type map<varchar(65533),map<int(11),varchar(30)>>.')
 -- !result
-select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map0);
+select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map0) order by t.pk;
 -- result:
 None
 -- !result
-select map1 from map_test t where not exists (select 1 from map_test s where t.map1 = s.map0);
+select map1 from map_test t where not exists (select 1 from map_test s where t.map1 = s.map0) order by t.pk;
 -- result:
-None
 {null:""}
+None
 -- !result
-select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5);
+select map0 from map_test t where not exists (select 1 from map_test s where t.map0 = s.map5) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),varchar(65533)> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
 -- !result
-select map5 from map_test t where not exists (select 1 from map_test s where t.map5 < s.map5);
+select map5 from map_test t where not exists (select 1 from map_test s where t.map5 < s.map5) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type map<int(11),struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type map<int(11),struct<c int(11), b varchar(65533)>>.')
 -- !result
-select map3 from map_test t where map3 in (select map3 from map_test s);
+select map3 from map_test t where map3 in (select map3 from map_test s) order by t.pk;
 -- result:
-{null:{null:null}}
 {"1":{1:"abc"}}
-{"3":{3:"a33c"},null:null}
 {"11":{1:"abc"},"":{2:null}}
+{null:{null:null}}
+{"3":{3:"a33c"},null:null}
 -- !result
-select map4 from map_test t where map4 in (select map5 from map_test s);
+select map4 from map_test t where map4 in (select map5 from map_test s) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 70. Detail message: The input types (map<int(11),json>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
-select map5 from map_test t where map5 in (select map5 from map_test s);
+select map5 from map_test t where map5 in (select map5 from map_test s) order by t.pk;
 -- result:
 {0:{"c":1,"b":"a"}}
+{null:{"c":null,"b":null}}
+{null:{"c":null,"b":null}}
 {null:null,3:{"c":3,"b":"a"}}
-{null:{"c":null,"b":null}}
-{null:{"c":null,"b":null}}
 -- !result
-select map3 from map_test t where map3 not in (select map2 from map_test s);
+select map3 from map_test t where map3 not in (select map2 from map_test s) order by t.pk;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 39 to line 1, column 74. Detail message: The input types (map<varchar(65533),map<int(11),varchar(30)>>,map<int(11),array<varchar(65533)>>) of in predict are not compatible.')
 -- !result
-select map5 from map_test t where map5 not in (select map5 from map_test s);
+select map5 from map_test t where map5 not in (select map5 from map_test s) order by t.pk;
 -- result:
 -- !result
-select map0 in (select map0 from map_test s) from map_test;
+select map0 in (select map0 from map_test s) from map_test order by 1;
 -- result:
-1
 None
 1
 1
 1
+1
 -- !result
-select map3 in (select map5 from map_test s) from map_test;
+select map3 in (select map5 from map_test s) from map_test order by 1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 43. Detail message: The input types (map<varchar(65533),map<int(11),varchar(30)>>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
-select map5 in (select map5 from map_test s) from map_test;
+select map5 in (select map5 from map_test s) from map_test order by 1;
 -- result:
 None
 1
@@ -249,7 +249,7 @@ None
 1
 1
 -- !result
-select map0 not in (select map0 from map_test s) from map_test;
+select map0 not in (select map0 from map_test s) from map_test order by 1;
 -- result:
 None
 0
@@ -257,19 +257,19 @@ None
 0
 0
 -- !result
-select map1 not in (select map0 from map_test s) from map_test;
+select map1 not in (select map0 from map_test s) from map_test order by 1;
 -- result:
-0
+None
 None
 0
 0
-None
+0
 -- !result
-select map4 not in (select map5 from map_test s) from map_test;
+select map4 not in (select map5 from map_test s) from map_test order by 1;
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 12 to line 1, column 47. Detail message: The input types (map<int(11),json>,map<int(11),struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
 -- !result
-select map5 not in (select map5 from map_test s) from map_test;
+select map5 not in (select map5 from map_test s) from map_test order by 1;
 -- result:
 None
 0
@@ -360,4 +360,18 @@ E: (1064, "Getting syntax error at line 1, column 59. Detail message: Unexpected
 select t.map5, s.map5 from map_test t full join map_test s where s.map5 = t.map5 order by t.pk;
 -- result:
 E: (1064, "Getting syntax error at line 1, column 59. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,array_length(v)),s.map2) = map_apply((k,v)->(k+1,array_length(v)),t.map2) order by t.pk;
+-- result:
+{0:["1","2"]}	{0:["1","2"]}
+{1:[]}	{1:[]}
+{null:null}	{null:null}
+{3:["3",null],null:null}	{3:["3",null],null:null}
+-- !result
+select t.map2, s.map2 from map_test t join map_test s on map_apply((k,v)->(k+1,v),s.map2) = map_apply((k,v)->(k+1,v),t.map2) order by t.pk;
+-- result:
+{0:["1","2"]}	{0:["1","2"]}
+{1:[]}	{1:[]}
+{null:null}	{null:null}
+{3:["3",null],null:null}	{3:["3",null],null:null}
 -- !result

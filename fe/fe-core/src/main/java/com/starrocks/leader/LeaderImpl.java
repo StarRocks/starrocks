@@ -34,6 +34,7 @@
 
 package com.starrocks.leader;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -228,8 +229,9 @@ public class LeaderImpl {
         } else {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
-                String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() +
-                        ", backendId: " + backendId + ", signature: " + signature;
+                String taskErrMsg = taskStatus.getError_msgs() != null ? Joiner.on(",").join(taskStatus.getError_msgs()) : "";
+                String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() + ", " +
+                        taskErrMsg + ", backendId: " + backendId + ", signature: " + signature;
                 task.setErrorMsg(errMsg);
                 LOG.warn(errMsg);
                 // We start to let FE perceive the task's error msg

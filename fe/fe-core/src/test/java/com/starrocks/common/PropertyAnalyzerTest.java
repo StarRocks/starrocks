@@ -310,7 +310,7 @@ public class PropertyAnalyzerTest {
     @Test
     public void testSchemaChangeProperties() throws AnalysisException {
         Map<String, String> props = new HashMap<>();
-        props.put(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE, "true");
-        Assert.assertEquals(PropertyAnalyzer.analyzeUseLightSchemaChange(props), true);
+        props.put(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "true");
+        Assert.assertEquals(PropertyAnalyzer.analyzeUseFastSchemaEvolution(props), true);
     }
 }

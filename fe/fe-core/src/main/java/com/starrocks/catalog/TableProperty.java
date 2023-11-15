@@ -212,7 +212,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    private Boolean useSchemaLightChange;
+    private Boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
 
@@ -523,6 +523,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
             persistendIndexType = TPersistentIndexType.LOCAL;
+        } else if (type.equals("CLOUD_NATIVE")) {
+            persistendIndexType = TPersistentIndexType.CLOUD_NATIVE;
         }
         return this;
     }
@@ -531,6 +533,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         switch (type) {
             case LOCAL:
                 return "LOCAL";
+            case CLOUD_NATIVE:
+                return "CLOUD_NATIVE";
             default:
                 // shouldn't happen
                 // for it has been checked outside
@@ -790,14 +794,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
-    public TableProperty buildUseLightSchemaChange() {
-        useSchemaLightChange = Boolean.parseBoolean(
-            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE, "false"));
+    public TableProperty buildUseFastSchemaEvolution() {
+        useFastSchemaEvolution = Boolean.parseBoolean(
+            properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
         return this;
     }
 
-    public Boolean getUseSchemaLightChange() {
-        return useSchemaLightChange;
+    public Boolean getUseFastSchemaEvolution() {
+        return useFastSchemaEvolution;
     }
 
     @Override
@@ -811,7 +815,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        buildDynamicProperty();
+        try {
+            buildDynamicProperty();
+        } catch (Exception ex) {
+            LOG.warn("build dynamic property failed", ex);
+        }
         buildReplicationNum();
         buildInMemory();
         buildStorageVolume();
@@ -833,6 +841,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildBinlogAvailableVersion();
         buildConstraint();
         buildDataCachePartitionDuration();
-        buildUseLightSchemaChange();
+        buildUseFastSchemaEvolution();
     }
 }

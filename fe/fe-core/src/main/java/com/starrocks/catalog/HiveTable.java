@@ -93,7 +93,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_PART_COLUMN_NAMES = "partColumnNames";
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HIVE_PROPERTIES = "hiveProperties";
+
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+
+    public static final String HIVE_TABLE_SERDE_LIB = "hive.table.serde.lib";
+
+    public static final String HIVE_TABLE_INPUT_FORMAT = "hive.table.input.format";
+
+    public static final String HIVE_TABLE_COLUMN_NAMES = "hive.table.column.names";
+
+    public static final String HIVE_TABLE_COLUMN_TYPES = "hive.table.column.types";
 
     private String catalogName;
     @SerializedName(value = "dn")
@@ -171,7 +180,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public boolean isUseMetadataCache() {
-        if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+        if (ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
             return true;
         } else {
             return useMetadataCache;
@@ -243,7 +253,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
         ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
-
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
             Column baseColumn = nameToColumn.get(colName);
@@ -339,6 +348,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             tPartition.setLocation(tPartitionLocation);
             tHdfsTable.putToPartitions(partitionId, tPartition);
         }
+
+        tHdfsTable.setSerde_lib(hiveProperties.get(HIVE_TABLE_SERDE_LIB));
+        tHdfsTable.setInput_format(hiveProperties.get(HIVE_TABLE_INPUT_FORMAT));
+        tHdfsTable.setHive_column_names(hiveProperties.get(HIVE_TABLE_COLUMN_NAMES));
+        tHdfsTable.setHive_column_types(hiveProperties.get(HIVE_TABLE_COLUMN_TYPES));
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
                 0, hiveTableName, hiveDbName);
@@ -513,7 +527,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 Objects.equal(hiveDbName, otherTable.hiveDbName) &&
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
-
 
     public static Builder builder() {
         return new Builder();

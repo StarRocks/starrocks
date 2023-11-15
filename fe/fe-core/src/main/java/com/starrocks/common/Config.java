@@ -725,7 +725,7 @@ public class Config extends ConfigBase {
      * handshake packet version.
      * global variable version.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
 
     /**
@@ -765,6 +765,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int publish_version_interval_ms = 10;
+
+    @ConfField(mutable = true)
+    public static boolean lake_enable_batch_publish_version  = false;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_max_version_num = 10;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_min_version_num = 1;
 
     /**
      * The thrift server max worker threads
@@ -2536,7 +2545,7 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = true;
+    public static boolean enable_fast_schema_evolution = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
@@ -2545,6 +2554,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
+
+    /**
+     * Whether analyze the mv after refresh in async mode.
+     */
+    @ConfField(mutable = true)
+    public static boolean mv_auto_analyze_async = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
@@ -2593,4 +2608,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    // This limit limits the maximum size of json file to load.
+    @ConfField(mutable = true)
+    public static long json_file_size_limit = 4294967296L;
 }

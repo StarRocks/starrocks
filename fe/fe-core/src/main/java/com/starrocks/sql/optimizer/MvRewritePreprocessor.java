@@ -39,6 +39,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,6 +56,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -182,11 +184,14 @@ public class MvRewritePreprocessor {
             logMVPrepare(connectContext, "queryExcludingMVNames:{}, queryIncludingMVNames:{}",
                     Strings.nullToEmpty(queryExcludingMVNames), Strings.nullToEmpty(queryIncludingMVNames));
 
-            Set<String> queryExcludingMVNamesSet = Sets.newHashSet(queryExcludingMVNames.split(","));
-            Set<String> queryIncludingMVNamesSet = Sets.newHashSet(queryIncludingMVNames.split(","));
+            final Set<String> queryExcludingMVNamesSet = Strings.isNullOrEmpty(queryExcludingMVNames) ? Sets.newHashSet()
+                    : Arrays.stream(queryExcludingMVNames.split(",")).map(String::trim).collect(Collectors.toSet());
+
+            final Set<String> queryIncludingMVNamesSet = Strings.isNullOrEmpty(queryIncludingMVNames) ? Sets.newHashSet()
+                    : Arrays.stream(queryIncludingMVNames.split(",")).map(String::trim).collect(Collectors.toSet());
             relatedMvs = relatedMvs.stream()
-                    .filter(mv -> queryIncludingMVNamesSet.contains(mv.getName()))
-                    .filter(mv -> !queryExcludingMVNamesSet.contains(mv.getName()))
+                    .filter(mv -> queryIncludingMVNamesSet.isEmpty() || queryIncludingMVNamesSet.contains(mv.getName()))
+                    .filter(mv -> queryExcludingMVNamesSet.isEmpty() || !queryExcludingMVNamesSet.contains(mv.getName()))
                     .collect(Collectors.toSet());
         }
         if (relatedMvs.isEmpty()) {
@@ -196,16 +201,11 @@ public class MvRewritePreprocessor {
 
         Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
         for (MaterializedView mv : relatedMvs) {
-            if (!mv.isValidPlan()) {
-                // skip to process unsupported plan tree
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}", mv.getName());
-                continue;
-            }
             try {
                 preprocessMv(mv, queryTables, originQueryColumns);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
-                logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), e);
+                logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), e.getMessage());
                 LOG.warn("Preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
@@ -220,7 +220,7 @@ public class MvRewritePreprocessor {
     }
 
     private void preprocessMv(MaterializedView mv, Set<Table> queryTables,
-                              Set<ColumnRefOperator> originQueryColumns) {
+                              Set<ColumnRefOperator> originQueryColumns) throws AnalysisException {
         if (!mv.isActive()) {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return;
@@ -234,7 +234,6 @@ public class MvRewritePreprocessor {
             return;
         }
         if (!mvPlanContext.isValidMvPlan()) {
-            mv.setPlanMode(MaterializedView.PlanMode.INVALID);
             if (mvPlanContext.getLogicalPlan() != null) {
                 logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
                         mv.getName(), mvPlanContext.getLogicalPlan().debugString());

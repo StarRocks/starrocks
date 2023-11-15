@@ -20,10 +20,12 @@
 #include <vector>
 
 #include "runtime/decimalv3.h"
+#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "testutil/parallel_test.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -541,13 +543,56 @@ PARALLEL_TEST(ConvertHelperTest, testValidSchema) {
         auto table_schema = std::make_shared<TabletSchema>(schema_pb);
         out_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(table_schema));
     }
-    ChunkConverter cc;
-    ASSERT_TRUE(cc.init(*in_schema, *out_schema).ok());
-    auto chunk_ptr = ChunkHelper::new_chunk(*in_schema, 10);
-    auto chunk_ptr1 = cc.copy_convert(*chunk_ptr);
-    ASSERT_TRUE(chunk_ptr1->schema()->sort_key_idxes().size() == 1);
-    auto chunk_ptr2 = cc.move_convert(chunk_ptr.get());
-    ASSERT_TRUE(chunk_ptr2->schema()->sort_key_idxes().size() == 1);
 }
 
+PARALLEL_TEST(ConvertHelperTest, testNullableIntConvertString) {
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
+    auto conv = get_type_converter(TYPE_INT, TYPE_VARCHAR);
+    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto c1 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto t0 = get_scalar_type_info(TYPE_INT);
+    auto t1 = get_scalar_type_info(TYPE_VARCHAR);
+
+    c0->append_datum({1});
+    c0->append_nulls(1);
+    auto status =
+            conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), mem_pool.get());
+
+    EXPECT_EQ("1", c1->get(0).get_slice());
+    ASSERT_TRUE(c1->get(1).is_null());
+}
+
+PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertInt) {
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
+    auto conv = get_type_converter(TYPE_VARCHAR, TYPE_INT);
+    auto c0 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto c1 = ChunkHelper::column_from_field_type(TYPE_INT, true);
+    auto t0 = get_scalar_type_info(TYPE_VARCHAR);
+    auto t1 = get_scalar_type_info(TYPE_INT);
+
+    c0->append_datum({"1"});
+    c0->append_nulls(1);
+    auto status =
+            conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), mem_pool.get());
+
+    EXPECT_EQ(1, c1->get(0).get_int32());
+    ASSERT_TRUE(c1->get(1).is_null());
+}
+
+PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertJson) {
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
+    auto conv = get_type_converter(TYPE_VARCHAR, TYPE_JSON);
+    auto c0 = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+    auto c1 = ChunkHelper::column_from_field_type(TYPE_JSON, true);
+    auto t0 = get_scalar_type_info(TYPE_VARCHAR);
+    auto t1 = get_scalar_type_info(TYPE_JSON);
+
+    c0->append_datum({"{}"});
+    c0->append_nulls(1);
+    auto status =
+            conv->convert_column(const_cast<TypeInfo*>(t0), *c0, const_cast<TypeInfo*>(t1), c1.get(), mem_pool.get());
+
+    EXPECT_EQ("{}", c1->get(0).get_json()->to_string_uncheck());
+    ASSERT_TRUE(c1->get(1).is_null());
+}
 } // namespace starrocks

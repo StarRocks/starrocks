@@ -18,7 +18,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -62,16 +64,16 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             BinaryPredicateOperator predicate, PredicateExtractorContext context) {
         ScalarOperator left = predicate.getChild(0);
         ScalarOperator right = predicate.getChild(1);
-        if (left.isColumnRef() && right.isConstantRef()) {
+        if (isSupportedRangeExpr(left) && right.isConstantRef()) {
             ConstantOperator constant = (ConstantOperator) right;
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), constant));
-            return new ColumnRangePredicate(left.cast(), rangeSet);
-        } else if (left.isConstantRef() && right.isColumnRef()) {
+            return new ColumnRangePredicate(left, rangeSet);
+        } else if (left.isConstantRef() && isSupportedRangeExpr(right)) {
             ConstantOperator constant = (ConstantOperator) left;
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), constant));
-            return new ColumnRangePredicate(right.cast(), rangeSet);
+            return new ColumnRangePredicate(right, rangeSet);
         } else if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
             if (predicate.getBinaryType().isEqual()) {
                 columnEqualityPredicates.add(predicate);
@@ -82,6 +84,11 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             residualPredicates.add(predicate);
         }
         return null;
+    }
+
+    private boolean isSupportedRangeExpr(ScalarOperator op) {
+        List<ColumnRefOperator> columns = Utils.collect(op, ColumnRefOperator.class);
+        return op.isVariable() && columns.size() == 1;
     }
 
     @Override
@@ -195,7 +202,7 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 return false;
             }
             ColumnRangePredicate columnRangePredicate = rangePredicate.cast();
-            return columnRangePredicate.getColumnRef().equals(toFind.getColumnRef());
+            return columnRangePredicate.getExpression().equals(toFind.getExpression());
         }).findFirst();
         return rangePredicateOptional;
     }

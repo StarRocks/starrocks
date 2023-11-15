@@ -723,7 +723,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "    EXCHANGE ID: 15\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 21\n" +
+                "    EXCHANGE ID: 22\n" +
                 "    RANDOM");
     }
 

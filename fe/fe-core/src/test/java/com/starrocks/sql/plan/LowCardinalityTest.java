@@ -1058,16 +1058,16 @@ public class LowCardinalityTest extends PlanTestBase {
                 "join supplier_nullable r " +
                 " on l.S_SUPPKEY = r.S_SUPPKEY ) tb group by S_SUPPKEY";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  8:Decode\n" +
-                "  |  <dict id 21> : <string id 17>\n" +
-                "  |  <dict id 22> : <string id 18>\n" +
+        assertContains(plan, "9:Decode\n" +
+                "  |  <dict id 23> : <string id 17>\n" +
+                "  |  <dict id 24> : <string id 18>\n" +
                 "  |  \n" +
-                "  7:Project\n" +
-                "  |  <slot 21> : 21: S_ADDRESS\n" +
-                "  |  <slot 22> : 22: S_COMMENT\n" +
+                "  8:Project\n" +
+                "  |  <slot 23> : 23: S_ADDRESS\n" +
+                "  |  <slot 24> : 24: S_COMMENT\n" +
                 "  |  \n" +
-                "  6:AGGREGATE (update finalize)\n" +
-                "  |  output: max(19: S_ADDRESS), max(20: S_COMMENT)\n" +
+                "  7:AGGREGATE (merge finalize)\n" +
+                "  |  output: max(21: S_ADDRESS), max(22: S_COMMENT)\n" +
                 "  |  group by: 1: S_SUPPKEY");
         plan = getThriftPlan(sql);
         Assert.assertEquals(plan.split("\n").length, 3);
@@ -1075,7 +1075,9 @@ public class LowCardinalityTest extends PlanTestBase {
                 "[TGlobalDict(columnId:19, strings:[6D 6F 63 6B], ids:[1], version:1), " +
                 "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1], version:1), " +
                 "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1], version:1), " +
-                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1], version:1)])");
+                "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:23, strings:[6D 6F 63 6B], ids:[1], version:1), " +
+                "TGlobalDict(columnId:24, strings:[6D 6F 63 6B], ids:[1], version:1)])");
         // the fragment on the top don't have to send global dicts
         sql = "select upper(ST_S_ADDRESS),\n" +
                 "    upper(ST_S_COMMENT)\n" +

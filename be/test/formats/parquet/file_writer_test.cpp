@@ -114,7 +114,7 @@ protected:
         auto ctx = _create_scan_context(type_descs);
         ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size);
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size, 0);
 
         auto st = file_reader->init(ctx);
         if (!st.ok()) {

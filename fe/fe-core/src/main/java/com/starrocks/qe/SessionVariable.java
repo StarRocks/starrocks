@@ -389,7 +389,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
 
+    public static final String ENABLE_FILE_METACACHE = "enable_file_metacache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
+    public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
     public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
@@ -554,6 +556,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
 
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+    
+    public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
+
+    public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -981,7 +989,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
-    private int newPlannerAggStage = 0;
+    private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
@@ -1214,6 +1222,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
+    private boolean enableDynamicPruneScanRange = true;
+
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
 
@@ -1231,6 +1242,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
+
+    @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
+    private boolean enableFileMetaCache = true;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
@@ -1435,6 +1449,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
+    private String cboEqBaseType = SessionVariableConstants.VARCHAR;
+
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
 
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
@@ -2730,6 +2761,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
@@ -2849,9 +2888,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setEnable_scan_datacache(enableScanDataCache);
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
+        tResult.setEnable_file_metacache(enableFileMetaCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
         tResult.setUse_page_cache(usePageCache);
 
         tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);

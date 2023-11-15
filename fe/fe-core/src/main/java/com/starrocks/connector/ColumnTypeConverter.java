@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
@@ -62,7 +61,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.ScalarType.OLAP_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.BOOLEAN;
 import static com.starrocks.catalog.Type.DATE;
@@ -217,14 +215,10 @@ public class ColumnTypeConverter {
             throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported CHAR types: CHAR(<=%d).",
                     type, HiveChar.MAX_CHAR_LENGTH);
         } else if (type.isVarchar()) {
-            if (type.getColumnSize() == -1 || type.getColumnSize() == OLAP_MAX_VARCHAR_LENGTH) {
+            if (type.getColumnSize() == -1 || type.getColumnSize() > HiveVarchar.MAX_VARCHAR_LENGTH) {
                 return stringTypeInfo;
             }
-            if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
-                return getVarcharTypeInfo(type.getColumnSize());
-            }
-            throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported VARCHAR types: VARCHAR(<=%d).",
-                    type, HiveVarchar.MAX_VARCHAR_LENGTH);
+            return getVarcharTypeInfo(type.getColumnSize());
         } else if (type.isArrayType()) {
             TypeInfo itemType = toTypeInfo(((ArrayType) type).getItemType());
             return getListTypeInfo(itemType);

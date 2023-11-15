@@ -86,6 +86,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -127,7 +128,7 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
  * Constant Functions List
  */
 public class ScalarOperatorFunctions {
-    private static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
+    public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
             ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
 
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
@@ -373,8 +374,8 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "year", argTypes = {DATETIME}, returnType = SMALLINT),
-            @ConstantFunction(name = "year", argTypes = {DATE}, returnType = SMALLINT)
+            @ConstantFunction(name = "year", argTypes = {DATETIME}, returnType = SMALLINT, isMonotonic = true),
+            @ConstantFunction(name = "year", argTypes = {DATE}, returnType = SMALLINT, isMonotonic = true)
     })
     public static ConstantOperator year(ConstantOperator arg) {
         return ConstantOperator.createSmallInt((short) arg.getDatetime().getYear());
@@ -405,6 +406,19 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "timestamp", argTypes = {DATETIME}, returnType = DATETIME)
     public static ConstantOperator timestamp(ConstantOperator arg) throws AnalysisException {
         return arg;
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "convert_tz", argTypes = {DATE, VARCHAR, VARCHAR}, returnType = DATETIME),
+            @ConstantFunction(name = "convert_tz", argTypes = {DATETIME, VARCHAR, VARCHAR}, returnType = DATETIME)
+    })
+    public static ConstantOperator convert_tz(ConstantOperator arg, ConstantOperator fromTz, ConstantOperator toTz) {
+        LocalDateTime dt = arg.getDatetime();
+        ZoneId oldZone = ZoneId.of(fromTz.getVarchar());
+
+        ZoneId newZone = ZoneId.of(toTz.getVarchar());
+        LocalDateTime newDateTime = dt.atZone(oldZone).withZoneSameInstant(newZone).toLocalDateTime();
+        return ConstantOperator.createDatetime(newDateTime);
     }
 
     @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)

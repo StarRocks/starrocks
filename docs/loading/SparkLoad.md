@@ -422,6 +422,12 @@ Currently, to use a Hive table in the import process, you need to create an exte
   
 In the load command, you can specify the required fields for building the global dictionary in the following format: `StarRocks field name=bitmap_dict(hive table field name)` Note that currently **the global dictionary is only supported when the upstream data source is a Hive table**.
 
+- **Import of bitmap binary type columns**
+
+The data type applicable to the StarRocks table aggregate column is bitmap type, and the data type of the corresponding column in the data source Hive table or HDFS file type is binary (through com.starrocks.load.loadv2.dpp.BitmapValue in spark-dpp in FE class serialization) type.
+
+There is no need to build a global dictionary, just specify the corresponding fields in the load command. The format is: ```StarRocks field name=bitmap_from_binary(Hive table field name)```
+
 ## Viewing Import Jobs
 
 The Spark load import is asynchronous, as is the broker load. The user must record the label of the import job and use it in the `SHOW LOAD` command to view the import results. The command to view the import is common to all import methods. The example is as follows.

@@ -967,7 +967,7 @@ vectorized_functions = [
 
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
-
+    [150283, 'array_contains_seq', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_seq'],
     [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
     [150301, 'all_match', 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::all_match'],
     [150302, 'any_match', 'BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::any_match'],

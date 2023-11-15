@@ -538,6 +538,9 @@ set (LLVM_LIBRARIES
     LLVMJITLink
     LLVMCFGuard
     LLVMInstrumentation
+    LLVMInstCombine
+    LLVMipo
+    LLVMVectorize
     LLVMIRReader
     LLVMCore
     LLVMTarget
@@ -560,9 +563,9 @@ set (LLVM_LIBRARIES
     LLVMMCParser
 )
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set(${LLVM_LIBRARIES} ${LLVM_LIBRARIES} LLVMX86CodeGen LLVMX86Desc LLVMX86Info)
+    list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info)
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    set(${LLVM_LIBRARIES} ${LLVM_LIBRARIES} LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info)
+    list(APPEND LLVM_LIBRARIES LLVMAArch64CodeGen LLVMAArch64Desc LLVMAArch64Info)
 endif()
 
 foreach(lib IN ITEMS ${LLVM_LIBRARIES})
@@ -607,7 +610,11 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment"
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fno-sized-deallocation")
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables -Werror=string-plus-int -Werror=pessimizing-move")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    # Turn on following warning as error explicitly
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=string-plus-int")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=pessimizing-move")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=delete-non-virtual-dtor")
     if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "11.0.0")
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
     endif()

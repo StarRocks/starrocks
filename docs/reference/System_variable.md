@@ -15,6 +15,14 @@ The variables in StarRocks refer to the variable sets in MySQL, but **some varia
 > SET GLOBAL query_mem_limit = 137438953472; -- Apply to all future sessions.
 > ```
 
+## Variable hierarchy and types
+
+StarRocks supports three types (levels) of variables: global variables, session variables, and `SET_VAR` hints. Their hierarchical relationship is as follows:
+
+* Global variables take effect on global level, and can be overridden by session variables and `SET_VAR` hints.
+* Session variables take effect only on the current session, and can be overridden by `SET_VAR` hints.
+* `SET_VAR` hints take effect only on the current query statement.
+
 ## View variables
 
 You can view all or some variables by using `SHOW VARIABLES [LIKE 'xxx']`. Example:
@@ -189,6 +197,12 @@ Whether to enable bucketization for the COUNT DISTINCT colum in a group-by-count
 Default value: false, which means this feature is disabled. You must use this variable with the variable `count_distinct_column_buckets`.
 
 You can also enable bucketization for the COUNT DISTINCT column by adding the `skew` hint to your query, for example, `select a,count(distinct [skew] b) from t group by a;`.
+
+### enable_group_level_query_queue (3.1.4 and later)
+
+Whether to enable resource group-level [query queue](../administration/query_queues.md).
+
+Default value: false, which means this feature is disabled.
 
 ### enable_insert_strict
 

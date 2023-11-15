@@ -19,13 +19,13 @@ import autovalue.shaded.com.google.common.common.collect.Lists;
 import autovalue.shaded.com.google.common.common.collect.Sets;
 import com.google.common.base.Preconditions;
 import com.staros.proto.ShardGroupInfo;
-import com.starrocks.alter.AlterJobV2;
-import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,27 +71,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        // 1. get shadow shard groups
-                        List<AlterJobV2> jobs = GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
-                                                              .getUnfinishedAlterJobV2ByTableId(table.getId());
-                        // if job is finished, then shadow shard groups will be normal shard groups,
-                        // guranteed by db lock;
-                        // if job is not finished, collect them below so that they will not be deleted
-                        for (AlterJobV2 job : jobs) {
-                            if (!(job instanceof LakeTableSchemaChangeJob)) {
-                                // only cloud schema change has shadow shard group
-                                continue;
-                            }
-                            LakeTableSchemaChangeJob realJob = (LakeTableSchemaChangeJob) job;
-                            if (realJob.getShardGroupIdMap() != null) {
-                                realJob.getShardGroupIdMap()
-                                       .entrySet()
-                                       .stream()
-                                       .map(e -> e.getValue()).forEach(groupIds::add);
-                            }
-                        }
-
-                        // 2. get normal shard groups
                         GlobalStateMgr.getCurrentState()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
@@ -214,7 +194,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         LOG.debug("emptyShardGroup.size is {}", emptyShardGroup.size());
         if (!emptyShardGroup.isEmpty()) {
             starOSAgent.deleteShardGroup(emptyShardGroup);
-            LOG.info("delete shard group: {}", emptyShardGroup);
         }
     }
 
@@ -258,5 +237,67 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         deleteUnusedShardAndShardGroup();
         deleteUnusedWorker();
+    }
+
+    // do a one time sync, delete all shards from this table that exist in starmgr but not in fe
+    public static void syncTableMeta(String dbName, String tableName, boolean forceDeleteData) throws DdlException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        if (db == null) {
+            throw new DdlException(String.format("db %s does not exist.", dbName));
+        }
+
+        HashMap<Long, List<Long>> feGroupToShards = new HashMap<>();
+        db.readLock();
+        try {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                throw new DdlException(String.format("table %s does not exist.", tableName));
+            }
+            if (!table.isCloudNativeTableOrMaterializedView()) {
+                throw new DdlException("only support cloud table or cloud mv.");
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            for (Partition partition : olapTable.getAllPartitions()) {
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    long groupId = physicalPartition.getShardGroupId();
+                    List<Long> feShardIds = new ArrayList<>();
+                    for (MaterializedIndex materializedIndex :
+                            physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        for (Tablet tablet : materializedIndex.getTablets()) {
+                            feShardIds.add(tablet.getId());
+                        }
+                    }
+                    if (!feShardIds.isEmpty()) {
+                        feGroupToShards.put(groupId, feShardIds);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new DdlException(e.getMessage());
+        } finally {
+            db.readUnlock();
+        }
+
+        // delete tablet meta and data, outside db lock
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+        Set<Long> shardToDelete = new HashSet<>();
+        for (Map.Entry<Long, List<Long>> entry : feGroupToShards.entrySet()) {
+            List<Long> starmgrShardIds = starOSAgent.listShard(entry.getKey());
+            starmgrShardIds.removeAll(entry.getValue());
+            if (forceDeleteData) {
+                try {
+                    // delete shard in starmgr but not in fe
+                    dropTabletAndDeleteShard(starmgrShardIds, starOSAgent);
+                } catch (Exception e) {
+                    // ignore exception
+                    LOG.info(e.getMessage());
+                }
+            }
+            shardToDelete.addAll(starmgrShardIds);
+        }
+
+        // do final meta delete, regardless whether above tablet deleted or not
+        starOSAgent.deleteShards(shardToDelete);
     }
 }

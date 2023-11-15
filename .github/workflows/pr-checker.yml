@@ -53,7 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
-       startsWith(github.event.pull_request.title, '[Enhancement]')) &&
+       startsWith(github.event.pull_request.title, '[Enhancement]') ||
+       startsWith(github.event.pull_request.title, '[Doc]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:

@@ -48,7 +48,9 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -337,7 +339,6 @@ public class AuthorizationMgrTest {
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
 
-        AuthenticationMgr authenticationMgr = masterGlobalStateMgr.getAuthenticationMgr();
         AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
@@ -361,7 +362,6 @@ public class AuthorizationMgrTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationMgr.revoke(revokeStmt);
         setCurrentUserAndRoles(ctx, testUser);
-        ;
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
                 ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
@@ -395,6 +395,100 @@ public class AuthorizationMgrTest {
         authorizationMgr.invalidateUserInCache(ctx.getCurrentUserIdentity());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
                 ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+    }
+
+    @Test
+    public void testBuiltinRolePersist() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
+        String sql = "create role r1";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+
+        sql = "grant r1 to test_user";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        saveRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataOutputStream());
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        sql = "grant root to role r1";
+        GrantRoleStmt grantStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationMgr.grantRole(grantStmt);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
+
+        sql = "revoke root from role r1";
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        RevokeRoleStmt revokeStmt = (RevokeRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        authorizationMgr.revokeRole(revokeStmt);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+
+        // start to replay
+        loadRBACPrivilege(masterGlobalStateMgr, emptyImage.getDataInputStream());
+        AuthorizationMgr followerManager = masterGlobalStateMgr.getAuthorizationMgr();
+
+        RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
+        followerManager.replayUpdateRolePrivilegeCollection(info);
+        authorizationMgr.invalidateRolesInCacheRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
+        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1,
+                PrivilegeType.SELECT);
+
+        info = (RolePrivilegeCollectionInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2);
+        followerManager.replayUpdateRolePrivilegeCollection(info);
+        authorizationMgr.invalidateRolesInCacheRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID);
+        Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(ctx.getCurrentUserIdentity(),
+                ctx.getCurrentRoleIds(), DB_NAME, TABLE_NAME_1, PrivilegeType.SELECT));
+
+        sql = "drop role r1";
+        stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+    }
+
+    @Test
+    public void testWontSavePrivCollForBuiltInRole() throws Exception {
+        GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
+        AuthorizationMgr authorizationMgr = masterGlobalStateMgr.getAuthorizationMgr();
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        authorizationMgr.saveV2(emptyImage.getDataOutputStream());
+
+        SRMetaBlockReader reader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        // read the whole first
+        reader.readJson(AuthorizationMgr.class);
+        // read the number of user
+        int numUser = reader.readJson(int.class);
+        // there should be only 2 users: root and test_user
+        Assert.assertEquals(2, numUser);
+
+        // read users and ignore them
+        for (int i = 0; i != numUser; ++i) {
+            // 2 json for each user(kv)
+            reader.readJson(UserIdentity.class);
+            reader.readJson(UserPrivilegeCollectionV2.class);
+        }
+
+        // read the number of roles
+        int numRole = reader.readJson(int.class);
+        for (int i = 0; i != numRole; ++i) {
+            // 2 json for each role(kv)
+            Long roleId = reader.readJson(Long.class);
+            RolePrivilegeCollectionV2 collection = reader.readJson(RolePrivilegeCollectionV2.class);
+            if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                // built-in role's priv collection should not be saved
+                Assert.assertTrue(collection.typeToPrivilegeEntryList.isEmpty());
+            }
+        }
     }
 
     @Test

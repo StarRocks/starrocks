@@ -66,7 +66,7 @@ if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
 else
-    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/include/llvm/InitializePasses.h ]]; then
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
@@ -82,7 +82,9 @@ Usage: $0 <options>
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --clean            clean and build target
-     --use-staros       build Backend with staros
+     --enable-shared-data
+                        build Backend with shared-data feature support
+     --use-staros       DEPRECATED, an alias of --enable-shared-data option
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
@@ -115,6 +117,7 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'without-java-ext' \
   -l 'use-staros' \
+  -l 'enable-shared-data' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -190,14 +193,14 @@ fi
 
 HELP=0
 if [ $# == 1 ] ; then
-    # default
+    # default. `sh build.sh``
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
-elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
-    # default
+elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
+    # default. `sh build.sh -j 32`
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
@@ -219,7 +222,7 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --use-staros) USE_STAROS=ON; shift ;;
+            --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
@@ -252,7 +255,7 @@ echo "Get params:
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
     WITH_CLANG_TIDY     -- $WITH_CLANG_TIDY
-    USE_STAROS          -- $USE_STAROS
+    ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
@@ -335,7 +338,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     # Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
     # Once the starcache version is stable, we will turn on it by default.
     if [[ -z ${WITH_STARCACHE} ]]; then
-      WITH_STARCACHE=${USE_STAROS}
+      WITH_STARCACHE=ON
     fi
 
     if [[ "${WITH_STARCACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/starcache/lib/libstarcache.a ]]; then
@@ -491,6 +494,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
     cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
@@ -508,6 +514,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/*.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/
     MSG="${MSG} √ ${MSG_BE}"
 fi
 

@@ -324,7 +324,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             for (String column : clause.getSortKeys()) {
                 int idx = columnNames.indexOf(column);
                 if (idx == -1) {
-                    throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                    throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
                 sortKeyIdxes.add(idx);
             }
@@ -385,6 +385,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 partitionIds.add(partition.getId());
             }
+            clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
         }
@@ -451,10 +452,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
                     if (refColumn.isGeneratedColumn()) {
-                        throw new SemanticException("Expression can not refers to other generated columns");
+                        throw new SemanticException("Expression can not refers to other generated columns: " +
+                                refColumn.getName());
                     }
                     if (refColumn.isAutoIncrement()) {
-                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                refColumn.getName());
                     }
                 }
             }
@@ -486,12 +489,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 colPos.analyze();
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
-            }
-        }
-        if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
-            Column afterColumn = table.getColumn(colPos.getLastCol());
-            if (afterColumn.isGeneratedColumn()) {
-                throw new SemanticException("Can not add column after Generated Column");
             }
         }
 
@@ -694,10 +691,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
                     if (refColumn.isGeneratedColumn()) {
-                        throw new SemanticException("Expression can not refers to other generated columns");
+                        throw new SemanticException("Expression can not refers to other generated columns: " +
+                                refColumn.getName());
                     }
                     if (refColumn.isAutoIncrement()) {
-                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                refColumn.getName());
                     }
                 }
             }

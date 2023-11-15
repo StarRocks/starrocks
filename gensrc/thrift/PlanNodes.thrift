@@ -263,6 +263,7 @@ struct TBrokerScanRangeParams {
     27: optional i8 escape
     // confluent schema registry url for pb import
     28: optional string confluent_schema_registry_url
+    29: optional i64 json_file_size_limit;
 }
 
 // Broker scan range

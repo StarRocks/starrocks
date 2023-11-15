@@ -173,7 +173,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/agg_with_having3"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second.contains("TEST_MV_3"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("TEST_MV_2"));
     }
 
     @Test

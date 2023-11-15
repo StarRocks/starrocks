@@ -26,10 +26,6 @@ public class HiveStorageFormatTest {
                 "Please use 'file_format' instead of 'format' in the table properties",
                 () -> HiveStorageFormat.check(ImmutableMap.of("format", "csv")));
 
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Unsupported hive storage format avro",
-                () -> HiveStorageFormat.check(ImmutableMap.of("file_format", "avro")));
-
         HiveStorageFormat.check(ImmutableMap.of("file_format", "textfile"));
     }
 }

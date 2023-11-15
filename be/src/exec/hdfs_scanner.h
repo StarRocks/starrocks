@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/runtime_filter_bank.h"
 #include "fs/fs.h"
 #include "io/cache_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
@@ -55,13 +56,15 @@ struct HdfsScanStats {
     int64_t page_read_ns = 0;
     // reader init
     int64_t footer_read_ns = 0;
+    int64_t footer_cache_read_ns = 0;
+    int64_t footer_cache_read_count = 0;
+    int64_t footer_cache_write_count = 0;
+    int64_t footer_cache_write_bytes = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
     int64_t group_dict_filter_ns = 0;
     int64_t group_dict_decode_ns = 0;
-    // iceberg pos-delete filter
-    int64_t build_iceberg_pos_filter_ns = 0;
     // io coalesce
     int64_t group_active_lazy_coalesce_together = 0;
     int64_t group_active_lazy_coalesce_seperately = 0;
@@ -74,9 +77,12 @@ struct HdfsScanStats {
     int64_t group_min_round_cost = 0;
 
     // ORC only!
-    int64_t delete_build_ns = 0;
-    int64_t delete_file_per_scan = 0;
     std::vector<int64_t> stripe_sizes;
+
+    // Iceberg v2 only!
+    int64_t iceberg_delete_file_build_ns = 0;
+    int64_t iceberg_delete_files_per_scan = 0;
+    int64_t iceberg_delete_file_build_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
@@ -147,6 +153,7 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
+    // The file last modification time
     int64_t modification_time = 0;
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -190,6 +197,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    bool use_file_metacache = false;
 };
 
 struct HdfsScannerContext {
@@ -238,6 +246,8 @@ struct HdfsScannerContext {
 
     bool can_use_min_max_count_opt = false;
 
+    bool use_file_metacache = false;
+
     std::string timezone;
 
     const TIcebergSchema* iceberg_schema = nullptr;
@@ -262,11 +272,12 @@ struct HdfsScannerContext {
     std::vector<ExprContext*> conjunct_ctxs_of_non_existed_slots;
 
     // other helper functions.
-    void update_partition_column_of_chunk(ChunkPtr* chunk, size_t row_count);
     bool can_use_dict_filter_on_slot(SlotDescriptor* slot) const;
 
     void append_not_existed_columns_to_chunk(ChunkPtr* chunk, size_t row_count);
-    void append_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+
+    // If there is no partition column in the chunk，append partition column to chunk，otherwise update partition column in chunk
+    void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
@@ -282,11 +293,10 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
-    Status open(RuntimeState* runtime_state);
-    void close(RuntimeState* runtime_state) noexcept;
-    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
-    void finalize();
+    Status open(RuntimeState* runtime_state);
+    Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
+    void close() noexcept;
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
@@ -333,6 +343,8 @@ public:
 
 protected:
     Status open_random_access_file();
+
+    void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
 
 private:
     bool _opened = false;

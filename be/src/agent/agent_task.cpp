@@ -122,6 +122,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
         error_msgs.emplace_back("alter failed");
         error_msgs.emplace_back("status: " + print_agent_status(status));
+        error_msgs.emplace_back(sc_status.get_error_msg());
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -223,7 +224,7 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
                      << ", signature: " << agent_task_req->signature;
         status_code = TStatusCode::RUNTIME_ERROR;
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
-            error_msgs.emplace_back("create tablet failed");
+            error_msgs.emplace_back(create_status.to_string(false));
         } else {
             error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
         }

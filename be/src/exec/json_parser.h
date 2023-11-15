@@ -26,7 +26,7 @@ public:
     JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
     virtual ~JsonParser() = default;
     // parse initiates the parser. The inner iterator would point to the first object to be returned.
-    virtual Status parse(uint8_t* data, size_t len, size_t allocated) noexcept = 0;
+    virtual Status parse(char* data, size_t len, size_t allocated) noexcept = 0;
     // get returns the object pointed by the inner iterator.
     virtual Status get_current(simdjson::ondemand::object* row) noexcept = 0;
     // next forwards the inner iterator.
@@ -36,7 +36,7 @@ public:
 
 protected:
     simdjson::ondemand::parser* const _parser;
-    uint8_t* _data = nullptr;
+    char* _data = nullptr;
     size_t _len = 0;
 };
 
@@ -46,7 +46,7 @@ protected:
 class JsonDocumentStreamParser : public JsonParser {
 public:
     JsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
-    Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
+    Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
@@ -75,7 +75,7 @@ private:
 class JsonArrayParser : public JsonParser {
 public:
     JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
-    Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
+    Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
@@ -157,7 +157,7 @@ class ExpandedJsonDocumentStreamParserWithRoot : public JsonDocumentStreamParser
 public:
     ExpandedJsonDocumentStreamParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonDocumentStreamParser(parser), _root_paths(std::move(root_paths)) {}
-    Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
+    Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
 
@@ -192,7 +192,7 @@ class ExpandedJsonArrayParserWithRoot : public JsonArrayParser {
 public:
     ExpandedJsonArrayParserWithRoot(simdjson::ondemand::parser* parser, std::vector<SimpleJsonPath> root_paths)
             : JsonArrayParser(parser), _root_paths(std::move(root_paths)) {}
-    Status parse(uint8_t* data, size_t len, size_t allocated) noexcept override;
+    Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
 

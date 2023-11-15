@@ -16,6 +16,7 @@
 
 #include "exec/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks {
@@ -37,6 +38,7 @@ Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParam
 }
 
 Status OlapMetaScanner::_init_meta_reader_params() {
+    _reader_params.tablet_id = _tablet->tablet_id();
     _reader_params.tablet = _tablet;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;

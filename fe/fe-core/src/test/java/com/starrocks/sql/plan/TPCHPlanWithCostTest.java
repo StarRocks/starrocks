@@ -26,14 +26,14 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        FeConstants.showLocalShuffleColumnsInExplain = false;
+        FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
         connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
     }
 
     @AfterClass
     public static void afterClass() {
-        FeConstants.showLocalShuffleColumnsInExplain = true;
+        FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
     }
 
     @Test
