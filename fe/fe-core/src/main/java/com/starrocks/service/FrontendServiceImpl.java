@@ -67,6 +67,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
+import com.starrocks.catalog.system.sys.ObjectDependencies;
 import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;

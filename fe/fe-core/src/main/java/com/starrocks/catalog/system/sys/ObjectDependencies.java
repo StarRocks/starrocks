@@ -14,11 +14,25 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TObjectDependencyItem;
+import com.starrocks.thrift.TObjectDependencyReq;
+import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TSchemaTableType;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.Collection;
 
 public class ObjectDependencies {
 
@@ -28,9 +42,61 @@ public class ObjectDependencies {
         return new SystemTable(SystemId.OBJECT_DEPENDENCIES, NAME, Table.TableType.SCHEMA,
                 SystemTable.builder()
                         .column("object_id", ScalarType.BIGINT)
+                        .column("object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+
                         .column("ref_object_id", ScalarType.BIGINT)
+                        .column("ref_object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_OBJECT_DEPENDENCIES);
+    }
+
+    public static TObjectDependencyRes listObjectDependencies(TObjectDependencyReq req) {
+        TAuthInfo auth = req.getAuth_info();
+        TObjectDependencyRes response = new TObjectDependencyRes();
+
+        UserIdentity currentUser;
+        if (auth.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
+        } else {
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
+        }
+
+        // list dependencies of mv
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
+        for (Database db : CollectionUtils.emptyIfNull(dbs)) {
+            for (Table table : db.getTables()) {
+                // Only show tables with privilege
+                try {
+                    Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                if (table.isMaterializedView()) {
+                    MaterializedView mv = (MaterializedView) table;
+                    for (BaseTableInfo refObj : CollectionUtils.emptyIfNull(mv.getBaseTableInfos())) {
+                        TObjectDependencyItem item = new TObjectDependencyItem();
+                        item.object_id = mv.getId();
+                        item.object_name = mv.getName();
+                        item.database = db.getFullName();
+                        item.catalog = db.getCatalogName();
+
+                        item.ref_object_id = refObj.getTableId();
+                        item.ref_object_name = refObj.getTableName();
+                        item.ref_database = refObj.getDbName();
+                        item.ref_catalog = refObj.getCatalogName();
+
+                        response.addToItems(item);
+                    }
+                }
+            }
+        }
+
+        return response;
     }
 
 }
