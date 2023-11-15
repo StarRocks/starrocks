@@ -892,7 +892,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     return fastSchemaEvolution;
                 }
                 // 2. add to rollup
-                fastSchemaEvolution = false;
                 modIndexSchema = indexSchemaMap.get(targetIndexId);
                 checkAndAddColumn(modIndexSchema, newColumn, columnPos, newColNameSet, false);
             }
@@ -905,7 +904,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 return fastSchemaEvolution;
             } else {
                 // add to rollup index
-                fastSchemaEvolution = false;
                 List<Column> modIndexSchema = indexSchemaMap.get(targetIndexId);
                 checkAndAddColumn(modIndexSchema, newColumn, columnPos, newColNameSet, false);
 
@@ -932,7 +930,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 return fastSchemaEvolution;
             }
 
-            fastSchemaEvolution = false;
             // 2. add to rollup index
             modIndexSchema = indexSchemaMap.get(targetIndexId);
             checkAndAddColumn(modIndexSchema, newColumn, columnPos, newColNameSet, false);
