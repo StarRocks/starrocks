@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
@@ -92,6 +93,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -182,6 +184,10 @@ public class Optimizer {
 
         try (Timer ignored = Tracers.watchScope("RuleBaseOptimize")) {
             logicOperatorTree = rewriteAndValidatePlan(connectContext, logicOperatorTree, rootTaskContext);
+        }
+
+        if (logicOperatorTree.getShortCircuit()) {
+            return logicOperatorTree;
         }
 
         memo.init(logicOperatorTree);
@@ -303,7 +309,11 @@ public class Optimizer {
     private OptExpression logicalRuleRewrite(ConnectContext connectContext,
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
-        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
+        if (result.isPresent()) {
+            return result.get();
+        }
+
         ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
 
@@ -442,6 +452,23 @@ public class Optimizer {
         return tree.getInputs().get(0);
     }
 
+    private Optional<OptExpression> ruleRewriteForShortCircuit(OptExpression tree, TaskContext rootTaskContext) {
+        Boolean isShortCircuit = tree.getShortCircuit();
+        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        tree.setShortCircuit(isShortCircuit);
+
+        if (isShortCircuit) {
+            ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
+            deriveLogicalProperty(tree);
+            pruneTables(tree, rootTaskContext, requiredColumns);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SHORT_CIRCUIT_SET);
+            OptExpression result = tree.getInputs().get(0);
+            result.setShortCircuit(true);
+            return Optional.of(result);
+        }
+        return Optional.empty();
+    }
+
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
                                                  SessionVariable sessionVariable,
                                                  OptExpression queryPlan) {
@@ -482,6 +509,11 @@ public class Optimizer {
         OptExpression result = logicalRuleRewrite(connectContext, tree, rootTaskContext);
         OptExpressionValidator validator = new OptExpressionValidator();
         validator.validate(result);
+        // skip memo
+        if (result.getShortCircuit()) {
+            result = new OlapScanImplementationRule().transform(result, null).get(0);
+            result.setShortCircuit(true);
+        }
         return result;
     }
 

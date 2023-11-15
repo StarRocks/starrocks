@@ -575,10 +575,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
-    
+
     public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
+
+    public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1446,6 +1448,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = AUDIT_EXECUTE_STMT)
     private boolean auditExecuteStmt = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
+    private boolean enableShortCircuit = true;
 
     private int exprChildrenLimit = -1;
 
@@ -2831,6 +2836,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
+    }
+
+    public boolean isEnableShortCircuit() {
+        return enableShortCircuit;
     }
 
     public void setLargeDecimalUnderlyingType(String type) {
