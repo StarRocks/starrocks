@@ -1,6 +1,6 @@
 # Releases of StarRocks Connector for Flink
 
-## **Notifications**
+## Notifications
 
 **User guide:**
 

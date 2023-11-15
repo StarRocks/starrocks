@@ -1,6 +1,6 @@
-#  Releases of StarRocks Connector for Spark
+# Releases of StarRocks Connector for Spark
 
-## **Notifications**
+## Notifications
 
 **User guide:**
 
