@@ -31,11 +31,10 @@
 #include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
 #include "udf/udf.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 
-TEST(BitmapValueTest, bitmap_union) {
+TEST(BitmapValueTest_1, bitmap_union) {
     BitmapValue empty;
     BitmapValue single(1024);
     BitmapValue bitmap({1024, 1025, 1026});
@@ -71,7 +70,7 @@ TEST(BitmapValueTest, bitmap_union) {
     ASSERT_EQ(5, bitmap2.cardinality());
 }
 
-TEST(BitmapValueTest, bitmap_intersect) {
+TEST(BitmapValueTest_1, bitmap_intersect) {
     BitmapValue empty;
     BitmapValue single(1024);
     BitmapValue bitmap({1024, 1025, 1026});
@@ -141,7 +140,7 @@ std::string convert_bitmap_to_string(BitmapValue& bitmap) {
     return buf;
 }
 
-TEST(BitmapValueTest, bitmap_serde) {
+TEST(BitmapValueTest_1, bitmap_serde) {
     bool use_v1 = config::bitmap_serialize_version == 1;
     BitmapTypeCode::type type_bitmap32 = BitmapTypeCode::BITMAP32_SERIV2;
     BitmapTypeCode::type type_bitmap64 = BitmapTypeCode::BITMAP64_SERIV2;
@@ -225,7 +224,7 @@ TEST(BitmapValueTest, bitmap_serde) {
 }
 
 // Forked from CRoaring's UT of Roaring64Map
-TEST(BitmapValueTest, Roaring64Map) {
+TEST(BitmapValueTest_1, Roaring64Map) {
     using starrocks::detail::Roaring64Map;
     // create a new empty bitmap
     Roaring64Map r1;
@@ -309,7 +308,7 @@ TEST(BitmapValueTest, Roaring64Map) {
     ASSERT_EQ(r1_sum, sum);
 }
 
-TEST(BitmapValueTest, bitmap_to_string) {
+TEST(BitmapValueTest_1, bitmap_to_string) {
     BitmapValue empty;
     ASSERT_STREQ("", empty.to_string().c_str());
     empty.add(1);
@@ -318,7 +317,7 @@ TEST(BitmapValueTest, bitmap_to_string) {
     ASSERT_STREQ("1,2", empty.to_string().c_str());
 }
 
-TEST(BitmapValueTest, bitmap_single_convert) {
+TEST(BitmapValueTest_1, bitmap_single_convert) {
     BitmapValue bitmap;
     ASSERT_STREQ("", bitmap.to_string().c_str());
     bitmap.add(1);
@@ -339,7 +338,7 @@ TEST(BitmapValueTest, bitmap_single_convert) {
     ASSERT_EQ(BitmapValue::SET, bitmap._type);
 }
 
-TEST(BitmapValueTest, bitmap_max) {
+TEST(BitmapValueTest_1, bitmap_max) {
     std::unique_ptr<FunctionContext> ctx_ptr;
     FunctionContext* ctx;
     ctx_ptr.reset(FunctionContext::create_test_context());
@@ -363,7 +362,7 @@ TEST(BitmapValueTest, bitmap_max) {
     ASSERT_EQ(bitmap.max(), std::numeric_limits<uint64_t>::max());
 }
 
-TEST(BitmapValueTest, bitmap_min) {
+TEST(BitmapValueTest_1, bitmap_min) {
     std::unique_ptr<FunctionContext> ctx_ptr;
     FunctionContext* ctx;
     ctx_ptr.reset(FunctionContext::create_test_context());
@@ -387,7 +386,7 @@ TEST(BitmapValueTest, bitmap_min) {
     ASSERT_EQ(bitmap.min(), 0);
 }
 
-TEST(BitmapValueTest, bitmap_xor) {
+TEST(BitmapValueTest_1, bitmap_xor) {
     // {3} ^ {1,2} = {1,2,3}
     {
         BitmapValue bm1;

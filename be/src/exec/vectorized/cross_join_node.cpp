@@ -226,7 +226,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
         }
     } else {
         if (src_col->is_constant()) {
@@ -237,7 +237,7 @@ void CrossJoinNode::_copy_probe_rows_with_index_base_probe(ColumnPtr& dest_col, 
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number);
         }
     }
 }
@@ -298,14 +298,14 @@ void CrossJoinNode::_copy_build_rows_with_index_base_build(ColumnPtr& dest_col, 
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
+            dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count);
         }
     }
 }
