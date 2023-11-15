@@ -44,7 +44,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TFrontend;
 import com.starrocks.thrift.TNetworkAddress;
@@ -55,9 +57,11 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -328,17 +332,28 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+
+        List<ComputeNode> nodeList;
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            nodeList = warehouse.getAnyAvailableCluster().getAllComputeNodes();
+        } else {
+            nodeList = Lists.newArrayList(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values());
+        }
+
+        for (ComputeNode node : nodeList) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
-            if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
+            if ((node.isAlive() && beId == null) || (beId != null && beId.equals(node.getId()))) {
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
-                location.setBackend_id(be.getId());
-                location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
+                location.setBackend_id(node.getId());
+                location.setServer(new TNetworkAddress(node.getHost(), node.getBePort()));
                 scanRangeLocations.addToLocations(location);
                 TScanRange scanRange = new TScanRange();
                 scanRangeLocations.setScan_range(scanRange);
