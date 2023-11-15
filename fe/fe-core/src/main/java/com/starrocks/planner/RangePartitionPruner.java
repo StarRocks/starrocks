@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -113,9 +114,10 @@ public class RangePartitionPruner implements PartitionPruner {
         }
 
         boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn, filter);
-        if (null == inPredicateLiterals || inPredicateLiterals.size() * complex > inPredicateMaxLen) {
-            LiteralExpr lowerBound = filter.getLowerBound();
-            LiteralExpr upperBound = filter.getUpperBound();
+        LiteralExpr lowerBound = filter.getLowerBound();
+        LiteralExpr upperBound = filter.getUpperBound();
+        if (null == inPredicateLiterals || ((lowerBound != null || upperBound != null) &&
+                inPredicateLiterals.size() * complex > inPredicateMaxLen)) {
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
                     && lowerBound != null && upperBound != null
                     && 0 == lowerBound.compareLiteral(upperBound)) {
@@ -195,8 +197,16 @@ public class RangePartitionPruner implements PartitionPruner {
         Set<Long> resultSet = Sets.newHashSet();
         int newComplex = inPredicateLiterals.size() * complex;
         for (LiteralExpr expr : inPredicateLiterals) {
-            minKey.pushColumn(expr, keyColumn.getPrimitiveType());
-            maxKey.pushColumn(expr, keyColumn.getPrimitiveType());
+            if (isConvertToDate) {
+                LiteralExpr convertExpr = PartitionUtil.convertToDateLiteral(expr);
+                Preconditions.checkState(convertExpr.getType().equals(keyColumn.getType()));
+                minKey.pushColumn(convertExpr, keyColumn.getPrimitiveType());
+                maxKey.pushColumn(convertExpr, keyColumn.getPrimitiveType());
+            } else {
+                Preconditions.checkState(expr.getType().equals(keyColumn.getType()));
+                minKey.pushColumn(expr, keyColumn.getPrimitiveType());
+                maxKey.pushColumn(expr, keyColumn.getPrimitiveType());
+            }
             Collection<Long> subList = prune(rangeMap, columnIdx + 1, minKey, maxKey, newComplex);
             resultSet.addAll(subList);
             minKey.popColumn();
