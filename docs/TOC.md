@@ -511,7 +511,6 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
-      + [date_diff](./sql-reference/sql-functions/date-time-functions/date_diff.md)
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_slice](./sql-reference/sql-functions/date-time-functions/date_slice.md)
       + [date_sub, subdate](./sql-reference/sql-functions/date-time-functions/date_sub.md)
@@ -676,15 +675,12 @@
       + [like](./sql-reference/sql-functions/like_predicate-functions/like.md)
       + [regexp](./sql-reference/sql-functions/like_predicate-functions/regexp.md)
       + [regexp_extract](./sql-reference/sql-functions/like_predicate-functions/regexp_extract.md)
-      + [regexp_extract_all](./sql-reference/sql-functions/like_predicate-functions/regexp_extract_all.md)
       + [regexp_replace](./sql-reference/sql-functions/like_predicate-functions/regexp_replace.md)
     + Percentile Functions
       + [percentile_approx_raw](./sql-reference/sql-functions/percentile-functions/percentile_approx_raw.md)
       + [percentile_empty](./sql-reference/sql-functions/percentile-functions/percentile_empty.md)
       + [percentile_hash](./sql-reference/sql-functions/percentile-functions/percentile_hash.md)
       + [percentile_union](./sql-reference/sql-functions/percentile-functions/percentile_union.md)
-    + Scalar Functions
-      + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Utility Functions
       + [catalog](./sql-reference/sql-functions/utility-functions/catalog.md)
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
@@ -741,12 +737,3 @@
   + [Kafka connector](./ecosystem_release/kafka_connector.md)
   + [Spark connector](./ecosystem_release/spark_connector.md)
   + [Flink connector](./ecosystem_release/flink_connector.md)
-+ Release Notes
-  + [v3.0](./release_notes/release-3.0.md)
-  + [v2.5-stable](./release_notes/release-2.5.md)
-  + [v2.4](./release_notes/release-2.4.md)
-  + [v2.3](./release_notes/release-2.3.md)
-  + [v2.2](./release_notes/release-2.2.md)
-  + [v2.1](./release_notes/release-2.1.md)
-  + [v2.0](./release_notes/release-2.0.md)
-  + [v1.19](./release_notes/release-1.19.md)

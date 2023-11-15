@@ -316,6 +316,7 @@ You can find a function based on the following categories:
 - [cardinality](../sql-functions/map-functions/cardinality.md)
 - [element_at](../sql-functions/map-functions/element_at.md)
 - [map_apply](../sql-functions/map-functions/map_apply.md)
+- [map_from_arrays](../sql-functions/map-functions/map_from_arrays.md)
 - [map_keys](../sql-functions/map-functions/map_keys.md)
 - [map_size](../sql-functions/map-functions/map_size.md)
 - [map_values](../sql-functions/map-functions/map_values.md)

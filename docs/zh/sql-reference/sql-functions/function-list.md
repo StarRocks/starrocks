@@ -322,8 +322,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [map_keys](./map-functions/map_keys.md)| 返回 Map 中所有 key 组成的数组。 |
 |  [map_size](./map-functions/map_size.md)| 计算 Map 中元素的个数。 |
 |  [map_values](./map-functions/map_values.md)| 返回 Map 中所有 Value 组成的数组。 |
-|  [transform_keys](./map-functions/transform_keys.md)| 对 Map 中的 key 进行 Lambda 转换。 |
-|  [transform_values](./map-functions/transform_values.md)| 对 Map 中的 value 进行 lambda 转换。 |
 
 ## Bit 函数
 
