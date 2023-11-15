@@ -858,8 +858,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 sb.append(String.format("%d:%d/%d/%d/%d:%s:%s,", replica.getBackendId(), replica.getVersion(),
-                    replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
-                    replica.getState(), getReplicaBackendState(replica.getBackendId())));
+                        replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
+                        replica.getState(), getReplicaBackendState(replica.getBackendId())));
 
             }
         }
