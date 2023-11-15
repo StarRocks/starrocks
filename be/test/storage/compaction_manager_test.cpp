@@ -18,7 +18,7 @@
 
 namespace starrocks {
 
-TEST_F(CompactionManagerTest, test_candidates) {
+TEST(CompactionManagerTest, test_candidates) {
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i <= 10; i++) {
@@ -65,39 +65,6 @@ TEST_F(CompactionManagerTest, test_candidates) {
             ASSERT_LE(candidate.score, last_score);
             last_score = candidate.score;
         }
-    }
-}
-
-TEST_F(CompactionManagerTest, test_candidates_exceede) {
-    config::max_compaction_candidate_num = 10;
-    std::vector<CompactionCandidate> candidates;
-    DataDir data_dir("./data_dir");
-    for (int i = 0; i < 20; i++) {
-        TabletSharedPtr tablet = std::make_shared<Tablet>();
-        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
-        tablet_meta->set_tablet_id(i);
-        tablet->set_tablet_meta(tablet_meta);
-        tablet->set_data_dir(&data_dir);
-        tablet->set_tablet_state(TABLET_RUNNING);
-
-        CompactionCandidate candidate;
-        candidate.tablet = tablet;
-        candidate.score = i;
-        candidates.push_back(candidate);
-    }
-
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(candidates.begin(), candidates.end(), g);
-
-    _engine->compaction_manager()->update_candidates(candidates);
-
-    config::max_compaction_candidate_num = 40960;
-    {
-        ASSERT_EQ(10, _engine->compaction_manager()->candidates_size());
-        CompactionCandidate candidate_1;
-        _engine->compaction_manager()->pick_candidate(&candidate_1);
-        ASSERT_EQ(19, candidate_1.tablet->tablet_id());
     }
 }
 
@@ -174,6 +141,39 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
 TEST(CompactionManagerTest, test_next_compaction_task_id) {
     uint64_t start_task_id = StorageEngine::instance()->compaction_manager()->next_compaction_task_id();
     ASSERT_LT(0, start_task_id);
+}
+
+TEST_F(CompactionManagerTest, test_candidates_exceede) {
+    config::max_compaction_candidate_num = 10;
+    std::vector<CompactionCandidate> candidates;
+    DataDir data_dir("./data_dir");
+    for (int i = 0; i < 20; i++) {
+        TabletSharedPtr tablet = std::make_shared<Tablet>();
+        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+        tablet_meta->set_tablet_id(i);
+        tablet->set_tablet_meta(tablet_meta);
+        tablet->set_data_dir(&data_dir);
+        tablet->set_tablet_state(TABLET_RUNNING);
+
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = i;
+        candidates.push_back(candidate);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(candidates.begin(), candidates.end(), g);
+
+    _engine->compaction_manager()->update_candidates(candidates);
+
+    config::max_compaction_candidate_num = 40960;
+    {
+        ASSERT_EQ(10, _engine->compaction_manager()->candidates_size());
+        CompactionCandidate candidate_1;
+        _engine->compaction_manager()->pick_candidate(&candidate_1);
+        ASSERT_EQ(19, candidate_1.tablet->tablet_id());
+    }
 }
 
 } // namespace starrocks
