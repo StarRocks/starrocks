@@ -2483,7 +2483,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     statement.getPipeName().getDbName(), PrivilegeType.CREATE_PIPE);
-            visitQueryStatement(statement.getInsertStmt().getQueryStatement(), context);
+            visitInsertStatement(statement.getInsertStmt(), context);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
