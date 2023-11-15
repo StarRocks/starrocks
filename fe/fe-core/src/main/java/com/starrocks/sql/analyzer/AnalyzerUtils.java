@@ -46,11 +46,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.ListPartitionInfo;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.MaterializedView;
->>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
