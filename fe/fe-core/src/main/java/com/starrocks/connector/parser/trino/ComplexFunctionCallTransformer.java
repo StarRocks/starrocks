@@ -15,11 +15,14 @@
 package com.starrocks.connector.parser.trino;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Type;
@@ -73,6 +76,13 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("element_at function must have 2 arguments");
             }
             return new CollectionElementExpr(args[0], args[1]);
+        } else if (functionName.equalsIgnoreCase("regexp_extract")) {
+            // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
+            FunctionCallExpr regexpExtractFunc = new FunctionCallExpr("regexp_extract",
+                    ImmutableList.of(args[0], args[1], args.length == 3 ? args[2] : new IntLiteral(0L)));
+            BinaryPredicate predicate = new BinaryPredicate(BinaryType.EQ, regexpExtractFunc, new StringLiteral(""));
+            // regexp_extract -> if(regexp_extract(xxx)='', null, regexp_extract(xxx))
+            return new FunctionCallExpr("if", ImmutableList.of(predicate, new NullLiteral(), regexpExtractFunc));
         }
         return null;
     }
