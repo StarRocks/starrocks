@@ -54,6 +54,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
@@ -398,12 +399,14 @@ public class TransactionState implements Writable {
 
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
-        if (this.tabletCommitInfos == null || this.tabletCommitInfos.contains(info)) {
+        if (this.tabletCommitInfos == null) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
             // if tabletCommitInfos is null, skip this check and return true
+            LOG.warn("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
+                    tabletId, backend != null ? backend.toString() : "", transactionId);
             return true;
-        } else {
-            return false;
         }
+        return this.tabletCommitInfos.contains(info);
     }
 
     // Only for OlapTable
@@ -752,6 +755,9 @@ public class TransactionState implements Writable {
         }
         if (txnCommitAttachment != null) {
             sb.append(" attachment: ").append(txnCommitAttachment);
+        }
+        if (tabletCommitInfos != null) {
+            sb.append(" tabletCommitInfos size: ").append(tabletCommitInfos.size());
         }
         return sb.toString();
     }
