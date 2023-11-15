@@ -437,13 +437,11 @@ public class PartitionUtil {
         if (partitionColumnFilter == null || partitionColumn == null) {
             return false;
         }
-        LiteralExpr lowerBound = partitionColumnFilter.getLowerBound();
-        LiteralExpr upperBound = partitionColumnFilter.getUpperBound();
-        LiteralExpr literalExpr = (lowerBound == null) ? upperBound : lowerBound;
-        if (literalExpr == null) {
+        Type filterType = partitionColumnFilter.getFilterType();
+        if (filterType == null) {
             return false;
         }
-        return isConvertToDate(partitionColumn.getType(), literalExpr.getType());
+        return isConvertToDate(partitionColumn.getType(), filterType);
     }
 
     /**
