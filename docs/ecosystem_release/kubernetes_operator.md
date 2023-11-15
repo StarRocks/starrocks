@@ -26,7 +26,7 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
   - Default configuration file for StarRocks Operator: `operator.yaml`
   - Helm Chart, including `kube-starrocks` Chart `kube-starrocks-${chart_version}.tgz`. The `kube-starrocks` Chart is divided into two subcharts: `starrocks` Chart `starrocks-${chart_version}.tgz` and `operator` Chart `operator-${chart_version}.tgz`.
 
-For example, the download URL for kube-starrocks chart v1.8.6 is: 
+For example, the download URL for kube-starrocks chart v1.8.6 is:
 
 `https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.8.6/kube-starrocks-1.8.6.tgz`
 
