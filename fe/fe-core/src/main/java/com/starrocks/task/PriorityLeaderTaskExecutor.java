@@ -112,10 +112,15 @@ public class PriorityLeaderTaskExecutor {
 
     public void setPoolSize(int poolSize) {
         // corePoolSize and maximumPoolSize are same.
-        // Must set corePoolSize first, because setMaximumPoolSize() will throw IllegalArgumentException
-        // if maximumPoolSize < corePoolSize.
-        executor.setCorePoolSize(poolSize);
-        executor.setMaximumPoolSize(poolSize);
+        // setCorePoolSize and setMaximumPoolSize() will throw IllegalArgumentException
+        int prePoolSize = executor.getMaximumPoolSize();
+        if (poolSize < prePoolSize) {
+            executor.setCorePoolSize(poolSize);
+            executor.setMaximumPoolSize(poolSize);
+        } else {
+            executor.setMaximumPoolSize(poolSize);
+            executor.setCorePoolSize(poolSize);
+        }
     }
 
     private class TaskChecker implements Runnable {
