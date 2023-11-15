@@ -35,6 +35,7 @@ import software.amazon.awssdk.services.glue.GlueClientBuilder;
 import software.amazon.awssdk.services.kms.KmsClient;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.sts.StsClient;
 import software.amazon.awssdk.services.sts.StsClientBuilder;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
@@ -54,6 +55,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SESS
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
@@ -78,7 +80,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
     private String s3ExternalId;
     private String s3Region;
     private String s3Endpoint;
-
+    private boolean s3EnablePathStyleAccess;
     private boolean glueUseAWSSDKDefaultBehavior;
     private boolean glueUseInstanceProfile;
     private String glueAccessKey;
@@ -102,6 +104,8 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         s3ExternalId = properties.getOrDefault(AWS_S3_EXTERNAL_ID, "");
         s3Region = properties.getOrDefault(AWS_S3_REGION, "");
         s3Endpoint = properties.getOrDefault(AWS_S3_ENDPOINT, "");
+        s3EnablePathStyleAccess =
+                Boolean.parseBoolean(properties.getOrDefault(AWS_S3_ENABLE_PATH_STYLE_ACCESS, "false"));
 
         glueUseAWSSDKDefaultBehavior = Boolean.parseBoolean(
                 properties.getOrDefault(AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
@@ -162,6 +166,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         if (!s3Endpoint.isEmpty()) {
             s3ClientBuilder.endpointOverride(ensureSchemeInEndpoint(s3Endpoint));
         }
+
+        // set for s3 path style access
+        s3ClientBuilder.serviceConfiguration(
+                S3Configuration.builder().pathStyleAccessEnabled(s3EnablePathStyleAccess).build());
 
         return s3ClientBuilder.build();
     }
