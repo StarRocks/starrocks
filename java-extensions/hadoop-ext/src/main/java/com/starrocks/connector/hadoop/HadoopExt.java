@@ -15,6 +15,11 @@
 package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.security.UserGroupInformation;
+>>>>>>> 0e0b2bbc2c ([BugFix][Hadoop-Ext] rewrite configuration before get UGI and bind UGI to filesystem (#34829))
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +39,10 @@ public class HadoopExt {
     }
 
     public void rewriteConfiguration(Configuration conf) {
+    }
+
+    public FileSystem bindUGIToFileSystem(FileSystem fs, UserGroupInformation ugi) {
+        return fs;
     }
 
     public String getCloudConfString(Configuration conf) {
