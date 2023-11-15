@@ -42,7 +42,7 @@ Status MatchChineseTermOperator::_match_internal(lucene::search::HitCollector* h
     auto reader = _CLNEW lucene::util::SimpleInputStreamReader(_CLNEW lucene::util::AStringReader(_term.c_str()),
                                                                lucene::util::SimpleInputStreamReader::UTF8);
 
-    lucene::analysis::TokenStream* token_stream = _analyzer->tokenStream(_field_name.c_str(), reader);
+    lucene::analysis::TokenStream* token_stream = _analyzer->reusableTokenStream(_field_name.c_str(), reader);
 
     lucene::analysis::Token token;
     std::vector<std::wstring> analyse_result;
