@@ -205,4 +205,33 @@ public class AlterTableTest {
         Assert.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
     }
 
+    @Test
+    public void testAlterTablePartitionStorageMedium() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_partition_storage_medium (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY RANGE(event_day)(\n" +
+                "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_partition_storage_medium SET(\"default.storage_medium\" = \"SSD\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable olapTable = (OlapTable) db.getTable("test_partition_storage_medium");
+        Assert.assertTrue(olapTable.getStorageMedium().equals("SSD"));
+    }
+
 }
