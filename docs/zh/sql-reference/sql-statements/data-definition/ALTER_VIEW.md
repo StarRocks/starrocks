@@ -1,0 +1,35 @@
+# ALTER VIEW
+
+## 功能
+
+该语句用于修改一个 VIEW 的定义。
+
+## 语法
+
+```sql
+ALTER VIEW
+[db_name.]view_name
+(column1[ COMMENT "col comment"][, column2, ...])
+AS query_stmt
+```
+
+说明：
+
+1. 视图都是逻辑上的，其中的数据不会存储在物理介质上，在查询时视图将作为语句中的子查询。因此，修改视图的定义等价于修改 query_stmt。
+2. query_stmt 为任意支持的 SQL。
+
+## example
+
+1. 修改 example_db 上的视图 example_view。
+
+    ```sql
+    ALTER VIEW example_db.example_view
+    (
+        c1 COMMENT "column 1",
+        c2 COMMENT "column 2",
+        c3 COMMENT "column 3"
+    )
+    AS SELECT k1, k2, SUM(v1) 
+    FROM example_table
+    GROUP BY k1, k2;
+    ```
