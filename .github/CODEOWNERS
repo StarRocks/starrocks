@@ -25,3 +25,8 @@
 # /thirdparty/ /docker/dockerfiles/dev-env/dev-env.Dockerfile belong to thirdparty-maintainer
 /thirdparty/  @StarRocks/thirdparty-maintainer
 /docker/dockerfiles/dev-env/dev-env.Dockerfile   @StarRocks/thirdparty-maintainer
+
+# cloud-native
+/be/src/storage/lake/ @StarRocks/cloud-native
+/be/src/runtime/lake_tablets_channel.h @StarRocks/cloud-native
+/be/src/runtime/lake_tablets_channel.cpp @StarRocks/cloud-native
