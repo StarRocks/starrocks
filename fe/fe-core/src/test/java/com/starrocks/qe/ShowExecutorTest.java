@@ -70,11 +70,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.proc.OptimizeProcDir;
-import com.starrocks.datacache.DataCacheMgr;
->>>>>>> b5848a2b32 ([BugFix] Fix show alter table optimize with filter (#34897))
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
