@@ -728,6 +728,11 @@ under the License.
                 <version>202</version>
             </dependency>
 
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>1.14.9</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

@@ -15,6 +15,7 @@
 package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
@@ -145,5 +146,10 @@ public class CelerDataHadoopExt extends HadoopExt {
             LOGGER.warn(LOGGER_MESSAGE_PREFIX + " create hdfs ugi failed", e);
         }
         return null;
+    }
+
+    @Override
+    public FileSystem bindUGIToFileSystem(FileSystem fs, UserGroupInformation ugi) {
+        return FileSystemByteBuddyProxy.createFSProxy(fs, ugi);
     }
 }

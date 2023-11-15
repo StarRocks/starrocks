@@ -26,6 +26,12 @@
             <artifactId>hadoop-common</artifactId>
             <version>3.3.6</version>
         </dependency>
+
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+            <version>1.14.9</version>
+        </dependency>
     </dependencies>
 
     <build>

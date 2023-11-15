@@ -386,7 +386,13 @@ public class UserGroupInformation {
    * @return true if UGI is working in a secure environment
    */
   public static boolean isSecurityEnabled() {
-    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+    //    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+    AuthenticationMethod method = authenticationMethod;
+    try {
+      method = getCurrentUser().getAuthenticationMethod();
+    } catch (IOException e) {
+    }
+    return !(method == AuthenticationMethod.SIMPLE);
   }
   
   @InterfaceAudience.Private
