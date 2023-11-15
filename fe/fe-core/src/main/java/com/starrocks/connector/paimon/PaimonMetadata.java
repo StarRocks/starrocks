@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
@@ -62,21 +63,17 @@ public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
     private final Catalog paimonNativeCatalog;
     private final HdfsEnvironment hdfsEnvironment;
-    private final String catalogType;
-    private final String metastoreUris;
-    private final String warehousePath;
     private final String catalogName;
+    private final Options paimonOptions;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
-                          String catalogType, String metastoreUris, String warehousePath) {
+                          Options paimonOptions) {
         this.paimonNativeCatalog = paimonNativeCatalog;
         this.hdfsEnvironment = hdfsEnvironment;
-        this.catalogType = catalogType;
-        this.metastoreUris = metastoreUris;
-        this.warehousePath = warehousePath;
+        this.paimonOptions = paimonOptions;
         this.catalogName = catalogName;
     }
 
@@ -164,8 +161,19 @@ public class PaimonMetadata implements ConnectorMetadata {
             Column column = new Column(fieldName, fieldType, true);
             fullSchema.add(column);
         }
+<<<<<<< HEAD
         PaimonTable table = new PaimonTable(catalogName, dbName, tblName, fullSchema,
                 catalogType, metastoreUris, warehousePath, paimonNativeTable);
+=======
+        long createTime = 0;
+        try {
+            createTime = getTableCreateTime(dbName, tblName);
+        } catch (Exception e) {
+            LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
+        }
+        PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema,
+                this.paimonOptions, paimonNativeTable, createTime);
+>>>>>>> e95749dc9d ([BugFix] fix the issue of reading paimon table on OSS (#34996))
         tables.put(identifier, table);
         return table;
     }

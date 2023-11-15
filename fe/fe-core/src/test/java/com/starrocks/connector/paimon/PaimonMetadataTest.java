@@ -42,6 +42,8 @@ import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.options.CatalogOptions;
+import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
@@ -79,8 +81,11 @@ public class PaimonMetadataTest {
     @Before
     public void setUp() {
 
-        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog,
-                "filesystem", null, "hdfs://127.0.0.1:9999/warehouse");
+        Options options = new Options();
+        options.set(CatalogOptions.METASTORE, "filesystem");
+        options.set(CatalogOptions.WAREHOUSE, "hdfs://127.0.0.1:9999/warehouse");
+
+        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog, options);
 
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
