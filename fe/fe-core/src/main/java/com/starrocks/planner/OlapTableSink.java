@@ -276,6 +276,7 @@ public class OlapTableSink extends DataSink {
 
     @Override
     public TDataSink toThrift() {
+        LOG.info("xxx data sink: {}", tDataSink);
         return tDataSink;
     }
 

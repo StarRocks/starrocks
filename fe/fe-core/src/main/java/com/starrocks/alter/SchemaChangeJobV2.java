@@ -431,12 +431,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
+            LOG.info("xxx add shadow index. table: {}, job: {}", tbl.getId(), jobId);
         } finally {
             db.writeUnlock();
         }
 
         this.watershedTxnId =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        LOG.info("xxx get watershed txn id: {}, job: {}", watershedTxnId, jobId);
         this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
@@ -947,7 +949,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
         tbl.setMaxColUniqueId(maxColUniqueId);
-        LOG.debug("fullSchema:{}, maxColUniqueId:{}", tbl.getFullSchema(), maxColUniqueId);
+        LOG.info("xxx on finished. fullSchema:{}, maxColUniqueId:{}, job: {}", tbl.getFullSchema(), maxColUniqueId, jobId);
 
 
         tbl.setState(OlapTableState.NORMAL);
