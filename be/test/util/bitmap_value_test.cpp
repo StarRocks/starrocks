@@ -31,7 +31,6 @@
 #include "types/bitmap_value.h"
 #include "types/bitmap_value_detail.h"
 #include "udf/udf.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks::vectorized {
 
