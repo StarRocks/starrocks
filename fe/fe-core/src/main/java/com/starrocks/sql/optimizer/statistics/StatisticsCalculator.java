@@ -359,11 +359,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    @Override
-    public Void visitLogicalOdpsScan(LogicalOdpsScanOperator node, ExpressionContext context) {
-        LOG.info("[debug] visit logical odps scan");
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
-    }
 
     @Override
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
@@ -381,11 +376,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         return visitOperator(node, context);
     }
+    @Override
+    public Void visitLogicalOdpsScan(LogicalOdpsScanOperator node, ExpressionContext context) {
+        return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
 
     @Override
     public Void visitPhysicalOdpsScan(PhysicalOdpsScanOperator node, ExpressionContext context) {
-        LOG.info("[debug] visit physical odps scan");
-        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+        return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+            context.setStatistics(stats);
+        }
+        return visitOperator(node, context);
     }
 
     public Void visitLogicalHudiScan(LogicalHudiScanOperator node, ExpressionContext context) {

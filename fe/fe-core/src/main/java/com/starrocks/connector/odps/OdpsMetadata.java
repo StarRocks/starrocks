@@ -197,7 +197,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         OdpsTableName odpsTableName = OdpsTableName.of(srDbName, table.getName());
         tableCache.invalidate(odpsTableName);
         get(tableCache, odpsTableName);
-        if(!table.isUnPartitioned()) {
+        if (!table.isUnPartitioned()) {
             partitionCache.invalidate(odpsTableName);
             get(partitionCache, odpsTableName);
         }
