@@ -248,7 +248,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         if (!strRegion.isEmpty()) {
             return Region.of(strRegion);
         }
-        Region region = null;
+        Region region = Region.of(AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
         try {
             DefaultAwsRegionProviderChain providerChain = DefaultAwsRegionProviderChain.builder()
                     .profileFile(ProfileFile::defaultProfileFile)
@@ -258,7 +258,6 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             LOG.info(
                     "AWS sdk unable to load region from DefaultAwsRegionProviderChain, using default region us-east-1 instead",
                     e);
-            region = Region.of(AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
         }
         return region;
     }
