@@ -75,6 +75,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 throw e;
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
@@ -107,6 +109,8 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 throw e;
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
