@@ -21,6 +21,7 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -139,7 +141,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                                               List<ScalarOperator> skewValues,
                                               OptimizerContext context) {
         ColumnRefSet columnRefSet = input.getOutputColumns();
-
+        // case when skew is null then round(rand() * 100) when skew in (skew values) then round(rand() * 100) else 0 end
         Function randFn = Expr.getBuiltinFunction(FunctionSet.RAND, new Type[] {},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator randFnOperator = new CallOperator(FunctionSet.RAND, randFn.getReturnType(), Lists.newArrayList(),
@@ -156,26 +158,28 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         CallOperator roundFnOperator = new CallOperator(FunctionSet.ROUND, roundFn.getReturnType(),
                 Lists.newArrayList(multiplyFnOperator), roundFn);
 
-        ColumnRefOperator roundColOperator = context.getColumnRefFactory().create(FunctionSet.ROUND,
-                roundFnOperator.getType(), roundFnOperator.isNullable());
+        IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(skewColumn);
 
         List<ScalarOperator> inPredicateArgs = Lists.newArrayList();
         inPredicateArgs.add(skewColumn);
+        skewValues.remove(ConstantOperator.createNull(ScalarType.NULL));
         inPredicateArgs.addAll(skewValues);
         InPredicateOperator inPredicateOperator = new InPredicateOperator(false, inPredicateArgs);
 
-        Function ifFn = Expr.getBuiltinFunction(FunctionSet.IF,
-                new Type[] {Type.BOOLEAN, roundColOperator.getType(), Type.INT},
-                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-        CallOperator ifFnOperator = new CallOperator(FunctionSet.IF, roundColOperator.getType(),
-                Lists.newArrayList(inPredicateOperator, roundFnOperator, ConstantOperator.createBigint(0)),
-                ifFn);
+        List<ScalarOperator> when = Lists.newArrayList();
+        when.add(isNullPredicateOperator);
+        when.add(roundFnOperator);
+        when.add(inPredicateOperator);
+        when.add(roundFnOperator);
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(roundFnOperator.getType(), null,
+                ConstantOperator.createBigint(0), when);
 
         Map<ColumnRefOperator, ScalarOperator> projectMaps = columnRefSet.getStream()
                 .map(columnRefId -> context.getColumnRefFactory().getColumnRef(columnRefId))
                 .collect(Collectors.toMap(
                         java.util.function.Function.identity(), java.util.function.Function.identity()));
-        projectMaps.put(context.getColumnRefFactory().create(RAND_COL, ifFnOperator.getType(), true), ifFnOperator);
+        projectMaps.put(context.getColumnRefFactory().create(RAND_COL, caseWhenOperator.getType(), true),
+                caseWhenOperator);
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMaps);
         return OptExpression.create(projectOperator, input);
