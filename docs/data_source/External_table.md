@@ -1,4 +1,4 @@
-# External table
+# (To be deprecated) External table
 
 :::note
 From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
