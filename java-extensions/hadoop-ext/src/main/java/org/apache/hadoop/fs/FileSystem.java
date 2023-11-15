@@ -598,9 +598,6 @@ public abstract class FileSystem extends Configured
             return createFileSystem(uri, conf);
         }
 
-<<<<<<< HEAD
-        return CACHE.get(uri, conf);
-=======
         HadoopExt.getInstance().rewriteConfiguration(conf);
         UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
         FileSystem fs = HadoopExt.getInstance().doAs(ugi, () -> {
@@ -613,7 +610,6 @@ public abstract class FileSystem extends Configured
         });
         FileSystem fs2 = HadoopExt.getInstance().bindUGIToFileSystem(fs, ugi);
         return fs2;
->>>>>>> 0e0b2bbc2c ([BugFix][Hadoop-Ext] rewrite configuration before get UGI and bind UGI to filesystem (#34829))
     }
 
     /**
