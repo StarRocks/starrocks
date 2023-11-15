@@ -36,4 +36,25 @@ public class PropertyAnalyzerTest {
             Assert.assertEquals("enable_async_write_back is disabled since version 3.1.4", e.getMessage());
         }
     }
+
+    @Test
+    public void testAnalyzeDataCachePartitionDuration() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 day");
+
+        try {
+            PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(false);
+        }
+
+        Assert.assertTrue(properties.size() == 0);
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
+        try {
+            PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+            Assert.assertTrue(false);
+        } catch (AnalysisException e) {
+            Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
+        }
+    }
 }
