@@ -17,13 +17,18 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.profiles.ProfileFile;
+import software.amazon.awssdk.profiles.ProfileFileSystemSetting;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.glue.GlueClient;
 import software.amazon.awssdk.services.glue.GlueClientBuilder;
@@ -59,6 +64,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
+    private static final Logger LOG = LogManager.getLogger(IcebergAwsClientFactory.class);
     public static final String HTTPS_SCHEME = "https://";
 
     private AwsProperties awsProperties;
@@ -94,7 +100,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         s3SessionToken = properties.getOrDefault(AWS_S3_SESSION_TOKEN, "");
         s3IamRoleArn = properties.getOrDefault(AWS_S3_IAM_ROLE_ARN, "");
         s3ExternalId = properties.getOrDefault(AWS_S3_EXTERNAL_ID, "");
-        s3Region = properties.getOrDefault(AWS_S3_REGION, AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
+        s3Region = properties.getOrDefault(AWS_S3_REGION, "");
         s3Endpoint = properties.getOrDefault(AWS_S3_ENDPOINT, "");
 
         glueUseAWSSDKDefaultBehavior = Boolean.parseBoolean(
@@ -105,7 +111,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueSessionToken = properties.getOrDefault(AWS_GLUE_SESSION_TOKEN, "");
         glueIamRoleArn = properties.getOrDefault(AWS_GLUE_IAM_ROLE_ARN, "");
         glueExternalId = properties.getOrDefault(AWS_GLUE_EXTERNAL_ID, "");
-        glueRegion = properties.getOrDefault(AWS_GLUE_REGION, AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
+        glueRegion = properties.getOrDefault(AWS_GLUE_REGION, "");
         glueEndpoint = properties.getOrDefault(AWS_GLUE_ENDPOINT, "");
     }
 
@@ -150,6 +156,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
         if (!s3Region.isEmpty()) {
             s3ClientBuilder.region(Region.of(s3Region));
+        } else {
+            Region region = tryToResolveRegion();
+            s3ClientBuilder.region(region);
         }
 
         // To prevent the 's3ClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
@@ -176,6 +185,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
 
         if (!glueRegion.isEmpty()) {
             glueClientBuilder.region(Region.of(glueRegion));
+        } else {
+            Region region = tryToResolveRegion();
+            glueClientBuilder.region(region);
         }
 
         // To prevent the 'glueClientBuilder' (NPE) exception, when 'aws.s3.endpoint' does not have
@@ -200,7 +212,9 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
                 return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey));
             }
         } else {
-            throw new IllegalArgumentException("Please configure the correct aws authentication parameters");
+            LOG.info("User didn't configure any credentials in Iceberg catalog, " +
+                    "we will use AWS DefaultCredentialsProvider instead");
+            return DefaultCredentialsProvider.builder().build();
         }
     }
 
@@ -226,5 +240,21 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
             return uri;
         }
         return URI.create(HTTPS_SCHEME + endpoint);
+    }
+
+    public static Region tryToResolveRegion() {
+        Region region = null;
+        try {
+            DefaultAwsRegionProviderChain providerChain = DefaultAwsRegionProviderChain.builder()
+                    .profileFile(ProfileFile::defaultProfileFile)
+                    .profileName(ProfileFileSystemSetting.AWS_PROFILE.getStringValueOrThrow()).build();
+            region = providerChain.getRegion();
+        } catch (Exception e) {
+            LOG.info(
+                    "AWS sdk unable to load region from DefaultAwsRegionProviderChain, using default region us-east-1 instead",
+                    e);
+            region = Region.of(AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
+        }
+        return region;
     }
 }

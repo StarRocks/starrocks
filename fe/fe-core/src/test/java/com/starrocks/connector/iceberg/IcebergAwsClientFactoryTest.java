@@ -18,20 +18,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.net.URI;
-import java.util.HashMap;
-import java.util.Map;
 
 public class IcebergAwsClientFactoryTest {
-
-    @Test
-    public void testInvalidCredential() {
-        IcebergAwsClientFactory factory = new IcebergAwsClientFactory();
-        Map<String, String> properties = new HashMap<>();
-        factory.initialize(properties);
-        Assert.assertThrows(IllegalArgumentException.class, factory::s3);
-        Assert.assertThrows(IllegalArgumentException.class, factory::glue);
-    }
-
     @Test
     public void testEnsureSchemeInEndpoint() {
         // test endpoint without scheme
