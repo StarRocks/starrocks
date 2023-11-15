@@ -592,11 +592,6 @@ public abstract class FileSystem extends Configured
                 return get(defaultUri, conf);              // return default
             }
         }
-        String disableCacheName = String.format("fs.%s.impl.disable.cache", scheme);
-        if (conf.getBoolean(disableCacheName, false)) {
-            LOGGER.debug("Bypassing cache to create filesystem {}", uri);
-            return createFileSystem(uri, conf);
-        }
 
         HadoopExt.getInstance().rewriteConfiguration(conf);
         UserGroupInformation ugi = HadoopExt.getInstance().getHDFSUGI(conf);
