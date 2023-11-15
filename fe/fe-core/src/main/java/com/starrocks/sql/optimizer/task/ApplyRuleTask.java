@@ -69,13 +69,13 @@ public class ApplyRuleTask extends OptimizerTask {
                 groupExpression.isUnused()) {
             return;
         }
-        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         // Apply rule and get all new OptExpressions
         Pattern pattern = rule.getPattern();
         Binder binder = new Binder(pattern, groupExpression);
         OptExpression extractExpr = binder.next();
         List<OptExpression> newExpressions = Lists.newArrayList();
         List<OptExpression> extractExpressions = Lists.newArrayList();
+        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         while (extractExpr != null) {
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
@@ -102,6 +102,12 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             GroupExpression newGroupExpression = result.second;
+            if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+                // new bitset should derive old bitset's info to track the lineage of applied rules.
+                newGroupExpression.mergeAppliedRules(groupExpression.getAppliedRuleMasks());
+                // new bitset add new rule which it's derived from.
+                newGroupExpression.addNewAppliedRule(rule);
+            }
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
                 pushTask(new OptimizeExpressionTask(context, newGroupExpression, isExplore));

@@ -436,6 +436,13 @@ public class UtFrameUtils {
         }
     }
 
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+            ConnectContext connectContext, String sql, String module) throws Exception {
+        Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+        return Pair.create(planPair.first, planAndTrace);
+    }
+
     public static String printPhysicalPlan(OptExpression execPlan) {
         return LogicalPlanPrinter.print(execPlan, isPrintPlanTableNames());
     }

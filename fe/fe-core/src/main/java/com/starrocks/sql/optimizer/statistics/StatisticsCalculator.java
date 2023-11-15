@@ -213,7 +213,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 statisticsBuilder.addColumnStatistic(entry.getKey(),
                         ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
             }
-
         }
         context.setStatistics(statisticsBuilder.build());
         return null;
