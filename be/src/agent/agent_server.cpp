@@ -31,6 +31,7 @@
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
 // under the License.
+// test
 
 #include "agent/agent_server.h"
 
@@ -59,7 +60,7 @@ namespace starrocks {
 namespace {
 constexpr size_t DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE = 2048;
 constexpr size_t MIN_CLONE_TASK_THREADS_IN_POOL = 2;
-} // namespace test
+} // namespace
 
 using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
 
