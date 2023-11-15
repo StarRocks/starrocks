@@ -29,7 +29,7 @@ SHOW ROLES
 | TablePrivs    | 某一数据表相关的权限，比如删除表、读取数据和导入数据等。     |
 | ResourcePrivs | 资源相关的权限，当前仅支持授予资源的使用权限。               |
 
-当前支持的权限列表，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+当前支持的权限列表，参见 [GRANT](./GRANT.md)。
 
 ## 示例
 

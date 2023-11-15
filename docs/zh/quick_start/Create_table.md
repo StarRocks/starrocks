@@ -45,7 +45,7 @@ MySQL [(none)]> SHOW DATABASES;
 
 StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/Data_model.md#明细模型) 编写建表语句。
 
-更多建表语法，参考 [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
+更多建表语法，参考 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
 
 ```sql
 use example_db;
@@ -95,7 +95,7 @@ StarRocks 表内部组织存储数据时会按照指定列排序，这些列为�
 
 #### 字段类型
 
-StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](/using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../sql-reference/sql-statements/data-types/Array.md)，字段类型介绍详见 [数据类型章节](/sql-reference/sql-statements/data-types/BIGINT.md)。
+StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](../using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../sql-reference/sql-statements/data-types/Array.md)，字段类型介绍详见 [数据类型章节](../../sql-reference/sql-statements/data-types/BIGINT.md)。
 
 > 注意：在建表时，您应尽量使用精确的类型。例如，整型数据不应使用字符串类型，INT 类型即可满足的数据不应使用 BIGINT 类型。精确的数据类型能够更好的发挥数据库的性能。
 
@@ -113,7 +113,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](/table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
 
 > 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
 
@@ -161,7 +161,7 @@ SHOW CREATE TABLE detailDemo;
 
 StarRocks 支持多种 DDL 操作。
 
-您可以通过 [ALTER TABLE](/sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+您可以通过 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
 
 ### 增加列
 

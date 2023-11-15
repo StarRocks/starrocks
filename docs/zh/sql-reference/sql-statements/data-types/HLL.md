@@ -20,8 +20,8 @@ HLL类型使用的存储空间取决于 HLL 中插入的 hash 值的去重数量
 
 详细的使用方法请参考：
 
-- [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
-- [HLL](/sql-reference/sql-statements/data-definition/HLL.md)
+- [使用 HyperLogLog 实现近似去重](../../../using_starrocks/Using_HLL.md)
+- [HLL](../../sql-statements/data-definition/HLL.md)
 
 ## 示例
 
