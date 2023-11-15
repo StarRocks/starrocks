@@ -3979,6 +3979,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new RuntimeException(ex.getMessage());
             }
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            try {
+                PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, null);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
         }
