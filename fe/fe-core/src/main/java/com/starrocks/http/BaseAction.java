@@ -41,7 +41,10 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> 32ff7033f5 ([BugFix] remove threadLocal after operation (#34758))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -113,6 +116,8 @@ public abstract class BaseAction implements IAction {
             } else {
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
             }
+        } finally {
+            ConnectContext.remove();
         }
     }
 
