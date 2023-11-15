@@ -730,7 +730,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ deploy, SQL-Tester, admit ]
+    needs: [ be-ut, deploy, SQL-Tester, admit ]
     if: always()
     env:
       PR_NUMBER: ${{ github.event.number }}
