@@ -4018,8 +4018,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
-                                ImmutableMap.of(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
-                                        propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)));
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
             if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -4028,10 +4027,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 tableProperty.buildStorageCoolDownTTL();
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
-                                ImmutableMap.of(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL,
-                                        propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)));
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                String partitionDuration = propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
+                tableProperty.buildDataCachePartitionDuration();
+                ModifyTablePropertyOperationLog info =
+                        new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                                ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+
         }
     }
 
@@ -4065,6 +4073,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
             try {
                 PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, null);
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }
