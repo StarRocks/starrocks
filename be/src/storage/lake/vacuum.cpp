@@ -98,6 +98,7 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
         g_deleted_files << paths.size();
         VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
     } else {
+        g_del_fails << 1;
         LOG(WARNING) << "Fail to delete: " << st;
     }
     return st;
