@@ -3067,6 +3067,8 @@ public class PrivilegeCheckerTest {
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
         String createSql2 = "create pipe p2 " +
                 "as insert into tbl_pipe select * from files('path'='fake://dir/', 'format'='parquet', 'auto_ingest'='false') ";
+        String dropSql = "drop pipe p1";
+        String dropSql2 = "drop pipe p2";
         ConnectContext ctx = starRocksAssert.getCtx();
 
         ctxToTestUser();
@@ -3111,21 +3113,40 @@ public class PrivilegeCheckerTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop pipe p1", ctx), ctx);
         }
 
-        // create pipe
         String dbName = connectContext.getDatabase();
-        verifyGrantRevoke(
-                createSql,
-                String.format("grant CREATE PIPE on DATABASE %s to test", dbName),
-                String.format("revoke CREATE PIPE on DATABASE %s from test", dbName),
-                "Access denied; you need (at least one of) the CREATE PIPE privilege(s) on DATABASE db1 " +
-                        "for this operation.");
-        verifyGrantRevoke(
-                createSql,
-                "grant CREATE PIPE on ALL DATABASES to test",
-                "revoke CREATE PIPE on ALL DATABASES from test",
-                "Access denied; you need (at least one of) the CREATE PIPE privilege(s) on DATABASE db1 " +
-                        "for this operation.");
 
+        // test create pipe without insert privilege
+        {
+            grantRevokeSqlAsRoot(String.format("grant CREATE PIPE on DATABASE %s to test", dbName));
+            ctxToTestUser();
+            verifyGrantRevoke(createSql,
+                    "grant INSERT on tbl_pipe to test",
+                    "revoke INSERT on tbl_pipe from test",
+                    "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl_pipe " +
+                            "for this operation");
+            grantRevokeSqlAsRoot(String.format("revoke CREATE PIPE on DATABASE %s from test", dbName));
+
+        }
+        // grant insert privilege to user
+        grantRevokeSqlAsRoot("grant INSERT on tbl_pipe to test");
+
+        // create pipe
+        {
+            verifyGrantRevoke(
+                    createSql,
+                    String.format("grant CREATE PIPE on DATABASE %s to test", dbName),
+                    String.format("revoke CREATE PIPE on DATABASE %s from test", dbName),
+                    "Access denied; you need (at least one of) the CREATE PIPE privilege(s) on DATABASE db1 " +
+                            "for this operation.");
+            verifyGrantRevoke(
+                    createSql,
+                    "grant CREATE PIPE on ALL DATABASES to test",
+                    "revoke CREATE PIPE on ALL DATABASES from test",
+                    "Access denied; you need (at least one of) the CREATE PIPE privilege(s) on DATABASE db1 " +
+                            "for this operation.");
+        }
+
+        //        ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql2, ctx), ctx);
 
@@ -3141,6 +3162,8 @@ public class PrivilegeCheckerTest {
         {
             // show grants
             Assert.assertEquals(ImmutableList.of(
+                    ImmutableList.of("'test'@'%'", "default_catalog",
+                            "GRANT INSERT ON TABLE db1.tbl_pipe TO USER 'test'@'%'"),
                     ImmutableList.of("'test'@'%'", "default_catalog", "GRANT USAGE ON PIPE db1.p1 TO USER 'test'@'%'")
             ), starRocksAssert.show("show grants for test"));
 
@@ -3149,7 +3172,7 @@ public class PrivilegeCheckerTest {
             req.setType(TGrantsToType.USER);
             TGetGrantsToRolesOrUserResponse response = GrantsTo.getGrantsTo(req);
             List<TGetGrantsToRolesOrUserItem> items = response.getGrants_to();
-            String grant = items.get(0).toString();
+            String grant = items.get(1).toString();
             Assert.assertEquals("TGetGrantsToRolesOrUserItem(grantee:'test'@'%', " +
                     "object_catalog:default_catalog, object_database:db1, object_name:p1, object_type:PIPE, " +
                     "privilege_type:USAGE, is_grantable:false)", grant);
@@ -3158,6 +3181,8 @@ public class PrivilegeCheckerTest {
             starRocksAssert.ddl("grant CREATE PIPE ON ALL DATABASES to test");
             // show grants
             Assert.assertEquals(ImmutableList.of(
+                    ImmutableList.of("'test'@'%'", "default_catalog",
+                            "GRANT INSERT ON TABLE db1.tbl_pipe TO USER 'test'@'%'"),
                     ImmutableList.of("'test'@'%'", "default_catalog",
                             "GRANT CREATE PIPE ON ALL DATABASES TO USER 'test'@'%'"),
                     ImmutableList.of("'test'@'%'", "default_catalog", "GRANT USAGE ON PIPE db1.p1 TO USER 'test'@'%'")
@@ -3168,22 +3193,30 @@ public class PrivilegeCheckerTest {
             req.setType(TGrantsToType.USER);
             response = GrantsTo.getGrantsTo(req);
             grant = response.toString();
-            Assert.assertEquals("TGetGrantsToRolesOrUserResponse(grants_to:" +
-                            "[TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
-                            "object_database:db1, object_type:DATABASE, privilege_type:CREATE PIPE, is_grantable:false), " +
-                            "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
-                            "object_database:db2, object_type:DATABASE, privilege_type:CREATE PIPE, is_grantable:false), " +
-                            "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
-                            "object_database:db3, object_type:DATABASE, privilege_type:CREATE PIPE, is_grantable:false), " +
-                            "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
-                            "object_database:db1, object_name:p1, object_type:PIPE, privilege_type:USAGE, is_grantable:false)])",
-                    grant);
+            Assert.assertEquals("TGetGrantsToRolesOrUserResponse(grants_to:[" +
+                    "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', " +
+                    "object_catalog:default_catalog, object_database:db1, object_type:DATABASE, " +
+                    "privilege_type:CREATE PIPE, is_grantable:false), " +
+                    "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
+                    "object_database:db2, object_type:DATABASE, privilege_type:CREATE PIPE, is_grantable:false), " +
+                    "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
+                    "object_database:db3, object_type:DATABASE, privilege_type:CREATE PIPE, is_grantable:false), " +
+                    "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
+                    "object_database:db1, object_name:tbl_pipe, object_type:TABLE, privilege_type:INSERT, " +
+                    "is_grantable:false), " +
+                    "TGetGrantsToRolesOrUserItem(grantee:'test'@'%', object_catalog:default_catalog, " +
+                    "object_database:db1, object_name:p1, object_type:PIPE, privilege_type:USAGE, " +
+                    "is_grantable:false)])", grant);
             starRocksAssert.ddl("revoke CREATE PIPE on ALL DATABASES from test");
         }
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke USAGE on PIPE db1.p1 from test", ctx), ctx);
         res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
         Assert.assertEquals(0, res.getResultRows().size());
-        Assert.assertEquals(ImmutableList.of(), starRocksAssert.show("show grants for test"));
+        Assert.assertEquals(ImmutableList.of(
+                        ImmutableList.of("'test'@'%'", "default_catalog",
+                                "GRANT INSERT ON TABLE db1.tbl_pipe TO USER 'test'@'%'")),
+                starRocksAssert.show("show grants for test"));
+
 
         // test desc pipe
         verifyGrantRevoke(
@@ -3253,6 +3286,7 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s) on PIPE db1.p1 " +
                         "for this operation");
 
+        grantRevokeSqlAsRoot("revoke INSERT on tbl_pipe from test");
         starRocksAssert.dropTable("tbl_pipe");
         starRocksAssert.getCtx().setDatabase(null);
     }
