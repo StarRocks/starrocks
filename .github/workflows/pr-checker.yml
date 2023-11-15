@@ -12,6 +12,10 @@ on:
       - edited
       - synchronize
 
+concurrency:
+  group: PR-CHECKER-${{ github.event.number }}
+  cancel-in-progress: false
+
 permissions:
   checks: write
   actions: write

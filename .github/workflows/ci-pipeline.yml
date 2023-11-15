@@ -496,7 +496,7 @@ jobs:
 
   build:
     runs-on: [self-hosted, normal]
-    needs: [be-checker, fe-checker, test-checker, be-ut, clang-tidy, fe-ut, thirdparty-update]
+    needs: [be-checker, fe-checker, test-checker, clang-tidy, fe-ut, thirdparty-update]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
@@ -506,9 +506,9 @@ jobs:
       base_version: ${{ steps.run_build.outputs.BASE_VERSION }}
     if: > 
       always() && 
-      (needs.be-ut.result == 'success' && needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
+      (needs.clang-tidy.result == 'success' && needs.fe-ut.result == 'success') || 
       (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || 
-      (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success' && needs.clang-tidy.result == 'success') ||
+      (needs.fe-checker.outputs.output1 != 'true' && needs.clang-tidy.result == 'success') ||
       (needs.be-checker.outputs.output1 != 'true' && needs.fe-checker.outputs.output1 != 'true' && needs.test-checker.outputs.output1 == 'true')
     steps:
       - name: CLEAN
