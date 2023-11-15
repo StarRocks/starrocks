@@ -15,6 +15,7 @@
 package com.starrocks.connector.hadoop;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +38,10 @@ public class HadoopExt {
     }
 
     public void rewriteConfiguration(Configuration conf) {
+    }
+
+    public FileSystem bindUGIToFileSystem(FileSystem fs, UserGroupInformation ugi) {
+        return fs;
     }
 
     public String getCloudConfString(Configuration conf) {
