@@ -82,7 +82,11 @@ public class RangePartitionPruner implements PartitionPruner {
         LOG.debug("column idx {}, column filters {}", columnIdx, partitionColumnFilters);
         // the last column in partition Key
         if (columnIdx == partitionColumns.size()) {
-            return Lists.newArrayList(rangeMap.subRangeMap(Range.closed(minKey, maxKey)).asMapOfRanges().values());
+            try {
+                return Lists.newArrayList(rangeMap.subRangeMap(Range.closed(minKey, maxKey)).asMapOfRanges().values());
+            } catch (IllegalArgumentException e) {
+                return Lists.newArrayList();
+            }
         }
         // no filter in this column
         Column keyColumn = partitionColumns.get(columnIdx);
@@ -174,8 +178,14 @@ public class RangePartitionPruner implements PartitionPruner {
                 pushMaxCount++;
             }
 
-            List<Long> result = Lists.newArrayList(rangeMap.subRangeMap(
-                    Range.range(minKey, lowerType, maxKey, upperType)).asMapOfRanges().values());
+            List<Long> result;
+            try {
+                result = Lists.newArrayList(rangeMap.subRangeMap(
+                        Range.range(minKey, lowerType, maxKey, upperType)).asMapOfRanges().values());
+            } catch (IllegalArgumentException e) {
+                result = Lists.newArrayList();
+            }
+
             for (; pushMinCount > 0; pushMinCount--) {
                 minKey.popColumn();
             }
