@@ -26,3 +26,16 @@ select map{'a':1,'b':2}['a'];
 select map{'a':NULL,'b':2}['a'];
 select map{}['a'];
 select c2["key1"] from map_top_n;
+
+-- name: testEmptyMap
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(map('a',1, 'b',2), c1)
+from t0;
+
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(c1, map('a',1, 'b',2))
+from t0;

@@ -73,3 +73,20 @@ select c2["key1"] from map_top_n;
 12
 7
 -- !result
+-- name: testEmptyMap
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(map('a',1, 'b',2), c1)
+from t0;
+-- result:
+{"a":1,"b":2}
+-- !result
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(c1, map('a',1, 'b',2))
+from t0;
+-- result:
+{"a":1,"b":2}
+-- !result
