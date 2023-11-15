@@ -4010,6 +4010,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new RuntimeException(ex.getMessage());
             }
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            try {
+                PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
         }
@@ -4028,6 +4035,10 @@ public class LocalMetastore implements ConnectorMetadata {
             String storageCoolDownTTL = logProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
             tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, storageCoolDownTTL);
             tableProperty.buildStorageCoolDownTTL();
+        } else if (logProperties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            String partitionDuration = logProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, partitionDuration);
+            tableProperty.buildDataCachePartitionDuration();
         } else {
             throw new DdlException("Modify failed because unknown properties: " + properties);
         }

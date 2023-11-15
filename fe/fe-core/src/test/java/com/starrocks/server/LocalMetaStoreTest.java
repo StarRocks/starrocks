@@ -34,6 +34,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyPartitionInfo;
@@ -223,5 +224,20 @@ public class LocalMetaStoreTest {
                 starRocksAssert.useDatabase("test").withTable(
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+    }
+
+    @Test
+    public void testAlterTableProperties() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t1");
+
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        try {
+            localMetastore.alterTableProperties(db, table, properties);
+        } catch (RuntimeException e) {
+            Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
+        }
     }
 }
