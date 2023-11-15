@@ -45,7 +45,11 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,6 +60,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -173,6 +178,22 @@ public class OdpsMetadata implements ConnectorMetadata {
                 builder.add(partitionSpec.toString(false, true));
             }
         }
+        return builder.build();
+    }
+
+    @Override
+    public Statistics getTableStatistics(OptimizerContext session,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate,
+                                         long limit) {
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columns.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+        // cause we don't know the real schema in file，just use the default Row Count now
+        builder.setOutputRowCount(1);
         return builder.build();
     }
 
