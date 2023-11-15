@@ -568,36 +568,13 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
         nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
     }
     std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["catalog_type"] = paimon_table->get_catalog_type();
-    jni_scanner_params["metastore_uri"] = paimon_table->get_metastore_uri();
-    jni_scanner_params["warehouse_path"] = paimon_table->get_warehouse_path();
     jni_scanner_params["database_name"] = paimon_table->get_database_name();
     jni_scanner_params["table_name"] = paimon_table->get_table_name();
+    jni_scanner_params["paimon_options"] = paimon_table->get_paimon_options();
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params["split_info"] = _scan_range.paimon_split_info;
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
     jni_scanner_params["nested_fields"] = nested_fields;
-
-    string option_info = "";
-    if (options.cloud_configuration != nullptr && options.cloud_configuration->cloud_type == TCloudType::AWS) {
-        const AWSCloudConfiguration aws_cloud_configuration =
-                CloudConfigurationFactory::create_aws(*options.cloud_configuration);
-        AWSCloudCredential aws_cloud_credential = aws_cloud_configuration.aws_cloud_credential;
-        if (!aws_cloud_credential.endpoint.empty()) {
-            option_info += "s3.endpoint=" + aws_cloud_credential.endpoint + ",";
-        }
-        if (!aws_cloud_credential.access_key.empty()) {
-            option_info += "s3.access-key=" + aws_cloud_credential.access_key + ",";
-        }
-        if (!aws_cloud_credential.secret_key.empty()) {
-            option_info += "s3.secret-key=" + aws_cloud_credential.secret_key + ",";
-        }
-        string enable_ssl = aws_cloud_configuration.enable_ssl ? "true" : "false";
-        option_info += "s3.connection.ssl.enabled=" + enable_ssl + ",";
-        string enable_path_style_access = aws_cloud_configuration.enable_path_style_access ? "true" : "false";
-        option_info += "s3.path.style.access=" + enable_path_style_access;
-    }
-    jni_scanner_params["option_info"] = option_info;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";

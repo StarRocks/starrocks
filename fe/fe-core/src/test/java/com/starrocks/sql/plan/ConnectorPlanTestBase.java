@@ -193,10 +193,12 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         properties.put("paimon.catalog.warehouse", warehouse);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", "paimon0", "", properties);
 
+        Options options = new Options();
+        options.set(CatalogOptions.METASTORE, "filesystem");
+        options.set(CatalogOptions.WAREHOUSE, warehouse);
         //register paimon catalog
         PaimonMetadata paimonMetadata =
-                new PaimonMetadata("paimon0", new HdfsEnvironment(), paimonNativeCatalog,
-                        "filesystem", null, warehouse);
+                new PaimonMetadata("paimon0", new HdfsEnvironment(), paimonNativeCatalog, options);
         metadataMgr.registerMockedMetadata("paimon0", paimonMetadata);
     }
 
