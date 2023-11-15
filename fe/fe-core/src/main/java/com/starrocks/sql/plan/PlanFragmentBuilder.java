@@ -799,11 +799,30 @@ public class PlanFragmentBuilder {
                     List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(partitionId);
                     Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                     final Partition partition = referenceTable.getPartition(partitionId);
+<<<<<<< HEAD
                     final MaterializedIndex selectedTable = partition.getIndex(selectedIndexId);
                     List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
                     Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                     for (int i = 0; i < allTabletIds.size(); i++) {
                         tabletId2BucketSeq.put(allTabletIds.get(i), i);
+=======
+
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
+                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
+                                .get(physicalPartition.getId());
+                        Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
+                        final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
+                        List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
+                        totalTabletsNum += selectedTable.getTablets().size();
+                        for (int i = 0; i < allTabletIds.size(); i++) {
+                            tabletId2BucketSeq.put(allTabletIds.get(i), i);
+                        }
+                        scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
+                        List<Tablet> tablets =
+                                selectTabletIds.stream().map(selectedTable::getTablet).collect(Collectors.toList());
+                        scanNode.addScanRangeLocations(partition, physicalPartition, selectedTable, tablets, localBeId);
+>>>>>>> a2015c1ef9 ([BugFix] fix cte output column duplicate (#34904))
                     }
                     totalTabletsNum += selectedTable.getTablets().size();
                     scanNode.setTabletId2BucketSeq(tabletId2BucketSeq);
@@ -2807,7 +2826,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
