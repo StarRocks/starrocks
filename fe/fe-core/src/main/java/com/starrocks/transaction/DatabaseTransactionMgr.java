@@ -411,9 +411,6 @@ public class DatabaseTransactionMgr {
         if (transactionState.getWriteEndTimeMs() < 0) {
             transactionState.setWriteEndTimeMs(System.currentTimeMillis());
         }
-        if (!tabletCommitInfos.isEmpty()) {
-            transactionState.setTabletCommitInfos(tabletCommitInfos);
-        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
