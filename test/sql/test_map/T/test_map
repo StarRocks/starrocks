@@ -39,3 +39,36 @@ with t0 as (
 )
 select map_concat(c1, map('a',1, 'b',2))
 from t0;
+
+select map_concat(c1, map())
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(1,2))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(map(),map()))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(map(),[]))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map([],map()))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map())
+from (select c1 from (values(map([], []))) as t(c1)) t;
+
+select map_concat(c1, map())
+from (select c1 from (values(map([], [[]]))) as t(c1)) t;
+
+select map_concat(c1, map([1], [2]))
+from (select c1 from (values(map([], []))) as t(c1)) t;
+
+select map_concat(c1, map([1], [[2]]))
+from (select c1 from (values(map([], [[]]))) as t(c1)) t;
+
+select map_concat(c1, map(named_struct('1',2), named_struct('A', [map()])))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(named_struct('1',2), named_struct('A', [map([],[[named_struct('C', [[map()]])]])])))
+from (select c1 from (values(map())) as t(c1)) t;

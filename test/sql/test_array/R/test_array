@@ -225,3 +225,33 @@ from t0;
 -- result:
 [1]
 -- !result
+select array_concat(c1, [[]])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[[]]
+-- !result
+select array_concat(c1, [[1]])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[[1]]
+-- !result
+select array_concat(c1, [[1]])
+from (select c1 from (values([[]])) as t(c1)) t;
+-- result:
+[[],[1]]
+-- !result
+select array_concat(c1, [map{'a':1}])
+from (select c1 from (values([map()])) as t(c1)) t;
+-- result:
+[{},{"a":1}]
+-- !result
+select array_concat(c1, [map{'a':1}])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[{"a":1}]
+-- !result
+select array_concat(c1, [named_struct('a', 1, 'b', 2, 'c', 3)])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[{"a":1,"b":2,"c":3}]
+-- !result
