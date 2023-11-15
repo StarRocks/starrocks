@@ -6,13 +6,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.profile.Timer;
-import com.starrocks.common.profile.Tracers;
-import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.OlapScanNode;
->>>>>>> 97745418cd ([Enhancement] skip optimizer lock for materialized view (#34569))
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
