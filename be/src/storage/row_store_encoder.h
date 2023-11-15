@@ -33,6 +33,8 @@ std::unique_ptr<Schema> create_binary_schema();
 
 class RowStoreEncoder {
 public:
+    virtual ~RowStoreEncoder() = default;
+
     virtual Status encode_chunk_to_full_row_column(const Schema& schema, const Chunk& chunk,
                                                    BinaryColumn* dest_column) = 0;
     // columns only contain value column, exclude key columns
