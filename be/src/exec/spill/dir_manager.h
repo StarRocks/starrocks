@@ -37,7 +37,7 @@ public:
 
     int64_t get_current_size() const { return _current_size.load(); }
 
-    void set_current_size(int64_t value) { _current_size.store(value); }
+    void update_current_size(int64_t incr) { _current_size += incr; }
 
     int64_t get_max_size() const { return _max_size; }
 
