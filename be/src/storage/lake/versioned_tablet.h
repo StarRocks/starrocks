@@ -21,6 +21,7 @@
 
 namespace starrocks {
 class TabletSchema;
+class Schema;
 }
 
 namespace starrocks::lake {
@@ -28,6 +29,9 @@ namespace starrocks::lake {
 class Rowset;
 class TabletManager;
 class TabletMetadataPB;
+class TabletWriter;
+class TabletReader;
+enum WriterType : int;
 
 // A tablet contains shards of data. There can be multiple versions of the same
 // tablet. This class represents a specific version of a tablet.
@@ -43,11 +47,25 @@ public:
     explicit VersionedTablet(TabletManager* tablet_mgr, TabletMetadataPtr metadata)
             : _tablet_mgr(tablet_mgr), _metadata(std::move(metadata)) {}
 
+    // Same as metadata()->id()
+    int64_t id() const;
+
+    // Same as metadata()->version()
+    int64_t version() const;
+
     const TabletMetadataPtr& metadata() const { return _metadata; }
 
     TabletSchemaPtr get_schema() const;
 
     StatusOr<RowsetList> get_rowsets() const;
+
+    // `segment_max_rows` is used in vertical writer
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
+                                                       uint32_t max_rows_per_segment = 0);
+
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
+
+    TabletManager* tablet_manager() const { return _tablet_mgr; }
 
 private:
     TabletManager* _tablet_mgr;
