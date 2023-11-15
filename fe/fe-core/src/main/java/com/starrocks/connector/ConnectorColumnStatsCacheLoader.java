@@ -66,6 +66,8 @@ public class ConnectorColumnStatsCacheLoader implements
                 throw e;
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
@@ -103,6 +105,8 @@ public class ConnectorColumnStatsCacheLoader implements
                 throw e;
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
