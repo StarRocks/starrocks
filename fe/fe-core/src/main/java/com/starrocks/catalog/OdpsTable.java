@@ -54,7 +54,6 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     private String dbName;
     private List<Column> dataColumns;
     private List<Column> partitionColumns;
-    private com.aliyun.odps.Table odpsTable;
 
     public OdpsTable() {
         super(TableType.ODPS);
@@ -64,7 +63,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
         super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), odpsTable.getName(), TableType.ODPS,
                 odpsTable.getSchema().getColumns().stream().map(EntityConvertUtils::convertColumn).collect(
                         Collectors.toList()));
-        this.odpsTable = odpsTable;
+        this.createTime = odpsTable.getCreatedTime().getTime();
         this.catalogName = catalogName;
         this.dbName = odpsTable.getProject();
         this.tableName = odpsTable.getName();
@@ -134,7 +133,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     @Override
     public String getUUID() {
         if (!Strings.isNullOrEmpty(catalogName)) {
-            return String.join(".", catalogName, dbName, name);
+            return String.join(".", catalogName, dbName, name, Long.toString(createTime));
         } else {
             return Long.toString(id);
         }
