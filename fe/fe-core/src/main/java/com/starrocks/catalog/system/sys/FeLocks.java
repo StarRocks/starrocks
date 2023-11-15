@@ -14,11 +14,24 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TFeLocksReq;
+import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TSchemaTableType;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.thrift.TException;
+
+import java.util.Collection;
 
 public class FeLocks {
 
@@ -31,12 +44,35 @@ public class FeLocks {
                         .column("lock_type", ScalarType.createVarcharType(64))
                         .column("lock_object", ScalarType.createVarcharType(64))
                         .column("lock_mode", ScalarType.createVarcharType(64))
-                        .column("lock_granted", ScalarType.createVarcharType(64))
                         .column("thread_info", ScalarType.createVarcharType(64))
+                        .column("granted", ScalarType.createVarchar(64))
                         .column("wait_start", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("waiter_list", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
-                TSchemaTableType.STARROCKS_OBJECT_DEPENDENCIES);
+                TSchemaTableType.SYS_FE_LOCKS);
     }
 
+    public static TFeLocksRes listLocks(TFeLocksReq request) throws TException {
+        TAuthInfo auth = request.getAuth_info();
+        UserIdentity currentUser;
+        if (auth.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
+        } else {
+            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
+        }
+
+        // authorize
+        try {
+            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.SELECT);
+        } catch (AccessDeniedException e) {
+            throw new TException(e.getMessage());
+        }
+
+        TFeLocksRes response = new TFeLocksRes();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
+        for (Database db : CollectionUtils.emptyIfNull(dbs)) {
+            // TODO
+        }
+        return response;
+    }
 }
