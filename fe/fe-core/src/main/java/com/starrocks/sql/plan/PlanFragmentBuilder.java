@@ -2807,7 +2807,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
