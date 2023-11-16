@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW CREATE TABLE
 
 Returns the CREATE TABLE statement that was used to create a given table.

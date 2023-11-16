@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # How to build StarRocks
 
 In general, you can build StarRocks by just executing

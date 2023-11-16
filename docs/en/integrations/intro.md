@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Integrate with StarRocks
 
 This topic introduces how to integrate with StarRocks.

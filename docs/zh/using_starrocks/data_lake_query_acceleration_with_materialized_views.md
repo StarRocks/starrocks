@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用物化视图加速数据湖查询
 
 本文描述了如何使用 StarRocks 的异步物化视图来优化数据湖中的查询性能。

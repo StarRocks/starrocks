@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Stream Load
 
 ## 1. Does Stream Load support identifying column names held in the first row of the source data file? Or, does Stream Load support skipping the first row during data reading?

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # KILL ANALYZE
 
 ## 功能

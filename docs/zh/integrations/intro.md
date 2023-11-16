@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 系统集成概述
 
 本文介绍如何与 StarRocks 进行集成（integration）。

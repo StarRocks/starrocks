@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # quarter
 
 ## 功能
