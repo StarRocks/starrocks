@@ -284,7 +284,7 @@ StarRocks v2.5 版本支持 SPJG 类型的异步物化视图查询的自动透�
   SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
-- 通过 Information Schema 中的系统元数据表 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](/administration/information_schema.md#materialized_views)。
+- 通过 Information Schema 中的系统元数据表 `materialized_views` 查看所有异步物化视图。详细内容，请参考 [information_schema.materialized_views](../administration/information_schema.md#materialized_views)。
 
   ```SQL
   SELECT * FROM information_schema.materialized_views;

@@ -131,7 +131,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](/using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -536,7 +536,7 @@ PROPERTIES (
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
+详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](../../../using_starrocks/Colocate_join.md) 章节。
 
 #### 设置动态分区
 

@@ -734,13 +734,13 @@ PROPERTIES
 
 ## 查看 Iceberg Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Iceberg Catalog `iceberg_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG iceberg_catalog_glue;
@@ -767,7 +767,7 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 
 ## 删除 Iceberg Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Iceberg Catalog `iceberg_catalog_glue`：
 
@@ -793,7 +793,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 查询 Iceberg 表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+1. 通过 [SHOW DATABASES](../../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -801,7 +801,7 @@ DROP Catalog iceberg_catalog_glue;
 
 2. [切换至目标 Iceberg Catalog 和数据库](#切换-iceberg-catalog-和数据库)。
 
-3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
