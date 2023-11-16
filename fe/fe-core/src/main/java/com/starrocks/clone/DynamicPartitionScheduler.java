@@ -45,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -135,6 +136,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
     public void removeTtlPartitionTable(Long dbId, Long tableId) {
         ttlPartitionInfo.remove(new Pair<>(dbId, tableId));
+    }
+
+    @VisibleForTesting
+    public Set<Pair<Long, Long>> getTtlPartitionInfo() {
+        return ttlPartitionInfo;
     }
 
     public String getRuntimeInfo(String tableName, String key) {
@@ -601,8 +607,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             int dropSize = allPartitionNumber - ttlNumber;
             for (int i = 0; i < dropSize; i++) {
                 Long checkDropPartitionId = candidatePartitionList.get(i).getKey();
-                String dropPartitionName = olapTable.getPartition(checkDropPartitionId).getName();
-                dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
+                Partition partition = olapTable.getPartition(checkDropPartitionId);
+                if (partition != null) {
+                    String dropPartitionName = partition.getName();
+                    dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
+                }
             }
         }
         return dropPartitionClauses;
