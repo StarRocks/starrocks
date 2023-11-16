@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Stream Load 常见问题
 
 ## 1. Stream Load 是否支持识别文本文件中首行的列名？或者是否支持指定不读取首行？

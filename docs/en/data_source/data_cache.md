@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data Cache
 
 This topic describes the working principles of Data Cache and how to enable Data Cache to improve query performance on external data.

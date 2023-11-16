@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Bitmap 索引
 
 本文介绍了如何创建和管理 bitmap（位图）索引，以及 Bitmap 索引的使用案例。

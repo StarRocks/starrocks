@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data lake query acceleration with materialized views
 
 This topic describes how to optimize query performance in your data lake using StarRocks' asynchronous materialized views.

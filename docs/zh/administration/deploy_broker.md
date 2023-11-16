@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署 Broker 节点
 
 本文介绍如何配置部署 Broker。

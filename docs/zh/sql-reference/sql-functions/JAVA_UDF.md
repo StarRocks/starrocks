@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Java UDF
 
 本文介绍如何使用 Java 语言编写用户定义函数（User Defined Function，UDF）。

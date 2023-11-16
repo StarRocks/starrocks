@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过 HTTP PUT 从本地文件系统或流式数据源导入数据
 
 StarRocks 提供基于 HTTP 协议的 Stream Load 导入方式，帮助您从本地文件系统或流式数据源导入数据。
