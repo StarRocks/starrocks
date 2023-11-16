@@ -1532,11 +1532,13 @@ struct TObjectDependencyItem {
     2: optional string object_name
     3: optional string database
     4: optional string catalog
+    5: optional string object_type
     
     11: optional i64 ref_object_id
     12: optional string ref_object_name
     13: optional string ref_database
     14: optional string ref_catalog
+    15: optional string ref_object_type
 }
 
 struct TObjectDependencyReq {

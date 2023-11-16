@@ -45,11 +45,13 @@ public class ObjectDependencies {
                         .column("object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("object_type", ScalarType.createVarcharType(64))
 
                         .column("ref_object_id", ScalarType.BIGINT)
                         .column("ref_object_name", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("ref_object_database", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .column("ref_object_catalog", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
+                        .column("ref_object_type", ScalarType.createVarcharType(64))
                         .build(),
                 TSchemaTableType.STARROCKS_OBJECT_DEPENDENCIES);
     }
@@ -84,11 +86,13 @@ public class ObjectDependencies {
                         item.object_name = mv.getName();
                         item.database = db.getFullName();
                         item.catalog = db.getCatalogName();
+                        item.object_type = mv.getType().toString();
 
                         item.ref_object_id = refObj.getTableId();
                         item.ref_object_name = refObj.getTableName();
                         item.ref_database = refObj.getDbName();
                         item.ref_catalog = refObj.getCatalogName();
+                        item.ref_object_type = refObj.getTable().getType().toString();
 
                         response.addToItems(item);
                     }
