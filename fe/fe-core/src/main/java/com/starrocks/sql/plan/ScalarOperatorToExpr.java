@@ -119,6 +119,7 @@ public class ScalarOperatorToExpr {
          */
         private static void hackTypeNull(Expr expr) {
             // For primitive types, this can be any legitimate type, for simplicity, we pick boolean.
+<<<<<<< HEAD
             if (expr.getType().isNull()) {
                 expr.setType(Type.BOOLEAN);
                 return;
@@ -127,6 +128,13 @@ public class ScalarOperatorToExpr {
             // For array types, itemType can be any legitimate type, for simplicity, we pick boolean.
             if (Objects.equals(Type.ARRAY_NULL, expr.getType())) {
                 expr.setType(Type.ARRAY_BOOLEAN);
+=======
+            Type previousType = expr.getType();
+            Type type = AnalyzerUtils.replaceNullType2Boolean(previousType);
+            // If actual type of expr is SlotRef, avoid change desc type if no hack happens.
+            if (!Objects.equals(previousType, type)) {
+                expr.setType(type);
+>>>>>>> 4a990fd4f3 ([BugFix] Fix mishandled type null (#34985))
             }
         }
 
@@ -146,9 +154,7 @@ public class ScalarOperatorToExpr {
                 return expr;
             }
 
-            if (expr.getType().isNull()) {
-                hackTypeNull(expr);
-            }
+            hackTypeNull(expr);
             return expr;
         }
 

@@ -141,6 +141,105 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_sortby(x->x+1, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
+<<<<<<< HEAD
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
+=======
+        assertVerbosePlanContains(sql, "[/c3/d]");
+        sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
+        assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
+    }
+
+    @Test
+    public void testCast() throws Exception {
+        String sql = "select cast(row(null, null, null) as STRUCT<a int, b MAP<int, int>, c ARRAY<INT>>); ";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
+                "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
+                "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+    }
+
+    @Test
+    public void testCastArrayIndex() throws Exception {
+        String sql = "select c1.b[cast('  111   ' as bigint)] from test";
+        String plan = getVerboseExplain(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> 2: c1.b[111]",
+                "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
+    }
+
+    @Test
+    public void testNoProjectOnTF() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // no project on input, and no project on tf, no prune
+        String sql = "select c2_struct from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        sql = "select c2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        sql = "select c2, c2_struct from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        // project on input, no project on tf, prune
+        sql = "select c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        // output contains the complete column, no prune
+        sql = "select c3 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), " +
+                "c3_sub1_sub2 int(11)>>, c3_sub2 int(11)>]");
+        sql = "select c3, c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), " +
+                "c3_sub1_sub2 int(11)>>, c3_sub2 int(11)>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testProjectOnTF() throws Exception {
+        FeConstants.runningUnitTest = true;
+        // no project on input, and project on tf, prune
+        String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        // no project on input, and project on tf all subfiled, no prune
+        sql = "select c2_struct.c2_sub1, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        sql = "select c2_struct, c2_struct.c2_sub2 from array_struct_nest, unnest(c2) as t(c2_struct);";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11), c2_sub2 int(11)>>]");
+        // project on input, project on tf, prune
+        sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        // project on input, project on tf but all subfiled, prune
+        sql = "select c3_struct.c3_sub1_sub1, c3_struct.c3_sub1_sub2 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        sql = "select c3_struct.c3_sub1_sub1, c3_struct from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct);";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11), c3_sub1_sub2 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testNoOutputOnTF() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select c1 from array_struct_nest, unnest(c2) as t(c2_struct) where c2_struct.c2_sub1 > 0;";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        sql = "select c1 from array_struct_nest, unnest(c3.c3_sub1) as t(c3_struct) where c3_struct.c3_sub1_sub1 > 0;";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testUnnestComplex() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest, unnest(c2) as t(c_struct), " +
+                "unnest(c3.c3_sub1) as tt(c3_struct) where c_struct.c2_sub1 > 10";
+        assertVerbosePlanContains(sql, "[ARRAY<struct<c2_sub1 int(11)>>]");
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testUnnestCrossJoin() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select c3_struct.c3_sub1_sub1 from array_struct_nest cross join " +
+                "unnest(c3.c3_sub1) as t(c3_struct) where c1 > 0;";
+        assertVerbosePlanContains(sql, "[struct<c3_sub1 array<struct<c3_sub1_sub1 int(11)>>>]");
+        FeConstants.runningUnitTest = false;
+>>>>>>> 4a990fd4f3 ([BugFix] Fix mishandled type null (#34985))
     }
 }

@@ -36,6 +36,11 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+>>>>>>> 4a990fd4f3 ([BugFix] Fix mishandled type null (#34985))
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -775,8 +780,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
-        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
-        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
+        Preconditions.checkState(java.util.Objects.equals(type, AnalyzerUtils.replaceNullType2Boolean(type)),
+                "NULL_TYPE is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
