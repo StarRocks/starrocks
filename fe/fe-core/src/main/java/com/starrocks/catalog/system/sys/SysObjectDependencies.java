@@ -16,6 +16,7 @@ package com.starrocks.catalog.system.sys;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -71,6 +72,8 @@ public class SysObjectDependencies {
         // list dependencies of mv
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
+            String catalog = Optional.ofNullable(db.getCatalogName())
+                    .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             for (Table table : db.getTables()) {
                 // Only show tables with privilege
                 try {
@@ -83,19 +86,19 @@ public class SysObjectDependencies {
                     MaterializedView mv = (MaterializedView) table;
                     for (BaseTableInfo refObj : CollectionUtils.emptyIfNull(mv.getBaseTableInfos())) {
                         TObjectDependencyItem item = new TObjectDependencyItem();
-                        item.object_id = mv.getId();
-                        item.object_name = mv.getName();
-                        item.database = db.getFullName();
-                        item.catalog = db.getCatalogName();
-                        item.object_type = mv.getType().toString();
+                        item.setObject_id(mv.getId());
+                        item.setObject_name(mv.getName());
+                        item.setDatabase(db.getFullName());
+                        item.setCatalog(catalog);
+                        item.setObject_type(mv.getType().toString());
 
-                        item.ref_object_id = refObj.getTableId();
-                        item.ref_object_name = refObj.getTableName();
-                        item.ref_database = refObj.getDbName();
-                        item.ref_catalog = refObj.getCatalogName();
-                        item.ref_object_type = Optional.ofNullable(refObj.getTable())
+                        item.setRef_object_id(refObj.getTableId());
+                        item.setRef_object_name(refObj.getTableName());
+                        item.setRef_database(refObj.getDbName());
+                        item.setRef_catalog(refObj.getCatalogName());
+                        item.setRef_object_type(Optional.ofNullable(refObj.getTable())
                                 .map(x -> x.getType().toString())
-                                .orElse("UNKNOWN");
+                                .orElse("UNKNOWN"));
 
                         response.addToItems(item);
                     }
