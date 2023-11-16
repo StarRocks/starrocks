@@ -736,6 +736,24 @@ public class SystemInfoService implements GsonPostProcessable {
                 v -> !v.diskExceedLimitByStorageMedium(storageMedium));
     }
 
+<<<<<<< HEAD
+=======
+    public Long seqChooseBackendOrComputeId() throws UserException {
+        List<Long> backendIds = seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.isSharedNothingMode()) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No backend or compute node alive.");
+    }
+
+>>>>>>> 1ace19da5a ([Refactor] encapsulation new method to distinguish shared_data and shared_nothing mode (#35169))
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
 
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
@@ -1119,7 +1137,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void checkClusterCapacity() throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return;
         }
 
