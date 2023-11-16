@@ -40,7 +40,7 @@ StarRocks 数据导入整体生态图如下。
 
 ### Stream Load 导入 Demo
 
-以 Stream load 导入方式为例，将文件中的数据导入到 [建表](./Create_table.md) 章节中创建的 detailDemo 表中。
+以下示例以 Stream Load 导入方式为例，将文件中的数据导入到 [建表](./Create_table.md) 章节中创建的 `detailDemo` 表中。
 
 * 在本地创建数据文件 detailDemo_data，以逗号作为数据之间的分隔符，插入两条数据，具体内容如下：
 

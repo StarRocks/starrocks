@@ -16,6 +16,7 @@ RETURNS ret_type
 
 注：方括号 [] 中内容可省略不写。
 
+<<<<<<< HEAD
 ### 参数说明
 
 **AGGREGATE**: 如果有此项，表示的是创建的函数是一个聚合函数，否则创建的是一个标量函数。
@@ -100,3 +101,13 @@ RETURNS ret_type
 ## 关键字(keywords)
 
 CREATE，FUNCTION
+=======
+| **参数**      | **必选** | **说明**                                                     |
+| ------------- | -------- | ------------------------------------------------------------ |
+| AGGREGATE     | 否       | 如要创建 UDAF，需指定该关键字。                              |
+| TABLE         | 否       | 如要创建 UDTF，需指定该关键字。                              |
+| function_name | 是       | 函数名，其可以包含数据库名称，比如，`db1.my_func`。如果 `function_name` 中包含了数据库名称，那么该 UDF 会创建在对应的数据库中，否则该 UDF 会创建在当前数据库。新函数名和参数不能与目标数据库中已有的函数相同，否则会创建失败；如只有函数名相同，参数不同，则可以创建成功。 |
+| arg_type      | 是       | 函数的参数类型。具体支持的数据类型，请参见 [Java UDF](../../sql-functions/JAVA_UDF.md#类型映射关系)。 |
+| ret_type      | 是       | 函数的返回值类型。具体支持的数据类型，请参见 [Java UDF](../../sql-functions/JAVA_UDF.md#类型映射关系)。 |
+| properties    | 是       | 函数相关属性。创建不同类型的 UDF 需配置不同的属性，详情和示例请参考 [Java UDF](../../sql-functions/JAVA_UDF.md#步骤六在-starrocks-中创建-udf)。 |
+>>>>>>> f05ef5645 ([Doc] fix links in Branch 2.3 (#35196))

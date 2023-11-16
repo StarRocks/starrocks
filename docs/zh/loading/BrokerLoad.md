@@ -46,6 +46,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../quick_start/Deploy.md#部署-broker)完成 Broker 部署。
 
+
 本文档假设您的 StarRocks 集群中已部署一个名称为“mybroker”的 Broker。
 
 ## 基本原理
@@ -168,7 +169,9 @@ WITH BROKER "mybroker"
 > **说明**
 >
 > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
+> - 如果您的 A EC2 实例上绑定的 IAM 角色可以访问您的 AWS S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
+
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 从 Google GCS 导入
 
@@ -199,6 +202,7 @@ WITH BROKER "mybroker"
 >
 > 由于 Broker Load 只支持通过 S3A 协议访问 Google GCS，因此当从 Google GCS 导入数据时，`DATA INFILE` 中传入的目标文件的 GCS URI，前缀必须修改为 `s3a://`。
 
+
 #### 从 阿里云 OSS 导入
 
 可以通过如下语句，把阿里云 OSS 存储空间 `bucket_oss` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
@@ -224,6 +228,8 @@ WITH BROKER "mybroker"
 );
 ```
 
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+
 #### 从腾讯云 COS 导入
 
 可以通过如下语句，把腾讯云 COS 存储空间 `bucket_cos` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
@@ -248,6 +254,39 @@ WITH BROKER "mybroker"
     "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
 );
 ```
+
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+
+#### 从华为云 OBS 导入
+
+可以通过如下语句，把华为云 OBS 存储空间 `bucket_obs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+
+```SQL
+LOAD LABEL test_db.label6
+(
+    DATA INFILE("obs://bucket_obs/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("obs://bucket_obs/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER "mybroker"
+(
+    "fs.obs.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "fs.obs.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.obs.endpoint" = "obs.cn-east-3.myhuaweicloud.com"
+);
+```
+
+> **说明**
+>
+> 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
+
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 查询数据
 
@@ -366,6 +405,7 @@ curl --location-trusted -u root: \
 ### 取消导入作业
 
 当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+
 
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 
