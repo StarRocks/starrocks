@@ -48,7 +48,7 @@ public class MapTypeTest extends PlanTestBase {
                 "select map_concat(map('a',1, 'b',2), c1)\n" +
                 "from t0;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "map_concat(map{'a':1,'b':2}, CAST(2: c1 AS MAP<VARCHAR,TINYINT>))");
+        assertContains(plan, "map_concat(map{'a':1,'b':2}, CAST(1: c1 AS MAP<VARCHAR,TINYINT>))");
 
         sql = "with t0 as (\n" +
                 "    select c1 from (values(map())) as t(c1)\n" +
@@ -56,7 +56,7 @@ public class MapTypeTest extends PlanTestBase {
                 "select map_concat(c1, map('a',1, 'b',2))\n" +
                 "from t0;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "map_concat(CAST(2: c1 AS MAP<VARCHAR,TINYINT>), map{'a':1,'b':2})");
+        assertContains(plan, "map_concat(CAST(1: c1 AS MAP<VARCHAR,TINYINT>), map{'a':1,'b':2})");
     }
 
     @Test
