@@ -330,7 +330,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
-        ruleRewriteIterative(tree, rootTaskContext, new SkewJoinOptimizeRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
