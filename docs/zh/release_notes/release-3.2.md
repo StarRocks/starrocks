@@ -44,6 +44,8 @@
 - 访问 StarRocks 内表、外表或其他对象时，可根据在 Ranger 中创建的 StarRocks Service 配置的访问策略来进行访问控制。
 - 访问 External Catalog 时，也可以复用对应数据源原有的 Ranger service（如 Hive Service）来进行访问控制（当前暂未支持导出数据到 Hive 操作的权限控制）。
 
+更多内容，请参阅 [使用 Apache Ranger 管理权限](../administration/ranger_plugin.md)。
+
 ### 功能优化
 
 #### 物化视图 
