@@ -24,7 +24,7 @@ Currently, the FILES() function supports the following data sources and file for
 
 ```SQL
 FILES( data_location , data_format [, StorageCredentialParams ] 
-    [, columns_from_path ] [, schema_detect ] [, unload_data ] )
+    [, columns_from_path ] [, unload_data ] )
 
 data_location ::=
     "path" = { "hdfs://<hdfs_host>:<hdfs_port>/<hdfs_path>"
@@ -37,16 +37,9 @@ data_location ::=
 data_format ::=
     "format" = { "parquet" | "orc" }
 
-
 -- Supported from v3.2 onwards.
 columns_from_path ::=
     "columns_from_path" = "<column_name> [, ...]"
-
-
--- Supported from v3.2 onwards.
-schema_detect::=
-    [ "schema_auto_detect_sample_rows" = "<INT>" ]
-    [, "schema_auto_detect_sample_files" = "<INT>" ]
 
 -- Supported from v3.2 onwards.
 unload_data::=
@@ -184,6 +177,8 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
 
+<!--
+
 ### schema_detect
 
 From v3.2 onwards, FILES() supports automatic schema detection and unionization of the same batch of data files. StarRocks first detects the schema of the data by sampling certain data rows of a random data file in the batch. Then, StarRocks unionizes the columns from all the data files in the batch.
@@ -203,6 +198,8 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 > **CAUTION**
 >
 > All data files in a single batch must be of the same file format.
+
+-->
 
 ### unload_data
 
