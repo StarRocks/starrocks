@@ -1,5 +1,47 @@
 # Docs
 
+## The `docusaurus` dir
+
+Allows tech writers to build the docs locally.
+
+Our docs are in `docs/en` and `docs/zh`. When versioning and internationalization are enabled
+in Docusaurus the markdown files need to be in `docs/` and `i18n/zh/some long path`. The
+`scripts/sync/sync.mjs` code will sync your files from the easy paths in `docs` to where
+Docusaurus wants them. This first set of commands installs the Docusaurus packages and
+requirements and then starts syncing your files. It will watch for changes and copy as you
+save files in case you want to make edits and see the changes in your browser as you save
+the files.
+
+```shell
+cd starrocks/docs/docusaurus
+yarn install --frozen-lockfile
+yarn sync
+```
+
+To build the docs open another shell and run these commands. By setting DISABLE_VERSIONING
+you can have Docusaurus build only the version you have checked out. If you want to build
+everything use the staging deploy GitHub action.
+
+```shell
+cd starrocks/docs/docusaurus
+export NODE_OPTIONS="--max-old-space-size=8192"
+export DISABLE_VERSIONING=true
+yarn build
+yarn serve
+```
+
+To run in development mode (re-render the pages as you edit and save them) you can run these commands:
+
+> Note:
+>
+> In development mode only one language is rendered, use `--locale` with `zh` or `en`.
+
+```shell
+cd starrocks/docs/docusaurus
+export NODE_OPTIONS="--max-old-space-size=8192"
+yarn start --locale zh
+```
+
 ## Release notes
 
 > Note:
