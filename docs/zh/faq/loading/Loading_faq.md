@@ -40,7 +40,7 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 ## 3. 发生数据质量错误 "ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel" 应该如何处理？
 
-运行 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句。在语句返回的信息中，找到 URL，然后查看错误数据。
+运行 [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句。在语句返回的信息中，找到 URL，然后查看错误数据。
 
 常见的数据质量错误有：
 
@@ -74,4 +74,4 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 ## 4. 导入过程中，发生远端程序呼叫（Remote Procedure Call，简称 RPC）超时问题应该如何处理？
 
-检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远端程序呼叫（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](/loading/Loading_intro.md)。
+检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远端程序呼叫（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](../../loading/Loading_intro.md)。

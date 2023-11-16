@@ -6,7 +6,7 @@ You can load data into StarRocks by running load jobs. Each load job has a uniqu
 
 All the loading methods provided by StarRocks can guarantee atomicity. Atomicity means that the qualified data within a load job must be all successfully loaded or none of the qualified data is successfully loaded. It never happens that some of the qualified data is loaded while the other data is not. Note that the qualified data does not include the data that is filtered out due to quality issues such as data type conversion errors.
 
-StarRocks supports two communication protocols that can be used to submit load jobs: MySQL and HTTP. For more information about the protocol supported by each loading method, see the "[Loading methods](/loading/Loading_intro.md#Loading methods)" section of this topic.
+StarRocks supports two communication protocols that can be used to submit load jobs: MySQL and HTTP. For more information about the protocol supported by each loading method, see the [Loading methods](#loading-methods) section of this topic.
 
 ## Supported data types
 

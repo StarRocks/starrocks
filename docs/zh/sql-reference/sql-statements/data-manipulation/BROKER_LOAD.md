@@ -110,7 +110,7 @@ INTO TABLE <table_name>
   >
   > 如果待导入数据文件的列和 StarRocks 表中的列按顺序一一对应，则不需要指定 `column_list` 参数。
 
-  如果要跳过待导入数据文件中的某一列，只需要在 `column_list` 参数中将该列命名为 StarRocks 表中不存在的列名即可。具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+  如果要跳过待导入数据文件中的某一列，只需要在 `column_list` 参数中将该列命名为 StarRocks 表中不存在的列名即可。具体请参见[导入过程中实现数据转换](../../../loading/Etl_in_loading.md)。
 
 - `COLUMNS FROM PATH AS`
 
@@ -309,7 +309,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
     >
     > - “平均导入速度”是指目前 StarRocks 集群的平均导入速度。由于每个 StarRocks 集群的机器环境不同、且集群允许的并发查询任务数也不同，因此，StarRocks 集群的平均导入速度需要根据历史导入速度进行推测。
     >
-    > - “导入并发数”可以通过 `max_broker_concurrency` 参数设置，具体请参见“从 HDFS 或外部云存储系统导入数据”文档中的“[作业拆分与并行执行](/loading/BrokerLoad.md#作业拆分与并行执行)”章节。
+    > - “导入并发数”可以通过 `max_broker_concurrency` 参数设置，具体请参见“从 HDFS 或外部云存储系统导入数据”文档中的“[作业拆分与并行执行](../../../loading/BrokerLoad.md#作业拆分与并行执行)”章节。
 
    例如，要导入一个 1 GB 的数据文件，该数据文件包含 2 个物化视图，当前 StarRocks 集群的平均导入速度为 10 MB/s，导入并发数为 3。在这种情况下，根据公式计算出来时长为 102 秒：
 
@@ -327,7 +327,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
     >
     > 这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。
 
-  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
+  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](./SHOW_LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
 
   **`max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]**
 
@@ -343,7 +343,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `timezone`
 
-  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](/administration/timezone.md)”中所述的会话级时区。
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。
 
 ## 列映射
 
@@ -632,7 +632,7 @@ WITH BROKER "mybroker"
 >
 > - 使用 `empty_hll` 函数给导入的数据行在 `table10` 中的第四列补充默认值。
 
-有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](/sql-reference/sql-statements/data-definition/HLL.md)。
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](../data-definition/HLL.md)。
 
 #### 提取文件路径中的分区字段
 

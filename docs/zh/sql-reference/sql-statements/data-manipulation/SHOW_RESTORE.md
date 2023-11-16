@@ -2,7 +2,7 @@
 
 ## description
 
-该语句用于查看 RESTORE 任务。详细的Backup&restore操作说明请参考: [备份恢复](/administration/Backup_and_restore.md)章节。
+该语句用于查看 RESTORE 任务。详细的Backup&restore操作说明请参考: [备份恢复](../../../administration/Backup_and_restore.md)章节。
 
 语法：
 

@@ -73,7 +73,7 @@ PROPERTIES(
 
 可以通过 `show tables;` 命令查看当前库的所有表，通过 `desc table_name;` 命令可以查看表结构。通过 `show create table table_name;` 可查看建表语句。请注意：在 StarRocks 中字段名不区分大小写，表名区分大小写。
 
-表创建成功后，可以参考 [导入查询](../quick_start/Import_and_query.md) 章节 [Stream load Demo](/quick_start/Import_and_query.md#stream-load%E5%AF%BC%E5%85%A5demo) 进行数据导入及查询操作。
+表创建成功后，可以参考 [导入查询](../quick_start/Import_and_query.md) 章节 [Stream load Demo](./Import_and_query.md#stream-load-导入-demo) 进行数据导入及查询操作。
 
 更多建表语法详见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 章节。
 
@@ -91,7 +91,7 @@ StarRocks 表中支持多种字段类型，除 demo 中已经列举的字段类�
 
 #### 分区，分桶
 
-`PARTITION` 关键字用于给表 [创建分区](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#Syntax)，当前 demo 中使用 `make_time` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，`PROPERTIES` 中的 `dynamic_partition` 开头的相关属性配置都是为表设置动态分区。详见 [动态分区管理](../table_design/Data_distribution.md#动态分区管理)。
+`PARTITION` 关键字用于给表 [创建分区](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#语法)，当前 demo 中使用 `make_time` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，`PROPERTIES` 中的 `dynamic_partition` 开头的相关属性配置都是为表设置动态分区。详见 [动态分区管理](../table_design/Data_distribution.md#管理动态分区)。
 
 `DISTRIBUTED` 关键字用于给表 [创建分桶](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
@@ -103,7 +103,7 @@ StarRocks 表中支持多种字段类型，除 demo 中已经列举的字段类�
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键和 shortke index](../table_design/Sort_key.md#排序列的原理) 章节。支持的索引类型有 [Bitmap 索引](../table_design/Bitmap_index.md#原理)，[Bloomfilter 索引](../table_design/Bloomfilter_index.md#原理) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键和 shortke index](../table_design/Sort_key.md#排序原理) 章节。支持的索引类型有 [Bitmap 索引](../table_design/Bitmap_index.md#原理)，[Bloomfilter 索引](../table_design/Bloomfilter_index.md#原理) 等。
 
 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
 

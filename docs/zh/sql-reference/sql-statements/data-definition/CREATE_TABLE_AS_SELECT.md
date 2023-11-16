@@ -39,7 +39,7 @@ AS SELECT query
 
 ## 使用说明
 
-- 仅支持 ENGINE 类型为 OLAP ；[数据模型](/table_design/Data_model.md) 为 [Duplicate Key](/table_design/Data_model.md#明细模型)，排序键为前三列（数据类型的存储空间不能超过 36 字节）。
+- 仅支持 ENGINE 类型为 OLAP ；[数据模型](../../../table_design/Data_model.md) 为 [Duplicate Key](../../../table_design/Data_model.md#明细模型)，排序键为前三列（数据类型的存储空间不能超过 36 字节）。
 - 暂不支持设置索引。
 - 暂无法对 CTAS 提供事务保证。如果 CTAS 语句执行失败（FE 重启等原因），则可能存在如下情况：
   - 新表可能已创建且未删除。

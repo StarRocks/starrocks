@@ -2,11 +2,11 @@
 
 StarRocks 提供基于 MySQL 协议的 Broker Load 导入方式，帮助您从 HDFS 或外部云存储系统导入几十到数百 GB 的数据量。
 
-Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
+Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
 
 Broker Load 支持一次导入多个数据文件，并且能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
-Broker Load 还支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+Broker Load 还支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](./Etl_in_loading.md)。
 
 ## 背景信息
 
@@ -44,7 +44,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 确保您的 StarRocks 集群中已部署 Broker。
 
-您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/quick_start/Deploy.md#部署-broker)完成 Broker 部署。
+您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../quick_start/Deploy.md#部署-broker)完成 Broker 部署。
 
 本文档假设您的 StarRocks 集群中已部署一个名称为“mybroker”的 Broker。
 
@@ -60,7 +60,7 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 ### 创建导入作业
 
-这里以导入 CSV 格式的数据为例介绍如何创建导入作业。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+这里以导入 CSV 格式的数据为例介绍如何创建导入作业。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
 
 #### 数据样例
 
@@ -326,7 +326,7 @@ Broker Load 支持通过 SHOW LOAD 语句和 curl 命令两种方式来查看导
 
 #### 使用 SHOW LOAD 语句
 
-请参见 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。
+请参见 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。
 
 #### 使用 curl 命令
 
@@ -357,7 +357,7 @@ curl --location-trusted -u root: \
 | dbName      | 目标 StarRocks 表所在的数据库的名称。                               |
 | tblNames    | 目标 StarRocks 表的名称。                        |
 | label       | 导入作业的标签。                                             |
-| state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](/loading/Loading_intro.md#异步导入)。 |
+| state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](./Loading_intro.md#异步导入)。 |
 | failMsg     | 导入作业的失败原因。当导入作业的状态为`PENDING`，`LOADING`或`FINISHED`时，该参数值为`NULL`。当导入作业的状态为`CANCELLED`时，该参数值包括 `type` 和 `msg` 两部分：<ul><li>`type` 包括如下取值：</li><ul><li>`USER_CANCEL`：导入作业被手动取消。</li><li>`ETL_SUBMIT_FAIL`：导入任务提交失败。</li><li>`ETL-QUALITY-UNSATISFIED`：数据质量不合格，即导入作业的错误数据率超过了 `max-filter-ratio`。</li><li>`LOAD-RUN-FAIL`：导入作业在 `LOADING` 状态失败。</li><li>`TIMEOUT`：导入作业未在允许的超时时间内完成。</li><li>`UNKNOWN`：未知的导入错误。</li></ul><li>`msg` 显示有关失败原因的详细信息。</li></ul> |
 | trackingUrl | 导入作业中质量不合格数据的访问地址。可以使用 `curl` 命令或 `wget` 命令访问该地址。如果导入作业中不存在质量不合格的数据，则返回空值。 |
 | status      | 导入请求的状态，包括 `OK` 和 `Fail`。                        |
@@ -365,7 +365,7 @@ curl --location-trusted -u root: \
 
 ### 取消导入作业
 
-当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](/sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
 
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 
@@ -383,7 +383,7 @@ WHERE LABEL = "label";
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](/administration/Configuration.md#配置-fe-动态参数)决定：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/Configuration.md#配置-fe-动态参数)决定：
 
 - `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
 
@@ -399,4 +399,4 @@ WHERE LABEL = "label";
 
 ## 常见问题
 
-请参见 [Broker Load 常见问题](/faq/loading/Broker_load_faq.md)。
+请参见 [Broker Load 常见问题](../faq/loading/Broker_load_faq.md)。
