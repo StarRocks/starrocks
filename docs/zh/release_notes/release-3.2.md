@@ -39,10 +39,10 @@
 
 #### 权限
 
-支持通过 Apache Ranger 实现访问控制，提供更高层次的数据安全保障，并且允许复用原有的外部数据源 Service。StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
+支持通过 Apache Ranger 实现访问控制，提供更高层次的数据安全保障，并且允许复用外部数据源对应的 Ranger Service。StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 - 访问 StarRocks 内表、外表或其他对象时，可根据在 Ranger 中创建的 StarRocks Service 配置的访问策略来进行访问控制。
-- 访问 External Catalog 时，也可以复用对应数据源原有的 Ranger service（如 Hive Service）来进行访问控制（当前暂未支持导出数据到 Hive 操作的权限控制）。
+- 访问 External Catalog 时，也可以复用对应数据源原有的 Ranger service（如 Hive Service）来进行访问控制（对于导出数据到 Hive，当前暂未提供相应的权限控制策略。）。
 
 更多内容，请参阅 [使用 Apache Ranger 管理权限](../administration/ranger_plugin.md)。
 
