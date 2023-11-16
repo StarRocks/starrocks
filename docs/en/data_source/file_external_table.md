@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # File external table
 
 File external table is a special type of external table. It allows you to directly query Parquet and ORC data files in external storage systems without loading data into StarRocks. In addition, file external tables do not rely on a metastore. In the current version, StarRocks supports the following external storage systems: HDFS, Amazon S3, and other S3-compatible storage systems.

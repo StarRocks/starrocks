@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过源码编译 StarRocks
 
 本文介绍如何通过 Docker 镜像编译 StarRocks。

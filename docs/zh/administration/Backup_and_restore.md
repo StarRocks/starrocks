@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 备份与恢复
 
 本文介绍如何备份以及恢复 StarRocks 中的数据，或将数据迁移至新的 StarRocks 集群。

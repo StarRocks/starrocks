@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # APPROX_COUNT_DISTINCT
 
 ## Description
