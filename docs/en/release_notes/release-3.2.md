@@ -39,7 +39,7 @@ Added the following functions:
 
 #### Privileges and security
 
-StarRocks supports access control through Apache Ranger, providing a higher level of data security and allowing the reuse of existing services of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
+StarRocks supports access control through Apache Ranger, providing a higher level of data security and allowing the reuse of existing Ranger Service of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
 
 - When accessing internal tables, external tables, or other objects in StarRocks, access control can be enforced based on the access policies configured for the StarRocks Service in Ranger.
 - When accessing an external catalog, access control can also leverage the corresponding Ranger service of the original data source (such as Hive Service) to control access (currently, access control for exporting data to Hive is not yet supported).
