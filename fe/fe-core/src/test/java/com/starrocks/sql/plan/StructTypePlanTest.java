@@ -199,7 +199,20 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
+<<<<<<< HEAD
         assertPlanContains(sql, "ARRAY<boolean>[], ARRAY<boolean>[]");
+=======
+        assertPlanContains(sql, "map_from_arrays(5: cast, 5: cast)");
+    }
+
+    @Test
+    public void testCast() throws Exception {
+        String sql = "select cast(row(null, null, null) as STRUCT<a int, b MAP<int, int>, c ARRAY<INT>>); ";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "cast(row[(NULL, NULL, NULL); args: BOOLEAN,BOOLEAN,BOOLEAN; " +
+                "result: struct<col1 boolean, col2 boolean, col3 boolean>; args nullable: true; result nullable: true] " +
+                "as struct<a int(11), b map<int(11),int(11)>, c array<int(11)>>)");
+>>>>>>> 4a990fd4f3 ([BugFix] Fix mishandled type null (#34985))
     }
 
     @Test

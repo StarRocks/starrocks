@@ -18,7 +18,11 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
+<<<<<<< HEAD
 import com.starrocks.catalog.ArrayType;
+=======
+import com.starrocks.analysis.BinaryType;
+>>>>>>> 4a990fd4f3 ([BugFix] Fix mishandled type null (#34985))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -88,17 +92,14 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);
 
-                //Cast from array(null), direct assignment type to avoid passing null_literal into be
-                if (type.isArrayType() && child.getType().isArrayType()
-                        && ((ArrayType) child.getType()).getItemType().isNull()) {
-                    child.setType(type);
+                // For compatibility, decimal ArithmeticExpr(+-*/%) use Type::equals instead of Type::matchesType to
+                // determine whether to cast child of the ArithmeticExpr
+                if (needAdjustScale && type.isDecimalOfAnyVersion() && !type.equals(child.getType())) {
+                    addCastChild(type, call, i);
                     continue;
                 }
 
-                // for compatibility, decimal ArithmeticExpr(+-*/%) use Type::equals instead of Type::matchesType to
-                // determine whether to cast child of the ArithmeticExpr
-                if ((needAdjustScale && type.isDecimalOfAnyVersion() && !type.equals(child.getType())) ||
-                        !type.matchesType(child.getType())) {
+                if (!type.matchesType(child.getType())) {
                     addCastChild(type, call, i);
                 }
             }

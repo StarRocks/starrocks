@@ -79,7 +79,11 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testArrayFnWithLambdaExpr() throws Exception {
         String sql = "select filter(array[], x -> true);";
+<<<<<<< HEAD
         assertPlanContains(sql, "array_filter(ARRAY<boolean>[], array_map(<slot 2> -> TRUE, ARRAY<boolean>[]))");
+=======
+        assertPlanContains(sql, "array_filter(CAST([] AS ARRAY<BOOLEAN>), array_map(<slot 2> -> TRUE, []))");
+>>>>>>> 4a990fd4f3 ([BugFix] Fix mishandled type null (#34985))
 
         sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
         assertPlanContains(sql, "array_filter(ARRAY<tinyint(4)>[5,-6,NULL,7], " +
