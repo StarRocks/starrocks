@@ -654,7 +654,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
         Locker locker = new Locker();
         // update the meta if succeed
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -1905,7 +1905,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
         String dropPartitionName = materializedView.getPartition(mvPartitionName).getName();
         Locker locker = new Locker();
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DmlException("drop partition failed. database:" + db.getFullName() + " not exist");
         }
         try {

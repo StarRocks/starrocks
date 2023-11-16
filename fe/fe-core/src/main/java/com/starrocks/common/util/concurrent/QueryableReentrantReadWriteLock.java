@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.util.concurrent;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.util.LogUtil;
 
 import java.util.Collection;
 import java.util.List;
@@ -24,10 +24,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /*
  * This Lock is for exposing the getOwner() method,
- * which is a protected method of ReentrantReadWriteLock
+ * which is a protected method of ReentrantReadWriteLock.
+ * And to provide the lock information for debugging, we should
+ * call the helper method like sharedLock(), exclusiveLock() instead of
+ * directly calling readLock().lock(), writeLock.lock().
  */
 public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     // threadId -> lockTime
@@ -45,11 +49,11 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     }
 
     public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
-        boolean succ = this.readLock().tryLock(timeout, unit);
-        if (succ) {
+        boolean result = this.readLock().tryLock(timeout, unit);
+        if (result) {
             this.sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
         }
-        return succ;
+        return result;
     }
 
     public void sharedUnlock() {
@@ -63,11 +67,11 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     }
 
     public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
-        boolean succ = this.writeLock().tryLock(timeout, unit);
-        if (succ) {
+        boolean result = this.writeLock().tryLock(timeout, unit);
+        if (result) {
             this.exclusiveLockTime.set(System.currentTimeMillis());
         }
-        return succ;
+        return result;
     }
 
     public void exclusiveUnlock() {
@@ -103,5 +107,54 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     public boolean isReadLockHeldByCurrentThread() {
         return this.getReadHoldCount() > 0;
+    }
+
+    private void appendQueuedInfo(StringBuilder sb, List<Long> queuedReaders, List<Long> queuedWriters) {
+        sb.append(queuedReaders.size()).append(" queued reader(s): ").append(queuedReaders).append(", ")
+                .append(queuedWriters.size()).append(" queued writer(s): ").append(queuedWriters);
+    }
+
+    /**
+     * Get the lock information, includes: isFair, owner name, owner id, queued readers, queued writers,
+     * owner or current thread stack trace.
+     *
+     * @param currThread the thread on which we want to dump the stack,
+     *              if it's null, we dump the owner thread(if exists) of this lock
+     * @return The lock information
+     */
+    private String getLockInfo(Thread currThread) {
+        StringBuilder sb = new StringBuilder();
+        List<Long> queuedReaders = getQueuedReaderThreads().stream().map(Thread::getId).collect(Collectors.toList());
+        List<Long> queuedWriters = getQueuedWriterThreads().stream().map(Thread::getId).collect(Collectors.toList());
+        if (currThread == null) {
+            sb.append("isFair: ").append(isFair()).append(", ");
+            Thread owner = getOwner();
+            if (owner == null) {
+                sb.append("no owner(writer), ").append(getReadLockCount()).append(" reader(s) holding lock, ");
+                appendQueuedInfo(sb, queuedReaders, queuedWriters);
+            } else {
+                sb.append("lock owner id: ").append(owner.getId())
+                        .append(", name: ").append(owner.getName()).append(", ");
+                appendQueuedInfo(sb, queuedReaders, queuedWriters);
+                sb.append(", owner stack: ")
+                        .append(LogUtil.getStackTraceToList(owner, 0, 15));
+            }
+        } else {
+            appendQueuedInfo(sb, queuedReaders, queuedWriters);
+            sb.append(", ").append("current thread id: ").append(currThread.getId())
+                    .append(", name: ").append(currThread.getName()).append(", ")
+                    .append("thread stack: ")
+                    .append(LogUtil.getCurrentStackTraceToList(5, 10));
+        }
+
+        return sb.toString();
+    }
+
+    public String getLockInfoWithOwnerStack() {
+        return getLockInfo(null);
+    }
+
+    public String getLockInfoWithCurrStack() {
+        return getLockInfo(Thread.currentThread());
     }
 }

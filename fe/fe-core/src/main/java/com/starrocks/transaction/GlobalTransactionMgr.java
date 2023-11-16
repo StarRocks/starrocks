@@ -278,7 +278,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         List<Long> tableIdList = transactionState.getTableIdList();
 
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE, timeoutMillis)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE,
+                timeoutMillis, TimeUnit.MILLISECONDS)) {
             throw new UserException("get database write lock timeout, database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
@@ -401,7 +402,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(
                     "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
         }

@@ -117,7 +117,7 @@ public class Database extends MetaObject implements Writable {
     private final QueryableReentrantReadWriteLock rwLock;
 
     // This param is used to make sure db not dropped when leader node writes wal,
-    // so this param does not need to be persistent,
+    // so this param does not need to be persisted,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
     // but that's ok to meet our needs.
     private volatile boolean exist = true;

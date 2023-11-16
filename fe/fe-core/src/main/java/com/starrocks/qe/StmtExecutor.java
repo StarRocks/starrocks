@@ -1789,7 +1789,7 @@ public class StmtExecutor {
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
                 insertStmt, db.getId(), olapTable.getId());
-        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
