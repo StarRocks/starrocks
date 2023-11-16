@@ -824,6 +824,7 @@ public class FileSystemManager {
                 conf.set("fs.cosn.trsf.fs.ofs.tmp.cache.dir", "/tmp");
                 conf.set("fs.cosn.credentials.provider", "org.apache.hadoop.fs.auth.RangerCredentialsProvider");
                 conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
+
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
             }
