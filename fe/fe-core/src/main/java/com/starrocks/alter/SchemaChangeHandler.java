@@ -2369,10 +2369,6 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // update base index schema
-            long baseIndexId = olapTable.getBaseIndexId();
-            List<Long> indexIds = new ArrayList<Long>();
-            indexIds.add(baseIndexId);
-            indexIds.addAll(olapTable.getIndexIdListExceptBaseIndex());
             Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             Boolean hasMv = !olapTable.getRelatedMaterializedViews().isEmpty();
             for (Map.Entry<Long, List<Column>> entry : changedIndexIdToSchema.entrySet()) {
@@ -2401,9 +2397,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 }
                 currentIndexMeta.setSchema(indexSchema);
-                if (!newSortKeyIdxes.isEmpty()) {
-                    currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
-                }
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();
                 int newSchemaVersion = currentSchemaVersion + 1;

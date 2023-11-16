@@ -376,15 +376,25 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
         List<Index> newIndexes = tbl.getCopiedIndexes();
 
-        Assertions.assertDoesNotThrow(
+        Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
                         .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 100, 100, false));
-        jobSize++;
-        Assertions.assertEquals(jobSize, alterJobs.size());
 
+        indexSchemaMap.get(tbl.getBaseIndexId()).add(6, new Column("kk", Type.INT));
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
                         .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 101, 101, true));
+        jobSize++;
+        Assertions.assertEquals(jobSize, alterJobs.size());
+
+        Map<Long, LinkedList<Column>> indexSchemaMap2 = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : tbl.getIndexIdToSchema().entrySet()) {
+            indexSchemaMap2.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+        }
+        indexSchemaMap2.get(tbl.getBaseIndexId()).remove(6);
+        Assertions.assertDoesNotThrow(
+                () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap2, newIndexes, 102, 102, true));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
@@ -392,7 +402,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 102, 102, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 103, 103, false));
         tbl.setState(beforeState);
 
         Map<Long, LinkedList<Column>> indexSchemaMapInvalid2 = new HashMap<>(indexSchemaMap);
@@ -402,7 +412,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid2, newIndexes, 103, 103, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid2, newIndexes, 104, 104, false));
 
         Map<Long, LinkedList<Column>> indexSchemaMapInvalid3 = new HashMap<>(indexSchemaMap);
 
@@ -410,13 +420,13 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         indexSchemaMapInvalid3.get(tbl.getBaseIndexId()).removeIf(Column::isKey);
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid3, newIndexes, 104, 104, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid3, newIndexes, 105, 105, false));
 
         Map<Long, LinkedList<Column>> emptyIndexMap = new HashMap<>();
 
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 105, 105, false));
+                        .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 106, 106, false));
 
     }
 
