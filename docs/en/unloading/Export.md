@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Export Overview
 
 Data Export is a feature to export and store data to other storage media. It can export data from user-specified tables or partitions in **text** format to remote storage such as HDFS/AliCloud OSS/AWS S3 (or S3 protocol-compatible object storage) via Broker.

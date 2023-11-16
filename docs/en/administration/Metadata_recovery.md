@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Restore FEs
 
 This topic describes how to restore the frontends (FEs) in your StarRocks cluster if the cluster is unavailable due to one of the following issues:

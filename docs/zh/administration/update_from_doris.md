@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 从 ApacheDoris 升级为 Starrocks 标准版操作手册
 
 ## 升级环境

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Manage a cluster
 
 This topic explains how to manage a cluster.

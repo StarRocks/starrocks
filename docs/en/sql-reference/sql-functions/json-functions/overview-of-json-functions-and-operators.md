@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Overview of JSON functions and operators
 
 This topic provides an overview of the JSON constructor functions, query functions, and processing functions, operators, and path expressions that are supported by StarRocks.

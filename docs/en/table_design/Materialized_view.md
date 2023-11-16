@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Materialized View
 
 ## Terminology

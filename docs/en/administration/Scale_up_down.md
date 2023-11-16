@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Scale in and out
 
 This topic describes how to scale in and out the node of StarRocks.

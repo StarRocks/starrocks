@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SSB 性能测试
 
 ## 一、测试结论

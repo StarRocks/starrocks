@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Routine Load
 
 The Routine load method supports continuous import of data from Kafka. Routine load can be paused, restarted, stopped by SQL. This section introduces the basic principle and usage of this method.

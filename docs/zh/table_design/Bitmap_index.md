@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Bitmap 索引
 
 StarRocks 支持基于Bitmap索引，对于有Filter的查询有明显的加速效果。

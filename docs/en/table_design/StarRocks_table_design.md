@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Understand StarRocks table design
 
 ## Columnar storage

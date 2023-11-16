@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # curdate
 
 ## 功能

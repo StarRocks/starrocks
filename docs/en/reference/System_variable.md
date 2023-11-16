@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # System variables
 
 ## Variable Settings and Viewing

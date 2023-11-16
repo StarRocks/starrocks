@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 集群管理
 
 StarRocks 集群提供服务过程中，有升级等需要启停的操作，本文主要介绍集群日常管理的常用操作步骤。
