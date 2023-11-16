@@ -597,7 +597,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             auto& column = chunk->get_column_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
-                _append_zero_to_column(column.get());
+                if (column->is_binary()) {
+                    std::ignore = column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_datum(Datum((uint8_t)0));
+                }
             } else {
                 column->append_nulls(1);
             }
@@ -620,7 +624,11 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
         if (i >= jsonpath_size) {
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
-                _append_zero_to_column(column);
+                if (column->is_binary()) {
+                    column->append_strings(std::vector{Slice{"0"}});
+                } else {
+                    column->append_datum(Datum((uint8_t)0));
+                }
             } else {
                 column->append_nulls(1);
             }
@@ -648,7 +656,11 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             } else if (st.is_not_found()) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
-                    _append_zero_to_column(column);
+                    if (column->is_binary()) {
+                        column->append_strings(std::vector{Slice{"0"}});
+                    } else {
+                        column->append_datum(Datum((uint8_t)0));
+                    }
                 } else {
                     column->append_nulls(1);
                 }
@@ -811,17 +823,6 @@ Status JsonReader::_read_and_parse_json() {
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      const std::string& col_name) {
     return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
-}
-
-void JsonReader::_append_zero_to_column(Column* column) {
-    auto* nullable_column = down_cast<NullableColumn*>(column);
-    if (nullable_column->data_column()->is_binary()) {
-        nullable_column->append_strings(std::vector{Slice{"0"}});
-    } else if (nullable_column->data_column()->is_numeric()) {
-        nullable_column->append_datum(Datum((uint8_t)0));
-    } else {
-        nullable_column->append_nulls(1);
-    }
 }
 
 } // namespace starrocks

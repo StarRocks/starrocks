@@ -120,7 +120,6 @@ private:
                              const std::string& col_name);
 
     Status _check_ndjson();
-    void _append_zero_to_column(Column* column);
 
 private:
     RuntimeState* _state = nullptr;
