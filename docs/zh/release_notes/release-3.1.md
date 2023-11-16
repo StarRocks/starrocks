@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks version 3.1
 
 ## 3.1.4

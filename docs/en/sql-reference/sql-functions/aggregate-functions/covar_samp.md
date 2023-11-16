@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # COVAR_SAMP
 
 ## Description

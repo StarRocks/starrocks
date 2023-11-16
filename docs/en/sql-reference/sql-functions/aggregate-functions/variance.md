@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # VARIANCE,VAR_POP,VARIANCE_POP
 
 ## Description

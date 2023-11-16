@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # starrocks-kubernetes-operator
 
 ## Notifications

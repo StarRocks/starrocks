@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # radians
 
 ## 功能

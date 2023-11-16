@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # query_dump interface
 
 This topic describes how to use the query_dump interface to obtain the details of an SQL query and its related information.

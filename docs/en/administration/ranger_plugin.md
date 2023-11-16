@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Manage permissions with Apache Ranger
 
 [Apache Ranger](https://ranger.apache.org/) provides a centralized security management framework that allows users to customize access policies through a visual web page. This helps determine which roles can access which data and exercise fine-grained data access control for various components and services in the Hadoop ecosystem.

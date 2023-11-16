@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # sub_bitmap
 
 ## 功能

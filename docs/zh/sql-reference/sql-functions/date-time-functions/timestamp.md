@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # timestamp
 
 ## 功能

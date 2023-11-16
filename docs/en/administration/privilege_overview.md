@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Overview of privileges
 
 This topic describes the basic concepts of StarRocks' privilege system. Privileges determine which users can perform which operations on which objects, so that you can more securely manage data and resources in a fine-grained manner.
