@@ -22,12 +22,16 @@ import net.bytebuddy.implementation.bind.annotation.RuntimeType;
 import net.bytebuddy.implementation.bind.annotation.SuperMethod;
 import net.bytebuddy.implementation.bind.annotation.This;
 import net.bytebuddy.matcher.ElementMatchers;
+import org.apache.hadoop.crypto.CryptoInputStream;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hdfs.DFSInputStream;
+import org.apache.hadoop.hdfs.client.HdfsDataInputStream;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
 import java.lang.reflect.Method;
 
 public class FileSystemByteBuddyProxy {
@@ -49,6 +53,7 @@ public class FileSystemByteBuddyProxy {
             dynamicType = new ByteBuddy()
                     .subclass(FSProxy.class)
                     .method(ElementMatchers.isDeclaredBy(FileSystem.class))
+                    //                    .method(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
                     .intercept(MethodDelegation.to(FSProxy.class))
                     .make()
                     .load(FSProxy.class.getClassLoader(), ClassLoadingStrategy.Default.INJECTION)
@@ -62,7 +67,9 @@ public class FileSystemByteBuddyProxy {
             FSProxy proxy = (FSProxy) self;
             LOGGER.debug(HadoopExt.LOGGER_MESSAGE_PREFIX + " fs proxy: " + method.toString());
             Object res = HadoopExt.getInstance().doAs(proxy.ugi, () -> method.invoke(proxy.target, args));
-            if (res instanceof FSDataInputStream) {
+            if (res instanceof HdfsDataInputStream) {
+                res = createHdfsDataInputStreamProxy((HdfsDataInputStream) res, proxy.ugi);
+            } else if (res instanceof FSDataInputStream) {
                 res = createFSDataInputStreamProxy((FSDataInputStream) res, proxy.ugi);
             }
             return res;
@@ -95,13 +102,54 @@ public class FileSystemByteBuddyProxy {
         public static Object intercept(@This Object self, @AllArguments Object[] args, @Origin Method method,
                                        @SuperMethod(nullIfImpossible = true) Method superMethod)
                 throws Exception {
-            LOGGER.debug(HadoopExt.LOGGER_MESSAGE_PREFIX + " input stream proxy: " + method.toString());
+            LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " input stream proxy: " + method.toString());
             InputStreamProxy proxy = (InputStreamProxy) self;
             return HadoopExt.getInstance().doAs(proxy.ugi, () -> method.invoke(proxy.target, args));
         }
     }
 
+    static class HdfsInputStreamProxy extends HdfsDataInputStream {
+        private FSDataInputStream target;
+        private UserGroupInformation ugi;
+
+        public static Class dynamicType;
+
+        static {
+            dynamicType = new ByteBuddy()
+                    .subclass(HdfsInputStreamProxy.class)
+                    .method(ElementMatchers.not(ElementMatchers.isDeclaredBy(Object.class)))
+                    .intercept(MethodDelegation.to(HdfsInputStreamProxy.class))
+                    .make()
+                    .load(HdfsInputStreamProxy.class.getClassLoader(), ClassLoadingStrategy.Default.INJECTION)
+                    .getLoaded();
+        }
+
+        public HdfsInputStreamProxy(DFSInputStream in, HdfsDataInputStream target, UserGroupInformation ugi) {
+            super(in);
+            this.target = target;
+            this.ugi = ugi;
+        }
+
+        public HdfsInputStreamProxy(CryptoInputStream in, HdfsDataInputStream target, UserGroupInformation ugi) {
+            super(in);
+            this.target = target;
+            this.ugi = ugi;
+        }
+
+        @RuntimeType
+        public static Object intercept(@This Object self, @AllArguments Object[] args, @Origin Method method,
+                                       @SuperMethod(nullIfImpossible = true) Method superMethod)
+                throws Exception {
+            LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " hdfs input stream proxy: " + method.toString());
+            HdfsInputStreamProxy proxy = (HdfsInputStreamProxy) self;
+            return HadoopExt.getInstance().doAs(proxy.ugi, () -> method.invoke(proxy.target, args));
+        }
+    }
+
     public static FileSystem createFSProxy(FileSystem target, UserGroupInformation ugi) {
+        if (ugi == null) {
+            return target;
+        }
         Object proxy = null;
         try {
             proxy = FSProxy.dynamicType.getConstructor(FileSystem.class, UserGroupInformation.class)
@@ -109,14 +157,41 @@ public class FileSystemByteBuddyProxy {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        return (FileSystem) proxy;
+        FileSystem fs = (FileSystem) proxy;
+        fs.setConf(target.getConf());
+        return fs;
     }
 
     public static FSDataInputStream createFSDataInputStreamProxy(FSDataInputStream target, UserGroupInformation ugi) {
+        if (ugi == null) {
+            return target;
+        }
         Object proxy = null;
         try {
             proxy = InputStreamProxy.dynamicType.getConstructor(FSDataInputStream.class, UserGroupInformation.class)
                     .newInstance(target, ugi);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return (FSDataInputStream) proxy;
+    }
+
+    public static FSDataInputStream createHdfsDataInputStreamProxy(FSDataInputStream target, UserGroupInformation ugi) {
+        if (ugi == null) {
+            return target;
+        }
+        Object proxy = null;
+        try {
+            InputStream in = target.getWrappedStream();
+            if (in instanceof DFSInputStream) {
+                proxy = HdfsInputStreamProxy.dynamicType.getConstructor(DFSInputStream.class, HdfsDataInputStream.class,
+                                UserGroupInformation.class)
+                        .newInstance(in, target, ugi);
+            } else {
+                proxy = HdfsInputStreamProxy.dynamicType.getConstructor(CryptoInputStream.class, HdfsDataInputStream.class,
+                                UserGroupInformation.class)
+                        .newInstance(in, target, ugi);
+            }
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

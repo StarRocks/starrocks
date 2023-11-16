@@ -32,6 +32,13 @@
             <artifactId>byte-buddy</artifactId>
             <version>1.14.9</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs-client</artifactId>
+            <version>3.3.6</version>
+            <scope>compile</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -45,6 +52,31 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                 </configuration>
+            </plugin>
+            <!-- Maven Shade Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.2.4</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <artifactSet>
+                                <includes>
+                                    <include>net.bytebuddy:byte-buddy</include>
+                                </includes>
+                                <excludes>
+                                    <exclude>org.apache.hadoop:hadoop-common</exclude>
+                                    <exclude>org.apache.hadoop:hadoop-hdfs-client</exclude>
+                                </excludes>
+                            </artifactSet>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

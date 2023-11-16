@@ -45,6 +45,7 @@ public class CelerDataHadoopExt extends HadoopExt {
     }
 
     public CelerDataHadoopExt() {
+        LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " Initialize CelerDataHadoopExt");
         if (!UserGroupInformation.isInitialized()) {
             Configuration conf = new Configuration();
             UserGroupInformation.setConfiguration(conf);
