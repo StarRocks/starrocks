@@ -37,11 +37,7 @@
 2. 语言：请至少选择中英文一种语言，欢迎提供中英双语版本。
 3. 索引：如果文档为新增，则需要在索引文件（TOC.md）中根据分类为新增文档添加索引。此索引文件最终将被渲染为官网页面的侧边导航。
 4. 图片：图片需要先放入文件 assets 中，文档中引用图片时请输入图片的相对路径，比如 `![test image](../../assets/test.png)` 。
-<<<<<<< HEAD
-5. 引用：如果引用官网文档，推荐使用文档相对路径，比如 `[test md](../../sql-reference.md)`。<br /> 如果引用外部文档，则引用格式为 `[引用文档名称](引用文档链接)`。
-=======
 5. 引用：如果引用官网文档，推荐使用文档相对路径，比如 `[test md](../data_source/catalog/hive_catalog.md)`。<br /> 如果引用外部文档，则引用格式为 `[引用文档名称](引用文档链接)`。
->>>>>>> 36879697d2 ([Doc] replace absolute path (#35106))
 6. 代码块：代码块必须标明语言类型，比如：`sql`，`json`。
 7. 文档中目前暂不支持出现特殊符号。
 
@@ -49,7 +45,6 @@
 
 1. 登录 GitHub 帐户，直接在[中文文档仓库](https://github.com/StarRocks/docs.zh-cn)单击 Add file，进入新文档编辑页面。
    ![image](https://user-images.githubusercontent.com/98087056/183546267-f05f6afc-4d58-40f8-ba73-437f82d5f662.png)
-
 2. 编写文档（markdown格式），并在索引（TOC.md）中添加索引。
     > 由于文档为markdown格式，建议您提前使用markdown-lint验证格式的规范性。
 3. 在github上提交文档Propose new file，输入标题和描述，然后提交，创建PR。
