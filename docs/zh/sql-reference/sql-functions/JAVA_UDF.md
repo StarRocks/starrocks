@@ -350,7 +350,20 @@ mvn deploy
 
 ### 步骤六：在 StarRocks 中创建 UDF
 
+<<<<<<< HEAD
 上传完成后，您需要在 StarRocks 中创建相对应的 UDF。
+=======
+StarRocks 内提供了两种 Namespace 的 UDF：一种是 Database 级 Namespace，一种是 Global 级 Namespace。
+
+- 如果您没有特殊的 UDF 可见性隔离需求，您可以直接选择创建 Global UDF。在引用 Global UDF 时，直接调用Function Name 即可，无需任何 Catalog 和 Database 作为前缀，访问更加便捷。
+- 如果您有特殊的 UDF 可见性隔离需求，或者需要在不同 Database下创建同名 UDF，那么你可以选择在 Database 内创建 UDF。此时，如果您的会话在某个 Database 内，您可以直接调用 Function Name 即可；如果您的会话在其他 Catalog 和 Database 下，那么您需要带上 Catalog 和 Database 前缀，例如: `catalog.database.function`。
+
+> **注意**
+>
+> 创建 Global UDF 需要有 System 级的 CREATE GLOBAL FUNCTION 权限；创建数据库级别的 UDF 需要有数据库级的 CREATE FUNCTION 权限；使用 UDF 需要有对应 UDF 的 USAGE 权限。关于如何赋权，参见 [GRANT](../sql-statements/account-management/GRANT.md)。
+
+JAR 包上传完成后，您需要在 StarRocks 中，按需创建相对应的 UDF。如果创建 Global UDF，只需要在 SQL 语句中带上 `GLOBAL` 关键字即可。
+>>>>>>> ce62989d86 ([Doc] replace absolute path (#35106))
 
 #### 语法
 
