@@ -123,6 +123,7 @@ public class CelerDataUGIManager {
     public void runBackgroundJob() {
         final int CHECK_INTERVAL_MS = 300 * 1000; // 5 min;
         while (true) {
+            LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " run background job once");
             refreshTickets();
             try {
                 Thread.sleep(CHECK_INTERVAL_MS);

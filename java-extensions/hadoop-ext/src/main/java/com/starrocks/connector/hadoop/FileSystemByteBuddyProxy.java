@@ -175,11 +175,13 @@ public class FileSystemByteBuddyProxy {
             }
 
             Object res = null;
+            UserGroupInformation ugi = proxy.getUGI();
+            Object target = proxy.getTarget();
             // No need to switch current user.
-            if (!UserGroupInformation.getCurrentUser().equals(proxy.getUGI())) {
-                res = HadoopExt.getInstance().doAs(proxy.getUGI(), () -> method.invoke(proxy.getTarget(), args));
+            if (ugi != null && !UserGroupInformation.getCurrentUser().equals(ugi)) {
+                res = HadoopExt.getInstance().doAs(ugi, () -> method.invoke(target, args));
             } else {
-                res = method.invoke(proxy.getTarget(), args);
+                res = method.invoke(target, args);
             }
 
             if (res instanceof HdfsDataInputStream) {
