@@ -14,7 +14,7 @@ Increase data load for one-time import and decrease import frequency.
 
 Adjust compaction strategy and speed up compaction (memory and io should be carefully studied after adjustment). And make the following changes to be.conf:
 
-```plain text
+```plaintext
 cumulative_compaction_num_threads_per_disk = 4
 base_compaction_num_threads_per_disk = 2
 cumulative_compaction_check_interval_seconds = 2
