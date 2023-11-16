@@ -641,7 +641,7 @@ public class ExpressionTest extends PlanTestBase {
                 "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 14> : array_map(<slot 5> -> 1, 8: c1)");
+                "  |  <slot 10> : array_map(<slot 5> -> 1, 2: c1)");
 
         sql = "WITH `CASE_006` AS\n" +
                 "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
@@ -652,7 +652,7 @@ public class ExpressionTest extends PlanTestBase {
                 "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 14> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 8: c1)");
+                "  |  <slot 10> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 2: c1)");
 
         sql = "SELECT uid, times, actions, step0_time, step1_time, array_filter((x, y)->(y = '支付' AND (x BETWEEN " +
                 "step1_time AND date_add(step1_time, INTERVAL 90 MINUTE)) AND (step1_time <> '2020-01-01 00:00:00')" +
