@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # years_sub
 
 ## 功能

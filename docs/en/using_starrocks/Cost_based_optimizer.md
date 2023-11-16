@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Gather statistics for CBO
 
 This topic describes the basic concept of StarRocks CBO and how to collect statistics for the CBO. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Continuously load data from Apache Kafka®
 
 This topic introduces how to create a Routine Load job to stream Kafka messages (events) into StarRocks, and familiarizes you with some basic concepts about Routine Load.

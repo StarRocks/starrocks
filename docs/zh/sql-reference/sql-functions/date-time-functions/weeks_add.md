@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # weeks_add
 
 ## 功能

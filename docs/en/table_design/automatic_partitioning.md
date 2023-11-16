@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Automatic partitioning
 
 This topic describes how to create a table that supports automatic partitioning. This topic also describes the usage notes and limits of automatic partitioning.

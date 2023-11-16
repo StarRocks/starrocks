@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # sub_bitmap
 
 ## Description

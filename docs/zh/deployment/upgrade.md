@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 升级 StarRocks
 
 本文介绍如何升级您的 StarRocks 集群。

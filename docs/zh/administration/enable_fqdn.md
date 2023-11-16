@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 启用 FQDN 访问
 
 本文介绍如何启用基于完全限定域名（fully qualified domain name，FQDN）访问 StarRocks 节点。 FQDN 是指可以在 Internet 上访问的特定实体的**完整域名**。FQDN 由两部分组成：主机名和域名。

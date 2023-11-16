@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # window_funnel
 
 ## 功能
