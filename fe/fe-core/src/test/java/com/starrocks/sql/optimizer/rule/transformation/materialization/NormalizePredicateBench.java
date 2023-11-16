@@ -15,8 +15,10 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -65,7 +67,8 @@ public class NormalizePredicateBench {
     @Param({"10", "20", "40", "80", "160"})
     private int predicateSize;
 
-    private ScalarOperator sourcePredicate;
+    private ScalarOperator randomPredicate;
+    private ScalarOperator disjunctive;
 
     public static void main(String[] args) throws RunnerException {
         Options opt = new OptionsBuilder()
@@ -76,7 +79,8 @@ public class NormalizePredicateBench {
 
     @Setup
     public void setup() {
-        sourcePredicate = generatePredicate();
+        randomPredicate = generatePredicate();
+        disjunctive = generateDisjunctive();
     }
 
     private BinaryType randomBinary() {
@@ -129,8 +133,38 @@ public class NormalizePredicateBench {
         return res;
     }
 
+    private ScalarOperator generateDisjunctive() {
+        ColumnRefFactory factory = new ColumnRefFactory();
+        List<ScalarOperator> disjuntiveList = Lists.newArrayList();
+        int conjunctSize = 3;
+        for (int i = 0; i < predicateSize / conjunctSize; i++) {
+            ScalarOperator conjunct;
+            List<ScalarOperator> conjuncts = Lists.newArrayList();
+            for (int j = 0; j < conjunctSize; j++) {
+                ColumnRefOperator ref = randomColumn(factory);
+                ConstantOperator constant = randomConstant(ref.getType());
+                BinaryType b = randomBinary();
+                conjuncts.add(new BinaryPredicateOperator(b, ref, constant));
+            }
+
+            disjuntiveList.add(Utils.compoundAnd(conjuncts));
+        }
+        return Utils.compoundOr(disjuntiveList);
+    }
+
     @Benchmark
-    public void bench_NormalizePredicate() {
-        ScalarOperator res = MvUtils.canonizePredicateForRewrite(sourcePredicate);
+    public void bench_NormalizePredicate_Random() {
+        ScalarOperator res = MvUtils.canonizePredicateForRewrite(randomPredicate);
+    }
+
+    /**
+     * (a = 1 and b = 2 and c = 3)
+     * OR (a = 2 and b = 3 and c = 4)
+     * OR (a = 3 and b = 3 and c = 4)
+     * ....
+     */
+    @Benchmark
+    public void bench_NormalizePredicate_Disjunctive() {
+        ScalarOperator res = MvUtils.canonizePredicateForRewrite(disjunctive);
     }
 }
