@@ -68,7 +68,7 @@ StarRocks-XX-1.0.0
 
 ### FE 的基本配置
 
-FE 的配置文件为 StarRocks-XX-1.0.0/fe/conf/fe.conf， 此处仅列出其中 JVM 配置和元数据目录配置，生产环境可参考 [FE 参数配置](../administration/Configuration.md#FE配置项) 对集群进行详细优化配置。
+FE 的配置文件为 StarRocks-XX-1.0.0/fe/conf/fe.conf， 此处仅列出其中 JVM 配置和元数据目录配置，生产环境可参考 [FE 参数配置](../administration/Configuration.md#fe-配置项) 对集群进行详细优化配置。
 
 ### FE 单实例部署
 
@@ -299,7 +299,7 @@ Alive 为 true 代表状态正常。
 
 ### FE 的高可用集群部署
 
-StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](/administration/Deployment.md)。
+StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](../administration/Deployment.md)。
 
 ### 集群升级
 

@@ -74,10 +74,7 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 ## 4. 导入过程中，发生远端程序呼叫（Remote Procedure Call，简称 RPC）超时问题应该如何处理？
 
-<<<<<<< HEAD
-检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远端程序呼叫（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](/loading/Loading_intro.md)。
-=======
-检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](../../loading/Loading_intro.md#be-配置)。
+检查 BE 配置文件 **be.conf** 中 `write_buffer_size` 参数的设置。该参数用于控制 BE 上内存块的大小阈值，默认阈值为 100 MB。如果阈值过大，可能会导致远端程序呼叫（Remote Procedure Call，简称 RPC）超时，这时候需要配合 BE 配置文件中的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。请参见 [BE 配置](../../loading/Loading_intro.md)。
 
 ## 5. 导入作业报错 "Value count does not match column count" 应该怎么处理？
 
@@ -92,4 +89,3 @@ Error: Value count does not match column count. Expect 3, but got 1. Row: 2023-0
 发生该错误的原因是导入命令或导入语句中指定的列分隔符与源数据中的列分隔符不一致。例如上面示例中，源数据为 CSV 格式，包括三列，列分隔符为逗号 (`,`)，但是导入命令或导入语句中却指定制表符 (`\t`) 作为列分隔符，最终导致源数据的三列数据解析成了一列数据。
 
 修改导入命令或导入语句中的列分隔符为逗号 (`,`)，然后再次尝试执行导入。
->>>>>>> f05ef5645 ([Doc] fix links in Branch 2.3 (#35196))

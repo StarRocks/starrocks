@@ -26,11 +26,11 @@ StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过
 
 ## 3. 数据质量问题报错 "ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel" 应该怎么解决？
 
-请参见[导入通用常见问题](/faq/loading/Loading_faq.md)。
+请参见[导入通用常见问题](./Loading_faq.md)。
 
 ## 4. 导入状态为 "Label Already Exists" 应该怎么解决？
 
-请参见[导入通用常见问题](/faq/loading/Loading_faq.md)。
+请参见[导入通用常见问题](./Loading_faq.md)。
 
 ## 5. 导入出错 "body exceed max size: 10737418240, limit: 10737418240" 应该如何解决？
 
