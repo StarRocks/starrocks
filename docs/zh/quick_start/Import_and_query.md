@@ -38,7 +38,7 @@ Stream Load 模式适用于导入本地文件，或通过程序导入数据流�
 
 ### 通过 Stream Load 导入数据
 
-以下示例以 Stream Load 导入方式为例，将文件中的数据导入到 [建表](..) 章节中创建的 `detailDemo` 表中。
+以下示例以 Stream Load 导入方式为例，将文件中的数据导入到 [建表](./Create_table.md) 章节中创建的 `detailDemo` 表中。
 
 在本地创建数据文件 **detailDemo_data**，以逗号作为数据之间的分隔符，插入两条数据。具体内容如下：
 
@@ -89,11 +89,11 @@ StarRocks 拓展支持多种函数、视图、以及外部表。
 
 ### 函数
 
-StarRocks 中支持多种函数，包括：[日期函数](../../sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](../../sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](../../sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](../../sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](../../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](../../sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](../../sql-reference/sql-functions/cast.md)，[hash 函数](../../sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](../../sql-reference/sql-functions/crytographic-functions/md5.md)，[窗口函数](../../sql-reference/sql-functions/Window_function.md) 等。
+StarRocks 中支持多种函数，包括：[日期函数](../sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](../sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](../sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](../sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](../sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](../sql-reference/sql-functions/cast.md)，[hash 函数](../sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](../sql-reference/sql-functions/crytographic-functions/md5.md)，[窗口函数](../sql-reference/sql-functions/Window_function.md) 等。
 
 ### 视图
 
-StarRocks 支持创建 [逻辑视图](../../sql-reference/sql-statements/data-definition/CREATE_VIEW.md) 和 [物化视图](../using_starrocks/Materialized_view.md#物化视图)。具体使用方式详见对应章节。
+StarRocks 支持创建 [逻辑视图](../sql-reference/sql-statements/data-definition/CREATE_VIEW.md) 和 [物化视图](../using_starrocks/Materialized_view.md#物化视图)。具体使用方式详见对应章节。
 
 ### 外部表
 
