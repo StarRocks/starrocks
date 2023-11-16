@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.reflect.TypeToken;
@@ -2563,6 +2564,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getAnalyzeForMV() {
         return analyzeTypeForMV;
+    }
+
+    @VisibleForTesting
+    public void setAnalyzeTypeForMV(String analyzeTypeForMV) {
+        this.analyzeTypeForMV = analyzeTypeForMV;
     }
 
     public boolean isEnableBigQueryLog() {
