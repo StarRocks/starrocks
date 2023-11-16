@@ -1,0 +1,40 @@
+-- name: test_object_dependencies
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (c1 int, c2 string);
+-- result:
+-- !result
+create materialized view mv1 refresh async as select * from t1;
+-- result:
+-- !result
+select * from sys.object_dependencies where object_database = 'db_${uuid0}';
+-- result:
+0	mv1	db_a3d2d8fc0187497d951bbef92101b231		MATERIALIZED_VIEW	0	t1	db_a3d2d8fc0187497d951bbef92101b231	default_catalog	OLAP
+-- !result
+create view v1 as select * from t1;
+-- result:
+-- !result
+create materialized view mv2 refresh async as select * from t1;
+-- result:
+-- !result
+select * from sys.object_dependencies where object_database = 'db_${uuid0}';
+-- result:
+0	mv1	db_a3d2d8fc0187497d951bbef92101b231		MATERIALIZED_VIEW	0	t1	db_a3d2d8fc0187497d951bbef92101b231	default_catalog	OLAP
+0	mv2	db_a3d2d8fc0187497d951bbef92101b231		MATERIALIZED_VIEW	0	t1	db_a3d2d8fc0187497d951bbef92101b231	default_catalog	OLAP
+-- !result
+create materialized view mv3 refresh async as select * from mv2;
+-- result:
+-- !result
+select * from sys.object_dependencies where object_database = 'db_${uuid0}';
+-- result:
+0	mv3	db_a3d2d8fc0187497d951bbef92101b231		MATERIALIZED_VIEW	0	mv2	db_a3d2d8fc0187497d951bbef92101b231	default_catalog	MATERIALIZED_VIEW
+0	mv1	db_a3d2d8fc0187497d951bbef92101b231		MATERIALIZED_VIEW	0	t1	db_a3d2d8fc0187497d951bbef92101b231	default_catalog	OLAP
+0	mv2	db_a3d2d8fc0187497d951bbef92101b231		MATERIALIZED_VIEW	0	t1	db_a3d2d8fc0187497d951bbef92101b231	default_catalog	OLAP
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
