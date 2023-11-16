@@ -93,7 +93,7 @@ void init_s3client() {
     }
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
     g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
 }
 
 void destroy_s3client() {
