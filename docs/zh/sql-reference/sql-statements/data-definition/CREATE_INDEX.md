@@ -2,13 +2,9 @@
 
 ## 功能
 
-<<<<<<< HEAD
-该语句用于创建索引。
+该语句用于创建索引。删除索引请参考 [DROP INDEX](../data-definition/DROP_INDEX.md) 章节。
 
-删除索引请参考 [DROP INDEX](../data-definition/DROP_INDEX.md) 章节。
-=======
 创建索引，当前仅支持创建 bitmap 索引。有关 bitmap 索引的使用说明和适用场景，参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md)。
->>>>>>> f05ef5645 ([Doc] fix links in Branch 2.3 (#35196))
 
 ## 语法
 
