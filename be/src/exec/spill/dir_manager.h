@@ -32,9 +32,34 @@ public:
     FileSystem* fs() const { return _fs.get(); }
     std::string dir() const { return _dir; }
 
+<<<<<<< HEAD
 private:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
+=======
+    int64_t get_current_size() const { return _current_size.load(); }
+
+    bool inc_size(int64_t value) {
+        int64_t old_size = 0;
+        do {
+            old_size = _current_size.load();
+            if (old_size + value >= _max_size) {
+                return false;
+            }
+        } while (!_current_size.compare_exchange_strong(old_size, old_size + value));
+        return true;
+    }
+
+    void dec_size(int64_t value) { _current_size -= value; }
+
+    int64_t get_max_size() const { return _max_size; }
+
+private:
+    std::string _dir;
+    std::shared_ptr<FileSystem> _fs;
+    int64_t _max_size;
+    std::atomic<int64_t> _current_size = 0;
+>>>>>>> ddccb1234e ([BugFix] fix inaccurate spill dir size (#35023))
 };
 using DirPtr = std::shared_ptr<Dir>;
 

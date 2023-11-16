@@ -29,6 +29,7 @@
 #include "io/input_stream.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
+#include "util/defer_op.h"
 #include "util/uid_util.h"
 
 namespace starrocks::spill {
@@ -45,6 +46,12 @@ public:
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
+<<<<<<< HEAD
+=======
+        _dir->dec_size(_data_size);
+        // try to delete related dir, only the last one can success, we ignore the error
+        (void)(_dir->fs()->delete_dir(parent_path()));
+>>>>>>> ddccb1234e ([BugFix] fix inaccurate spill dir size (#35023))
     }
 
     Status open();
@@ -69,7 +76,7 @@ public:
 
     Status ensure_preallocate(size_t length);
 
-    Status append_data(const std::vector<Slice>& data);
+    Status append_data(const std::vector<Slice>& data, size_t total_size);
 
     Status flush();
 
@@ -86,6 +93,7 @@ private:
     uint64_t _id;
     std::unique_ptr<WritableFile> _writable_file;
     bool _has_open = false;
+    size_t _data_size = 0;
 };
 
 Status LogBlockContainer::open() {
@@ -113,8 +121,10 @@ Status LogBlockContainer::ensure_preallocate(size_t length) {
     return _writable_file->pre_allocate(length);
 }
 
-Status LogBlockContainer::append_data(const std::vector<Slice>& data) {
-    return _writable_file->appendv(data.data(), data.size());
+Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
+    RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
+    _data_size += total_size;
+    return Status::OK();
 }
 
 Status LogBlockContainer::flush() {
@@ -167,8 +177,25 @@ public:
     Status append(const std::vector<Slice>& data) override {
         size_t total_size = 0;
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
+<<<<<<< HEAD
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
+=======
+        // try to apply for the required size from dir first, if it fails, just return an error directly.
+        // if the subsequent operations fail, the applied size should be rolled back.
+        if (!_container->dir()->inc_size(total_size)) {
+            return Status::Aborted(fmt::format("spill dir {} current used size has exceed limit {}!",
+                                               _container->dir()->dir(), _container->dir()->get_max_size()));
+        }
+        Status ret;
+        DeferOp defer([&]() {
+            if (!ret.ok()) {
+                _container->dir()->dec_size(total_size);
+            }
+        });
+        RETURN_IF_ERROR(ret = _container->ensure_preallocate(total_size));
+        RETURN_IF_ERROR(ret = _container->append_data(data, total_size));
+>>>>>>> ddccb1234e ([BugFix] fix inaccurate spill dir size (#35023))
         _size += total_size;
         return Status::OK();
     }
