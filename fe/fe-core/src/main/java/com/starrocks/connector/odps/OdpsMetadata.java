@@ -32,7 +32,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
@@ -68,7 +67,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
-import static com.google.common.base.Throwables.throwIfInstanceOf;
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static java.util.concurrent.TimeUnit.HOURS;
@@ -204,7 +202,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     private List<PartitionSpec> loadPartitions(OdpsTableName odpsTableName) {
-        com.aliyun.odps.Table odpsTable = odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
+        com.aliyun.odps.Table odpsTable =
+                odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
         List<Partition> partitions =
                 odpsTable.getPartitions();
         return partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
@@ -300,11 +299,9 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     private static <K, V> V get(LoadingCache<K, V> cache, K key) {
         try {
-            return cache.getUnchecked(key);
-        } catch (UncheckedExecutionException e) {
-            LOG.error("Error occurred when loading cache", e);
-            throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
-            throw e;
+            return cache.get(key);
+        } catch (ExecutionException e) {
+            return null;
         }
     }
 }
