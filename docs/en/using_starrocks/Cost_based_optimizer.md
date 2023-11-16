@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Cost Based Optimizer
 
 StarRocks 1.16.0 introduces cost-based optimizer (CBO). This feature is enabled by default in StarRocks 1.19 and later. CBO can select the optimal execution plan based on cost, significantly improving the performance of complex queries.

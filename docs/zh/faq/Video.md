@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 视频资源
 
 [POC测试指南](https://www.bilibili.com/video/BV1SX4y1c7i4?spm_id_from=333.999.0.0)

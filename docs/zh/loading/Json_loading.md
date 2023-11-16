@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 介绍
 
 对于一些半结构化的比如Json类型的数据，我们可以用stream load 或者 routine load的方式进行导入。

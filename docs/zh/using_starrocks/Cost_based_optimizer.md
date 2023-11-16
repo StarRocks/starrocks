@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 
 # CBO 优化器
 

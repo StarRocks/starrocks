@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 手动部署
 
 手动部署可以让用户快速体验StarRocks, 积累StarRocks的系统运维经验.  生产环境部署, 请使用管理平台和自动部署。

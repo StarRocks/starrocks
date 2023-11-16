@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # System Limit
 
 This section describes rules and restrictions of  using the StarRocks system.

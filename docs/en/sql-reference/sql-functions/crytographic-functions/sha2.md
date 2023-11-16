@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # sha2
 
 Calculate the SHA-224 hash value, SHA-256 hash value, SHA-384 hash value, and SHA-512 hash value of a string.

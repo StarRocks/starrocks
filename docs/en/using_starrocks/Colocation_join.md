@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Colocate Join
 
 For shuffle join and broadcast join, if the join condition is met, the data rows of the two joining tables are merged into a single node to complete the join. Neither of these two join methods can avoid latency or overhead caused by data network transmission between nodes.

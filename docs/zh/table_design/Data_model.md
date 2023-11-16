@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 数据模型介绍
 
 目前，StarRocks根据摄入数据和实际存储数据之间的映射关系, 其中明细表对应明细模型（Duplicate Key），聚合表对应聚合模型（Aggregate Key），更新表对应更新模型（Unique Key）和主键模型（Primary Key）。为了描述方便, 我们借鉴关系模式中的主键概念, 称StarRocks表的维度列的取值构成数据表的排序键, StarRocks的排序键对比传统的主键具有:

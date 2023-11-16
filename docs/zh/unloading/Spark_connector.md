@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Spark StarRocks Connector
 
 Spark StarRocks Connector 可以支持通过 Spark 读取 StarRocks 中存储的数据。

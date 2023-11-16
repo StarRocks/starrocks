@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Routine Load常见问题
 
 ## kafka 生产的mysql binlog数据算不算文本格式数据？

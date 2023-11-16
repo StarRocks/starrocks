@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Spark Load
 
 Spark load uses external Spark resources to pre-process      imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).

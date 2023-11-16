@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # sha2
 
 ## 功能

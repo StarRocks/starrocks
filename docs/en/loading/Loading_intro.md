@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data import
 
 StarRocks supports multiple data models (refer to [Table Design](../table_design/Table_design.md) chapter) for different business scenarios. The data import function aims to clean and transform the raw data according to the specific model and load it into StarRocks.

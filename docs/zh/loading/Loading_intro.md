@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 导入
 
 为了更好地满足各种不同的业务场景，StarRocks支持多种数据模型，StarRocks中存储的数据需要按照特定的模型进行组织（参考[表设计](../table_design/Table_design.md)章节）。数据导入功能是将原始数据按照相应的模型进行清洗转换并加载到StarRocks中，方便查询使用。
