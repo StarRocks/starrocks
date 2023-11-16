@@ -1,11 +1,11 @@
--- name: test_light_schema_change
-create database test_light_schema_change;
+-- name: test_fast_schema_evolution
+create database test_fast_schema_evolution;
 -- result:
 -- !result
-use test_light_schema_change;
+use test_fast_schema_evolution;
 -- result:
 -- !result
-create table t1(k int, v int not null) ENGINE=OLAP DUPLICATE KEY(k) PROPERTIES ("replication_num" = "1", 'light_schema_change' = 'true');
+create table t1(k int, v int not null) ENGINE=OLAP DUPLICATE KEY(k) PROPERTIES ("replication_num" = "1", 'fast_schema_evolution' = 'true');
 -- result:
 -- !result
 insert into t1 values(1, 1);
@@ -103,7 +103,7 @@ PRIMARY KEY(`k1`,`k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
-    "light_schema_change" = "true"
+    "fast_schema_evolution" = "true"
 );
 -- result:
 -- !result
@@ -150,7 +150,7 @@ select * from tab1;
 500	k2_500	500	500	500	0	v4_500	v5_500
 600	k2_600	600	600	600	0	v4_600	v5_600
 -- !result
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123432 -H column_separator:, -H columns:k1,k2,v6,v2 ${url}/api/test_light_schema_change/tab1/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123432 -H column_separator:, -H columns:k1,k2,v6,v2 ${url}/api/test_fast_schema_evolution/tab1/_stream_load
 -- result:
 0
 {
@@ -189,7 +189,7 @@ select * from tab1;
 100	k2_100	100	111	999	v6_100	v5_100
 400	k2_400	400	222	999	v6_400	v5_400
 -- !result
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123433 -H column_separator:, -H columns:k1,k2,v6,v3 ${url}/api/test_light_schema_change/tab1/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123433 -H column_separator:, -H columns:k1,k2,v6,v3 ${url}/api/test_fast_schema_evolution/tab1/_stream_load
 -- result:
 0
 {
@@ -262,7 +262,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
+"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -279,7 +279,7 @@ drop table t1;
 drop table tab1;
 -- result:
 -- !result
-drop database test_light_schema_change;
+drop database test_fast_schema_evolution;
 -- result:
 -- !result
 -- name: test_meta_scan
@@ -301,7 +301,7 @@ PROPERTIES (
     "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
-    "light_schema_change" = "true"
+    "fast_schema_evolution" = "true"
 );
 -- result:
 -- !result
@@ -330,7 +330,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
+"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -368,7 +368,7 @@ PROPERTIES (
     "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
-    "light_schema_change" = "false"
+    "fast_schema_evolution" = "false"
 );
 -- result:
 -- !result
