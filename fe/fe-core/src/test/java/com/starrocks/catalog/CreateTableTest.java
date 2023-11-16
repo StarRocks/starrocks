@@ -226,9 +226,10 @@ public class CreateTableTest {
                         + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
-                .expectThrowsNoException(() -> createTable("create table test.tb13(col1 bigint, col2 bigint AUTO_INCREMENT) \n"
-                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
-                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+                .expectThrowsNoException(
+                        () -> createTable("create table test.tb13(col1 bigint, col2 bigint AUTO_INCREMENT) \n"
+                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
                 .expectThrowsNoException(() -> createTable("CREATE TABLE test.full_width_space (\n" +
@@ -355,17 +356,19 @@ public class CreateTableTest {
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class, "Getting syntax error at line 1, column 25. " +
                                 "Detail message: AUTO_INCREMENT column col1 must be NOT NULL.",
-                        () -> createTable("create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
-                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
-                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+                        () -> createTable(
+                                "create table test.atbl10(col1 bigint NULL AUTO_INCREMENT, col2 varchar(10)) \n"
+                                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class,
                         "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
                                 "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
-                        () -> createTable("create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
-                                + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
-                                + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
+                        () -> createTable(
+                                "create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
+                                        + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
+                                        + "properties('replication_num' = '1', 'replicated_storage' = 'true');"));
 
         ExceptionChecker
                 .expectThrowsWithMsg(DdlException.class, "Table with AUTO_INCREMENT column must use Replicated Storage",
@@ -409,19 +412,22 @@ public class CreateTableTest {
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + "('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to AUTO_INCREMENT columns",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Expression can not refers to AUTO_INCREMENT columns",
                 () -> createTable("CREATE TABLE test.atbl19 ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, \n"
                         + "array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) )\n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
                         + "('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other generated columns",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Expression can not refers to other generated columns",
                 () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc DOUBLE AS (array_avg(array_data)), \n"
                         + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
                         + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
 
-        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Generated Column don't support aggregation function",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Generated Column don't support aggregation function",
                 () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc BIGINT AS (sum(id)) ) \n"
                         + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
@@ -535,7 +541,8 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Invalid bloom filter column 'k3': unsupported type JSON",
-                () -> alterTableWithNewParser("ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
+                () -> alterTableWithNewParser(
+                        "ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
 
         // Modify column in unique key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -911,7 +918,8 @@ public class CreateTableTest {
         ));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
-                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
+                () -> alterTableWithNewParser(
+                        "ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
 
         // Modify column in unique key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -1610,6 +1618,57 @@ public class CreateTableTest {
                 ));
     }
 
+    @Test
+    public void testDuplicateTableNotSupportColumnWithRow() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.dwd_site_scan_dtl_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"" +
+                ");";
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+    }
 
+    @Test
+    public void testColumnWithRowNotSupportAllKeys() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.dwd_column_with_row_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"" +
+                ");";
 
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testColumnWithRowSuccess() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.dwd_column_with_row_success_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \"\" ,\n" +
+                "address_code bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"" +
+                ");";
+
+        ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(sql1));
+    }
 }

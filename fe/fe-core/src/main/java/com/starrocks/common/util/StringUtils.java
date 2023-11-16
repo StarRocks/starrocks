@@ -14,6 +14,8 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.catalog.Table;
+
 import java.security.SecureRandom;
 
 public class StringUtils {
@@ -32,4 +34,30 @@ public class StringUtils {
         return randomString.toString();
     }
 
+    /**
+     * Check two table names are equal or not.
+     * NOTE: OLAP table name is case-sensitive and other catalogs are not.
+     */
+    public static boolean areTableNamesEqual(Table table, String toCheck) {
+        if (table == null) {
+            return false;
+        }
+
+        if (table.isNativeTableOrMaterializedView()) {
+            return table.getName().equals(toCheck);
+        } else {
+            return table.getName().equalsIgnoreCase(toCheck);
+        }
+    }
+
+    /**
+     * Check two column names are equal or not, column names are always case-insensitive.
+     */
+    public static boolean areColumnNamesEqual(String columName, String toCheck) {
+        if (columName == null) {
+            return false;
+        }
+
+        return columName.equalsIgnoreCase(toCheck);
+    }
 }

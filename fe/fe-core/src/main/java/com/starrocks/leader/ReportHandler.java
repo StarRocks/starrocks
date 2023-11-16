@@ -98,7 +98,6 @@ import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMetaType;
@@ -815,7 +814,7 @@ public class ReportHandler extends Daemon {
                                             indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(),
                                             partition.getVisibleVersion(),
                                             indexMeta.getKeysType(),
-                                            TStorageType.COLUMN,
+                                            olapTable.getStorageType(),
                                             TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,
                                             olapTable.getCopiedIndexes(),
                                             olapTable.isInMemory(),
@@ -1054,6 +1053,10 @@ public class ReportHandler extends Daemon {
             long maxRowsetCreationTime = -1L;
             for (Replica replica : tablet.getImmutableReplicas()) {
                 maxRowsetCreationTime = Math.max(maxRowsetCreationTime, replica.getMaxRowsetCreationTime());
+                if (replica.getLastReportVersion() <= 1) {
+                    // unmigratable if it is a empty tablet
+                    return false;
+                }
             }
 
             // get negative max rowset creation time or too close to the max rowset creation time, unmigratable

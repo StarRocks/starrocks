@@ -49,6 +49,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static java.lang.Double.NEGATIVE_INFINITY;
+import static java.lang.Double.POSITIVE_INFINITY;
+
 public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final int NUM_TABLE2_ROWS = 10000;
     private static final int NUM_TABLE0_ROWS = 10000;
@@ -68,6 +71,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         OlapTable colocateT0 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate_t0");
         setTableStatistics(colocateT0, NUM_TABLE0_ROWS);
+
+        OlapTable lineitem = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        setTableStatistics(lineitem, NUM_TABLE0_ROWS * NUM_TABLE0_ROWS);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE test_mv\n" +
@@ -2276,5 +2282,53 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
         Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
 
+    }
+
+    @Test
+    public void testStringInPredicateEstimate(
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+        new Expectations() {
+            {
+                mockedStatisticStorage.getColumnStatistics((Table) any,
+                        Lists.newArrayList("t1a", (String) any, (String) any, (String) any));
+                result = Lists.newArrayList(new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                        0.0, 10, 3),
+                        new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                                0.0, 10, 3, null,
+                                ColumnStatistic.StatisticType.UNKNOWN),
+                        new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                                0.0, 10, 3, null,
+                                ColumnStatistic.StatisticType.UNKNOWN),
+                        new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                                0.0, 10, 3, null,
+                                ColumnStatistic.StatisticType.UNKNOWN));
+            }
+        };
+
+        String sql = "SELECT t1a from test_all_type where t1a in ('a', 'b', 'c');";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 10000");
+
+        sql = "SELECT t1a from test_all_type where t1a not in ('a', 'b', 'c');";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 5000");
+
+        sql = "SELECT t1a from test_all_type where t1a  in ('a', 'b', 'c', 'd', 'e');";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 10000");
+
+        sql = "SELECT t1a from test_all_type where t1a != 'a' and  t1a != 'a';";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 6667");
+
+        sql = "SELECT t1.L_PARTKEY from lineitem t1 join nation t2 on t1.L_PARTKEY = t2.N_NATIONKEY " +
+                "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 6250000");
+
+        sql = "SELECT t1.L_PARTKEY from lineitem t1 left join nation t2 on t1.L_PARTKEY = t2.N_NATIONKEY " +
+                "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 100000000");
     }
 }

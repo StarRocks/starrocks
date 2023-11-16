@@ -111,7 +111,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public void setCloudConfiguration(Map<String, String> params) {
         Map<String, String> newParams = new HashMap<>(this.params);
         newParams.putAll(params);
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams, true);
         if (!isValidCloudConfiguration()) {
             Gson gson = new Gson();
             throw new SemanticException("Storage params is not valid " + gson.toJson(newParams));
@@ -145,6 +145,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public String getComment() {
         return comment;
+    }
+
+    public String getType() {
+        return svt.toString();
     }
 
     private StorageVolumeType toStorageVolumeType(String svt) {

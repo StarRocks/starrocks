@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string_view>
 #include <variant>
 
@@ -63,6 +64,9 @@ public:
 
     void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
 
+    // cache the segment if the given key not exists in the cache, returns the segment shared_ptr stored in the cache.
+    std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, std::shared_ptr<Segment> segment);
+
     void cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec);
 
     void erase(std::string_view key);
@@ -78,9 +82,14 @@ public:
 private:
     static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
 
+    std::shared_ptr<Segment> _lookup_segment_no_lock(std::string_view key);
+    void _cache_segment_no_lock(std::string_view key, std::shared_ptr<Segment> segment);
+
     void insert(std::string_view key, CacheValue* ptr, size_t size);
 
     std::unique_ptr<Cache> _cache;
+
+    std::mutex _mutex;
 };
 
 } // namespace starrocks::lake

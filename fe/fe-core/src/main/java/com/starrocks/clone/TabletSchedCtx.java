@@ -67,7 +67,6 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
-import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletSchedule;
 import com.starrocks.thrift.TTaskType;
@@ -708,22 +707,12 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         if (cloneTask != null) {
             AgentTaskQueue.removeTask(cloneTask.getBackendId(), TTaskType.CLONE, cloneTask.getSignature());
 
-            // clear all CLONE replicas
-            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
-            if (db != null) {
-                db.writeLock();
-                try {
-                    List<Replica> cloneReplicas = Lists.newArrayList();
-                    tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
-                            cloneReplicas::add);
+            List<Replica> cloneReplicas = Lists.newArrayList();
+            tablet.getImmutableReplicas().stream().filter(r -> r.getState() == ReplicaState.CLONE).forEach(
+                    cloneReplicas::add);
 
-                    for (Replica cloneReplica : cloneReplicas) {
-                        tablet.deleteReplica(cloneReplica);
-                    }
-
-                } finally {
-                    db.writeUnlock();
-                }
+            for (Replica cloneReplica : cloneReplicas) {
+                tablet.deleteReplica(cloneReplica);
             }
         }
 
@@ -901,7 +890,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
                     indexMeta.getSchemaHash(), indexMeta.getSchemaVersion(), visibleVersion,
                     indexMeta.getKeysType(),
-                    TStorageType.COLUMN,
+                    indexMeta.getStorageType(),
                     TStorageMedium.HDD, indexMeta.getSchema(), olapTable.getCopiedBfColumns(), olapTable.getBfFpp(), null,
                     olapTable.getCopiedIndexes(),
                     olapTable.isInMemory(),

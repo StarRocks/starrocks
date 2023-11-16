@@ -305,18 +305,23 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     ASSIGN_OR_RETURN(auto new_schema, new_tablet.get_schema());
     ASSIGN_OR_RETURN(auto has_delete_predicates, base_tablet.has_delete_predicates(alter_version));
 
+    std::vector<std::string> base_table_columns;
+    for (auto& column : base_schema->columns()) {
+        base_table_columns.emplace_back(std::string{column.name()});
+    }
     // parse request and create schema change params
     SchemaChangeParams sc_params;
     sc_params.base_tablet = &base_tablet;
     sc_params.new_tablet = &new_tablet;
-    sc_params.chunk_changer = std::make_unique<ChunkChanger>(new_schema);
+    sc_params.chunk_changer =
+            std::make_unique<ChunkChanger>(base_schema, new_schema, base_table_columns, request.alter_job_type);
     sc_params.version = alter_version;
     sc_params.txn_id = request.txn_id;
 
-    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
-    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(base_schema, new_schema, sc_params.chunk_changer.get(),
-                                                     sc_params.materialized_params_map, has_delete_predicates,
-                                                     &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
+    SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map, sc_params.where_expr);
+    RETURN_IF_ERROR(SchemaChangeUtils::parse_request(
+            base_schema, new_schema, sc_params.chunk_changer.get(), sc_params.materialized_params_map,
+            sc_params.where_expr, has_delete_predicates, &sc_params.sc_sorting, &sc_params.sc_directly, nullptr));
 
     // create txn log
     auto txn_log = std::make_shared<TxnLog>();

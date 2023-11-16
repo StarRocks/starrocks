@@ -39,6 +39,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
@@ -114,11 +115,15 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
 }
 
 // current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key) {
+void TabletManager::update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint) {
     // use write lock to protect parallel segment size update
     std::unique_lock wrlock(_meta_lock);
     auto segment = _metacache->lookup_segment(key);
     if (segment == nullptr) {
+        return;
+    }
+    if (segment_addr_hint != 0 && segment_addr_hint != reinterpret_cast<intptr_t>(segment.get())) {
+        // the segment in cache is not the one as expected, skip the cache update
         return;
     }
     _metacache->cache_segment(key, std::move(segment));
@@ -335,6 +340,35 @@ bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
 }
 #endif // USE_STAROS
 
+StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
+    int64_t size = 0;
+    TabletMetadataPtr metadata;
+    if (version_hint != nullptr && *version_hint > 0) {
+        ASSIGN_OR_RETURN(metadata, get_tablet_metadata(tablet_id, *version_hint));
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " data size from version hint: " << *version_hint
+                << ", size: " << size;
+    } else {
+        ASSIGN_OR_RETURN(TabletMetadataIter metadata_iter, list_tablet_metadata(tablet_id, true));
+        if (!metadata_iter.has_next()) {
+            return Status::NotFound(fmt::format("tablet {} metadata not found", tablet_id));
+        }
+        ASSIGN_OR_RETURN(metadata, metadata_iter.next());
+        if (version_hint != nullptr) {
+            *version_hint = metadata->version();
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            size += rowset.data_size();
+        }
+        VLOG(2) << "get tablet " << tablet_id << " data size from version : " << metadata->version()
+                << ", size: " << size;
+    }
+
+    return size;
+}
+
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
     // 1. direct lookup in cache, if there is schema info for the tablet
     auto cache_key = tablet_schema_cache_key(tablet_id);
@@ -483,11 +517,11 @@ int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
     return size;
 }
 
-void TabletManager::set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
+void TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size) {
     std::unique_lock wrlock(_meta_lock);
+    _tablet_in_writing_txn_size[tablet_id][txn_id] += size;
     VLOG(1) << "tablet " << tablet_id << " add in writing data size: " << _tablet_in_writing_txn_size[tablet_id][txn_id]
             << " size: " << size << " txn_id: " << txn_id;
-    _tablet_in_writing_txn_size[tablet_id][txn_id] = size;
 }
 
 void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id) {
@@ -500,6 +534,11 @@ void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_i
 void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {
     auto cache_key = global_schema_cache_key(schema_id);
     _metacache->cache_tablet_schema(cache_key, std::move(schema), 0);
+}
+
+StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
+    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
+    return VersionedTablet(this, std::move(metadata));
 }
 
 } // namespace starrocks::lake

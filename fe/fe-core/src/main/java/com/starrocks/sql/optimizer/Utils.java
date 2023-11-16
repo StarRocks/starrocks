@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -397,9 +399,7 @@ public class Utils {
                 }
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
-                // TODO(stephen): support `analyze table` to collect iceberg table ndv
-                // iceberg metadata doesn't have ndv, we default to unknown for all iceberg table column statistics.
-                return true;
+                return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -639,5 +639,22 @@ public class Utils {
             eqColumnRefs.put(Objects.requireNonNull(lhsColRef), Objects.requireNonNull(rhsColRef));
         }
         return eqColumnRefs;
+    }
+
+    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
+        for (ScalarOperator child : operator.getChildren()) {
+            if (child instanceof CallOperator) {
+                CallOperator call = (CallOperator) child;
+                String fnName = call.getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

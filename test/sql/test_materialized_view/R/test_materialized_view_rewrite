@@ -583,4 +583,69 @@ select depts.deptno
 from emps right anti join depts using (deptno);
 -- result:
 2
+-- name: test_count_rollup_with_empty_table
+create table empty_tbl(time date, user_id int, user_name varchar(20), tag_id int) partition by range (time)  (partition p1 values less than MAXVALUE) distributed by hash(time) buckets 3 properties('replication_num' = '1');
+-- result:
 -- !result
+create materialized view empty_tbl_with_mv distributed by hash(user_id) 
+as select user_id, count(tag_id) from empty_tbl group by user_id, time;
+-- result:
+-- !result
+select user_id, count(tag_id) from empty_tbl group by user_id, time;
+-- result:
+-- !result
+select user_id, count(tag_id) from empty_tbl group by user_id;
+-- result:
+-- !result
+drop table empty_tbl;
+-- result:
+-- !result
+drop materialized view empty_tbl_with_mv;
+-- result:
+-- !result
+CREATE TABLE orders (
+    dt date NOT NULL,
+    order_id bigint NOT NULL,
+    user_id int NOT NULL,
+    merchant_id int NOT NULL,
+    good_id int NOT NULL,
+    good_name string NOT NULL,
+    price int NOT NULL,
+    cnt int NOT NULL,
+    revenue int NOT NULL,
+    state tinyint NOT NULL
+)
+PRIMARY KEY (dt, order_id)
+PARTITION BY RANGE(dt) (
+    PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),
+    PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22'))
+)
+DISTRIBUTED BY HASH(order_id) BUCKETS 4
+PROPERTIES (
+    "replication_num" = "1",
+    "enable_persistent_index" = "true"
+);
+-- result:
+-- !result
+            
+CREATE MATERIALIZED VIEW order_mv2
+PARTITION BY date_trunc('MONTH', dt)
+DISTRIBUTED BY HASH(order_id) BUCKETS 10
+REFRESH ASYNC START('2023-07-01 10:00:00') EVERY (interval 1 day)
+AS
+select
+    dt,
+    order_id,
+    user_id,
+    sum(cnt) as total_cnt,
+    sum(revenue) as total_revenue,
+    count(state) as state_count
+from orders group by dt, order_id, user_id;
+-- result:
+-- !result
+select count() from orders;
+-- result:
+0
+-- !result
+drop materialized view order_mv2;
+-- result:

@@ -19,11 +19,18 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.iceberg.TableTestBase;
 import com.starrocks.server.IcebergTableFactory;
+import mockit.Mocked;
+import org.apache.iceberg.Table;
+import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.catalog.Type.INT;
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class IcebergTableTest extends TableTestBase {
 
@@ -34,5 +41,32 @@ public class IcebergTableTest extends TableTestBase {
                 "resource_name", "iceberg_db", "iceberg_table", columns, mockedNativeTableB, Maps.newHashMap());
         List<Column> inputColumns = Lists.newArrayList(new Column("k1", INT, true));
         IcebergTableFactory.validateIcebergColumnType(inputColumns, oTable);
+    }
+
+    @Test
+    public void testCreateTableResourceName(@Mocked Table icebergNativeTable) throws DdlException {
+
+        String resourceName = "Iceberg_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
+
+        IcebergTable.Builder tableBuilder = IcebergTable.builder()
+                .setId(1000)
+                .setSrTableName("supplier")
+                .setCatalogName("iceberg_catalog")
+                .setRemoteDbName("iceberg_oss_tpch_1g_parquet_gzip")
+                .setRemoteTableName("supplier")
+                .setResourceName(resourceName)
+                .setFullSchema(new ArrayList<>())
+                .setNativeTable(icebergNativeTable)
+                .setIcebergProperties(new HashMap<>());
+        IcebergTable oTable = tableBuilder.build();
+        IcebergTable.Builder newBuilder = IcebergTable.builder();
+        IcebergTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
+        IcebergTable table = newBuilder.build();
+        Assert.assertEquals(table.getResourceName(), resourceName);
     }
 }

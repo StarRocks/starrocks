@@ -45,7 +45,8 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
@@ -70,9 +71,10 @@ public class TransactionLoadAction extends RestBaseAction {
     private static final String CHANNEL_ID_STR = "channel_id";
     private static TransactionLoadAction ac;
 
-    private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
+    private Map<String, Long> txnNodeMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() * 512;
+            return size() > (GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() +
+                    GlobalStateMgr.getCurrentSystemInfo().getTotalComputeNodeNumber()) * 512;
         }
     };
 
@@ -80,9 +82,9 @@ public class TransactionLoadAction extends RestBaseAction {
         super(controller);
     }
 
-    public int txnBackendMapSize() {
+    public int txnNodeMapSize() {
         synchronized (this) {
-            return txnBackendMap.size();
+            return txnNodeMap.size();
         }
     }
 
@@ -141,7 +143,7 @@ public class TransactionLoadAction extends RestBaseAction {
             throw new DdlException("Must provide channel_num when stream load begin.");
         }
 
-        Long backendID = null;
+        Long nodeID = null;
 
         if (Strings.isNullOrEmpty(dbName)) {
             throw new UserException("No database selected.");
@@ -206,15 +208,11 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-                    if (CollectionUtils.isEmpty(backendIds)) {
-                        throw new UserException("No backend alive.");
-                    }
-                    backendID = backendIds.get(0);
-                    // txnBackendMap is LRU cache, it automic remove unused entry
-                    txnBackendMap.put(label, backendID);
+                    nodeID = getBackendOrComputeId();
+                    // txnNodeMap is LRU cache, it atomic remove unused entry
+                    txnNodeMap.put(label, nodeID);
                 } else if (channelIdStr == null) {
-                    backendID = txnBackendMap.get(label);
+                    nodeID = txnNodeMap.get(label);
                 }
             }
         }
@@ -268,7 +266,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (op.equalsIgnoreCase(TXN_COMMIT) && channelIdStr != null) {
-            int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().commitLoadTask(label, resp);
             sendResult(request, response, resp);
@@ -276,7 +273,6 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
         if (op.equalsIgnoreCase(TXN_ROLLBACK) && channelIdStr != null) {
-            int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             GlobalStateMgr.getCurrentState().getStreamLoadMgr().rollbackLoadTask(label, resp);
             sendResult(request, response, resp);
@@ -284,20 +280,39 @@ public class TransactionLoadAction extends RestBaseAction {
         }
 
 
-        if (backendID == null) {
-            throw new UserException("transaction with op " + op + " label " + label + " has no backend");
+        if (nodeID == null) {
+            throw new UserException("transaction with op " + op + " label " + label + " has no node");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
-        if (backend == null) {
-            throw new UserException("Backend " + backendID + " is not alive");
+        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackend(nodeID);
+        if (node == null) {
+            node = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(nodeID);
+            if (node == null) {
+                throw new UserException("Node " + nodeID + " is not alive");
+            }
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
 
         LOG.info("redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
                 redirectAddr, dbName, tableName, op, label);
         redirectTo(request, response, redirectAddr);
+    }
+
+    private static Long getBackendOrComputeId() throws UserException {
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true,
+                false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No backend or compute node alive.");
     }
 }
 

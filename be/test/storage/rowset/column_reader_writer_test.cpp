@@ -160,9 +160,6 @@ protected:
         }
         // read and check
         {
-            // create page cache
-            std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
-            StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
             auto res = ColumnReader::create(&meta, segment.get());
             ASSERT_TRUE(res.ok());

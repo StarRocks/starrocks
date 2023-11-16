@@ -18,9 +18,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
-import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.qe.scheduler.RecoverableException;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
@@ -28,7 +27,6 @@ import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -51,7 +49,8 @@ public class QueryQueueManager {
     }
 
     public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws UserException, InterruptedException {
-        if (!needCheckQueue(coord) || !isEnableQueue(coord)) {
+        JobSpec jobSpec = coord.getJobSpec();
+        if (!jobSpec.isNeedQueued() || !jobSpec.isEnableQueue()) {
             return;
         }
 
@@ -107,30 +106,6 @@ public class QueryQueueManager {
                 context.setPending(false);
             }
         }
-    }
-
-    public boolean isEnableQueue(DefaultCoordinator coord) {
-        if (coord.getJobSpec().isStatisticsJob()) {
-            return GlobalVariable.isEnableQueryQueueStatistic();
-        }
-
-        if (coord.isLoadType()) {
-            return GlobalVariable.isEnableQueryQueueLoad();
-        }
-
-        return GlobalVariable.isEnableQueryQueueSelect();
-    }
-
-    public boolean needCheckQueue(DefaultCoordinator coord) {
-        if (!coord.getJobSpec().isNeedQueued()) {
-            return false;
-        }
-
-        // The queries only using schema meta will never been queued, because a MySQL client will
-        // query schema meta after the connection is established.
-        List<ScanNode> scanNodes = coord.getScanNodes();
-        boolean notNeed = scanNodes.isEmpty() || scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
-        return !notNeed;
     }
 
     private LogicalSlot createSlot(DefaultCoordinator coord) throws UserException {

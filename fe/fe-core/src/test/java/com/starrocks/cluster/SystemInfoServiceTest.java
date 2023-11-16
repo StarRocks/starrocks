@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -65,6 +66,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.List;
 
 public class SystemInfoServiceTest {
 
@@ -370,6 +372,32 @@ public class SystemInfoServiceTest {
         dis.close();
 
         deleteDir(dir);
+    }
+
+    @Test
+    public void testSeqChooseComputeNodes() {
+        clearAllBackend();
+        AddBackendClause stmt = new AddBackendClause(Lists.newArrayList("192.168.0.1:1234"));
+        com.starrocks.sql.analyzer.Analyzer.analyze(new AlterSystemStmt(stmt), new ConnectContext(null));
+
+        try {
+            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(stmt.getHostPortPairs());
+        } catch (DdlException e) {
+            Assert.fail();
+        }
+
+        Assert.assertNotNull(GlobalStateMgr.getCurrentSystemInfo().
+                getComputeNodeWithHeartbeatPort("192.168.0.1", 1234));
+
+        List<Long> longList = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, false, false);
+        Assert.assertEquals(1, longList.size());
+        ComputeNode computeNode = new ComputeNode();
+        computeNode.setHost("192.168.0.1");
+        computeNode.setHttpPort(9030);
+        computeNode.setAlive(true);
+        GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
+        List<Long> computeNods = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true, false);
+        Assert.assertEquals(1, computeNods.size());
     }
 
 }

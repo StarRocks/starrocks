@@ -131,7 +131,6 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -740,7 +739,8 @@ public class PlanFragmentBuilder {
 
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(physicalPartition.getId());
+                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
+                                .get(physicalPartition.getId());
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
                         List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -1176,7 +1176,7 @@ public class PlanFragmentBuilder {
                 }
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
-                icebergScanNode.setupScanRangeLocations();
+                icebergScanNode.setupScanRangeLocations(context.getDescTbl());
                 // set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
@@ -2337,9 +2337,8 @@ public class PlanFragmentBuilder {
                 throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
             }
 
-            PhysicalPropertySet outputProperty = optExpr.getOutputProperty();
-            if (outputProperty != null && outputProperty.getDistributionProperty().isAny()) {
-                joinNode.setCanShuffleOutput(true);
+            if (node.getCanLocalShuffle()) {
+                joinNode.setCanLocalShuffle(true);
             }
 
             // Build outputColumns
@@ -2798,7 +2797,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());

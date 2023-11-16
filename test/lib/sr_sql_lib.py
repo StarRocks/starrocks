@@ -908,10 +908,10 @@ class StarrocksSQLApiLib(object):
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][8]
             if status != "FINISHED":
-                time.sleep(5)
+                time.sleep(1)
             else:
                 # sleep another 5s to avoid FE's async action.
-                time.sleep(5)
+                time.sleep(1)
                 break
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
@@ -939,6 +939,12 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
 
 
+    def check_hit_materialized_view_plan(self, res, mv_name):
+        """
+        assert mv_name is hit in query
+        """
+        tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+
     def check_hit_materialized_view(self, query, mv_name):
         """
         assert mv_name is hit in query
@@ -946,7 +952,7 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        print(res)
+        #print(res)
         tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
     def check_no_hit_materialized_view(self, query, mv_name):
@@ -998,6 +1004,25 @@ class StarrocksSQLApiLib(object):
             if status != "PENDING":
                 break
             time.sleep(0.5)
+
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
+        """
+        wait alter table job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                True,
+            )
+            if (not res["status"]) or len(res["result"]) <= 0:
+                return ""
+
+            status = res["result"][0][6]
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
+                break
+            time.sleep(0.5)
+        tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
         """

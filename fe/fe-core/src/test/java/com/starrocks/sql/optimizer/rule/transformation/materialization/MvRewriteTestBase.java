@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -38,6 +39,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -64,6 +66,7 @@ import org.junit.rules.TemporaryFolder;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
 
 public class MvRewriteTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -83,7 +86,15 @@ public class MvRewriteTestBase {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
         Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
         FeConstants.enablePruneEmptyOutputScan = false;
+
+        // build a small cache for test
+        Config.mv_plan_cache_max_size = 10;
+        CachingMvPlanContextBuilder.getInstance().rebuildCache();
+
+        // Use sync analyze
+        Config.mv_auto_analyze_async = false;
 
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
@@ -392,5 +403,11 @@ public class MvRewriteTestBase {
         for (OptExpression child : root.getInputs()) {
             getScanOperators(child, name, results);
         }
+    }
+
+    public static Set<String> getPartitionNamesToRefreshForMv(MaterializedView mv) {
+        Set<String> toRefreshPartitions = Sets.newHashSet();
+        mv.getPartitionNamesToRefreshForMv(toRefreshPartitions, true);
+        return toRefreshPartitions;
     }
 }

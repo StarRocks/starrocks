@@ -27,6 +27,7 @@
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/write_batch.h"
+#include "row_store_encoder.h"
 #include "rowset_merger.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -262,7 +263,10 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     RETURN_IF_ERROR(_load_meta_and_log(tablet_updates_pb));
 
-    _rowset_stats.clear();
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        _rowset_stats.clear();
+    }
     std::set<uint32_t> unapplied_rowsets;
     auto st = _load_rowsets_and_check_consistency(unapplied_rowsets);
     if (st.is_corruption()) {
@@ -2045,14 +2049,16 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
+        auto st = output_rowset->verify();
         string msg = strings::Substitute(
                 "actual row size changed after compaction $0 -> $1 inputs:$2 output:$3 max_rowset_id:$4 "
-                "max_src_rssid:$5 $6",
+                "max_src_rssid:$5 $6 $7",
                 row_before, row_after, PrettyPrinter::print_unique_int_list_range(info->inputs), rowset_id,
-                max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id));
+                max_rowset_id, max_src_rssid, _debug_compaction_stats(info->inputs, rowset_id),
+                st.ok() ? "" : st.get_error_msg());
         LOG(ERROR) << msg << debug_string();
         _set_error(msg + _debug_version_info(true));
-        CHECK(output_rowset->verify().ok()) << msg;
+        CHECK(st.ok()) << msg;
     }
 }
 
@@ -4315,7 +4321,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDelt
             ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
         }
         iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
-        return dcg_segment->new_column_iterator(col_index);
+        return dcg_segment->new_column_iterator(ucid, nullptr);
     }
     return nullptr;
 }
@@ -4362,6 +4368,12 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             }
         }
     }
+    std::unique_ptr<BinaryColumn> full_row_column;
+    // if we are getting multiple(>2) columns, and full row column is available,
+    // get values from full row column as an optimization
+    if (_tablet.is_column_with_row_store() && column_ids.size() > 2) {
+        full_row_column = std::make_unique<BinaryColumn>();
+    }
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
         auto iter = rssid_to_rowsets.upper_bound(rssid);
@@ -4396,18 +4408,34 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
+        iter_opts.use_page_cache = true;
         ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
-        for (auto i = 0; i < column_ids.size(); ++i) {
-            // try to build iterator from delta column file first
-            ASSIGN_OR_RETURN(auto col_iter,
-                             new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
-            if (col_iter == nullptr) {
-                // not found in delta column file, build iterator from main segment
-                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(column_ids[i], nullptr, read_tablet_schema));
-                iter_opts.read_file = read_file.get();
-            }
+        iter_opts.read_file = read_file.get();
+
+        if (full_row_column) {
+            full_row_column->reset_column();
+            full_row_column->reserve(rowids.size());
+            const auto& column = _tablet.tablet_schema()->column(_tablet.tablet_schema()->num_columns() - 1);
+            ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
-            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), full_row_column.get()));
+            auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);
+            row_encoder->decode_columns_from_full_row_column(*(_tablet.tablet_schema()->schema()), *full_row_column,
+                                                             column_ids, columns);
+        } else {
+            for (auto i = 0; i < column_ids.size(); ++i) {
+                // try to build iterator from delta column file first
+                ASSIGN_OR_RETURN(auto col_iter,
+                                 new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
+                if (col_iter == nullptr) {
+                    // not found in delta column file, build iterator from main segment
+                    const auto& column = read_tablet_schema->column(column_ids[i]);
+                    ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(column, nullptr));
+                    iter_opts.read_file = read_file.get();
+                }
+                RETURN_IF_ERROR(col_iter->init(iter_opts));
+                RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            }
         }
     }
     if (state != nullptr && with_default) {
@@ -4448,7 +4476,8 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
                              new_dcg_column_iterator(ctx, fs, iter_opts, unique_column_ids[i], read_tablet_schema));
             if (col_iter == nullptr) {
                 // not found in delta column file, build iterator from main segment
-                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator(auto_increment_column_idx));
+                const TabletColumn& col = auto_increment_state->schema->column(auto_increment_column_idx);
+                ASSIGN_OR_RETURN(col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
                 iter_opts.read_file = read_file.get();
             }
             RETURN_IF_ERROR(col_iter->init(iter_opts));

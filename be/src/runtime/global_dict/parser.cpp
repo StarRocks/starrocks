@@ -143,13 +143,11 @@ private:
     DictOptimizeContext* _dict_opt_ctx;
 };
 
-Status DictOptimizeParser::_check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx) {
+void DictOptimizeParser::_check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx) {
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
         dict_opt_ctx->slot_id = f->slot_id();
         dict_opt_ctx->could_apply_dict_optimize = true;
-        return Status::OK();
     }
-    return Status::OK();
 }
 
 Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
@@ -286,12 +284,10 @@ Status DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, 
     return _rewrite_expr_ctxs(pexpr_ctxs, state, target_slotids);
 }
 
-void DictOptimizeParser::close(RuntimeState* state) noexcept {
-    Expr::close(_expr_close_list, state);
-}
+void DictOptimizeParser::close(RuntimeState* state) noexcept {}
 
-Status DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
-    return _check_could_apply_dict_optimize(expr_ctx->root(), dict_opt_ctx);
+void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
+    _check_could_apply_dict_optimize(expr_ctx->root(), dict_opt_ctx);
 }
 
 void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const std::vector<ExprContext*>& conjunct_ctxs,

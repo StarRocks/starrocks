@@ -42,6 +42,7 @@ using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
 class CompactionScheduler;
 class Metacache;
+class VersionedTablet;
 
 class TabletManager {
     friend class Tablet;
@@ -61,6 +62,8 @@ public:
     [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
+
+    StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
@@ -130,16 +133,22 @@ public:
     // The return value will never be null.
     Metacache* metacache() { return _metacache.get(); }
 
+    StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
+
     int64_t in_writing_data_size(int64_t tablet_id);
 
-    void set_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
+    void add_in_writing_data_size(int64_t tablet_id, int64_t txn_id, int64_t size);
 
     void remove_in_writing_data_size(int64_t tablet_id, int64_t txn_id);
 
     // only for TEST purpose
     void TEST_set_global_schema_cache(int64_t index_id, TabletSchemaPtr schema);
 
-    void update_segment_cache_size(std::string_view key);
+    // update cache size of the segment with the given key, optionally provide the segment address hint.
+    // If segment_addr_hint is provided and it's non-zero, the cache size will be only updated when the
+    // instance address matches the address provided by the segment_addr_hint. This is used to prevent
+    // updating the cache size where the cached object is not the one as expected.
+    void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

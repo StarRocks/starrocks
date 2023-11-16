@@ -139,7 +139,12 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
         segment = std::make_shared<Segment>(std::move(fs), segment_path, seg_id, std::move(tablet_schema), _mgr);
         if (fill_metadata_cache) {
-            _mgr->metacache()->cache_segment(segment_path, segment);
+            // NOTE: the returned segment may be not the same as the parameter passed in
+            // Use the one in cache if the same key already exists
+            if (auto cached_segment = _mgr->metacache()->cache_segment_if_absent(segment_path, segment);
+                cached_segment != nullptr) {
+                segment = cached_segment;
+            }
         }
     }
     // segment->open will read the footer, and it is time-consuming.
@@ -205,16 +210,13 @@ StatusOr<bool> Tablet::has_delete_predicates(int64_t version) {
 }
 
 int64_t Tablet::data_size() {
-    int64_t size = 0;
-    if (_version_hint > 0) {
-        auto metadata = get_metadata(_version_hint);
-        if (metadata.ok()) {
-            for (const auto& rowset : metadata.value()->rowsets()) {
-                size += rowset.data_size();
-            }
-        }
+    auto size = _mgr->get_tablet_data_size(_id, &_version_hint);
+    if (size.ok()) {
+        return size.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet " << _id << " data size: " << size.status();
+        return 0;
     }
-    return size;
 }
 
 } // namespace starrocks::lake

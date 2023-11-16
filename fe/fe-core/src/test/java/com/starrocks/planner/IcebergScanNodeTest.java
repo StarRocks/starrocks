@@ -77,7 +77,7 @@ public class IcebergScanNodeTest extends TableTestBase {
         mockedNativeTableC.newRowDelta().addRows(FILE_B_1).addDeletes(FILE_C_1).commit();
         mockedNativeTableC.refresh();
 
-        scanNode.setupScanRangeLocations();
+        scanNode.setupScanRangeLocations(descTable);
 
         List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
         Assert.assertTrue(result.size() > 0);

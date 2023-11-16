@@ -33,7 +33,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv1.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv2.sql");
         executeSqlFile("sql/materialized-view/tpch/ddl_tpch_mv3.sql");
-       connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
 
         int scale = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();

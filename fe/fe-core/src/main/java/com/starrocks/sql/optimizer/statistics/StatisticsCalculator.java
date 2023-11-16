@@ -25,7 +25,6 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
@@ -119,12 +118,16 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -143,8 +146,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.PREDICATE_UNKNOWN_FILTER_COEFFICIENT;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
+import static java.lang.Math.pow;
 
 /**
  * Estimate stats for the root group using a group expression's children's stats
@@ -184,6 +189,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
+        predicate = removePartitionPredicate(predicate, node);
         Statistics statistics = context.getStatistics();
         if (null != predicate) {
             statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
@@ -284,11 +290,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
-            String catalogName = ((IcebergTable) table).getCatalogName();
+            String catalogName = table.getCatalogName();
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, colRefToColumnMetaMap, null,
                     node.getPredicate(), node.getLimit());
             context.setStatistics(stats);
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalIcebergScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+            }
         }
 
         return visitOperator(node, context);
@@ -672,7 +683,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 if (groupByIndex == 0) {
                     rowCount *= cardinality;
                 } else {
-                    rowCount *= Math.max(1, cardinality * Math.pow(
+                    rowCount *= Math.max(1, cardinality * pow(
                             StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1D));
                     if (rowCount > inputStatistics.getOutputRowCount()) {
                         rowCount = inputStatistics.getOutputRowCount();
@@ -736,7 +747,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (joinType.isAntiJoin()) {
                 innerRowCount = Math.max(0, Math.min(leftRowCount, rightRowCount));
             } else {
-                innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
+                // if the large table is ten million times larger than the small table, we'd better multiply
+                // a filter coefficient.
+                double scaleFactor = Math.max(leftRowCount, rightRowCount) / Math.min(leftRowCount, rightRowCount);
+                if (scaleFactor >= Math.pow(10, 7)) {
+                    innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount)
+                            * pow(PREDICATE_UNKNOWN_FILTER_COEFFICIENT, eqOnPredicates.size()));
+                } else {
+                    innerRowCount = Math.max(1, Math.max(leftRowCount, rightRowCount));
+                }
+
             }
         }
 
@@ -806,8 +826,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics joinStats = joinStatsBuilder.build();
 
         allJoinPredicate.removeAll(eqOnPredicates);
-
         Statistics estimateStatistics = estimateStatistics(allJoinPredicate, joinStats);
+        if (joinType.isLeftOuterJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), leftRowCount))
+                    .build();
+        } else if (joinType.isRightOuterJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), rightRowCount))
+                    .build();
+        } else if (joinType.isFullOuterJoin()) {
+            estimateStatistics = Statistics.buildFrom(estimateStatistics)
+                    .setOutputRowCount(Math.max(estimateStatistics.getOutputRowCount(), joinStats.getOutputRowCount()))
+                    .build();
+        }
+
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
     }
@@ -1086,8 +1119,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             entry.getValue().sort((o1, o2) -> ((int) (o2.second - o1.second)));
             for (int index = 0; index < entry.getValue().size(); ++index) {
                 double selectivity = entry.getValue().get(index).second;
-                double sqrtNum = Math.pow(2, index);
-                cumulativeSelectivity = cumulativeSelectivity * Math.pow(selectivity, 1 / sqrtNum);
+                double sqrtNum = pow(2, index);
+                cumulativeSelectivity = cumulativeSelectivity * pow(selectivity, 1 / sqrtNum);
             }
         }
         for (double complexSelectivity : complexEqOnPredicatesSelectivity) {
@@ -1353,4 +1386,50 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         context.setStatistics(context.getChildStatistics(0));
         return visitOperator(node, context);
     }
+
+
+    // avoid use partition cols filter rows twice
+    private ScalarOperator removePartitionPredicate(ScalarOperator predicate, Operator operator) {
+        if (operator instanceof LogicalIcebergScanOperator) {
+            LogicalIcebergScanOperator icebergScanOperator = operator.cast();
+            List<String> partitionColNames = icebergScanOperator.getTable().getPartitionColumnNames();
+            List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+            List<ScalarOperator> newPredicates = Lists.newArrayList();
+            for (ScalarOperator scalarOperator : conjuncts) {
+                if (scalarOperator instanceof BinaryPredicateOperator) {
+                    BinaryPredicateOperator bop = scalarOperator.cast();
+                    if (bop.getBinaryType().isEqualOrRange()
+                            && bop.getChild(1).isConstantRef()
+                            && isPartitionCol(bop.getChild(0), partitionColNames)) {
+                        // do nothing
+                    } else {
+                        newPredicates.add(scalarOperator);
+                    }
+                } else if (scalarOperator instanceof InPredicateOperator) {
+                    InPredicateOperator inOp = scalarOperator.cast();
+                    if (!inOp.isNotIn()
+                            && inOp.getChildren().stream().skip(1).allMatch(ScalarOperator::isConstant)
+                            && isPartitionCol(inOp.getChild(0), partitionColNames)) {
+                        // do nothing
+                    } else {
+                        newPredicates.add(scalarOperator);
+                    }
+                }
+            }
+            return newPredicates.size() < 1 ? ConstantOperator.TRUE : Utils.compoundAnd(newPredicates);
+        }
+        return predicate;
+    }
+
+    private boolean isPartitionCol(ScalarOperator scalarOperator, Collection<String> partitionColumns) {
+        if (scalarOperator.isColumnRef()) {
+            String colName = ((ColumnRefOperator) scalarOperator).getName();
+            return partitionColumns.contains(StringUtils.lowerCase(colName));
+        } else if (scalarOperator instanceof CastOperator && scalarOperator.getChild(0).isColumnRef()) {
+            String colName = ((ColumnRefOperator) scalarOperator.getChild(0)).getName();
+            return partitionColumns.contains(StringUtils.lowerCase(colName));
+        }
+        return false;
+    }
+
 }

@@ -312,8 +312,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
+    public static final String GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT = "global_runtime_filter_wait_timeout";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
     public static final String ENABLE_TOPN_RUNTIME_FILTER = "enable_topn_runtime_filter";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE = "global_runtime_filter_rpc_http_min_size";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
@@ -403,6 +406,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
+
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -537,6 +544,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_EXPR_PRUNE_PARTITION = "enable_expr_prune_partition";
 
     public static final String AUDIT_EXECUTE_STMT = "audit_execute_stmt";
+
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
+    
+    public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
+
+    public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1009,8 +1024,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterWaitTimeout = 20;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterRpcTimeout = 400;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
+    private long globalRuntimeFilterRpcHttpMinSize = 64L * 1024 * 1024;
 
     //In order to be compatible with the logic of the old planner,
     //When the column name is the same as the alias name,
@@ -1380,6 +1401,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
     private boolean cboPredicateSubfieldPath = true;
 
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
+
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
     }
@@ -1400,6 +1424,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
+
+    @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
+    private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
+    private String cboEqBaseType = SessionVariableConstants.VARCHAR;
+
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
 
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
@@ -1428,7 +1469,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboPredicateSubfieldPath() {
         return cboPredicateSubfieldPath;
     }
-    
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
+
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
@@ -2656,6 +2702,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableExprPrunePartition = enableExprPrunePartition;
     }
 
+    public boolean enableCboDeriveRangeJoinPredicate() {
+        return cboDeriveRangeJoinPredicate;
+    }
+
+    public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
+        this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
@@ -2673,6 +2727,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getLargeDecimalUnderlyingType() {
         return largeDecimalUnderlyingType;
+    }
+
+    public long getCrossJoinCostPenalty() {
+        return crossJoinCostPenalty;
+    }
+
+    public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
+        this.crossJoinCostPenalty = crossJoinCostPenalty;
+    }
+
+    public boolean getEnableIcebergIdentityColumnOptimize() {
+        return enableIcebergIdentityColumnOptimize;
+    }
+
+    public boolean getEnablePlanSerializeConcurrently() {
+        return enablePlanSerializeConcurrently;
     }
 
     // Serialize to thrift object
@@ -2734,11 +2804,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
-        final int global_runtime_filter_wait_timeout = 20;
-        final int global_runtime_filter_rpc_timeout = 400;
-        tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
-        tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
+        tResult.setGlobal_runtime_filter_build_max_size(globalRuntimeFilterBuildMaxSize);
+        tResult.setRuntime_filter_wait_timeout_ms(globalRuntimeFilterWaitTimeout);
+        tResult.setRuntime_filter_send_timeout_ms(globalRuntimeFilterRpcTimeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
+        tResult.setRuntime_filter_rpc_http_min_size(globalRuntimeFilterRpcHttpMinSize);
         tResult.setPipeline_dop(pipelineDop);
         if (pipelineProfileLevel == 2) {
             tResult.setPipeline_profile_level(TPipelineProfileLevel.DETAIL);

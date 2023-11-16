@@ -529,7 +529,7 @@ public class DefaultCoordinator extends Coordinator {
 
     private void deliverExecFragments(boolean needDeploy) throws RpcException, UserException {
         lock();
-        try {
+        try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployLockInternalTime")) {
             Deployer deployer =
                     new Deployer(connectContext, jobSpec, executionDAG, coordinatorPreprocessor.getCoordAddress(),
                             this::handleErrorExecution);

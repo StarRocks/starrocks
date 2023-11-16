@@ -725,7 +725,7 @@ public class Config extends ConfigBase {
      * handshake packet version.
      * global variable version.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static String mysql_server_version = "5.1.0";
 
     /**
@@ -765,6 +765,15 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int publish_version_interval_ms = 10;
+
+    @ConfField(mutable = true)
+    public static boolean lake_enable_batch_publish_version  = false;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_max_version_num = 10;
+
+    @ConfField(mutable = true)
+    public static int lake_batch_publish_min_version_num = 1;
 
     /**
      * The thrift server max worker threads
@@ -1829,7 +1838,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -2545,6 +2554,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
+
+    /**
+     * Whether analyze the mv after refresh in async mode.
+     */
+    @ConfField(mutable = true)
+    public static boolean mv_auto_analyze_async = true;
 
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,

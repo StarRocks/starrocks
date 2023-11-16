@@ -57,16 +57,9 @@ protected:
     Status _lazy_init(RuntimeState* runtime_state, const MetaScannerParams& params);
     Status _real_init();
 
-    Status _get_tablet(const TInternalScanRange* scan_range) override;
-    Status _init_meta_reader_params() override;
-
     LakeMetaScanNode* _parent;
-    lake::Tablet _tablet;
-    std::shared_ptr<const TabletSchema> _tablet_schema;
-
-    LakeMetaReaderParams _reader_params;
-    std::shared_ptr<LakeMetaReader> _reader;
     int64_t _tablet_id;
+    std::unique_ptr<LakeMetaReader> _reader;
 };
 
 } // namespace starrocks

@@ -261,6 +261,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -339,6 +340,8 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -2304,6 +2307,7 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
+            boolean readSucc = false;
             try {
                 entity = cursor.next();
 
@@ -2311,6 +2315,8 @@ public class GlobalStateMgr {
                 if (entity == null) {
                     break;
                 }
+
+                readSucc = true;
 
                 // apply
                 EditLog.loadJournal(this, entity);
@@ -2320,7 +2326,9 @@ public class GlobalStateMgr {
                             replayedJournalId.incrementAndGet(),
                             entity == null ? null : entity.getData(),
                             e);
-                    cursor.skipNext();
+                    if (!readSucc) {
+                        cursor.skipNext();
+                    }
                     continue;
                 }
                 // handled in outer loop
@@ -2805,6 +2813,18 @@ public class GlobalStateMgr {
                             .append("\" = \"");
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
+                }
+
+                // store type
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+                    if (olapTable.storageType() != null &&
+                            !PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(olapTable.storageType())) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+                                .append("\" = \"");
+
+                        sb.append(olapTable.storageType()).append("\"");
+                    }
                 }
             }
 
@@ -3867,9 +3887,9 @@ public class GlobalStateMgr {
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds) {
+                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
         return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds);
+                tmpPartitionIds, distributionDesc);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {

@@ -155,11 +155,205 @@ SELECT COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT avg(v3) OVER (PARTITION 
 -- result:
 49176	715012.2492279809	1.5	121.5
 -- !result
-SELECT /*+ SET_VAR(pipeline_dop='1')*/ COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT cume_dist() OVER (PARTITION BY v2 ORDER BY v1) AS wv FROM t1)a;
+SELECT /*+ SET_VAR(pipeline_dop='1')*/ COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT CAST(cume_dist() OVER (PARTITION BY v2 ORDER BY v1) AS decimal64(18,5)) AS wv FROM t1)a;
 -- result:
-49176	36879.33463478241	0.3333333333333333	1.0
+49176	36879.23668	0.33333	1.00000
 -- !result
-SELECT /*+ SET_VAR(pipeline_dop='1')*/ COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT percent_rank() OVER (PARTITION BY v2 ORDER BY v1) AS wv FROM t1)a;
+SELECT /*+ SET_VAR(pipeline_dop='1')*/ COUNT(*), SUM(wv), MIN(wv), MAX(wv) FROM (SELECT CAST(percent_rank() OVER (PARTITION BY v2 ORDER BY v1) AS decimal64(18,5)) AS wv FROM t1)a;
 -- result:
-49176	12298.165548229932	0.0	0.9998779843006467
+49176	12298.17356	0.00000	0.99988
+-- !result
+-- name: test_window_function_half_bounded_streaming
+CREATE TABLE `t1` (
+  `v1` int(11) NULL,
+  `v2` int(11) NULL,
+  `v3` int(11) NOT NULL,
+  `v4` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t1` (v1, v2, v3, v4) values
+    (1, 1, 1, NULL),
+    (1, 1, 2, NULL),
+    (1, NULL, 3, NULL),
+    (1, NULL, 4, NULL),
+    (1, 2, 5, NULL),
+    (1, 2, 6, NULL),
+    (1, NULL, 7, NULL),
+    (1, NULL, 8, NULL),
+    (2, 3, 9, NULL),
+    (2, 3, 10, NULL),
+    (2, NULL, 11, NULL),
+    (2, NULL, 12, NULL),
+    (2, 4, 13, NULL),
+    (2, 4, 14, NULL),
+    (2, NULL, 15, NULL),
+    (2, NULL, 16, NULL),
+    (NULL, 3, 17, NULL),
+    (NULL, 3, 18, NULL),
+    (NULL, NULL, 19, NULL),
+    (NULL, NULL, 20, NULL),
+    (NULL, 4, 21, NULL),
+    (NULL, 4, 22, NULL),
+    (NULL, NULL, 23, NULL),
+    (NULL, NULL, 24, NULL);
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` (v1, v2, v3, v4) values
+    (101, 101, 101, NULL),
+    (101, 101, 102, NULL),
+    (101, NULL, 103, NULL),
+    (101, NULL, 104, NULL),
+    (101, 102, 105, NULL),
+    (101, 102, 106, NULL),
+    (101, NULL, 107, NULL),
+    (101, NULL, 108, NULL),
+    (102, 103, 109, NULL),
+    (102, 103, 110, NULL),
+    (102, NULL, 111, NULL),
+    (102, NULL, 112, NULL),
+    (102, 104, 113, NULL),
+    (102, 104, 114, NULL),
+    (102, NULL, 115, NULL),
+    (102, NULL, 116, NULL),
+    (NULL, 103, 117, NULL),
+    (NULL, 103, 118, NULL),
+    (NULL, NULL, 119, NULL),
+    (NULL, NULL, 120, NULL),
+    (NULL, 104, 121, NULL),
+    (NULL, 104, 122, NULL),
+    (NULL, NULL, 123, NULL),
+    (NULL, NULL, 124, NULL);
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+INSERT INTO `t1` SELECT * FROM `t1`;
+-- result:
+-- !result
+CREATE TABLE `t5` (
+  `v1` decimal64(18,5) NULL,
+  `v2` decimal64(18,5) NULL,
+  `v3` decimal64(18,5) NOT NULL,
+  `v4` decimal64(18,5) NOT NULL,
+  `v5` decimal64(18,5) NOT NULL,
+  `v6` decimal64(18,5) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t5` (v1, v2, v3, v4, v5, v6) 
+SELECT v1, v2, v3, 
+row_number() OVER (ORDER BY v1, v2, v3, v4) as v4,
+row_number() OVER (PARTITION BY v1 ORDER BY v2, v3, v4) as v5,
+1 as v6
+FROM `t1`;
+-- result:
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lead(v3, 1) OVER(ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2468381.00000	12.54877149815	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lead(v3, 10) OVER(ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2468210.00000	12.54847631346	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lag(v3, 1) OVER(ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2468286.00000	12.54828853652	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lag(v3, 10) OVER(ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2467272.00000	12.54370748472	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lead(v3, 1) OVER(PARTITION BY v2 ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2467893.00000	12.54680088462	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lead(v3, 10) OVER(PARTITION BY v2 ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2463758.00000	12.53068386414	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lag(v3, 1) OVER(PARTITION BY v2 ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2467820.00000	12.54642975165	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT lag(v3, 10) OVER(PARTITION BY v2 ORDER BY v4) AS wv FROM t5) a;
+-- result:
+2463012.00000	12.52688970491	1.00000	124.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING) AS wv FROM t5) a;
+-- result:
+276285246416.00000	1404645.01416413312	19.00000	2467272.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS wv FROM t5) a;
+-- result:
+276307456904.00000	1404693.65949680483	19.00000	2468286.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) AS wv FROM t5) a;
+-- result:
+276334608259.00000	1404824.54987697251	209.00000	2468400.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS wv FROM t5) a;
+-- result:
+276312393685.00000	1404711.61585427851	38.00000	2468400.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(PARTITION BY v2 ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING) AS wv FROM t5) a;
+-- result:
+91694377058.00000	466357.99905400319	1.00000	1331404.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(PARTITION BY v2 ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS wv FROM t5) a;
+-- result:
+91716566824.00000	466288.24740842421	1.00000	1332436.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(PARTITION BY v2 ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING) AS wv FROM t5) a;
+-- result:
+91743691933.00000	466404.81094944688	11.00000	1332552.00000
+-- !result
+SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v3) OVER(PARTITION BY v2 ORDER BY v4 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 FOLLOWING) AS wv FROM t5) a;
+-- result:
+91721503117.00000	466292.00787477631	2.00000	1332552.00000
 -- !result
