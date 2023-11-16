@@ -240,7 +240,7 @@ public class Database extends MetaObject implements Writable {
     }
 
     public boolean isReadLockHeldByCurrentThread() {
-        return this.rwLock.getReadHoldCount() > 0;
+        return this.rwLock.isReadLockHeldByCurrentThread();
     }
 
     public void writeLock() {

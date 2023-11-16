@@ -45,7 +45,9 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
         boolean succ = this.readLock().tryLock(timeout, unit);
-        this.sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
+        if (succ) {
+            this.sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
+        }
         return succ;
     }
 
@@ -61,7 +63,9 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
         boolean succ = this.writeLock().tryLock(timeout, unit);
-        this.exclusiveLockTime = System.currentTimeMillis();
+        if (succ) {
+            this.exclusiveLockTime = System.currentTimeMillis();
+        }
         return succ;
     }
 
