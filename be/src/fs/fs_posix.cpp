@@ -102,6 +102,8 @@ static Status io_error(const std::string& context, int err_number) {
 static Status do_sync(int fd, const string& filename) {
     if (fdatasync(fd) < 0) {
         return io_error(filename, errno);
+    } else {
+        LOG(INFO) << "xxx fdatasync file: " << filename;
     }
     return Status::OK();
 }
@@ -449,6 +451,7 @@ public:
         if (unlink(fname.c_str()) != 0) {
             return io_error(fname, errno);
         }
+        LOG(INFO) << "xxx delete file: " << fname;
         return Status::OK();
     }
 
@@ -492,6 +495,7 @@ public:
         if (rmdir(dirname.c_str()) != 0) {
             return io_error(dirname, errno);
         }
+        LOG(INFO) << "xxx delete dir: " << dirname;
         return Status::OK();
     }
 
