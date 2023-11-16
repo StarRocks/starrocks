@@ -130,7 +130,7 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         LogicalJoinOperator.Builder joinBuilder = LogicalJoinOperator.builder();
         LogicalJoinOperator newJoinOperator = joinBuilder.withOperator(oldJoinOperator)
                 .setOnPredicate(andPredicateOperator)
-                .setJoinHint(JoinOperator.HINT_SHUFFLE)
+                .setJoinHint(JoinOperator.HINT_SKEW)
                 .build();
 
         OptExpression joinExpression = OptExpression.create(newJoinOperator, newLeftChild, newRightChild);
@@ -288,7 +288,8 @@ public class SkewJoinOptimizeRule extends TransformationRule {
 
         LogicalJoinOperator.Builder joinBuilder = new LogicalJoinOperator.Builder();
         joinBuilder.setJoinType(JoinOperator.LEFT_OUTER_JOIN)
-                .setOnPredicate(onPredicate);
+                .setOnPredicate(onPredicate)
+                .setJoinHint(JoinOperator.HINT_BROADCAST);
         LogicalJoinOperator joinOperator = joinBuilder.build();
         OptExpression joinOptExpression = OptExpression.create(joinOperator, input, skewValueSaltOpt);
         Map<ColumnRefOperator, ScalarOperator> joinProjectMap = input.getOutputColumns().getStream().
