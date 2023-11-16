@@ -385,6 +385,7 @@ You can find a function based on the following categories:
 - [tan](./math-functions/tan.md)
 - [tanh](./math-functions/tanh.md)
 - [truncate](./math-functions/truncate.md)
+- [width_bucket](./math-functions/width_bucket.md)
 
 ## Pattern matching functions
 
