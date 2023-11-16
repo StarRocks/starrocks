@@ -218,7 +218,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             AbortTxnRequest request = new AbortTxnRequest();
             request.txnIds = txnIds;
             request.skipCleanup = true;
-            request.tabletIds = null; // unused when skipCleanup is false
+            request.tabletIds = null; // unused when skipCleanup is true
 
             sendAbortTxnRequestIgnoreResponse(request, node);
         }
