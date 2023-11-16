@@ -325,7 +325,7 @@ public class PlanFragmentBuilder {
 
     private static boolean enableComputeNode(ExecPlan execPlan) {
         boolean preferComputeNode = execPlan.getConnectContext().getSessionVariable().isPreferComputeNode();
-        if (preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (preferComputeNode || RunMode.isSharedDataMode()) {
             return true;
         }
         return false;
