@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 
 # 测试常见问题
 

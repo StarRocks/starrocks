@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 升级标准版 DorisDB 至社区版 StarRocks
 
 本文介绍如何将标准版 DorisDB 升级至社区版 StarRocks。标准版 DorisDB 包括安装包命名格式为 DorisDB-x 的版本，社区版 StarRocks 包含安装包命名格式为 StarRocks-x 的版本。

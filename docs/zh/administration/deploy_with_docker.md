@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Docker 部署
 
 本文介绍如何以 Docker 镜像的方式手动部署 StarRocks。

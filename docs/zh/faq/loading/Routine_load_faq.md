@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Routine Load常见问题
 
 ## 1. 如何提高导入性能？

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 下一步
 
 * StarRocks高级使用技巧请参考"[Using StarRocks](../using_starrocks/Using_bitmap.md)"

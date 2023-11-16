@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # retention
 
 ## 功能

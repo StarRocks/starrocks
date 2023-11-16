@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Flink Connector常见问题
 
 ## flink-connector-jdbc_2.11sink到StarRocks时间落后8小时

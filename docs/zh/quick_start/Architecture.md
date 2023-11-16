@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks 基本概念及系统架构
 
 ## 系统架构图

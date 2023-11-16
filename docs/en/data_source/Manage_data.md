@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use catalogs to manage internal and external data
 
  Catalogs are used to manage data. StarRocks 2.3 and later provide the following two types of catalogs:

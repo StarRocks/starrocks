@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW FILE
 
 SHOW FILE 语句用于查看保存在数据库中的文件的信息。

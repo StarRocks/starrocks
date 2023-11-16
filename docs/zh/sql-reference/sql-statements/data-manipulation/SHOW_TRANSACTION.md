@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW TRANSACTION
 
 ## 功能

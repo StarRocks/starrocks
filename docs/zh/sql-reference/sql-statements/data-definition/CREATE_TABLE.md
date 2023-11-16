@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE TABLE
 
 ## 功能

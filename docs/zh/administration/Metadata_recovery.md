@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 恢复元数据
 
 本文介绍如何恢复 StarRocks 中的元数据。
