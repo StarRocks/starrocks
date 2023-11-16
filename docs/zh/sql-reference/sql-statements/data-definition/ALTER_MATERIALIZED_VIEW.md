@@ -21,7 +21,7 @@
   - `unique_constraints`
   - `foreign_key_constraints`
   - `colocate_with`
-  - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](/reference/System_variable.md)。
+  - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../../reference/System_variable.md)。
 
 ## 语法
 
