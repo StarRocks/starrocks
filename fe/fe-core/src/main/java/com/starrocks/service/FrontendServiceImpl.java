@@ -67,8 +67,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
-import com.starrocks.catalog.system.sys.ObjectDependencies;
 import com.starrocks.catalog.system.sys.RoleEdges;
+import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -640,7 +640,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TObjectDependencyRes listObjectDependencies(TObjectDependencyReq params) throws TException {
-        return ObjectDependencies.listObjectDependencies(params);
+        return SysObjectDependencies.listObjectDependencies(params);
     }
 
     // list MaterializedView table match pattern

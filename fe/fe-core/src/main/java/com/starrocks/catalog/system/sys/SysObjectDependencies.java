@@ -33,8 +33,9 @@ import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;
+import java.util.Optional;
 
-public class ObjectDependencies {
+public class SysObjectDependencies {
 
     public static final String NAME = "object_dependencies";
 
@@ -92,7 +93,9 @@ public class ObjectDependencies {
                         item.ref_object_name = refObj.getTableName();
                         item.ref_database = refObj.getDbName();
                         item.ref_catalog = refObj.getCatalogName();
-                        item.ref_object_type = refObj.getTable().getType().toString();
+                        item.ref_object_type = Optional.ofNullable(refObj.getTable())
+                                .map(x -> x.getType().toString())
+                                .orElse("UNKNOWN");
 
                         response.addToItems(item);
                     }
