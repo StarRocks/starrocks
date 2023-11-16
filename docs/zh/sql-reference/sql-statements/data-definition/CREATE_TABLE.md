@@ -387,7 +387,7 @@ PARTITION BY RANGE (pay_dt) (
 2. 当分区列为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
 3. 当分区列的数据类型为 INT 时，START 值、END 值仍需要用双引号包裹。
 4. 仅支持指定一列作为分区列。
-5. 更详细的语法规则，请参见[批量创建分区](/table_design/Data_distribution.md#批量创建分区)。
+5. 更详细的语法规则，请参见[批量创建分区](../../../table_design/Data_distribution.md#批量创建分区)。
 
 示例：
 
@@ -618,7 +618,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 #### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
 
-要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `foreign_key_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `foreign_key_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md)。
 
 ```SQL
 PROPERTIES (
