@@ -1,14 +1,15 @@
-# StarRocks v3.2
+# StarRocks version 3.2
 
 ## v3.2.0-RC01
 
-Release date: November xx, 2023
+Release date: November 15, 2023
 
 ### New Features
 
 #### Shared-data cluster
 
 - Supports [the persistent index for Primary Key tables](../table_design/table_types/primary_key_table.md) on local disks.
+- Supports the even distribution of Data Cache among multiple local disks.
 
 #### Data Lake Analytics
 
@@ -20,9 +21,8 @@ Release date: November xx, 2023
 - Added the following features of loading with the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md):
   - Loading Parquet and ORC format data from Azure or GCP.
   - Extracting the value of a key/value pair from the file path as the value of a column using the parameter `columns_from_path`.
-  - Automatic table schema detection and unionization of the same batch of data files. It is useful when loading data files from Hive when these data files are stored under different storage paths and have different table schemas.
   - Loading complex data types including ARRAY, JSON, MAP, and STRUCT.
-- Supports the dict_mapping column property, which can significantly facilitate the loading process during the construction of a global dictionary.
+- Supports the dict_mapping column property, which can significantly facilitate the loading process during the construction of a global dictionary, accelerating the exact COUNT DISTINCT calculation.
 - Supports unloading data from StarRocks to Parquet-formatted files stored in AWS S3 or HDFS by using INSERT INTO FILES. For detailed instructions, see [Unload data using INSERT INTO FILES](../unloading/unload_using_insert_into_files.md).
 
 #### SQL reference
@@ -36,6 +36,15 @@ Added the following functions:
 - Aggregate functions: approx_top_k
 - Window functions: cume_dist, percent_rank and session_number
 - Utility functions: dict_mapping and get_query_profile
+
+#### Privileges and security
+
+StarRocks supports access control through Apache Ranger, providing a higher level of data security and allowing the reuse of existing services of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
+
+- When accessing internal tables, external tables, or other objects in StarRocks, access control can be enforced based on the access policies configured for the StarRocks Service in Ranger.
+- When accessing an external catalog, access control can also leverage the corresponding Ranger service of the original data source (such as Hive Service) to control access (currently, access control for exporting data to Hive is not yet supported).
+
+For more information, see [Manage permissions with Apache Ranger](../administration/ranger_plugin.md).
 
 ### Improvements
 
