@@ -301,7 +301,6 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
         testDb = currentState.getDb("test");
-        ConnectContext.get().getSessionVariable().setAnalyzeTypeForMV("not");
     }
 
     private void dropMv(String mvName) throws Exception {
@@ -2443,7 +2442,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testPartitionAndDistributionByColumnNameIgnoreCase() {
-        ConnectContext.get().getSessionVariable().setAnalyzeTypeForMV("not");
         String sql = "create materialized view mv1 " +
                 "partition by K1 " +
                 "distributed by hash(K2) buckets 10 " +
@@ -2814,7 +2812,6 @@ public class CreateMaterializedViewTest {
     public void testCreateAsyncMVWithDifferentDB() {
         try {
             ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
-            ConnectContext.get().getSessionVariable().setAnalyzeTypeForMV("not");
             StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
             newStarRocksAssert.withDatabase("test_mv_different_db")
                     .useDatabase("test_mv_different_db");
@@ -2841,7 +2838,6 @@ public class CreateMaterializedViewTest {
     public void testCreateAsyncMVWithDifferentDB2() {
         try {
             ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
-            ConnectContext.get().getSessionVariable().setAnalyzeTypeForMV("not");
             StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
             newStarRocksAssert.withDatabase("test_mv_different_db")
                     .useDatabase("test_mv_different_db");
@@ -2947,7 +2943,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testCreateAsync_Immediate_Implicit(@Mocked TaskManager taskManager) throws Exception {
-        ConnectContext.get().getSessionVariable().setAnalyzeTypeForMV("not");
         new Expectations() {
             {
                 taskManager.executeTask((String) any);
