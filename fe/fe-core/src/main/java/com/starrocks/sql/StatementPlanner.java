@@ -6,6 +6,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -152,6 +153,7 @@ public class StatementPlanner {
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = System.currentTimeMillis();
 
+            // TODO: double check relatedMvs for OlapTable
             Set<OlapTable> olapTables = Sets.newHashSet();
             Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
             session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
@@ -199,11 +201,15 @@ public class StatementPlanner {
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-                isSchemaValid = olapTables.stream().noneMatch(t ->
-                        t.lastSchemaUpdateTime.get() > planStartTime);
-                isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
-                        t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
-                                t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
+
+                // Check rewritten tables in case of there are some materialized views
+                List<OlapTable> hitTables = plan.getScanNodes().stream()
+                        .filter(scan -> scan instanceof OlapScanNode)
+                        .map(scan -> ((OlapScanNode) scan).getOlapTable())
+                        .collect(Collectors.toList());
+                isSchemaValid = hitTables.stream().noneMatch(t -> hasSchemaChange(t, planStartTime));
+                isSchemaValid = isSchemaValid && hitTables.stream().allMatch(
+                        t -> noVersionChange(t, buildFragmentStartTime));
                 if (isSchemaValid) {
                     return plan;
                 }
@@ -212,6 +218,15 @@ public class StatementPlanner {
         Preconditions.checkState(false, "The tablet write operation update metadata " +
                 "take a long time");
         return null;
+    }
+
+    private static boolean hasSchemaChange(OlapTable table, long since) {
+        return table.lastSchemaUpdateTime.get() > since;
+    }
+
+    private static boolean noVersionChange(OlapTable table, long since) {
+        return (table.lastVersionUpdateEndTime.get() < since &&
+                table.lastVersionUpdateEndTime.get() >= table.lastVersionUpdateStartTime.get());
     }
 
     // Lock all database before analyze
