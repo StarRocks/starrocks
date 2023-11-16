@@ -52,6 +52,7 @@
 #include "json2pb/pb_to_json.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
+#include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -85,6 +86,7 @@ using starrocks::PageHandle;
 using starrocks::PagePointer;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
+using starrocks::DeltaColumnGroupList;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
@@ -131,8 +133,16 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
+<<<<<<< HEAD
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool --operation=print_lake_txn_log\n";
+=======
+    ss << "./meta_tool --operation=scan_dcgs --root_path=/path/to/storage/path "
+          "--tablet_id=tabletid\n";
+    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
+    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
+    ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
+>>>>>>> dd32eb66ee ([BugFix] fix partial update column mode execute concurrent with incremental clone issue (#34555))
     return ss.str();
 }
 
@@ -579,6 +589,18 @@ void check_meta_consistency(DataDir* data_dir) {
     return;
 }
 
+void scan_dcgs(DataDir* data_dir) {
+    DeltaColumnGroupList dcgs;
+    Status st = TabletMetaManager::scan_tablet_delta_column_group(data_dir->get_meta(), FLAGS_tablet_id, &dcgs);
+    if (!st.ok()) {
+        std::cout << "scan delta column group, st: " << st.to_string() << std::endl;
+        return;
+    }
+    for (const auto& dcg : dcgs) {
+        std::cout << dcg->debug_string() << std::endl;
+    }
+}
+
 namespace starrocks {
 
 class SegmentDump {
@@ -932,7 +954,12 @@ int meta_tool_main(int argc, char** argv) {
                                                   "compact_meta",
                                                   "get_meta_stats",
                                                   "ls",
+<<<<<<< HEAD
                                                   "check_table_meta_consistency"};
+=======
+                                                  "check_table_meta_consistency",
+                                                  "scan_dcgs"};
+>>>>>>> dd32eb66ee ([BugFix] fix partial update column mode execute concurrent with incremental clone issue (#34555))
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -940,7 +967,7 @@ int meta_tool_main(int argc, char** argv) {
 
         bool read_only = false;
         if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls" ||
-            FLAGS_operation == "check_table_meta_consistency") {
+            FLAGS_operation == "check_table_meta_consistency" || FLAGS_operation == "scan_dcgs") {
             read_only = true;
         }
 
@@ -969,6 +996,8 @@ int meta_tool_main(int argc, char** argv) {
             list_meta(data_dir.get());
         } else if (FLAGS_operation == "check_table_meta_consistency") {
             check_meta_consistency(data_dir.get());
+        } else if (FLAGS_operation == "scan_dcgs") {
+            scan_dcgs(data_dir.get());
         } else {
             std::cout << "invalid operation: " << FLAGS_operation << "\n" << usage << std::endl;
             return -1;

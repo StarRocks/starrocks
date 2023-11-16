@@ -802,6 +802,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_upsert) {
     int64_t version = 1;
     int64_t version_before_partial_update = 1;
     prepare_tablet(this, tablet, version, version_before_partial_update, N);
+    int64_t version_after_partial_update = version;
     auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
     auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
 
@@ -835,6 +836,33 @@ TEST_P(RowsetColumnPartialUpdateTest, test_upsert) {
                     StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
         }
         ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
+    }
+
+    {
+        // test clone after upsert
+        // 1. full clone with version after partial update
+        auto new_tablet = create_tablet(rand(), rand());
+        ASSERT_EQ(1, new_tablet->updates()->version_history_count());
+        ASSERT_OK(full_clone(tablet, version_after_partial_update, new_tablet));
+        ASSERT_TRUE(check_tablet(new_tablet, version_after_partial_update, N, [](int64_t k1, int64_t v1, int32_t v2) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        }));
+        // 2. increment clone, upsert v1 = k1 % 100 + 3
+        ASSERT_OK(increment_clone(tablet, {version_after_partial_update + 1}, new_tablet));
+        ASSERT_TRUE(check_tablet(new_tablet, version_after_partial_update + 1, 2 * N,
+                                 [](int64_t k1, int64_t v1, int32_t v2) {
+                                     if (k1 < N) {
+                                         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+                                     } else {
+                                         return (int16_t)((k1 - N) % 100 + 3) == v1 && (int32_t)0 == v2;
+                                     }
+                                 }));
+        // 3. increment clone, update v2 = k1 % 100 + 4
+        ASSERT_OK(increment_clone(tablet, {version_after_partial_update + 2}, new_tablet));
+        ASSERT_TRUE(check_tablet(new_tablet, version_after_partial_update + 2, 2 * N,
+                                 [](int64_t k1, int64_t v1, int32_t v2) {
+                                     return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+                                 }));
     }
 }
 
