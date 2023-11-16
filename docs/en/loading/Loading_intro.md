@@ -13,7 +13,7 @@ Choose the import methods based on your data source.
 * Real-time data import. It is recommended to import log and binlog data to StarRocks via [Routine load](./RoutineLoad.md) after they are synchronized to Kafka. StarRocks has a standard [Flink-connector](./Flink-connector-starrocks.md) to facilitate the use of Flink jobs.
 * Write to StarRocks programmatically. It is recommended to use [Stream  Load](./StreamLoad.md).
 * Text file import. It is recommended to use `Stream  Load`.
-* Mysql data import. It is recommend to use [MySQL external table](../using_starrocks/External_table.md#MySQLExternalTables) to import (`insert into new_table select * from external_table`)
+* Mysql data import. It is recommend to use [MySQL external table](../using_starrocks/External_table.md#mysql-external-table) to import (`insert into new_table select * from external_table`)
 * Other data sources to import. It is recommended to use DataX import. StarRocks provides [DataX-StarRocks-writer](./DataX-starrocks-writer.md)
 *StarRocks internal import. It is recommended to use [insert into tablename select](./InsertInto.md) inside StarRocks, which can work with an external scheduler for simple ETL processing.
 
