@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Routine Load
 
 ## Does mysql binlog data produced by kafka count as text format data?

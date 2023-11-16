@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Others FAQs
 
 This topic provides answers to some general questions.

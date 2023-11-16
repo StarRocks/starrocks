@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 内存管理
 
 本章节简单的介绍StarRocks中的内存使用分类和基本的查看内存管理的方法

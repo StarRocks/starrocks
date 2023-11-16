@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks基本概念
 
 * FE：FrontEnd简称FE，是StarRocks的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。

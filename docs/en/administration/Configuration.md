@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Parameter Configuration
 
 After the service is started, you may adjust the configuration parameters to meet the business requirements. You need to reboot the BE and Fe to apply the changes.

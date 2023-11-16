@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Spark StarRocks Connector
 
 The Spark StarRocks Connector reads data stored in StarRocks via Spark.

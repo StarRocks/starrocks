@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CONVERT_TZ
 
 > - *本文以`CONVERT_TZ`为例，说明函数文档的编写要求。*

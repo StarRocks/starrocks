@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 catalog 管理内部和外部数据
 
 Catalog（数据目录）用于管理数据。StarRocks 2.3 及以上版本提供以下两种数据目录：

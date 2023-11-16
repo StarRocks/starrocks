@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ETL When Loading
 
 When importing data into StarRocks tables, sometimes the content of the target table is **not** exactly the same as the content of the data source. For example:

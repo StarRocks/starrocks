@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 背景介绍
 
 用户在使用StarRocks进行精确去重分析时，通常会有两种方式：

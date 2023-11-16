@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Stream load
 
 StarRocks supports importing data directly from local files in CSV file format. The imported data size is up to 10GB.

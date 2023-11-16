@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # md5
 
 Calculate the 128-bit checksum of a string.

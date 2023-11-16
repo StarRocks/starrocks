@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 创建表
 
 本文介绍如何在 StarRocks 中创建表以及进行相关操作。

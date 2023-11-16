@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 其他常见问题
 
 ## 建表时，varchar(32)和string占用的存储空间是否相同？查询时的性能是否相同？

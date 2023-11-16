@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Synchronize data from MySQL
 
 This topic describes how to synchronize data from MySQL to StarRocks in seconds by using Flink CDC Connector, flink-starrocks-connector, and StarRocks Migration Tools (SMT).

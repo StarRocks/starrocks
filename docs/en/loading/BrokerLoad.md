@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Broker Load
 
 StarRocks supports importing data from external storage systems such as Apache HDFS, Amazon S3, etc. The supported file formats are CSV, ORC File, Parquet, etc. The data volume is in the range of tens to hundreds of GB.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data by using flink-connector-starrocks
 
 This topic describes how to load data from Apache Flink® to StarRocks.

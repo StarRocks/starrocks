@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 时区
 
 StarRocks 支持多时区设置
