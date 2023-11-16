@@ -28,11 +28,13 @@ SchemaScanner::ColumnDesc SysObjectDependencies::_s_columns[] = {
         {"OBJECT_NAME", TYPE_BIGINT, sizeof(StringValue), false},
         {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
 
         {"REF_OBJECT_ID", TYPE_VARCHAR, sizeof(int64_t), true},
         {"REF_OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
         {"REF_OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"REF_OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"REF_OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
 };
 
 SysObjectDependencies::SysObjectDependencies()
@@ -55,9 +57,11 @@ Status SysObjectDependencies::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TObjectDependencyItem& info = _result.items[_index];
     DatumArray datum_array{
-            (info.object_id),     Slice(info.object_name),     Slice(info.database),     Slice(info.catalog),
+            (info.object_id),        Slice(info.object_name),     Slice(info.database),
+            Slice(info.catalog),     Slice(info.object_type),
 
-            (info.ref_object_id), Slice(info.ref_object_name), Slice(info.ref_database), Slice(info.ref_catalog),
+            (info.ref_object_id),    Slice(info.ref_object_name), Slice(info.ref_database),
+            Slice(info.ref_catalog), Slice(info.ref_object_type),
     };
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
