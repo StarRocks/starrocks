@@ -42,7 +42,7 @@ under the License.
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
-        <log4j.version>2.19.0</log4j.version>
+        <log4j.version>2.21.1</log4j.version>
         <jackson.version>2.15.2</jackson.version>
         <spark.version>3.4.1</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
