@@ -2,7 +2,11 @@
 
 ## 功能
 
+<<<<<<< HEAD
 恢复之前删除的 database、table 或者 partition。通过 [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE_TABLE.md) 命令删除数据无法恢复。
+=======
+恢复之前删除的 database、table 或者 partition。通过 [TRUNCATE TABLE](../../../sql-reference/sql-statements/data-definition/TRUNCATE_TABLE.md) 命令删除的数据无法恢复。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ## 语法
 

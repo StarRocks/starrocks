@@ -45,7 +45,11 @@ MySQL [(none)]> SHOW DATABASES;
 
 StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/Data_model.md#明细模型) 编写建表语句。
 
+<<<<<<< HEAD
 更多建表语法，参考 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
+=======
+更多建表语法，参考 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ```sql
 use example_db;
@@ -95,13 +99,21 @@ StarRocks 表内部组织存储数据时会按照指定列排序，这些列为�
 
 #### 字段类型
 
+<<<<<<< HEAD
 StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](../using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../sql-reference/sql-statements/data-types/Array.md)，字段类型介绍详见 [数据类型章节](../../sql-reference/sql-statements/data-types/BIGINT.md)。
+=======
+StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](../using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../sql-reference/sql-statements/data-types/Array.md)，字段类型介绍详见 [数据类型章节](../sql-reference/sql-statements/data-types/BIGINT.md)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 > 注意：在建表时，您应尽量使用精确的类型。例如，整型数据不应使用字符串类型，INT 类型即可满足的数据不应使用 BIGINT 类型。精确的数据类型能够更好的发挥数据库的性能。
 
 #### 分区分桶
 
+<<<<<<< HEAD
 `PARTITION` 关键字用于给表 [创建分区](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](../table_design/Data_distribution.md#管理动态分区)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
+=======
+`PARTITION` 关键字用于给表 [创建分区](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#partition_desc)。以上示例中使用 `recruit_date` 进行范围分区，从 11 日到 15 日每天创建一个分区。StarRocks 支持动态生成分区，详见 [动态分区管理](../table_design/dynamic_partitioning.md)。**为了优化生产环境的查询性能，我们强烈建议您为表制定合理的数据分区计划。**
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 `DISTRIBUTED` 关键字用于给表 [创建分桶](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#distribution_desc)，以上示例中使用 `recruit_date` 以及 `region_num` 两个字段通过 Hash 算法创建 8 个桶。
 
@@ -109,7 +121,11 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 数据模型
 
+<<<<<<< HEAD
 `DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](../table_design/Data_model.md)，[聚合模型](../table_design/Data_model.md)，[更新模型](../table_design/Data_model.md)，[主键模型](../table_design/Data_model.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+=======
+`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](../table_design/table_types/duplicate_key_table.md)，[聚合模型](../table_design/table_types/aggregate_table.md)，[更新模型](../table_design/table_types/unique_key_table.md)，[主键模型](../table_design/table_types/primary_key_table.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 #### 索引
 
@@ -161,7 +177,11 @@ SHOW CREATE TABLE detailDemo;
 
 StarRocks 支持多种 DDL 操作。
 
+<<<<<<< HEAD
 您可以通过 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+=======
+您可以通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ### 增加列
 
@@ -255,4 +275,8 @@ mysql -h 127.0.0.1 -P9030 -utest -p123456
 
 ## 下一步
 
+<<<<<<< HEAD
 表创建成功后，您可以 [导入并查询数据](./Import_and_query.md)。
+=======
+表创建成功后，您可以 [导入并查询数据](../quick_start/Import_and_query.md)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))

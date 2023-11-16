@@ -2,9 +2,13 @@
 
 ## 功能
 
+<<<<<<< HEAD
 Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](./SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的前提条件、基本原理、以及支持的数据文件格式和外部存储系统等，请参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)。
 
 在使用 Broker Load 导入数据前，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../../../administration/deploy_broker.md)完成 Broker 部署。本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
+=======
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](./SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的背景信息、前提条件、基本原理、支持的数据文件格式和外部存储系统、以及如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作等，请参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ## 语法
 
@@ -18,6 +22,11 @@ WITH BROKER "<broker_name>"
 [opt_properties]
 ```
 
+<<<<<<< HEAD
+=======
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../keywords.md)。
+
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 ## 参数说明
 
 ### `database_name` 和 `label_name`
@@ -186,9 +195,16 @@ INTO TABLE <table_name>
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
     ```
 
+<<<<<<< HEAD
    > **说明**
    >
    > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。 部署多组 Broker 时，每组 Broker 均需要修改如下信息，重启后生效。
+=======
+    > **说明**
+    >
+    > - **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 需要有权限读取该文件。部署多个 Broker 时，每个 Broker 节点均需要修改如上信息，然后重启各 Broker 节点使配置生效。
+    > - 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 - HA 配置
 
@@ -219,11 +235,17 @@ INTO TABLE <table_name>
 
 如果数据源为 Amazon S3，需要提供如下配置信息。
 
+<<<<<<< HEAD
 | **参数名称**      | **参数说明**                                            |
 | ----------------- | ------------------------------------------------------- |
 | fs.s3a.access.key | 访问 Amazon S3 存储空间的 Access Key ID。      |
 | fs.s3a.secret.key | 访问 Amazon S3 存储空间的 Secret Access Key。 |
 | fs.s3a.endpoint   | 访问 Amazon S3 存储空间的连接地址。                             |
+=======
+  > **说明**
+  >
+  > 您可以通过 [SHOW BROKER](../Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 请参见 AWS 官方文档[访问密钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
 
@@ -344,7 +366,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
     >
     > 这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。
 
+<<<<<<< HEAD
   如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](./SHOW_LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
+=======
+  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](../data-manipulation/SHOW_LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
   **`max_filter_ratio` = [`dpp.abnorm.ALL`/(`dpp.abnorm.ALL` + `dpp.norm.ALL`)]**
 
@@ -360,7 +386,19 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `timezone`
 
+<<<<<<< HEAD
   指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应[设置时区](../../../administration/timezone.md)中所述的会话级时区。
+=======
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。
+
+- `priority`
+
+   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/Configuration.md#fe-配置项) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
+
+   已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) 语句修改该作业的优先级。
+
+   StarRocks 自 v2.5 版本起支持为导入作业设置 `priority` 参数。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ## 列映射
 

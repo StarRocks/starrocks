@@ -1,6 +1,10 @@
 # 通过导入实现数据变更
 
+<<<<<<< HEAD
 StarRocks 的[主键模型](../table_design/Data_model.md#主键模型)支持通过 [Stream Load](./StreamLoad.md)、[Broker Load](./BrokerLoad.md) 或 [Routine Load](./RoutineLoad.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../loading/InsertInto.md) 语句对 StarRocks 表进行数据变更。
+=======
+StarRocks 的[主键模型](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](./StreamLoad.md)、[Broker Load](./BrokerLoad.md) 或 [Routine Load](./RoutineLoad.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../loading/InsertInto.md) 语句对 StarRocks 表进行数据变更。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 StarRocks 还支持部分更新 (Partial Update)。
 

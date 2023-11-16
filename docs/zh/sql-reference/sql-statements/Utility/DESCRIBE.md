@@ -4,7 +4,12 @@
 
 该语句用于展示指定 table 的 schema 信息。
 
+<<<<<<< HEAD
 语法：
+=======
+- 查看 StarRocks 表结构、[排序键](../../../table_design/Sort_key.md) (Sort Key) 类型和[物化视图](../../../using_starrocks/Materialized_view.md)。
+- 查看外部数据源（如 Apache Hive™）中的表结构。仅 StarRocks 2.4 及以上版本支持该操作。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ```sql
 DESC[RIBE] [db_name.]table_name [ALL];

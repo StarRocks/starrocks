@@ -9,6 +9,22 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 > * 使用 Spark Load 导入数据至 StarRocks 表时，不支持该表分桶列的数据类型为 DATE、DATETIME 或者 DECIMAL。
 > * Spark Load 不支持导入至主键模型表。
 
+<<<<<<< HEAD
+=======
+## 背景信息
+
+在 StarRocks v2.4 及以前版本，Spark Load 需要借助 Broker 进程访问外部存储系统。配置执行 ETL 任务的 Spark 集群时需要指定 Broker 组。Broker 是一个独立的无状态进程，封装了文件系统接口。通过 Broker 进程，StarRocks 能够访问和读取外部存储系统上的数据文件。
+自 StarRocks v2.5 起，Spark Load 不再需要借助 Broker 进程即可访问外部存储系统。
+> **说明**
+>
+> 使用无 Broker 进程的方式导入在某些场景下会受限。如果您配置了多 HDFS 集群或多 Kerberos 用户时，暂时还不支持使用无 Broker 进程的方式导入。这种情况下，您必须继续通过 Broker 进程执行导入。
+
+## 使用说明
+
+如果您继续通过 Broker 进程执行导入，则必须确保您的 StarRocks 集群中已部署 Broker。
+您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
+
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 ## 支持的数据格式
 
 * CSV

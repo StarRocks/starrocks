@@ -2,6 +2,7 @@
 
 StarRocks 提供基于 MySQL 协议的 Broker Load 导入方式，帮助您从 HDFS 或外部云存储系统导入几十到数百 GB 的数据量。
 
+<<<<<<< HEAD
 Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
 
 Broker Load 支持单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load)。您可以通过单次导入操作，把一个或多个数据文件导入单张或多张目标表。而且 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
@@ -11,6 +12,25 @@ Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DE
 ## 背景信息
 
 Broker Load 需要借助 Broker 访问外部存储系统。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
+=======
+Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
+
+Broker Load 支持单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load)。您可以通过单次导入操作，把一个或多个数据文件导入单张或多张目标表。而且 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
+
+Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
+
+## 背景信息
+
+在 v2.4 及以前版本，StarRocks 在执行 Broker Load 时需要借助 Broker 才能访问外部存储系统，称为“有 Broker 的导入”。导入语句中需要通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。Broker 是一个独立的无状态服务，封装了文件系统接口。通过 Broker，StarRocks 能够访问和读取外部存储系统上的数据文件，并利用自身的计算资源对数据文件中的数据进行预处理和导入。
+
+自 v2.5 起，StarRocks 在执行 Broker Load 时不需要借助 Broker 即可访问外部存储系统，称为“无 Broker 的导入”。导入语句中也不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。
+
+需要注意的是，无 Broker 的导入在数据源为 HDFS 的某些场景下会受限，例如，在多 HDFS 集群或者多 Kerberos 用户的场景。在这些场景下，可以继续采用有 Broker 的导入，需要确保至少部署了一组独立的 Broker。有关各种场景下如何指定认证方式和 HA 配置，参见 [HDFS](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md##hdfs)。
+
+> **说明**
+>
+> 您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看 StarRocks 集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../deployment/deploy_broker.md)完成 Broker 部署。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ## 支持的数据文件格式
 
@@ -65,7 +85,13 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 ### 创建多表导入 (Multi-Table Load) 作业
 
+<<<<<<< HEAD
 这里以 CSV 格式的数据为例，介绍如何导入多个数据文件至多张目标表。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+=======
+这里以 CSV 格式的数据为例，介绍如何导入多个数据文件至多张目标表。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 #### 数据样例
 
@@ -372,7 +398,11 @@ Broker Load 支持通过 SHOW LOAD 语句和 curl 命令两种方式来查看导
 
 #### 使用 SHOW LOAD 语句
 
+<<<<<<< HEAD
 请参见 [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。
+=======
+请参见 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 #### 使用 curl 命令
 
@@ -407,7 +437,11 @@ curl --location-trusted -u <username>:<password> \
 | dbName      | 目标 StarRocks 表所在的数据库的名称。                               |
 | tblNames    | 目标 StarRocks 表的名称。                        |
 | label       | 导入作业的标签。                                             |
+<<<<<<< HEAD
 | state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](./Loading_intro.md#异步导入)。 |
+=======
+| state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`QUEUEING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`PREPARED`：事务已提交。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](./Loading_intro.md#异步导入)。 |
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 | failMsg     | 导入作业的失败原因。当导入作业的状态为`PENDING`，`LOADING`或`FINISHED`时，该参数值为`NULL`。当导入作业的状态为`CANCELLED`时，该参数值包括 `type` 和 `msg` 两部分：<ul><li>`type` 包括如下取值：</li><ul><li>`USER_CANCEL`：导入作业被手动取消。</li><li>`ETL_SUBMIT_FAIL`：导入任务提交失败。</li><li>`ETL-QUALITY-UNSATISFIED`：数据质量不合格，即导入作业的错误数据率超过了 `max-filter-ratio`。</li><li>`LOAD-RUN-FAIL`：导入作业在 `LOADING` 状态失败。</li><li>`TIMEOUT`：导入作业未在允许的超时时间内完成。</li><li>`UNKNOWN`：未知的导入错误。</li></ul><li>`msg` 显示有关失败原因的详细信息。</li></ul> |
 | trackingUrl | 导入作业中质量不合格数据的访问地址。可以使用 `curl` 命令或 `wget` 命令访问该地址。如果导入作业中不存在质量不合格的数据，则返回空值。 |
 | status      | 导入请求的状态，包括 `OK` 和 `Fail`。                        |
@@ -415,7 +449,11 @@ curl --location-trusted -u <username>:<password> \
 
 ### 取消导入作业
 
+<<<<<<< HEAD
 当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+=======
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 例如，可以通过以下语句，撤销 `db1` 数据库中标签为 `label1` 的导入作业：
 

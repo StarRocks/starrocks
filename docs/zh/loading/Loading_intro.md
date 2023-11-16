@@ -115,9 +115,21 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - 从 Hive 导入数据时，推荐创建 [Hive 外部表](../data_source/External_table.md#hive-外表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [Broker Load](../loading/BrokerLoad.md) 实现导入。
 
+<<<<<<< HEAD
 - 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
 
 - 从 Oracle、PostgreSQL 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入，或者通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
+=======
+- 从另外一个 StarRocks 集群或从 Elasticsearch 导入数据时，推荐创建 [StarRocks 外部表](../data_source/External_table.md#starrocks-外部表)或 [Elasticsearch 外部表](../data_source/External_table.md#elasticsearch-外部表)，然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
+
+  > **注意**
+  >
+  > StarRocks 外表只支持数据写入，不支持数据读取。
+
+- 从 MySQL 导入数据时，推荐创建 [MySQL 外部表](../data_source/External_table.md#mysql-外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。如果要导入实时数据，建议您参考 [从 MySQL 实时同步](../loading/Flink_cdc_load.md) 实现导入。
+
+- 从 Oracle、PostgreSQL 或 SQL Server 等数据源导入数据时，推荐创建 [JDBC 外部表](../data_source/External_table.md#更多数据库jdbc的外部表)、然后使用 [INSERT](../loading/InsertInto.md) 实现导入。或者，您也可以通过 [DataX](../loading/DataX-starrocks-writer.md) 实现导入。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 下图详细展示了在各种数据源场景下，应该选择哪一种导入方式。
 

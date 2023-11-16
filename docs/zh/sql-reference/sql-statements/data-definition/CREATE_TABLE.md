@@ -118,7 +118,11 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 ### **index_definition**
 
+<<<<<<< HEAD
 语法：
+=======
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -296,8 +300,16 @@ PARTITION BY RANGE (datekey) (
 说明：
 用户可以通过给出一个 START 值、一个 END 值以及一个定义分区增量值的 EVERY 子句批量产生分区。
 
+<<<<<<< HEAD
 1. 当前分区键仅支持 **日期类型** 和 **整数类型**，分区类型需要与 EVERY 里的表达式匹配。
 2. 当分区键为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
+=======
+1. 当前分区列仅支持 **日期类型** 和 **整数类型**，分区类型需要与 EVERY 里的表达式匹配。
+2. 当分区列为日期类型的时候需要指定 `INTERVAL` 关键字来表示日期间隔，目前日期仅支持 `day、week、month、year`，分区的命名规则同动态分区一样。
+3. 当分区列的数据类型为 INT 时，START 值、END 值仍需要用双引号包裹。
+4. 仅支持指定一列作为分区列。
+5. 更详细的语法规则，请参见[批量创建分区](../../../table_design/Data_distribution.md#批量创建分区)。
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 更详细的语法规则，请参见[批量创建分区](../../../table_design/Data_distribution.md#批量创建分区)。
 

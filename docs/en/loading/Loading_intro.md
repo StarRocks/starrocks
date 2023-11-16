@@ -116,7 +116,15 @@ You can determine the loading method of your choice based on your business scena
 
 - When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#mysql-external-table) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can use [DataX](../loading/DataX-starrocks-writer.md) to load the data. If you want to load data in real time, we recommend that you follow the instructions provided in [Synchronize data from MySQL in real time](../loading/Flink_cdc_load.md).
 
+<<<<<<< HEAD
 - When you load data from other data sources such as Oracle and PostgreSQL, we recommend that you create a [JDBC external table](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can use [DataX](../loading/DataX-starrocks-writer.md) to load the data.
+=======
+  > **NOTICE**
+  >
+  > StarRocks external tables only support data writes. They do not support data reads.
+
+- When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#mysql-external-table) and then use [INSERT](../loading/InsertInto.md) to load the data. If you want to load data in real time, we recommend that you load the data by following the instructions provided in [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md).
+>>>>>>> b8eb50e58 ([Doc] link fixes to 2.5 (#35185))
 
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
 
