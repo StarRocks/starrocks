@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ln, dlog1, log
 
 ## Description

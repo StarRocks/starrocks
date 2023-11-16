@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 概述
 
 本文介绍什么是 Catalog， 以及如何使用 Catalog 管理和查询内外部数据。

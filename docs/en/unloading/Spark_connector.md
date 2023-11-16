@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Read data from StarRocks using Spark connector
 
 StarRocks provides a self-developed connector named StarRocks Connector for Apache Spark™ (Spark connector for short) to help you read data from a StarRocks table by using Spark. You can use Spark for complex processing and machine learning on the data you have read from StarRocks.

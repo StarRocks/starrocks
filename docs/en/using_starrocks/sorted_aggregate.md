@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Sorted streaming aggregate
 
 Common aggregation methods in database systems include hash aggregate and sort aggregate.

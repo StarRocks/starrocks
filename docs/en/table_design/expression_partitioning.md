@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Expression partitioning (recommended)
 
 Since v3.0, StarRocks supports expression partitioning (previously known as automatic partitioning), which is more flexible and user-friendly. This partitioning method is suitable for most scenarios such as querying and managing data based on continuous time ranges or enum values.

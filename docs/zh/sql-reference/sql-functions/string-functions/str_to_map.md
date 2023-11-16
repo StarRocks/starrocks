@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # str_to_map
 
 ## 功能

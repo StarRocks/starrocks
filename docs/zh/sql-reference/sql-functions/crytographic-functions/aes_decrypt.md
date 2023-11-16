@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # aes_decrypt
 
 ## 功能

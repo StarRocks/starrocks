@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # last_query_id
 
 ## 功能

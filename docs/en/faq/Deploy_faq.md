@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deployment
 
 This topic provides answers to some frequently asked questions about deployment.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ADD SQLBLACKLIST
 
 ## Description

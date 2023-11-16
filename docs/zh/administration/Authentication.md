@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 设置用户认证
 
 本文介绍如何在 StarRocks 中设置用户认证 (authentication)。

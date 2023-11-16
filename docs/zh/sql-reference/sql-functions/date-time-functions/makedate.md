@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # makedate
 
 ## 功能

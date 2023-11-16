@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # REFRESH MATERIALIZED VIEW
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # md5
 
 ## 功能

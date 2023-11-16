@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # UNINSTALL PLUGIN
 
 ## 功能

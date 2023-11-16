@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SUSPEND or RESUME PIPE
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 【公测中】从 Apache® Pulsar™ 持续导入
 
 自 StarRocks 2.5 版本，Routine Load 支持持续消费 Apache® Pulsar™ 的消息并导入至 StarRocks 中。Pulsar 是一个分布式消息队列系统，采用存储计算分离架构。

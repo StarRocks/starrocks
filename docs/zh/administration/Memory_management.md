@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 管理内存
 
 本文介绍如何管理并调优内存资源。

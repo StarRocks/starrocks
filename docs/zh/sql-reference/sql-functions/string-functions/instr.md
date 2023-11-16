@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # instr
 
 ## 功能

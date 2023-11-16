@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # INSERT
 
 ## 功能

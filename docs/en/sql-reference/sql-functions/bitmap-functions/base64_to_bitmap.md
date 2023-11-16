@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # base64_to_bitmap
 
 ## Description

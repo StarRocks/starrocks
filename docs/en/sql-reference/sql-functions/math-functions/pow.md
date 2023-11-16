@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # pow, power, dpow, fpow
 
 ## Description

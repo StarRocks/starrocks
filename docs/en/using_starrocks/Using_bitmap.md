@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use Bitmap for exact Count Distinct
 
 This topic describes how to use bitmaps to compute the number of distinct values in StarRocks.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # multi_distinct_sum
 
 ## 功能

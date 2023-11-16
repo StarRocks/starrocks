@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Dynamic partitioning
 
 StarRocks supports dynamic partitioning, which can automatically manage the time to life (TTL) of partitions, such as partitioning new input data in tables and deleting expired partitions. This feature significantly reduces maintenance costs.

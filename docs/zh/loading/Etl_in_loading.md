@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 导入过程中实现数据转换
 
 StarRocks 支持在导入数据的过程中实现数据转换。

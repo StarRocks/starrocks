@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # current_version
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Enable FQDN access
 
 This topic describes how to enable cluster access by using a fully qualified domain name (FQDN). An FQDN is a **complete domain name** for a specific entity that can be accessed over the Internet. The FQDN consists of two parts: the hostname and the domain name.

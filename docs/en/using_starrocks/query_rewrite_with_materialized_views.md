@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Query rewrite with materialized views
 
 This topic describes how to leverage StarRocks' asynchronous materialized views to rewrite and accelerate queries.

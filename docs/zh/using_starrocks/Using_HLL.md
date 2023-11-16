@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 HyperLogLog 实现近似去重
 
 本文介绍如何通过 HLL（HyperLogLog）在 StarRocks 中实现近似去重。

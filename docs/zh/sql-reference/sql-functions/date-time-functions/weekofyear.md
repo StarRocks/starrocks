@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # weekofyear
 
 ## 功能

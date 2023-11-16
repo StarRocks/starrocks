@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Flink connector 版本发布
 
 ## 发布说明

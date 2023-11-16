@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ADMIN SHOW REPLICA STATUS
 
 ## Description

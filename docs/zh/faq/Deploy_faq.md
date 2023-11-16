@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署常见问题
 
 本页列举了部署 StarRocks 时可能会遇到的常见问题及潜在解决方案。

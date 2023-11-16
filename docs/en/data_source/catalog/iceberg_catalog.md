@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Iceberg catalog
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # STDDEV_SAMP
 
 ## Description

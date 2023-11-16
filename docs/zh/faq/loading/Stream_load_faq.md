@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Stream Load 常见问题
 
 ## 1. Stream Load 是否支持识别 CSV 格式文件开头前几行的列名？或者是否支持在数据读取过程中跳过开头前几行数据？

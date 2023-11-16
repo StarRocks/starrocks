@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Downgrade StarRocks
 
 This topic describes how to downgrade your StarRocks cluster.

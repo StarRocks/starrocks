@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # REFRESH EXTERNAL TABLE
 
 ## Description

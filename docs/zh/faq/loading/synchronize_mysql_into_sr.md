@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # MySQL 实时同步至 StarRocks 常见问题
 
 ## 1. 执行 Flink job 报错

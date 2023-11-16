@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 权限系统 FAQ
 
 ## 为什么已经赋予角色给用户，但用户执行 SQL 时仍旧报错没有权限？

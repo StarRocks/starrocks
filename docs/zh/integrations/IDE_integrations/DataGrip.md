@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DataGrip
 
 DataGrip 支持查询 StarRocks 中的内部数据和外部数据。

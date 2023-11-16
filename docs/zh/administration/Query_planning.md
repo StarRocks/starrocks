@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 分析查询
 
 本文介绍如何分析 StarRocks 中的查询。

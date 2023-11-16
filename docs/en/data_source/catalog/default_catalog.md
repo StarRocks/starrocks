@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Default catalog
 
 This topic describes what the default catalog is, and how to query the internal data of StarRocks by using the default catalog.

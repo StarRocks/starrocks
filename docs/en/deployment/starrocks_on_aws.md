@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy StarRocks on AWS
 
 StarRocks and AWS provide [AWS Partner Solutions](https://aws.amazon.com/solutions/partners) to quickly deploy StarRocks on AWS. This topic provides step-by-step instructions to help you deploy and access StarRocks.

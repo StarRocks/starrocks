@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DELETE
 
 该语句用于从表中删除数据行。表可以是分区表或者非分区表。

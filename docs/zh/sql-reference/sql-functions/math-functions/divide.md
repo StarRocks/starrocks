@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # divide
 
 ## 功能

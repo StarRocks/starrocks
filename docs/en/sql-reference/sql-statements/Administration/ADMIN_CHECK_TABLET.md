@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ADMIN CHECK TABLET
 
 ## Description

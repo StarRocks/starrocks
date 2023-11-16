@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Lambda expression
 
 Lambda expressions are anonymous functions that can be passed as parameters into higher-order SQL functions. Lambda expressions allow you to develop code that is more concise, elegant, and extensible.

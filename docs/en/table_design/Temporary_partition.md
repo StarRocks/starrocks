@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Temporary partition
 
 This topic describes how to use the temporary partition feature.

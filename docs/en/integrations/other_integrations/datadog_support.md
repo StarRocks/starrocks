@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Integrate Datadog with StarRocks
 
 This topic describes how to integrate your StarRocks cluster with [Datadog](https://www.datadoghq.com/), a monitoring and security platform.

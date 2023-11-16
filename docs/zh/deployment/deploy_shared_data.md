@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署使用 StarRocks 存算分离集群
 
 本文介绍如何部署和使用 StarRocks 存算分离集群。该功能从 3.0 版本开始支持。

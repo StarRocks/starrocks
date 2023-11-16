@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # StarRocks version 3.1
 
 ## 3.1.4

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data using Stream Load transaction interface
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'

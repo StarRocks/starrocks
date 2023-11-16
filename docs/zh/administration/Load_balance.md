@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 负载均衡
 
 本文介绍如何通过在多个 FE 节点之上部署负载均衡层以实现 StarRocks 的高可用。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用窗口函数组织过滤数据
 
 本文介绍如何使用 StarRocks 窗口函数。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # minute
 
 ## 功能

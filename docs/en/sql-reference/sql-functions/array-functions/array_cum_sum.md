@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # array_cum_sum
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # map_from_arrays
 
 ## Description

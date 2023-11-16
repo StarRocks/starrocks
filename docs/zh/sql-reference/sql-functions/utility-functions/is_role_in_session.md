@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # is_role_in_session
 
 ## 功能

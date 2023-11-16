@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # murmur_hash3_32
 
 ## 功能

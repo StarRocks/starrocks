@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 资源隔离
 
 本文介绍如何使用资源隔离功能。

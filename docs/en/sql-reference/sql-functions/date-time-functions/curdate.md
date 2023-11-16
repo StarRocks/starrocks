@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # curdate,current_date
 
 ## Description

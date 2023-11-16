@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # cot
 
 ## 功能

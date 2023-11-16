@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SET DEFAULT ROLE
 
 ## 功能

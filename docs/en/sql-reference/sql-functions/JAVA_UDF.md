@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Java UDFs
 
 From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language.

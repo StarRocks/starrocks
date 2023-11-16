@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deployment prerequisites
 
 This topic describes the hardware and software requirements that your servers must meet before deploying StarRocks. For recommended hardware specifications of your StarRocks cluster, see [Plan your StarRocks cluster](../deployment/plan_cluster.md).

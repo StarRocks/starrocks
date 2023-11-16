@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy and Manage StarRocks with StarGo
 
 This topic describes how to deploy and manage StarRocks clusters with StarGo.

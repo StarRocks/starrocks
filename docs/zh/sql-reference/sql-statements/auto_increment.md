@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # AUTO_INCREMENT
 
 StarRocks 自 3.0 版本起支持 `AUTO_INCREMENT` 列属性，可以简化数据管理。本文介绍 `AUTO_INCREMENT` 列属性的应用场景、用法和特性。

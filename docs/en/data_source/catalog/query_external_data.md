@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Query external data
 
 This topic guides you through querying data from external data sources by using external catalogs.

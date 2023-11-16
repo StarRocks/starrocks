@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # translate
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Back up and restore data
 
 This topic describes how to back up and restore data in StarRocks, or migrate data to a new StarRocks cluster.

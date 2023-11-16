@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Create a table
 
 This QuickStart tutorial will walk you through the necessary steps to create a table in StarRocks, and introduce some basic features of StarRocks.

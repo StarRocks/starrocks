@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Strict mode
 
 Strict mode is an optional property that you can configure for data loads. It affects the loading behavior and the final loaded data.

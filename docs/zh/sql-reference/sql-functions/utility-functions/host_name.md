@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # host_name
 
 ## 功能

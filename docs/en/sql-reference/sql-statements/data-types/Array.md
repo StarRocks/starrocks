@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ARRAY
 
 ARRAY, as an extended type of database, is supported in various database systems such as PostgreSQL, ClickHouse, and Snowflake. ARRAY is widely used in scenarios such as A/B tests, user tag analysis, and user profiling. StarRocks supports multidimensional array nesting, array slicing, comparison, and filtering.

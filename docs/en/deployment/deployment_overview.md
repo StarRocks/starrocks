@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deployment overview
 
 This chapter describes how to deploy, upgrade, and downgrade a StarRocks cluster in a production environment.

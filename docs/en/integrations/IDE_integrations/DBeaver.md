@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # DBeaver
 
 DBeaver is a SQL client software application and a database administration tool, which offers a helpful assistant that walks you through the process of connecting to a database.

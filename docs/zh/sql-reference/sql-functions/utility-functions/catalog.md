@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # catalog
 
 ## 功能

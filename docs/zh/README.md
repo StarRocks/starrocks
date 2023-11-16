@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks 文档
 
 欢迎来到 StarRocks 文档仓库！本仓库存放的是 StarRocks 官网中文文档的源文件。官网英文文档的源文件存放于 [StarRocks/starrocks/docs](https://github.com/StarRocks/starrocks/tree/main/docs)。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # murmur_hash3_32
 
 ## Description

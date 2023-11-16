@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # to_base64
 
 ## Description

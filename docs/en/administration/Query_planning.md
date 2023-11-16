@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Query analysis
 
 How to optimize query performance is a frequently asked question. Slow queries impair user experience as well as cluster performance. It is important to analyze and optimize query performance.

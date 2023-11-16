@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # hours_add
 
 ## 功能

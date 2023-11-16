@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # JDBC catalog
 
 StarRocks 从 3.0 版本开始支持 JDBC Catalog。

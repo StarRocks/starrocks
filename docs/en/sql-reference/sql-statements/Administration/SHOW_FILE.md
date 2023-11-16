@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW FILE
 
 You can execute the SHOW FILE statement to view the information about a file stored in a database.

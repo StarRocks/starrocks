@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW MATERIALIZED VIEWS
 
 ## 功能

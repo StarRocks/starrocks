@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Manage audit logs within StarRocks via Audit Loader
 
 This topic describes how to manage StarRocks audit logs within a table via the plugin - Audit Loader.

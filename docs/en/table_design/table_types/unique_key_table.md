@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Unique Key table
 
 When you create a table, you can define primary key columns and metric columns. This way, queries return the most recent record among a group of records that have the same primary key. Compared with the Duplicate Key table, the Unique Key table simplifies the data loading process to better support real-time and frequent data updates.

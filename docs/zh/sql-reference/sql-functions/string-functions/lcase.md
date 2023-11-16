@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # lcase
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 关键字
 
 本文介绍了什么是非保留关键字和保留关键字，并列举了 StarRocks 中的所有保留关键字。

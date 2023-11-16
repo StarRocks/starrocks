@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # cos_similarity_norm
 
 ## Description

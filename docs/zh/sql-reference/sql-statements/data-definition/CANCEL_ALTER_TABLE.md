@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CANCEL ALTER TABLE
 
 ## 功能

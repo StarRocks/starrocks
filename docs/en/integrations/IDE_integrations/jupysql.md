@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Jupyter
 
 This guide describes how to integrate your StarRocks cluster with [Jupyter](https://jupyter.org/), the latest web-based interactive development environment for notebooks, code, and data.

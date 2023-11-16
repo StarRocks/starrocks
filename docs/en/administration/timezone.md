@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Configure a time zone
 
 This topic describes how to configure a time zone and the impacts of time zone settings.

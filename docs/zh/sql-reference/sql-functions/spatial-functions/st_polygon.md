@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ST_Polygon, ST_PolyFromText, ST_PolygonFromText
 
 ## 功能

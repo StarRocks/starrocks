@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SUSPEND or RESUME PIPE
 
 ## 功能

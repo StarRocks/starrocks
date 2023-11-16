@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # RAND, RANDOM
 
 ## 功能

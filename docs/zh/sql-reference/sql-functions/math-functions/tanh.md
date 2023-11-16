@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # tanh
 
 ## 功能

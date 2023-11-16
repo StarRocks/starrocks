@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过 Audit Loader 管理 StarRocks 中的审计日志
 
 本文档介绍如何通过插件 Audit Loader 在 StarRocks 内部管理审计日志。

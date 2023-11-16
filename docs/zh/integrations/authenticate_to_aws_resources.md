@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 配置 AWS 认证信息
 
 StarRocks 支持通过以下三种认证鉴权方式实现与 AWS 资源的集成：Instance Profile、Assumed Role、IAM User。本文介绍在这三种认证鉴权方式下如何配置 AWS 安全凭证。

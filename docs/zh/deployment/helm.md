@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Helm 部署 StarRocks 集群
 
 [Helm](https://helm.sh/) 是 Kubernetes 的包管理工具。[Helm Chart](https://helm.sh/docs/topics/charts/) 是 Helm 包，包含在 Kubernetes 集群上运行应用程序所需的所有资源定义。本文介绍如何在 Kubernetes 集群上使用 Helm 自动化部署 StarRocks 集群。

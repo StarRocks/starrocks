@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # uuid
 
 ## 功能

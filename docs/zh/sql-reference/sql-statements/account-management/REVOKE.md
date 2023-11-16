@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # REVOKE
 
 ## 功能

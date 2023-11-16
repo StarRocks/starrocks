@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # TPC-DS Benchmarking
 
 TPC-DS is a decision support benchmark developed by the Transaction Processing Performance Council (TPC). It uses more comprehensive test datasets and complex SQL queries than TPC-H.

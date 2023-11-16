@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use the debuginfo file for debugging
 
 ## Change description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 导入和查询数据
 
 本文介绍如何在 StarRocks 中导入和查询数据。

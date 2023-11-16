@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # append_trailing_char_if_absent
 
 ## Description

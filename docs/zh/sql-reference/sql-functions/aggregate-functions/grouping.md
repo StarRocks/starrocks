@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # grouping
 
 ## 功能

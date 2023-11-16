@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Authenticate to Microsoft Azure Storage
 
 From v3.0 onwards, StarRocks can integrate with Microsoft Azure Storage (Azure Blob Storage or Azure Data Lake Storage) in the following scenarios:

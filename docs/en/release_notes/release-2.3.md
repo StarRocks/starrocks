@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # StarRocks version 2.3
 
 ## 2.3.16
