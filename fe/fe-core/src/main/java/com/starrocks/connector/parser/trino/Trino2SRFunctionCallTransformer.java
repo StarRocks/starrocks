@@ -200,10 +200,6 @@ public class Trino2SRFunctionCallTransformer {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 ImmutableList.of(Expr.class, Expr.class));
-
-        // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
-        registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
-                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
     }
 
     private static void registerJsonFunctionTransformer() {
