@@ -29,15 +29,8 @@ StarRocks 支持以下数据类型：[数值类型](#数值类型)、[字符串�
 
 ## 半结构化类型
 
-<<<<<<< HEAD
-- [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
-- [JSON](/sql-reference/sql-statements/data-types/JSON.md)
-=======
 - [ARRAY](./Array.md)
 - [JSON](./JSON.md)
-- [MAP](./Map.md)
-- [STRUCT](./STRUCT.md)
->>>>>>> a78299d341 ([Doc] replace absolute path (#35106))
 
 ## 其他类型
 
