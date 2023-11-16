@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Bitmap Indexing
 
 StarRocks supports bitmap-based indexing that significantly speeds up queries.

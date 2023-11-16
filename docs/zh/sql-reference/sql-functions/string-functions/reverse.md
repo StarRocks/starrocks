@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # reverse
 
 ## 功能

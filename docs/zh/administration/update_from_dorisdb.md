@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 标准版 DorisDB-x 升级到社区版 StarRocks-x
 
 > 注意：StarRocks 可以做到前向兼容，所以在升级的时候可以做到灰度升级，但是一定是先升级 BE 再升级 FE。(标准版安装包命名为 DorisDB *, 社区版安装包命名格式为 StarRocks*)

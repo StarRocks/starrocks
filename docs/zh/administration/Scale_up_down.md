@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 扩容缩容
 
 ## FE扩缩容

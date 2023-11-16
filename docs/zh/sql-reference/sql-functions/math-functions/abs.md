@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # abs
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 从 MySQL 实时同步
 
 本文介绍如何将 MySQL 的数据实时（秒级）同步至 StarRocks，支撑企业实时分析和处理海量数据的需求。

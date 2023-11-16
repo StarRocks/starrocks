@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 创建表
 
 ## 使用 MySQL 客户端访问 StarRocks

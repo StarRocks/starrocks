@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CBO优化器
 
 StarRocks 1.16.0 版本推出CBO优化器（Cost-based Optimizer ）。StarRocks 1.19及以上版本，该特性默认开启。CBO优化器能够基于成本选择最优的执行计划，大幅提升复杂查询的效率和性能。

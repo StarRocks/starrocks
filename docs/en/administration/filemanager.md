@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # File manager
 
 With file manager, you can create, view, and delete files, such as the files that are used to access external data sources: public key files, private key files, and certificate files. You can reference or access the created files by using commands.

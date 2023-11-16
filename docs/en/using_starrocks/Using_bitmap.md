@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use Bitmap for exact count distinct
 
 ## Background

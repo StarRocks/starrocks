@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use Flink connector to read data from StarRocks
 
 This topic describes how to use the source function of flink-connector-starrocks to read data from StarRocks.

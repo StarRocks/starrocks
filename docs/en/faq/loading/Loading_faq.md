@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Loading
 
 ## Common issues in loading
