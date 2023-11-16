@@ -62,7 +62,11 @@ broker;
 
     这里需要指定具体的broker name, 以及所需的broker属性
 
+<<<<<<< HEAD
     对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以参阅：`help broker load` 中 broker 所需属性。
+=======
+    对于不同存储系统对应的 broker，这里需要输入的参数不同。具体参数可以在 [BROKER LOAD](./BROKER_LOAD.md) 章节中搜索 broker_properties。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ## example
 

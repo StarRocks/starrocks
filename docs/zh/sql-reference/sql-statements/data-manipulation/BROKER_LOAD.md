@@ -30,8 +30,142 @@ WITH BROKER broker_name
     当前导入批次的标签。在一个 database 内唯一。
     语法：
 
+<<<<<<< HEAD
     ```sql
     [database_name.]your_label
+=======
+`label_name` 指定导入作业的标签。
+
+`database_name` 为可选，指定目标 StarRocks 表所在的数据库。
+
+每个导入作业都对应一个在该数据库内唯一的标签。通过标签，可以查看对应导入作业的执行情况，并防止导入相同的数据。导入作业的状态为 **FINISHED** 时，其标签不可再复用给其他导入作业。导入作业的状态为 **CANCELLED** 时，其标签可以复用给其他导入作业，但通常都是用来重试同一个导入作业（即使用同一个标签导入相同的数据）以实现数据“精确一次 (Exactly-Once)”语义。
+
+有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。
+
+### `data_desc`
+
+用于描述一批次待导入的数据。每个 `data_desc` 声明了本批次待导入数据所属的数据源地址、ETL 函数、StarRocks 表和分区等信息。
+
+Broker Load 支持一次导入多个数据文件。在一个导入作业中，您可以使用多个 `data_desc` 来声明导入多个数据文件，也可以使用一个 `data_desc` 来声明导入一个路径下的所有数据文件。Broker Load 还支持保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
+
+`data_desc` 语法如下：
+
+```SQL
+DATA INFILE ("<file_path>"[, "<file_path>" ...])
+[NEGATIVE]
+INTO TABLE <table_name>
+[PARTITION (<partition_name>[, <partition_name> ...])]
+[FORMAT AS "CSV | Parquet | ORC"]
+[COLUMNS TERMINATED BY "<column_separator>"]
+[(column_list)]
+[COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
+[SET <k1=f1(v1)>[, <k2=f2(v2)> ...]]
+[WHERE predicate]
+```
+
+`data_desc` 中的必选参数如下：
+
+- `file_path`
+
+  用于指定待导入数据文件所在的路径。
+
+  您可以指定导入一个具体的数据文件。例如，通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` 可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下名为 `20210411` 的数据文件。
+
+  您也可以用通配符指定导入某个路径下所有的数据文件。Broker Load 支持如下通配符：`?`、`*`、`[]`、`{}` 和 `^`。具体请参见[通配符使用规则参考](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/fs/FileSystem.html#globStatus-org.apache.hadoop.fs.Path-)。例如， 通过指定 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` 路径可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下所有分区内的数据文件，通过 `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` 路径可以匹配 HDFS 服务器上 `/user/data/tablename` 目录下所有 `202104` 分区内的数据文件。
+
+  > **说明**
+  >
+  > 中间的目录也可以使用通配符匹配。
+
+  以 HDFS 数据源为例，文件路径中的 `hdfs_host` 和 `hdfs_port` 参数说明如下：
+
+  - `hdfs_host`：HDFS 集群中 NameNode 所在主机的 IP 地址。
+  - `hdfs_port`：HDFS 集群中 NameNode 所在主机的 FS 端口。默认端口号为 `9000`。
+
+- `INTO TABLE`
+
+  用于指定目标 StarRocks 表的名称。
+
+`data_desc` 中的可选参数如下：
+
+- `NEGATIVE`
+
+  用于撤销某一批已经成功导入的数据。如果想要撤销某一批已经成功导入的数据，可以通过指定 `NEGATIVE` 关键字来导入同一批数据。
+
+  > **说明**
+  >
+  > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+
+- `PARTITION`
+
+  指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。
+
+- `FORMAT AS`
+
+  用于指定待导入数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
+
+- `COLUMNS TERMINATED BY`
+
+  用于指定待导入数据文件中的列分隔符。如果不指定该参数，则默认列分隔符为 `\t`，即 Tab。必须确保这里指定的列分隔符与待导入数据文件中的列分隔符一致；否则，导入作业会因数据质量错误而失败，作业状态 (`State`) 会显示为 `CANCELLED`。
+
+  需要注意的是，Broker Load 通过 MySQL 协议提交导入请求，除了 StarRocks 会做转义处理以外，MySQL 协议也会做转义处理。因此，如果列分隔符是 Tab 等不可见字符，则需要在列分隔字符前面多加一个反斜线 (\\)。例如，如果列分隔符是 `\t`，这里必须输入 `\\t`；如果列分隔符是 `\n`，这里必须输入 `\\n`。Apache Hive™ 文件的列分隔符为 `\x01`，因此，如果待导入数据文件是 Hive 文件，这里必须传入 `\\x01`。
+
+  > **说明**
+  >
+  > StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+
+- `column_list`
+
+  用于指定待导入数据文件和 StarRocks 表之间的列对应关系。语法如下：`(<column_name>[, <column_name> ...])`。`column_list` 中声明的列与 StarRocks 表中的列按名称一一对应。
+
+  > **说明**
+  >
+  > 如果待导入数据文件的列和 StarRocks 表中的列按顺序一一对应，则不需要指定 `column_list` 参数。
+
+  如果要跳过待导入数据文件中的某一列，只需要在 `column_list` 参数中将该列命名为 StarRocks 表中不存在的列名即可。具体请参见[导入过程中实现数据转换](../../../loading/Etl_in_loading.md)。
+
+- `COLUMNS FROM PATH AS`
+
+  用于从指定的文件路径中提取一个或多个分区字段的信息。该参数仅当指定的文件路径中存在分区字段时有效。
+
+  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列。这时候，您可以设置参数为 `col_name`。导入时，StarRocks 会将 `col_value` 落入 `col_name` 对应的列中。
+
+  > **说明**
+  >
+  > 该参数只有在从 HDFS 导入数据时可用。
+
+- `SET`
+
+  用于将待导入数据文件的某一列按照指定的函数进行转化，然后将转化后的结果落入 StarRocks 表中。语法如下：`column_name = expression`。以下为两个示例：
+
+  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中有四列，前两列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 列，后两列之和对应 StarRocks 表中的 `col3` 列。这种情况下，需要通过 `column_list` 参数声明 `(col1,col2,tmp_col3,tmp_col4)`，并使用 SET 子句指定 `SET (col3=tmp_col3+tmp_col4)` 来实现数据转换。
+  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`；待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，需要通过 `column_list` 参数声明 `(tmp_time)`、并使用 SET 子句指定 `SET (year = year(tmp_time), month=month(tmp_time), day=day(tmp_time))` 来实现数据转换。
+
+- `WHERE`
+
+  用于指定过滤条件，对做完转换的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入到 StarRocks 表中。
+
+### `WITH BROKER`
+
+用于指定 Broker 的名称。
+
+### `broker_properties`
+
+用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同。
+
+#### HDFS
+
+社区版本的 HDFS，支持简单认证和 Kerberos 认证两种认证方式（Broker Load 默认使用简单认证），并且支持 NameNode 节点的 HA 配置。如果数据源为社区版本的 HDFS，可以提供如下配置信息：
+
+- 认证方式
+
+  - 如果使用简单认证，需要指定如下配置：
+
+    ```Plain
+    "hadoop.security.authentication" = "simple"
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
     ```
 
 2. data_desc
@@ -188,7 +322,15 @@ WITH BROKER broker_name
 
         max_filter_ratio：最大容忍可过滤（数据不规范等原因）的数据比例。默认零容忍。
 
+<<<<<<< HEAD
         exec_mem_limit：  导入内存限制。默认为 2GB。单位为字节。
+=======
+    > **说明**
+    >
+    > - “平均导入速度”是指目前 StarRocks 集群的平均导入速度。由于每个 StarRocks 集群的机器环境不同、且集群允许的并发查询任务数也不同，因此，StarRocks 集群的平均导入速度需要根据历史导入速度进行推测。
+    >
+    > - “导入并发数”可以通过 `max_broker_concurrency` 参数设置，具体请参见“从 HDFS 或外部云存储系统导入数据”文档中的“[作业拆分与并行执行](../../../loading/BrokerLoad.md#作业拆分与并行执行)”章节。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
         strict mode：     是否对数据进行严格限制。默认为 false。
 
@@ -203,7 +345,11 @@ WITH BROKER broker_name
         日期类（DATE/DATETIME）：2017-10-03, 2017-06-13 12:34:03。
         （注：如果是其他日期格式，可以在导入命令中，使用 strftime 或者 time_format 函数进行转换）
 
+<<<<<<< HEAD
         字符串类（CHAR/VARCHAR）："I am a student", "a"
+=======
+  如果因为设置最大容忍率为 `0` 而导致作业失败，可以通过 [SHOW LOAD](./SHOW_LOAD.md) 语句来查看导入作业的结果信息。然后，判断错误的数据行是否可以被过滤掉。如果可以被过滤掉，则可以根据结果信息中的 `dpp.abnorm.ALL` 和 `dpp.norm.ALL` 来计算导入作业的最大容忍率，然后调整后重新提交导入作业。计算公式如下：
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
         NULL值：\N
 
@@ -235,11 +381,104 @@ WITH BROKER broker_name
 
     使用简单认证，同时配置 namenode HA
 
+<<<<<<< HEAD
     ```sql
     LOAD LABEL example_db.label3
     (
     DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
     INTO TABLE `my_table`
+=======
+  指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。
+
+## 列映射
+
+在导入数据时，可以通过 `column_list` 参数来指定待导入数据文件和 StarRocks 表之间的列映射关系。如果待导入数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定该参数；否则，必须通过该参数来配置列映射关系，一般包括如下两种场景：
+
+- 待导入数据文件中的列与 StarRocks 表中的列一一对应，并且数据不需要通过函数计算、可以直接落入 StarRocks 表中对应的列。
+
+  您需要在 `column_list` 参数中按照待导入数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系。
+
+  例如，StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3`；待导入数据文件中也有三列，按顺序依次对应 StarRocks 表中的 `col3`、`col2` 和 `col1`。这种情况下，需要指定 `(col3, col2, col1)`。
+
+- 待导入数据文件中的列与 StarRocks 表中的列不一一对应，或者某些列的数据需要通过函数计算以后才能落入 StarRocks 表中对应的列。
+
+  您不仅需要在 `column_list` 参数中按照待导入数据文件中的列顺序、使用 StarRocks 表中对应的列名来配置列映射关系，还需要指定参与数据计算的函数。以下为两个示例：
+
+  - StarRocks 表中有三列，按顺序依次为 `col1`、`col2` 和 `col3` ；待导入数据文件中有四列，前三列按顺序依次对应 StarRocks 表中的 `col1`、`col2` 和 `col3`，第四列在 StarRocks 表中无对应的列。这种情况下，需要指定 `(col1, col2, col3, temp)`，其中，最后一列可随意指定一个名称（如 `temp`）用于占位即可。
+  - StarRocks 表中有三列，按顺序依次为 `year`、`month` 和 `day`。待导入数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `(col, year = year(col), month=month(col), day=day(col))`。其中，`col` 是待导入数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从待导入数据文件中的 `col` 列提取对应的数据并落入 StarRocks 表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取待导入数据文件中 `col` 列的 `yyyy` 部分的数据并落入 StarRocks 表中的 `year` 列。
+
+## 示例
+
+本文以 HDFS 数据源为例，介绍各种导入配置。
+
+### 导入 CSV 格式的数据
+
+本小节以 CSV 格式的数据为例，重点阐述在创建导入作业的时候，如何运用各种参数配置来满足不同业务场景下的各种导入要求。
+
+#### 设置超时时间
+
+StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列。
+
+如果要把 `example1.csv` 中所有的数据都导入到 `table1` 中，并且要求超时时间最大不超过 3600 秒，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label1
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE table1
+)
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+```
+
+#### 设置最大容错率
+
+StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列。
+
+如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.1`，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label2
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
+    INTO TABLE table2
+)
+WITH BROKER "mybroker"
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "max_filter_ratio" = "0.1"
+);
+```
+
+#### 导入指定路径下所有数据文件
+
+StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+HDFS 集群的 `/user/starrocks/data/input/` 路径下所有数据文件也包含三列，按顺序一一对应 `table3` 中的三列，并且列分隔符为 Hive 文件的默认列分隔符 `\x01`。
+
+如果要把 `hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/` 路径下所有数据文件的数据都导入到 `table3` 中，可以执行如下语句：
+
+```SQL
+LOAD LABEL test_db.label3
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/*")
+    INTO TABLE table3
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
     COLUMNS TERMINATED BY "\\x01"
     )
     WITH BROKER my_hdfs_broker
@@ -293,9 +532,13 @@ WITH BROKER broker_name
 
 5. 从 BOS 导入一批数据，指定分区, 并对导入文件的列做一些转化，如下：
 
+<<<<<<< HEAD
     表结构为：
     k1 varchar(20)
     k2 int
+=======
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](../data-definition/HLL.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
     假设数据文件只有一行数据：
 

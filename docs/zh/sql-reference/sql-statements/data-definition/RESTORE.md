@@ -2,7 +2,7 @@
 
 ## description
 
-将通过 [BACKUP](/sql-reference/sql-statements/data-definition/BACKUP.md) 命令备份的数据，恢复到指定数据库下。该命令为 **异步** 操作。提交成功后，需通过 `SHOW RESTORE;` 命令查看进度。当前，仅支持恢复 OLAP 类型表，且表的数据模型需为明细模型、聚合模型或更新模型，暂不支持恢复数据模型为主键模型的表。
+将通过 [BACKUP](../data-definition/BACKUP.md) 命令备份的数据，恢复到指定数据库下。该命令为 **异步** 操作。提交成功后，需通过 `SHOW RESTORE;` 命令查看进度。当前，仅支持恢复 OLAP 类型表，且表的数据模型需为明细模型、聚合模型或更新模型，暂不支持恢复数据模型为主键模型的表。
 
 语法：
 
@@ -18,7 +18,11 @@ PROPERTIES ("key"="value", ...);
 
 说明：
 
+<<<<<<< HEAD
 1. 同一数据库下只能有一个正在执行的 BACKUP 或 RESTORE 任务。
+=======
+1. 同一数据库下只能有一个正在执行的 [BACKUP](./BACKUP.md)  或 [RESTORE](./RESTORE.md) 任务。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 2. ON 子句中标识需要恢复的表和分区。如果不指定分区，则默认恢复该表的所有分区。所指定的表和分区必须已存在于仓库备份中。
 

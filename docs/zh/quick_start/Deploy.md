@@ -37,8 +37,12 @@ StarRocks-XX-1.0.0
 
 准备三台物理机, 需要以下环境支持：
 
+<<<<<<< HEAD
 * Linux (Centos 7+)
 * Java 1.8+
+=======
+FE 的配置文件为 StarRocks-XX-1.0.0/fe/conf/fe.conf， 此处仅列出其中 JVM 配置和元数据目录配置，生产环境可参考 [FE 参数配置](../administration/Configuration.md#fe-配置项) 对集群进行详细优化配置。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 CPU需要支持AVX2指令集，cat /proc/cpuinfo |grep avx2有结果输出表明CPU支持，如果没有支持，建议更换机器，StarRocks使用向量化技术需要一定的指令集支持才能发挥效果。
 
@@ -437,8 +441,12 @@ mysql -h fe_host -P9030 -u root
 ```sql
 mysql > drop database if exists example_db;
 
+<<<<<<< HEAD
 mysql > drop user test;
 ```
+=======
+StarRocks FE 支持 HA 模型部署，保证集群的高可用，详细设置方式请参考 [FE 高可用集群部署](../administration/Deployment.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ### 创建新用户
 

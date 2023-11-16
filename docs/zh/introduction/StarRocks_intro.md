@@ -28,7 +28,18 @@ StarRocks通过CBO优化器(Cost Based Optimizer)可以对复杂查询自动优�
 
 ### 联邦查询
 
+<<<<<<< HEAD
 StarRocks支持使用外表的方式进行联邦查询，当前可以支持Hive、MySQL、Elasticsearch三种类型的外表，用户无需通过数据导入，可以直接进行数据查询加速。
+=======
+* [导入总览](../loading/Loading_intro)
+* [通过 HTTP PUT 从本地文件系统或流式数据源导入](../loading/StreamLoad)
+* [从 HDFS 或外部云存储系统导入](../loading/BrokerLoad)
+* [从 Apache Kafka® 持续导入](../loading/RoutineLoad)
+* [使用 Apache Spark™ 导入](../loading/SparkLoad)
+* [使用 INSERT 语句导入](../loading/InsertInto)
+* [从 MySQL 实时同步](../loading/Flink_cdc_load)
+* [从 Apache Flink® 持续导入](../loading/Flink-connector-starrocks)
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ### 高效更新
 

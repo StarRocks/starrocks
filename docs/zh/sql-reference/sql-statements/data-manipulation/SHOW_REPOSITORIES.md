@@ -4,7 +4,15 @@
 
 该语句用于查看当前已创建的仓库。
 
+<<<<<<< HEAD
 语法：
+=======
+备份数据需要创建仓库，详细的备份恢复操作说明请参考: [备份恢复](../../../administration/Backup_and_restore.md)章节。
+
+## 语法
+
+注：方括号 [] 中内容可省略不写。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ```sql
 SHOW REPOSITORIES;

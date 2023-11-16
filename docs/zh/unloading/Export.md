@@ -52,7 +52,11 @@ StarRocks 会首先在指定的远端存储的路径中，建立一个名为 `__
 
 `lineorder_921d8f80-7c9d-11eb-9342-acde48001122_1_2_0.csv`
 
+<<<<<<< HEAD
 其中:
+=======
+不同的 Broker 提供不同的参数配置，具体请参见 [Broker 配置项](../administration/Configuration.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 * `lineorder_`：为导出文件的前缀，由用户指定到导出路径中，不指定默认为`data_`。
 * `921d8f80-7c9d-11eb-9342-acde48001122`：为作业的 query id。文件名默认包含 query id，指定参数 include_query_id = false 后不包含。
@@ -87,14 +91,22 @@ WITH BROKER "hdfs"
 );
 ~~~
 
+<<<<<<< HEAD
 可以指定需要导出的分区，不写默认导出表中所有分区。
+=======
+有关 EXPORT 语句的详细语法和参数说明，请参见 [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 可以指定需要导出的列，顺序可以跟 schema 不同，不写默认导出表中所有列。
 
 导出路径**如果指定到目录**，需要指定最后的`/`，否则最后的部分会被当做导出文件的前缀。不指定前缀默认为`data_`。
 示例中导出文件会生成到 export 目录中，文件前缀为 `lineorder_`。
 
+<<<<<<< HEAD
 PROPERTIES如下：
+=======
+有关 SELECT LAST_QUERY_ID() 语句的详细语法和参数说明，请参见 [last_query_id](../sql-reference/sql-functions/utility-functions/last_query_id.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 * `column_separator`：列分隔符。默认为 `\t`。
 * `line_delimiter`：行分隔符。默认为 `\n`。
@@ -129,12 +141,16 @@ FinishTime: 2019-06-25 17:08:34
   ErrorMsg: N/A
 ~~~
 
+<<<<<<< HEAD
 * JobId：作业的唯一 ID
 * State：作业状态：
   * PENDING：作业待调度
   * EXPORING：数据导出中
   * FINISHED：作业成功
   * CANCELLED：作业失败
+=======
+有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](../sql-reference/sql-statements/data-manipulation/SHOW_EXPORT.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 * Progress：作业进度。该进度以查询计划为单位。假设一共 10 个查询计划，当前已完成 3 个，则进度为 30%。
 * TaskInfo：以 Json 格式展示的作业信息：
@@ -164,7 +180,11 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 
 ### 最佳实践
 
+<<<<<<< HEAD
 #### 查询计划的拆分
+=======
+有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 一个 Export 作业有多少查询计划需要执行，取决于总共有多少 Tablet，以及一个查询计划可以处理的最大数据量。
 作业是按照查询计划来重试的，如果一个查询计划处理更多的数据量，查询计划出错（比如调用 Broker 的 RPC 失败，远端存储出现抖动等），会导致一个查询计划的重试成本变高。每个查询计划中每个 BE 扫描的数据量由 FE 配置参数 `export_max_bytes_per_be_per_task` 计算得到，默认为 256M。每个查询计划中每个 BE 最少一个 Tablet，最多导出的数据量不超过配置的参数 `export_max_bytes_per_be_per_task`。

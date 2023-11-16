@@ -160,7 +160,11 @@ MERGE:
 
 ## be/fe日志文件太多，怎么处理？
 
+<<<<<<< HEAD
 调整日志级别和参数大小，详情参考文档中log相关的参数默认值和作用说明：[参数配置](/administration/Configuration.md)
+=======
+调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/Configuration.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ## 更改副本数失败：table lineorder is colocate table, cannot change replicationNum
 

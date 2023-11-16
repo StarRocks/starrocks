@@ -19,4 +19,23 @@ StarRocks支持在导入过程中进行数据转换，具体可以参考企业�
 -H "columns: NO,DATE_1, VERSION, PRICE, DATE=LEFT(DATE_1,6)"
 ```
 
+<<<<<<< HEAD
 来实现列的转换。DATE_1可以简单的认为是先占位进行取数，然后通过函数转换，赋值给StarRocks中对应的字段。特别注意，我们需要先列出 CSV 数据文件中的所有列，再进行函数转换，常规函数这里都可以使用。
+=======
+`DATE_1` 可以简单地看成是先占位进行取数，然后通过 left() 函数进行转换，赋值给 StarRocks 表中的 `DATE` 列。特别需要注意的是，必须先列出 CSV 文件中所有列的临时名称，然后再使用函数进行转换。支持列转换的函数为标量函数，包括非聚合函数和窗口函数。
+
+## 3. 数据质量问题报错 "ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel" 应该怎么解决？
+
+请参见[导入通用常见问题](./Loading_faq.md)。
+
+## 4. 导入状态为 "Label Already Exists" 应该怎么解决？
+
+请参见[导入通用常见问题](./Loading_faq.md)。
+
+## 5. 导入出错 "body exceed max size: 10737418240, limit: 10737418240" 应该如何解决？
+
+导入文件大小超过 10GB, 超过 Stream Load 所能支持的文件大小上限。有两种解决方法:
+
+1. 把文件通过 `seq -w 0 n` 拆分。
+2. 通过 `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=1024000` 来扩大这个上限。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))

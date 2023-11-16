@@ -72,4 +72,4 @@ SHOW CREATE VIEW example_db.example_view;
 
 ## 相关操作
 
-StarRocks 还支持创建物化视图，详细信息请参见[物化视图](/using_starrocks/Materialized_view.md)。
+StarRocks 还支持创建物化视图，详细信息请参见[物化视图](../../../using_starrocks/Materialized_view.md)。

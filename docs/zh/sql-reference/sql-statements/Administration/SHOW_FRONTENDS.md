@@ -2,7 +2,11 @@
 
 ## description
 
+<<<<<<< HEAD
 该语句用于查看 FE 节点
+=======
+该语句用于查看 FE 节点。FE 节点添加方式及高可用部署请参考 [集群部署](../../../administration/Deployment.md) 章节。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 语法：
 

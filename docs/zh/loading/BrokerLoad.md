@@ -2,11 +2,19 @@
 
 StarRocks支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支持CSV、ORCFile、Parquet等文件格式。数据量在几十GB到上百GB 级别。
 
+<<<<<<< HEAD
 在Broker Load模式下，通过部署的Broker程序，StarRocks可读取对应数据源（如HDFS, S3）上的数据，利用自身的计算资源对数据进行预处理和导入。这是一种**异步**的导入方式，用户需要通过MySQL协议创建导入，并通过查看导入命令检查导入结果。
+=======
+Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 本节主要介绍Broker导入的基本原理、使用示例、最佳实践，及常见问题。
 
+<<<<<<< HEAD
 ---
+=======
+Broker Load 还支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](./Etl_in_loading.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ## 名词解释
 
@@ -14,7 +22,44 @@ StarRocks支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支
 
 * Plan:  导入执行计划，BE会执行导入执行计划将数据导入到StarRocks系统中。
 
+<<<<<<< HEAD
 ---
+=======
+Broker Load 支持如下数据文件格式：
+
+- CSV
+
+- Parquet
+
+- ORC
+
+> **说明**
+>
+> 对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+
+## 支持的外部存储系统
+
+Broker Load 支持从如下外部存储系统导入数据：
+
+- HDFS
+
+- Amazon S3
+
+- Google GCS
+
+- 阿里云 OSS
+
+- 腾讯云 COS
+
+## 前提条件
+
+确保您的 StarRocks 集群中已部署 Broker。
+
+您可以通过 [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW_BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](../quick_start/Deploy.md#部署-broker)完成 Broker 部署。
+
+
+本文档假设您的 StarRocks 集群中已部署一个名称为“mybroker”的 Broker。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ## 基本原理
 
@@ -35,7 +80,11 @@ StarRocks支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支
   
 ---
 
+<<<<<<< HEAD
 ## 导入示例
+=======
+这里以导入 CSV 格式的数据为例介绍如何创建导入作业。有关如何导入其他格式的数据、以及 Broker Load 的详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ### Broker搭建
 
@@ -101,7 +150,11 @@ PROPERTIES
 );
 ~~~
 
+<<<<<<< HEAD
 **阿里云 OSS导入示例：**
+=======
+#### 从 Amazon S3 导入
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ~~~SQL
 LOAD LABEL example_db.label12
@@ -110,17 +163,111 @@ LOAD LABEL example_db.label12
     INTO TABLE `my_table`
     (k1, k2, k3)
 )
+<<<<<<< HEAD
 WITH BROKER my_broker
+=======
+WITH BROKER "mybroker"
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+);
+```
+
+> **说明**
+>
+> - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
+> - 如果您的 A EC2 实例上绑定的 IAM 角色可以访问您的 AWS S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
+
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+
+#### 从 Google GCS 导入
+
+可以通过如下语句，把 Google GCS 存储空间 `bucket_gcs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+
+```SQL
+LOAD LABEL test_db.label3
+(
+    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER "mybroker"
+(
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "storage.googleapis.com"
+);
+```
+
+> **说明**
+>
+> 由于 Broker Load 只支持通过 S3A 协议访问 Google GCS，因此当从 Google GCS 导入数据时，`DATA INFILE` 中传入的目标文件的 GCS URI，前缀必须修改为 `s3a://`。
+
+
+#### 从 阿里云 OSS 导入
+
+可以通过如下语句，把阿里云 OSS 存储空间 `bucket_oss` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+
+```SQL
+LOAD LABEL test_db.label4
+(
+    DATA INFILE("oss://bucket_oss/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("oss://bucket_oss/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER "mybroker"
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 (
     "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
+<<<<<<< HEAD
+=======
+);
+```
+
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+
+#### 从腾讯云 COS 导入
+
+可以通过如下语句，把腾讯云 COS 存储空间 `bucket_cos` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+
+```SQL
+LOAD LABEL test_db.label5
+(
+    DATA INFILE("cosn://bucket_cos/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("cosn://bucket_cos/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 )
 ~~~
 
+<<<<<<< HEAD
 执行`HELP BROKER LOAD`可查看创建导入作业的详细语法。这里主要介绍命令中参数的意义和注意事项。
   
 **Label：**
+=======
+有关详细语法和参数说明，请参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 导入任务的标识。每个导入任务，都有**一个数据库**内部唯一的Label。Label是用户在导入命令中自定义的名称。通过这个Label，用户可以查看对应导入任务的执行情况，并且Label可以用来防止用户导入相同的数据。当导入任务状态为FINISHED时，对应的Label就不能再次使用了。当 Label 对应的导入任务状态为CANCELLED时，**可以再次使用**该Label提交导入作业。
 
@@ -132,7 +279,11 @@ WITH BROKER my_broker
 
 Broker load支持一次导入任务涉及多张表，每个Broker load导入任务可通过多个data_desc声明多张表来实现多表导入。每个单独的data-desc可以指定属于**该表**的数据源地址，可以用多个 file-path 来指定导入同一个表的多个文件。Broker load 保证了单次导入的多张表之间原子性成功或失败。
 
+<<<<<<< HEAD
 * file_path
+=======
+#### 查询数据
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 文件路径可以指定到一个文件，也可以用 * 通配符指定某个目录下的所有文件。中间的目录也可以使用通配符匹配。
 
@@ -164,7 +315,11 @@ parquet类型也可以通过文件后缀名 **.parquet** 或者 **.parq** 判断
 
 * COLUMNS FROM PATH AS
 
+<<<<<<< HEAD
 提取文件路径中的分区字段。
+=======
+请参见 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 例: 导入文件为/path/col_name=col_value/dt=20210101/file1，col_name/dt为表中的列，则设置如下语句可以将col_value、20210101分别导入到col_name、dt对应的列中。
 
@@ -186,11 +341,29 @@ data_desc中的WHERE语句负责过滤已经完成transform的数据。被过滤
 
 导入作业参数是指Broker Load创建导入语句中属于opt_properties部分的参数。导入作业参数是作用于整个导入作业的。下面是对其中部分参数的详细说明。
 
+<<<<<<< HEAD
 * timeout
+=======
+| **参数**    | **说明**                                                     |
+| ----------- | ------------------------------------------------------------ |
+| dbName      | 目标 StarRocks 表所在的数据库的名称。                               |
+| tblNames    | 目标 StarRocks 表的名称。                        |
+| label       | 导入作业的标签。                                             |
+| state       | 导入作业的状态，包括：<ul><li>`PENDING`：导入作业正在等待执行中。</li><li>`LOADING`：导入作业正在执行中。</li><li>`FINISHED`：导入作业成功。</li><li>`CANCELLED`：导入作业失败。</li></ul>请参见[异步导入](./Loading_intro.md#异步导入)。 |
+| failMsg     | 导入作业的失败原因。当导入作业的状态为`PENDING`，`LOADING`或`FINISHED`时，该参数值为`NULL`。当导入作业的状态为`CANCELLED`时，该参数值包括 `type` 和 `msg` 两部分：<ul><li>`type` 包括如下取值：</li><ul><li>`USER_CANCEL`：导入作业被手动取消。</li><li>`ETL_SUBMIT_FAIL`：导入任务提交失败。</li><li>`ETL-QUALITY-UNSATISFIED`：数据质量不合格，即导入作业的错误数据率超过了 `max-filter-ratio`。</li><li>`LOAD-RUN-FAIL`：导入作业在 `LOADING` 状态失败。</li><li>`TIMEOUT`：导入作业未在允许的超时时间内完成。</li><li>`UNKNOWN`：未知的导入错误。</li></ul><li>`msg` 显示有关失败原因的详细信息。</li></ul> |
+| trackingUrl | 导入作业中质量不合格数据的访问地址。可以使用 `curl` 命令或 `wget` 命令访问该地址。如果导入作业中不存在质量不合格的数据，则返回空值。 |
+| status      | 导入请求的状态，包括 `OK` 和 `Fail`。                        |
+| msg         | HTTP 请求的错误信息。                                        |
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 导入作业的超时时间(以秒为单位)。用户可以在opt_properties中自行设置每个导入的超时时间。导入任务在设定的时限内未完成则会被系统取消，变成 CANCELLED。Broker Load的默认导入超时时间为4小时。
 
+<<<<<<< HEAD
 > 注意：通常情况下，用户不需要手动设置导入任务的超时时间。当在默认超时时间内无法完成导入时，可以手动设置任务的超时时间。
+=======
+当导入作业状态不为 **CANCELLED** 或 **FINISHED** 时，可以通过 [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL_LOAD.md) 语句来取消该导入作业。
+
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 推荐超时时间的计算方式如下：
 
@@ -204,7 +377,11 @@ data_desc中的WHERE语句负责过滤已经完成transform的数据。被过滤
 
 * max_filter_ratio
 
+<<<<<<< HEAD
 导入任务的最大容忍率，默认为0容忍，取值范围是0~1。当导入的错误率超过该值，则导入失败。
+=======
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/Configuration.md#配置-fe-动态参数)决定：
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 如果用户希望忽略错误的行，可以通过设置这个参数大于 0，来保证导入可以成功。
 
@@ -328,6 +505,7 @@ LoadFinishTime: 2019-07-27 11:50:16
 
 ## 常见问题
 
+<<<<<<< HEAD
 * Q：数据质量问题报错：ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel
 
     A: 可参考章节导入总览/常见问题。
@@ -410,3 +588,6 @@ LoadFinishTime: 2019-07-27 11:50:16
   A：首先检查是不是所有的broker所在机器是否都配置了`/etc/krb5.conf`文件。
 
     如果配置了仍然报错，需要在broker的启动脚本中的`JAVA_OPTS`变量最后，加上`-Djava.security.krb5.conf:/etc/krb5.conf`。
+=======
+请参见 [Broker Load 常见问题](../faq/loading/Broker_load_faq.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))

@@ -14,7 +14,11 @@
 
 该函数支持与WHERE，GROUP BY子句搭配使用。
 
+<<<<<<< HEAD
 COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 精确去重](../../../using_starrocks/Using_bitmap.md)。
+=======
+COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 实现精确去重](../../../using_starrocks/Using_bitmap.md)。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 ## 语法
 

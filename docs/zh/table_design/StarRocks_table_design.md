@@ -4,7 +4,11 @@
 
 ![column](../assets/3.1.1-1.png)
 
+<<<<<<< HEAD
 StarRocks的表和关系型数据相同, 由行和列构成. 每行数据对应用户一条记录, 每列数据有相同数据类型. 所有数据行的列数相同, 可以动态增删列.  StarRocks中, 一张表的列可以分为维度列(也成为key列)和指标列(value列), 维度列用于分组和排序, 指标列可通过聚合函数SUM, COUNT, MIN, MAX, REPLACE, HLL\_UNION, BITMAP\_UNION等累加起来. 因此, StarRocks的表也可以认为是多维的key到多维指标的映射。
+=======
+StarRocks 中的表由行和列构成。每行数据对应用户一条记录，每列数据具有相同的数据类型。所有数据行的列数相同，可以动态增删列。在 StarRocks 中，一张表的列可以分为维度列（也称为 Key 列）和指标列（也称为 Value 列）。维度列用于分组和排序，指标列的值可以通过聚合函数 [sum](../sql-reference/sql-functions/aggregate-functions/sum.md)、[count](../sql-reference/sql-functions/aggregate-functions/count.md)、[min](../sql-reference/sql-functions/aggregate-functions/min.md)、[max](../sql-reference/sql-functions/aggregate-functions/max.md)、[hll_union_agg](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) 和 [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md) 等累加起来。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
   <br/>
 

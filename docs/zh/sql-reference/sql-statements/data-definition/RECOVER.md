@@ -2,7 +2,11 @@
 
 ## description
 
+<<<<<<< HEAD
 该语句用于恢复之前删除的 database、table 或者 partition
+=======
+恢复之前删除的 database、table 或者 partition。通过 [TRUNCATE TABLE](./TRUNCATE_TABLE.md) 命令删除数据无法恢复。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 语法：
 

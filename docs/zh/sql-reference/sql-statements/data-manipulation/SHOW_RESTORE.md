@@ -2,7 +2,11 @@
 
 ## description
 
+<<<<<<< HEAD
 该语句用于查看 RESTORE 任务
+=======
+该语句用于查看 RESTORE 任务。详细的Backup&restore操作说明请参考: [备份恢复](../../../administration/Backup_and_restore.md)章节。
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 语法：
 

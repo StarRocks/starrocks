@@ -6,8 +6,12 @@ StarRocks supports a variety of import methods. Users can choose the most suitab
 
 > Note: It is recommended to read this whole section first, and then dive into the details of your selected import method.
 
+<<<<<<< HEAD
 ![Data Import Overview](../assets/4.1.1.png)
 Choose the import methods based on your data source.
+=======
+StarRocks supports two communication protocols that can be used to submit load jobs: MySQL and HTTP. For more information about the protocol supported by each loading method, see the [Loading methods](#loading-methods) section of this topic.
+>>>>>>> a83aa885d ([Doc] fix links in 2.2 (#35221))
 
 * Offline data import. If the data source is Hive/HDFS, [Broker Load](./BrokerLoad.md) is recommended. If there are many data tables, consider using [Hive external table](../using_starrocks/External_table.md) for direct query.The performance may be worse than `Broker Load`, but it doesn’t require data relocation. If a table has a large data volume, or needs the global data dictionary for precise deduplication, choose [Spark  Load](./SparkLoad.md).
 * Real-time data import. It is recommended to import log and binlog data to StarRocks via [Routine load](./RoutineLoad.md) after they are synchronized to Kafka. StarRocks has a standard [Flink-connector](./Flink-connector-starrocks.md) to facilitate the use of Flink jobs.
