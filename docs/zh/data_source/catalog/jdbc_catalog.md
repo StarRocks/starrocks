@@ -46,7 +46,7 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | type         | 资源类型，固定取值为 `jdbc`。                                |
 | user         | 目标数据库登录用户名。                                       |
 | password     | 目标数据库用户登录密码。                                     |
-| jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) 和 [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) 官网文档。 |
+| jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。 |
 | driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br />**说明**<br />您也可以把 JDBC 驱动程序部署在 FE 或 BE 所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file:///<path>/to/the/driver`。 |
 | driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：`com.mysql.jdbc.Driver`（MySQL 5.x 及之前版本）、`com.mysql.cj.jdbc.Driver`（MySQL 6.x 及之后版本）</li><li>PostgreSQL: `org.postgresql.Driver`</li></ul> |
 
@@ -108,7 +108,11 @@ DROP Catalog jdbc0;
 
 ## 查询 JDBC Catalog 中的表数据
 
+<<<<<<< HEAD
 1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的集群中的数据库：
+=======
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查看指定 Catalog 所属的集群中的数据库：
+>>>>>>> 723154ee58 ([Doc] fix missing comma in BROKER LOAD doc (#35164))
 
    ```SQL
    SHOW DATABASES from <catalog_name>;
