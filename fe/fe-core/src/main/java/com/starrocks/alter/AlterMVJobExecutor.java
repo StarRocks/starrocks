@@ -313,7 +313,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
             Locker locker = new Locker();
-            if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
                 throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
             }
             try {

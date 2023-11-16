@@ -96,6 +96,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
@@ -983,7 +984,7 @@ public class GlobalStateMgr {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
+                        LOG.warn("globalStateMgr lock is held by: {}", LogUtil.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {

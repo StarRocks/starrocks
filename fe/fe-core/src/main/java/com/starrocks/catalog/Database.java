@@ -51,6 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.LockUtils.SlowLockLogStats;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -115,9 +116,10 @@ public class Database extends MetaObject implements Writable {
     private String catalogName;
 
     private final QueryableReentrantReadWriteLock rwLock;
+    private SlowLockLogStats slowLockLogStats = new SlowLockLogStats();
 
     // This param is used to make sure db not dropped when leader node writes wal,
-    // so this param does not need to be persistent,
+    // so this param does not need to be persisted,
     // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
     // but that's ok to meet our needs.
     private volatile boolean exist = true;
@@ -154,6 +156,10 @@ public class Database extends MetaObject implements Writable {
     @Deprecated
     public QueryableReentrantReadWriteLock getRwLock() {
         return rwLock;
+    }
+
+    public SlowLockLogStats getSlowLockLogStats() {
+        return slowLockLogStats;
     }
 
     public long getId() {

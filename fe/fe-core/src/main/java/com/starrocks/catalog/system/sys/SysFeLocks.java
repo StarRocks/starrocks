@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
@@ -110,7 +111,7 @@ public class SysFeLocks {
             lockItem.setThread_info(ownerInfo.toString());
 
             // wait start
-            long lockStartTime = lock.getExclusiveLockTime();
+            long lockStartTime = lock.getExclusiveLockStartTimeMs();
             lockItem.setStart_time(lockStartTime);
             lockItem.setHold_time_ms(currentTime - lockStartTime);
         } else if (CollectionUtils.isNotEmpty(sharedLockThreadIds)) {
@@ -119,7 +120,7 @@ public class SysFeLocks {
 
             // lock start
             long lockStart = ListUtils.emptyIfNull(sharedLockThreadIds).stream()
-                    .map(lock::getSharedLockTime)
+                    .map(lock::getSharedLockStartTimeMs)
                     .filter(x -> x > 0)
                     .min(Comparator.naturalOrder()).orElse(0L);
             lockItem.setStart_time(lockStart);
@@ -143,17 +144,7 @@ public class SysFeLocks {
         }
 
         // waiters
-        Collection<Thread> waiters = lock.getQueuedThreads();
-        JsonArray waiterIds = new JsonArray();
-        for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
-            if (th != null) {
-                JsonObject waiter = new JsonObject();
-                waiter.addProperty("threadId", th.getId());
-                waiter.addProperty("threadName", th.getName());
-                waiterIds.add(waiter);
-            }
-        }
-        lockItem.setWaiter_list(waiterIds.toString());
+        lockItem.setWaiter_list(LockChecker.getLockWaiterInfoJsonArray(lock.getQueuedThreads()).toString());
 
         return lockItem;
     }
