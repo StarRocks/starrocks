@@ -80,7 +80,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     @Test
     public void testArrayFnWithLambdaExpr() throws Exception {
         String sql = "select filter(array[], x -> true);";
-        assertPlanContains(sql, "array_filter([], array_map(<slot 2> -> TRUE, []))");
+        assertPlanContains(sql, "array_filter(CAST([] AS ARRAY<BOOLEAN>), array_map(<slot 2> -> TRUE, []))");
 
         sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
         assertPlanContains(sql, " array_filter([5,-6,NULL,7], array_map(<slot 2> -> <slot 2> > 0, [5,-6,NULL,7]))");
