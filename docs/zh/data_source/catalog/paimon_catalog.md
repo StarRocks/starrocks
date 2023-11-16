@@ -629,13 +629,13 @@ PROPERTIES
 
 ## 查看 Paimon Catalog
 
-您可以通过 [SHOW CATALOGS](../../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Paimon Catalog `paimon_catalog_fs` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG paimon_catalog_fs;
@@ -643,7 +643,7 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ## 删除 Paimon Catalog
 
-您可以通过 [DROP CATALOG](../../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Paimon Catalog `paimon_catalog_fs`：
 
@@ -669,7 +669,7 @@ DROP Catalog paimon_catalog_fs;
 
 ## 查询 Paimon 表数据
 
-1. 通过 [SHOW DATABASES](../../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Paimon Catalog 中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
@@ -693,7 +693,7 @@ DROP Catalog paimon_catalog_fs;
    USE <catalog_name>.<db_name>;
    ```
 
-3. 通过 [SELECT](../../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;
