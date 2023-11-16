@@ -321,7 +321,6 @@ PARTITION BY RANGE (k1, k2, ...)
 
 语法：
 
-<<<<<<< HEAD
 ```sql
 PARTITION BY RANGE (k1, k2, k3, ...)
 (
@@ -330,9 +329,6 @@ PARTITION BY RANGE (k1, k2, k3, ...)
     ...
 )
 ```
-=======
-    更多信息，请参见[批量创建分区](../../../table_design/Data_distribution.md#range-分区)。
->>>>>>> a78299d341 ([Doc] replace absolute path (#35106))
 
 说明：
 
