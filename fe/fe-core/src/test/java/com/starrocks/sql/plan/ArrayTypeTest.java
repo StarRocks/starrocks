@@ -114,6 +114,26 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
                 "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'], CAST([1.1] AS ARRAY<VARCHAR>)");
+
+        sql = "with t0 as (\n" +
+                "    select c1 from (values([])) as t(c1)\n" +
+                ")\n" +
+                "select \n" +
+                "array_concat(c1, [1])\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        getThriftPlan(sql); // Check null type handling
+        assertContains(plan, "<slot 3> : array_concat(CAST(2: c1 AS ARRAY<TINYINT>), [1])");
+
+        sql = "with t0 as (\n" +
+                "    select c1 from (values([])) as t(c1)\n" +
+                ")\n" +
+                "select \n" +
+                "array_concat(c1, [1])\n" +
+                "from t0;";
+        plan = getFragmentPlan(sql);
+        getThriftPlan(sql); // Check null type handling
+        assertContains(plan, "<slot 3> : array_concat(CAST(2: c1 AS ARRAY<TINYINT>), [1])");
     }
 
     @Test
@@ -320,13 +340,13 @@ public class ArrayTypeTest extends PlanTestBase {
         {
             String sql = "select array_append([[1,2,3]], [])";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "<slot 2> : array_append([[1,2,3]], [])");
+            assertContains(plan, "<slot 2> : array_append([[1,2,3]], CAST([] AS ARRAY<TINYINT>))");
         }
         {
             String sql = "select array_append([[1,2,3]], [null])";
             String plan = getFragmentPlan(sql);
             assertContains(plan,
-                    "<slot 2> : array_append([[1,2,3]], [NULL])");
+                    "<slot 2> : array_append([[1,2,3]], CAST([NULL] AS ARRAY<TINYINT>))");
         }
         {
             starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
@@ -708,8 +728,7 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testEmptyArrayOlap() throws Exception {
         String sql = "select arrays_overlap([[],[]],[])";
         String plan = getVerboseExplain(sql);
-        assertCContains(plan, "arrays_overlap[([[],[]], []); " +
-                "args: INVALID_TYPE,INVALID_TYPE; " +
-                "result: BOOLEAN; args nullable: true; result nullable: true]");
+        assertCContains(plan, "arrays_overlap[([[],[]], cast([] as ARRAY<ARRAY<BOOLEAN>>)); " +
+                "args: INVALID_TYPE,INVALID_TYPE; result: BOOLEAN; args nullable: true; result nullable: true]");
     }
 }
