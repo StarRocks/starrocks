@@ -140,7 +140,7 @@ public class DictMappingRewriter {
 
         @Override
         public ScalarOperator visitCall(CallOperator call, RewriterContext context) {
-            if (!call.getFunction().isCouldApplyDictOptimize()) {
+            if (call.getFunction() == null || !call.getFunction().isCouldApplyDictOptimize()) {
                 context.hasAppliedOperator = false;
                 context.hasUnsupportedOperator = true;
                 return visit(call, context);
