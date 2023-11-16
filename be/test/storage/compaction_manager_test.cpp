@@ -80,7 +80,7 @@ TEST(CompactionManagerTest, test_candidates) {
     }
 }
 
-TEST_F(CompactionManagerTest, test_candidates_exceede) {
+TEST(CompactionManagerTest, test_candidates_exceede) {
     config::max_compaction_candidate_num = 10;
     std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
