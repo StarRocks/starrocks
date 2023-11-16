@@ -120,6 +120,13 @@ public class InsertAnalyzer {
                     HiveWriteUtils.isS3Url(table.getTableLocation()) && insertStmt.isOverwrite()) {
                 throw new SemanticException("Unsupported insert overwrite hive unpartitioned table with s3 location");
             }
+
+            if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE &&
+                    !session.getSessionVariable().enableWriteHiveExternalTable()) {
+                throw new SemanticException("Only support to write hive managed table, tableType: " +
+                        ((HiveTable) table).getHiveTableType());
+            }
+
             PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
             if (insertStmt.getTargetColumnNames() != null) {
