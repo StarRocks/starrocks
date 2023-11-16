@@ -970,7 +970,7 @@ modifyColumnClause
     ;
 
 columnRenameClause
-    : RENAME COLUMN oldColumn=identifier newColumn=identifier
+    : RENAME COLUMN oldColumn=identifier TO newColumn=identifier
     ;
 
 reorderColumnsClause
