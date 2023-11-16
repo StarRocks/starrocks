@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy StarRocks with Docker
 
 This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.

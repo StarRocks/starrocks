@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Hive catalog
 
 A Hive catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards. Within Hive catalogs, you can:

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Hive catalog
 
 Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hive Catalog，您可以：

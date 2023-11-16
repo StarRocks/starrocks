@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Docker 部署 StarRocks
 
 本快速入门教程将指导您使用 Docker 在本地计算机上部署 StarRocks。在开始之前，您可以阅读 [系统架构](../introduction/Architecture.md) 了解更多概念细节。

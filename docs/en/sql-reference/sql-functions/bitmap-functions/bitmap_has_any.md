@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # bitmap_has_any
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # FILES
 
 ## 功能
