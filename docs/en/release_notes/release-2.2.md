@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # StarRocks version 2.2
 
 Release date: April 6, 2023

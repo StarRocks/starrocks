@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # timediff
 
 ## 功能

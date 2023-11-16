@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # STRING
 
 ## 描述

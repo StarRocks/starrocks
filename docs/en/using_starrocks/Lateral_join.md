@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use Lateral Join for column-to-row conversion
 
 Column-to-row conversion is a common operation in ETL processing. Lateral is a special Join keyword that can associate a row with an internal subquery or table function. By using Lateral in conjunction with unnest(), you can expand one row into multiple rows. For more information, see [unnest](../sql-reference/sql-functions/array-functions/unnest.md).
