@@ -18,7 +18,7 @@
 #include <queue>
 #include <utility>
 
-#include "exec/pipeline/exchange/local_exchange_memory_manager.h"
+#include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
@@ -88,7 +88,7 @@ class LocalExchangeSourceOperator final : public SourceOperator {
 
 public:
     LocalExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
+                                const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager)
             : SourceOperator(factory, id, "local_exchange_source", plan_node_id, true, driver_sequence),
               _memory_manager(memory_manager) {}
 
@@ -160,7 +160,7 @@ private:
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
-    const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;
+    const std::shared_ptr<ChunkBufferMemoryManager>& _memory_manager;
     std::map<PartitionKeyPtr, PendingPartitionChunks, PartitionKeyComparator> _partitions;
 
     // STREAM MV
@@ -170,7 +170,7 @@ private:
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                       std::shared_ptr<LocalExchangeMemoryManager> memory_manager)
+                                       std::shared_ptr<ChunkBufferMemoryManager> memory_manager)
             : SourceOperatorFactory(id, "local_exchange_source", plan_node_id),
               _memory_manager(std::move(memory_manager)) {}
 
@@ -186,7 +186,7 @@ public:
     std::vector<LocalExchangeSourceOperator*>& get_sources() { return _sources; }
 
 private:
-    std::shared_ptr<LocalExchangeMemoryManager> _memory_manager;
+    std::shared_ptr<ChunkBufferMemoryManager> _memory_manager;
     std::vector<LocalExchangeSourceOperator*> _sources;
 };
 
