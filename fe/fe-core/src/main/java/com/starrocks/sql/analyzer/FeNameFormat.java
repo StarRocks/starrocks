@@ -18,8 +18,10 @@ import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Role;
 
 public class FeNameFormat {
@@ -75,6 +77,13 @@ public class FeNameFormat {
         }
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
+
+        if (Config.prohibit_op_column_name) {
+            if (columnName.equals(Load.LOAD_OP_COLUMN)) {
+                throw new SemanticException("[" + columnName + "] is a prohibited system reserved name, " +
+                        "if you are sure you want to use it. Please reset FE configuration prohibit_op_column_name");
+            }
         }
     }
 

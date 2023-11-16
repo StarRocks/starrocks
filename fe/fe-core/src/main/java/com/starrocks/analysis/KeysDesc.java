@@ -252,15 +252,6 @@ public class KeysDesc implements ParseNode, Writable {
                 throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
             }
         }
-
-        if (Config.prohibit_op_column_name) {
-            for (int i = 0; i < cols.size(); ++i) {
-                if (cols.get(i).getName().equals(Load.LOAD_OP_COLUMN)) {
-                    throw new SemanticException("[" + cols.get(i).getName() + "] is a prohibited system reserved name, " +
-                            "if you are sure you want to use it. Please reset FE configuration prohibit_op_column_name");
-                }
-            }
-        }
     }
 }
 
