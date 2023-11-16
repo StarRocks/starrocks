@@ -26,6 +26,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.thrift.TAuthInfo;
@@ -39,6 +40,8 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadTxnBeginRequest;
+import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -58,6 +61,8 @@ import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.thrift.TException;
 import org.junit.AfterClass;
@@ -231,6 +236,27 @@ public class FrontendServiceImplTest {
 
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testLoadTxnBegin() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label");
+        request.setDb("test");
+        request.setTbl("site_access_empty");
+        request.setUser("root");
+        request.setPasswd("");
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public boolean isEnableLoadProfile() {
+                return true;
+            }
+        };
+
+        TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+        Assert.assertEquals(result.getStatus().getStatus_code(), TStatusCode.OK);
     }
 
     @Test
