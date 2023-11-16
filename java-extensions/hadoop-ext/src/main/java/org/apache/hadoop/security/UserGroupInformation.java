@@ -578,6 +578,10 @@ public class UserGroupInformation {
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation getCurrentUser() throws IOException {
+    UserGroupInformation ugi = CelerDataUGIManager.getCurrentUser();
+    if (ugi != null) {
+      return ugi;
+    }
     ensureInitialized();
     AccessControlContext context = AccessController.getContext();
     Subject subject = Subject.getSubject(context);
