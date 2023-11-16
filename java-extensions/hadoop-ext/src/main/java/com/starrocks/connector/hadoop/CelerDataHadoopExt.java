@@ -153,4 +153,16 @@ public class CelerDataHadoopExt extends HadoopExt {
     public FileSystem bindUGIToFileSystem(FileSystem fs, UserGroupInformation ugi) {
         return FileSystemByteBuddyProxy.createFSProxy(fs, ugi);
     }
+
+    @Override
+    public <R, E extends Exception> R doAs(UserGroupInformation ugi, GenericExceptionAction<R, E> action) throws E {
+        if (ugi == null) {
+            return action.run();
+        }
+        try (CelerDataUGIManager.SwitchUserRequest _ = new CelerDataUGIManager.SwitchUserRequest(ugi)) {
+            return executeActionInDoAs(ugi, action);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

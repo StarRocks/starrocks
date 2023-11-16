@@ -33,6 +33,26 @@ public class CelerDataUGIManager {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CelerDataUGIManager.class);
 
+    protected static ThreadLocal<UserGroupInformation> currentUser = new ThreadLocal<>();
+
+    public static class SwitchUserRequest implements AutoCloseable {
+        private UserGroupInformation old;
+
+        public SwitchUserRequest(UserGroupInformation user) {
+            old = currentUser.get();
+            currentUser.set(user);
+        }
+
+        @Override
+        public void close() throws Exception {
+            currentUser.set(old);
+        }
+    }
+
+    public static UserGroupInformation getCurrentUser() {
+        return currentUser.get();
+    }
+
     static class Key {
         final String keytab;
         final String principal;

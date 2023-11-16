@@ -388,9 +388,9 @@ public class UserGroupInformation {
   public static boolean isSecurityEnabled() {
     //    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
     AuthenticationMethod method = authenticationMethod;
-    try {
-      method = getCurrentUser().getAuthenticationMethod();
-    } catch (IOException e) {
+    UserGroupInformation ugi = CelerDataUGIManager.getCurrentUser();
+    if (ugi != null) {
+      method = ugi.getAuthenticationMethod();
     }
     return !(method == AuthenticationMethod.SIMPLE);
   }
