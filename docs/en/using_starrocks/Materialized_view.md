@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Materialized view
 
 This topic describes how to create, use, and manage a materialized view.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # adddate,days_add
 
 ## 功能

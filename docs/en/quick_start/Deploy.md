@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy StarRocks
 
 This QuickStart tutorial guides you through the procedures to deploy a simple StarRocks cluster. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.

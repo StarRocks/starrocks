@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # BITMAP
 
 ## 描述

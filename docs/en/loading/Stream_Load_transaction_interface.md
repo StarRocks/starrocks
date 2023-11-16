@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data by using Stream Load transaction interface
 
 StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) of transactions that are run to stream data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads. You can optionally run stream load jobs by using the Stream Load transaction interface.

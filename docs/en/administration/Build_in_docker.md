@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Introduction of the dev-env image
 
 ## Download the image

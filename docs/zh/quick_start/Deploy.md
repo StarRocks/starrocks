@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 手动部署 StarRocks
 
 本文介绍如何以二进制安装包方式手动部署 StarRocks。
