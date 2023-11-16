@@ -4,7 +4,7 @@ StarRocks 从 3.0 版本开始支持 JDBC Catalog。
 
 JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执行数据导入就可以直接查询 JDBC 数据源里的数据。
 
-此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../../sql-reference/sql-statements/data-manipulation/insert.md) 能力对 JDBC 数据源的数据实现转换和导入。
+此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力对 JDBC 数据源的数据实现转换和导入。
 
 目前 JDBC Catalog 支持 MySQL 和 PostgreSQL。
 
@@ -84,13 +84,13 @@ PROPERTIES
 
 ## 查看 JDBC Catalog
 
-您可以通过 [SHOW CATALOGS](../../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 JDBC Catalog `jdbc0` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
@@ -98,7 +98,7 @@ SHOW CREATE CATALOG jdbc0;
 
 ## 删除 JDBC Catalog
 
-您可以通过 [DROP CATALOG](../../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除一个 JDBC Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除一个 JDBC Catalog。
 
 例如，通过如下命令删除 JDBC Catalog `jdbc0`：
 
@@ -108,7 +108,7 @@ DROP Catalog jdbc0;
 
 ## 查询 JDBC Catalog 中的表数据
 
-1. 通过 [SHOW DATABASES](../../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的集群中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
    SHOW DATABASES from <catalog_name>;
@@ -132,7 +132,7 @@ DROP Catalog jdbc0;
     USE <catalog_name>.<db_name>;
     ```
 
-3. 通过 [SELECT](../../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT * FROM <table_name>;
