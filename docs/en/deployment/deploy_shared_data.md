@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy and use shared-data StarRocks
 
 This topic describes how to deploy and use a shared-data StarRocks cluster.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # all_match
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # All statements
 
 This topic lists all the SQL statements supported by StarRocks and categorizes these statements by their functions.

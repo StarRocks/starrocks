@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Realtime synchronization from MySQL
 
 StarRocks supports real-time data synchronization from MySQL within seconds, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.

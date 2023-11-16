@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data using INSERT
 
 This topic describes how to load data into StarRocks by using a SQL statement - INSERT.

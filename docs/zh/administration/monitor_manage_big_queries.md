@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 监控管理大查询
 
 本文介绍如何监控和管理 StarRocks 集群中的大查询。

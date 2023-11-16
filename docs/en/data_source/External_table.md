@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # (To be deprecated) External table
 
 :::note

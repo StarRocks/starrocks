@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Hudi catalog
 
 Hudi Catalog 是一种 External Catalog。通过 Hudi Catalog，您不需要执行数据导入就可以直接查询 Apache Hudi 里的数据。
