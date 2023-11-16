@@ -35,19 +35,10 @@ show databases;
 ```
 
 Information_schema 的表结构类似 MySQL，但是部分统计信息还不完善，当前推荐通过 `desc tablename` 等命令来获取数据库元数据信息。
-<br/>
 
 ## 建表
 
-<<<<<<< HEAD
 StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，分别适用于不同的应用场景，以 明细表 为例书写建表语句：
-=======
-在新建的数据库中创建表。
-
-StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/Data_model.md#明细模型) 编写建表语句。
-
-更多建表语法，参考 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
->>>>>>> f05ef5645 ([Doc] fix links in Branch 2.3 (#35196))
 
 ```sql
 use example_db;
@@ -97,11 +88,7 @@ StarRocks 表内部组织存储数据时会按照指定列排序，这些列为�
 
 #### 字段类型
 
-<<<<<<< HEAD
 StarRocks 表中支持多种字段类型，除 demo 中已经列举的字段类型，还支持 [BITMAP 类型](../using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[Array 类型](../using_starrocks/Array.md)，字段类型介绍详见 数据类型章节。
-=======
-StarRocks 表中支持多种字段类型，除以上示例中已经列举的字段类型，还支持 [BITMAP 类型](../using_starrocks/Using_bitmap.md)，[HLL 类型](../using_starrocks/Using_HLL.md)，[ARRAY 类型](../sql-reference/sql-statements/data-types/Array.md)，字段类型介绍详见 [数据类型章节](../sql-reference/sql-statements/data-types/BIGINT.md)。
->>>>>>> f05ef5645 ([Doc] fix links in Branch 2.3 (#35196))
 
 建表时尽量使用精确的类型。例如整形就不要用字符串类型，INT 类型满足则不要使用 BIGINT，精确的数据类型能够更好的发挥数据库的性能。
 
@@ -133,11 +120,7 @@ StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [
 
 表创建成功后即可进行[数据导入查询](../quick_start/Import_and_query.md)。
 
-<<<<<<< HEAD
 StarRocks支持[用户创建授权](../sql-reference/sql-statements/account-management/GRANT.md)及多种[DDL操作](../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md)，此处仅简单介绍部分Schema Change 操作和如何创建用户并授权。
-=======
-您可以通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
->>>>>>> f05ef5645 ([Doc] fix links in Branch 2.3 (#35196))
 
 ### Schema 修改
 
