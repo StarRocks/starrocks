@@ -302,10 +302,27 @@ public class CatalogUtils {
         }
     }
 
+<<<<<<< HEAD
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
         
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+=======
+    public static int calPhysicalPartitionBucketNum() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.isSharedDataMode()) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+        }
+
+        return Math.min(backendNum, 16);
+    }
+
+    public static int calBucketNumAccordingToBackends() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+
+        if (RunMode.isSharedDataMode()) {
+>>>>>>> 1ace19da5a ([Refactor] encapsulation new method to distinguish shared_data and shared_nothing mode (#35169))
             backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
 

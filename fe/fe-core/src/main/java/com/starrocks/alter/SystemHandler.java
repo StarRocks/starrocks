@@ -248,6 +248,14 @@ public class SystemHandler extends AlterHandler {
             return decommissionBackends;
         }
 
+<<<<<<< HEAD
+=======
+        // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
+        if (RunMode.isSharedDataMode()) {
+            return decommissionBackends;
+        }
+
+>>>>>>> 1ace19da5a ([Refactor] encapsulation new method to distinguish shared_data and shared_nothing mode (#35169))
         if (infoService.getClusterAvailableCapacityB() - releaseCapacity < needCapacity) {
             decommissionBackends.clear();
             throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");

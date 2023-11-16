@@ -92,6 +92,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+<<<<<<< HEAD
+=======
+            if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
+                // batch publish
+                List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
+                        getReadyPublishTransactionsBatch();
+                if (readyTransactionStatesBatch.size() != 0) {
+                    publishVersionForLakeTableBatch(readyTransactionStatesBatch);
+                }
+                return;
+
+            }
+
+>>>>>>> 1ace19da5a ([Refactor] encapsulation new method to distinguish shared_data and shared_nothing mode (#35169))
             List<TransactionState> readyTransactionStates =
                     globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
             if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
@@ -100,7 +114,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
             // TODO: need to refactor after be split into cn + dn
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
             }
 

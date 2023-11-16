@@ -1120,7 +1120,12 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
+<<<<<<< HEAD
             if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+=======
+            if ((Config.enable_new_publish_mechanism || RunMode.isSharedDataMode()) &&
+                    transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+>>>>>>> 1ace19da5a ([Refactor] encapsulation new method to distinguish shared_data and shared_nothing mode (#35169))
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {
