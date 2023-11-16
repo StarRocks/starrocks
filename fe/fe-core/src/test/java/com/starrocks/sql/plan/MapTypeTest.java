@@ -41,25 +41,6 @@ public class MapTypeTest extends PlanTestBase {
         String sql = "select map_concat(map{16865432442:3},map{3.323777777:'3'})";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "MAP<DECIMAL128(28,9),VARCHAR>");
-<<<<<<< HEAD
-=======
-
-        sql = "with t0 as (\n" +
-                "    select c1 from (values(map())) as t(c1)\n" +
-                ")\n" +
-                "select map_concat(map('a',1, 'b',2), c1)\n" +
-                "from t0;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "map_concat(map{'a':1,'b':2}, CAST(1: c1 AS MAP<VARCHAR,TINYINT>))");
-
-        sql = "with t0 as (\n" +
-                "    select c1 from (values(map())) as t(c1)\n" +
-                ")\n" +
-                "select map_concat(c1, map('a',1, 'b',2))\n" +
-                "from t0;";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "map_concat(CAST(1: c1 AS MAP<VARCHAR,TINYINT>), map{'a':1,'b':2})");
->>>>>>> 2406135476 ([BugFix] Fix text-based profile analysis not showing node id (#35184))
     }
 
     @Test
