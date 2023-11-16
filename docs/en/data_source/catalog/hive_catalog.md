@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Hive catalog
 
 A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion. Also, you can directly transform and load data from Hive by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs.

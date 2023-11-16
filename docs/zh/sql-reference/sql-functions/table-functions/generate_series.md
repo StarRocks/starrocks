@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # generate_series
 
 ## 功能

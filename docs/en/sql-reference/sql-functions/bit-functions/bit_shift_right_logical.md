@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # bit_shift_right
 
 ## Description

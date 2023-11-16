@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 数据湖相关 FAQ
 
 本文介绍数据湖相关的常见问题，并给出解决方案。文中介绍的很多指标，需要您通过 `set enable_profile=true` 设置来采集 SQL 查询的 Profile 并进行分析。

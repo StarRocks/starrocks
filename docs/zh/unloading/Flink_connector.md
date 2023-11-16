@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Flink Connector 读取数据
 
 StarRocks 提供自研的 Apache Flink® Connector (StarRocks Connector for Apache Flink®)，支持通过 Flink 批量读取某个 StarRocks 集群中的数据。

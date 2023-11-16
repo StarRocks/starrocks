@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Elasticsearch catalog
 
 StarRocks 自 3.1 版本起支持 Elasticsearch Catalog。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # EXPORT
 
 ## 功能
