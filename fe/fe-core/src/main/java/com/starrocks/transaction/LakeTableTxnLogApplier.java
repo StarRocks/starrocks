@@ -24,10 +24,13 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
+    private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
     // lake table or lake materialized view
     private final OlapTable table;
 
@@ -40,6 +43,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
             Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("apply commit log failed, partition is null, partition info: {}", partitionCommitInfo);
+                continue;
+            }
             partition.setNextVersion(partition.getNextVersion() + 1);
         }
     }
@@ -53,6 +60,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
+            if (partition == null) {
+                LOG.warn("apply commit log failed, partition is null, partition info: {}", partitionCommitInfo);
+                continue;
+            }
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
