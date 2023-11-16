@@ -404,8 +404,13 @@ public class DatabaseTransactionMgr {
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
+<<<<<<< HEAD
         if (!tabletCommitInfos.isEmpty()) {
             transactionState.setTabletCommitInfos(tabletCommitInfos);
+=======
+        if (transactionState.getWriteEndTimeMs() < 0) {
+            transactionState.setWriteEndTimeMs(System.currentTimeMillis());
+>>>>>>> e607877b14 ([BugFix] Fix version not found when transactional stream load and clone run concurrently (#35115))
         }
 
         // update transaction state extra if exists
