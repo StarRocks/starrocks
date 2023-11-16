@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # now, current_timestamp, localtime, localtimestamp
 
 ## 功能

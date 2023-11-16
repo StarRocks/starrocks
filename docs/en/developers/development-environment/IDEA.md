@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Setup StarRocks FE development environment on IDEA
 
 This tutorial is based on macOS and has been tested on Apple Chip(M1, M2).

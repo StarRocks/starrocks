@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Hex
 
 Hex 支持对 StarRocks 中的内部数据和外部数据进行查询和可视化处理。

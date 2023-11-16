@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Information Schema
 
 `information_schema` 是 StarRocks 实例中的一个数据库。该数据库包含数张由系统定义的表，这些表中存储了关于 StarRocks 实例中所有对象的大量元数据信息。

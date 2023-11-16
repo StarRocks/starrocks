@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # seconds_add
 
 ## 功能

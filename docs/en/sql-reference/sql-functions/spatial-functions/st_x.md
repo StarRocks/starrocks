@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ST_X
 
 ## Description
