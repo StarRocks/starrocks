@@ -26,7 +26,11 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
+<<<<<<< HEAD
 import com.starrocks.qe.QueryQueueManager;
+=======
+import com.starrocks.qe.SessionVariable;
+>>>>>>> eb806a11cf ([BugFix] Txn timeout too fast if not specify `timeout` in http header (#34544))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.system.Backend;
@@ -43,6 +47,13 @@ import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TListTableStatusResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TLoadTxnBeginRequest;
+import com.starrocks.thrift.TLoadTxnBeginResult;
+import com.starrocks.thrift.TLoadTxnCommitRequest;
+import com.starrocks.thrift.TLoadTxnCommitResult;
+>>>>>>> eb806a11cf ([BugFix] Txn timeout too fast if not specify `timeout` in http header (#34544))
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -298,6 +309,27 @@ public class FrontendServiceImplTest {
 
         partition = impl.createPartition(request);
         Assert.assertEquals(1, partition.partitions.size());
+    }
+
+    @Test
+    public void testLoadTxnBegin() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label");
+        request.setDb("test");
+        request.setTbl("site_access_auto");
+        request.setUser("root");
+        request.setPasswd("");
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public boolean isEnableLoadProfile() {
+                return true;
+            }
+        };
+
+        TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+        Assert.assertEquals(result.getStatus().getStatus_code(), TStatusCode.OK);
     }
 
     @Test

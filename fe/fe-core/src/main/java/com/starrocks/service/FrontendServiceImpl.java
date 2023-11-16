@@ -1203,6 +1203,30 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // begin
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+<<<<<<< HEAD
+=======
+
+        // just use default value of session variable
+        // as there is no connectContext for sync stream load
+        ConnectContext connectContext = new ConnectContext();
+        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
+            TransactionResult resp = new TransactionResult();
+            StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond * 1000, resp, false);
+            if (!resp.stateOK()) {
+                LOG.warn(resp.msg);
+                throw new UserException(resp.msg);
+            }
+
+            StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
+            // this should't open
+            if (task == null || task.getTxnId() == -1) {
+                throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+            }
+            return task.getTxnId();
+        }
+
+>>>>>>> eb806a11cf ([BugFix] Txn timeout too fast if not specify `timeout` in http header (#34544))
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
