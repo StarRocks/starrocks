@@ -300,7 +300,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private static <K, V> V get(LoadingCache<K, V> cache, K key) {
         try {
             return cache.get(key);
-        } catch (ExecutionException e) {
+        } catch (Exception e) {
             return null;
         }
     }
