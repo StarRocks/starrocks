@@ -72,34 +72,34 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
                 + "last_visit_date DATETIME REPLACE DEFAULT '1970-01-01 00:00:00',\n" + "cost BIGINT SUM DEFAULT '0',\n"
                 + "max_dwell_time INT MAX DEFAULT '0',\n" + "min_dwell_time INT MIN DEFAULT '99999')\n"
                 + "AGGREGATE KEY(user_id, date, city, age, sex)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'light_schema_change' = 'true');";
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
         createTable(createAggTblStmtStr);
 
         String createUniqTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_uniq (\n" + "user_id LARGEINT NOT NULL,\n"
                 + "username VARCHAR(50) NOT NULL,\n" + "city VARCHAR(20),\n" + "age SMALLINT,\n" + "sex TINYINT,\n"
                 + "phone LARGEINT,\n" + "address VARCHAR(500),\n" + "register_time DATETIME)\n"
                 + "UNIQUE  KEY(user_id, username)\n" + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'light_schema_change' = 'true');";
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
         createTable(createUniqTblStmtStr);
 
         String createDupTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup (\n" + "timestamp DATETIME,\n"
                 + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
                 + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'light_schema_change' = 'true');";
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createDupTblStmtStr);
 
         String createDupTbl2StmtStr = "CREATE TABLE IF NOT EXISTS test.sc_dup2 (\n" + "timestamp DATETIME,\n"
                 + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
                 + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'light_schema_change' = 'true');";
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createDupTbl2StmtStr);
 
         String createPKTblStmtStr = "CREATE TABLE IF NOT EXISTS test.sc_pk (\n" + "timestamp DATETIME,\n"
                 + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
                 + "op_time DATETIME)\n" + "PRIMARY  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'light_schema_change' = 'true');";
+                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
 
         createTable(createPKTblStmtStr);
 
@@ -378,13 +378,13 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 100, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 100, 100, false));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
         Assertions.assertDoesNotThrow(
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 101, true));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 101, 101, true));
         jobSize++;
         Assertions.assertEquals(jobSize, alterJobs.size());
 
@@ -392,7 +392,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         tbl.setState(OlapTableState.ROLLUP);
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 102, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMap, newIndexes, 102, 102, false));
         tbl.setState(beforeState);
 
         Map<Long, LinkedList<Column>> indexSchemaMapInvalid2 = new HashMap<>(indexSchemaMap);
@@ -402,7 +402,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid2, newIndexes, 103, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid2, newIndexes, 103, 103, false));
 
         Map<Long, LinkedList<Column>> indexSchemaMapInvalid3 = new HashMap<>(indexSchemaMap);
 
@@ -410,13 +410,13 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         indexSchemaMapInvalid3.get(tbl.getBaseIndexId()).removeIf(Column::isKey);
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid3, newIndexes, 104, false));
+                        .modifyTableAddOrDropColumns(db, tbl, indexSchemaMapInvalid3, newIndexes, 104, 104, false));
 
         Map<Long, LinkedList<Column>> emptyIndexMap = new HashMap<>();
 
         Assertions.assertThrows(DdlException.class,
                 () -> ((SchemaChangeHandler) GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler())
-                        .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 105, false));
+                        .modifyTableAddOrDropColumns(db, tbl, emptyIndexMap, newIndexes, 105, 105, false));
 
     }
 

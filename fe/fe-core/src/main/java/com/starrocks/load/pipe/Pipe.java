@@ -17,6 +17,7 @@ package com.starrocks.load.pipe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -28,6 +29,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -98,7 +100,7 @@ public class Pipe implements GsonPostProcessable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
     @SerializedName(value = "createdTime")
-    private long createdTime = -1;
+    private long createdTime;
     @SerializedName(value = "load_status")
     private LoadStatus loadStatus = new LoadStatus();
     @SerializedName(value = "task_execution_variables")
@@ -120,7 +122,7 @@ public class Pipe implements GsonPostProcessable {
         this.state = State.RUNNING;
         this.pipeSource = sourceTable;
         this.originSql = originSql;
-        this.createdTime = System.currentTimeMillis();
+        this.createdTime = TimeUtils.getEpochSeconds();
         this.properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables.putAll(DEFAULT_TASK_EXECUTION_VARIABLES);
@@ -496,16 +498,26 @@ public class Pipe implements GsonPostProcessable {
             if (this.state == State.RUNNING) {
                 this.state = State.SUSPEND;
 
+                List<PipeFileRecord> loadingFiles = Lists.newArrayList();
                 for (PipeTaskDesc task : runningTasks.values()) {
-                    task.interrupt();
+                    if (task.isTaskRunning()) {
+                        task.interrupt();
+                        loadingFiles.addAll(task.getPiece().getFiles());
+                    }
                 }
                 LOG.info("suspend pipe " + this);
 
                 if (!runningTasks.isEmpty()) {
-                    runningTasks.clear();
                     LOG.info("suspend pipe {} and clear running tasks {}", this, runningTasks);
+                    runningTasks.clear();
                 }
                 loadStatus.loadingFiles = 0;
+
+                // Change LOADING files to UNLOADED
+                if (CollectionUtils.isNotEmpty(loadingFiles)) {
+                    FileListRepo repo = getPipeSource().getFileListRepo();
+                    repo.updateFileState(loadingFiles, FileListRepo.PipeFileState.UNLOADED, null);
+                }
             }
         } finally {
             lock.writeLock().unlock();
@@ -612,6 +624,9 @@ public class Pipe implements GsonPostProcessable {
         return lastErrorInfo;
     }
 
+    /**
+     * Unix timestamp in seconds
+     */
     public long getCreatedTime() {
         return createdTime;
     }

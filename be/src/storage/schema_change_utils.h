@@ -99,7 +99,7 @@ public:
     void set_query_slots(DescriptorTbl* desc_tbl) {
         std::vector<TupleDescriptor*> tuples;
         desc_tbl->get_tuple_descs(&tuples);
-        DCHECK_EQ(0, tuples.size());
+        DCHECK_LE(0, tuples.size());
         _query_slots = tuples[0]->slots();
     }
 

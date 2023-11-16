@@ -315,6 +315,15 @@ public class OlapTable extends Table {
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.keysType = this.keysType;
+        if (this.relatedMaterializedViews != null) {
+            olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
+        }
+        if (this.uniqueConstraints != null) {
+            olapTable.uniqueConstraints = Lists.newArrayList(this.uniqueConstraints);
+        }
+        if (this.foreignKeyConstraints != null) {
+            olapTable.foreignKeyConstraints = Lists.newArrayList(this.foreignKeyConstraints);
+        }
         if (this.partitionInfo != null) {
             olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
@@ -2692,21 +2701,21 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
-    public Boolean getUseLightSchemaChange() {
+    public Boolean getUseFastSchemaEvolution() {
         if (tableProperty != null) {
-            return tableProperty.getUseSchemaLightChange();
+            return tableProperty.getUseFastSchemaEvolution();
         }
         // property is set false by default
         return false;
     }
 
-    public void setUseLightSchemaChange(boolean useLightSchemaChange) {
+    public void setUseFastSchemaEvolution(boolean useFastSchemaEvolution) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE,
-                Boolean.valueOf(useLightSchemaChange).toString());
-        tableProperty.buildUseLightSchemaChange();
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION,
+                Boolean.valueOf(useFastSchemaEvolution).toString());
+        tableProperty.buildUseFastSchemaEvolution();
     }
 
 

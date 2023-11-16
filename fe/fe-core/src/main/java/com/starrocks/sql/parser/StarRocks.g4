@@ -952,11 +952,11 @@ modifyCommentClause
     ;
 
 optimizeClause
-    : keyDesc?
+    : partitionNames?
+      keyDesc?
       partitionDesc?
       orderByDesc?
       distributionDesc?
-      partitionNames?
      ;
 
 addColumnClause

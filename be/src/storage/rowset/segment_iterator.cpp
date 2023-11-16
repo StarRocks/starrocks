@@ -264,9 +264,8 @@ private:
 
     void _update_stats(RandomAccessFile* rfile);
 
-    //  This function will search and build the segment from delta column group,
-    // and also return the columns's index in this segment if need.
-    StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid, int32_t* col_index);
+    //  This function will search and build the segment from delta column group.
+    StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid);
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
@@ -455,7 +454,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
-StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid, int32_t* col_index) {
+StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
     // iterate dcg from new ver to old ver
     for (const auto& dcg : _dcgs) {
         // cols file index -> column index in corresponding file
@@ -465,39 +464,6 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
             if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
-            }
-            if (col_index != nullptr) {
-                /*
-                    If the number of cols file columns is less than corresponding dcg meta column_ids vector
-                    size, it means that drop column has been done. We should assign col_index more carefully.
-                    The column offset is not the offset in dcg column_ids vector but it should be the column
-                    offset of the loaded cols file.
-                */
-                DCHECK(_dcg_segments[column_file]->num_columns() <= dcg->column_ids()[idx.first].size());
-                if (_dcg_segments[column_file]->num_columns() < dcg->column_ids()[idx.first].size()) {
-                    auto new_schema = std::make_shared<TabletSchema>();
-                    if (_opts.tablet_schema != nullptr) {
-                        new_schema = TabletSchema::create_with_uid(_opts.tablet_schema, dcg->column_ids()[idx.first]);
-                    } else {
-                        new_schema = TabletSchema::create_with_uid(_segment->tablet_schema_share_ptr(),
-                                                                   dcg->column_ids()[idx.first]);
-                    }
-
-                    *col_index = INT32_MIN;
-                    for (int i = 0; i < new_schema->columns().size(); ++i) {
-                        const auto& col = new_schema->column(i);
-                        if (col.unique_id() == dcg->column_ids()[idx.first][idx.second]) {
-                            *col_index = i;
-                            break;
-                        }
-                    }
-                    if (*col_index == INT32_MIN) {
-                        return Status::InternalError("Can not find suitable column in cols file, filename: " +
-                                                     _dcg_segments[column_file]->file_name());
-                    }
-                } else {
-                    *col_index = idx.second;
-                }
             }
             return _dcg_segments[column_file];
         }
@@ -510,13 +476,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
                                                                                     std::string* filename,
                                                                                     ColumnAccessPath* path) {
     // build column iter from delta column group
-    int32_t col_index = 0;
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid, &col_index));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
-        return dcg_segment->new_column_iterator(col_index, path);
+        return dcg_segment->new_column_iterator(ucid, path);
     }
     return nullptr;
 }
@@ -560,7 +525,9 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
-        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid, access_path, _opts.tablet_schema));
+        auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+        const auto& col = tablet_schema->column(cid);
+        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
         iter_opts.read_file = rfile.get();
         _column_files[cid] = std::move(rfile);
@@ -1699,12 +1666,10 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
         if (_bitmap_index_iterators[cid] == nullptr) {
             ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
-            int32_t col_index = 0;
-            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid, &col_index));
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
             if (segment_ptr == nullptr) {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
-                col_index = cid;
             }
 
             IndexReadOptions opts;
@@ -1714,8 +1679,7 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
 
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, opts, &_bitmap_index_iterators[cid],
-                                                                   _opts.tablet_schema));
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &_bitmap_index_iterators[cid]));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }

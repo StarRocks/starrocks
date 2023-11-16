@@ -85,10 +85,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |    \n" +
                 "  18:UNION\n" +
                 "  |  output exprs:\n" +
-                "  |      [391, INT, true] | [392, DECIMAL64(7,2), true]\n" +
+                "  |      [321, INT, true] | [322, DECIMAL64(7,2), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [325: ws_sold_date_sk, INT, true] | [346: ws_ext_sales_price, DECIMAL64(7,2), true]\n" +
-                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]\n" +
+                "  |      [255: ws_sold_date_sk, INT, true] | [276: ws_ext_sales_price, DECIMAL64(7,2), true]\n" +
+                "  |      [289: cs_sold_date_sk, INT, true] | [310: cs_ext_sales_price, DECIMAL64(7,2), true]\n" +
                 "  |  pass-through-operands: all\n" +
                 "  |  cardinality: 194398472\n" +
                 "  |  column statistics: \n" +
@@ -117,48 +117,18 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // Check the size of the left and right tables
         Assert.assertTrue(replayPair.second, replayPair.second.contains("51:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
+                "  |  other join predicates: cast([208: d_month_seq, INT, true] as BIGINT) <= [291: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
                 "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
-                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
-                "  |  \n" +
-                "  |----50:EXCHANGE\n" +
-                "  |       distribution type: BROADCAST\n" +
-                "  |       cardinality: 1\n" +
-                "  |    \n" +
-                "  42:Project\n" +
-                "  |  output columns:\n" +
-                "  |  931 <-> [931: d_date_sk, INT, false]\n" +
-                "  |  934 <-> [934: d_month_seq, INT, true]\n" +
-                "  |  cardinality: 36525\n" +
-                "  |  column statistics: \n" +
-                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 36524.5] ESTIMATE\n" +
-                "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
-                "  |  \n" +
-                "  41:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) >= [987: expr, BIGINT, true]\n" +
-                "  |  cardinality: 36525\n" +
-                "  |  column statistics: \n" +
-                "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 36524.5] ESTIMATE\n" +
-                "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
-                "  |  * expr-->[1.0, 2401.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n" +
-                "  |  \n" +
-                "  |----40:EXCHANGE\n" +
-                "  |       distribution type: BROADCAST\n" +
-                "  |       cardinality: 1\n" +
-                "  |    \n" +
-                "  32:OlapScanNode\n" +
-                "     table: date_dim, rollup: date_dim"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("|----18:EXCHANGE\n" +
+                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----18:EXCHANGE\n" +
                 "  |       distribution type: SHUFFLE\n" +
-                "  |       partition exprs: [796: cs_bill_customer_sk, INT, true]\n" +
+                "  |       partition exprs: [70: cs_bill_customer_sk, INT, true]\n" +
                 "  |       cardinality: 6304\n" +
                 "  |    \n" +
-                "  2:OlapScanNode\n" +
-                "     table: customer, rollup: customer"));
+                "  2:OlapScanNode"));
     }
 
     @Test
@@ -174,12 +144,12 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "    RANDOM\n" +
                 "\n" +
                 "  40:Project\n" +
-                "  |  <slot 171> : 171: c_customer_sk\n" +
+                "  |  <slot 99> : 99: c_customer_sk\n" +
                 "  |  \n" +
                 "  39:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(190: sum AS DOUBLE) > CAST(0.5 * 262: max AS DOUBLE)"));
+                "  |  other join predicates: CAST(118: sum AS DOUBLE) > CAST(0.5 * 190: max AS DOUBLE)"));
     }
 
 
@@ -210,17 +180,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
-                "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
-                "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
-                "  |  output columns: 256, 258, 260, 266, 267, 269, 280\n" +
+                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
+                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
+                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
+                "  |  output columns: 1, 3, 5, 11, 12, 14, 25\n" +
                 "  |  cardinality: 37372757"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
-                "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
-                "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
-                "  |  other predicates: 365: wr_order_number IS NULL\n" +
-                "  |  output columns: 330, 332, 335, 348, 349, 351, 365\n" +
+                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
+                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
+                "  |  other predicates: 110: wr_order_number IS NULL\n" +
+                "  |  output columns: 75, 77, 80, 93, 94, 96, 110\n" +
                 "  |  cardinality: 7914602"));
     }
 
@@ -269,23 +239,22 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
         // checkout join order as hint
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 19:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 729: ss_sold_date_sk = 750: d_date_sk\n" +
+                "  |  equal join conjunct: 3: ss_sold_date_sk = 24: d_date_sk\n" +
                 "  |  \n" +
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: store_sales"));
+                "  0:OlapScanNode"));
     }
 
     @Test
     public void testTPCDS64() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds64"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 83:SELECT\n" +
-                "  |  predicates: 521: d_year = 1999"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  83:SELECT\n" +
+                "  |  predicates: 457: d_year = 1999"));
     }
 
     @Test
@@ -785,15 +754,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
         // tbl_mock_015
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 1, probe_expr = (37: mock_004)"));
+                "     - filter_id = 1, probe_expr = (1: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 3, probe_expr = (60: mock_004)"));
+                "     - filter_id = 3, probe_expr = (24: mock_004)"));
 
         // table: tbl_mock_001, rollup: tbl_mock_001
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 0, probe_expr = (37: mock_004)"));
+                "     - filter_id = 0, probe_expr = (1: mock_004)"));
         Assert.assertTrue(plan, plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 4, probe_expr = (60: mock_004)"));
+                "     - filter_id = 4, probe_expr = (24: mock_004)"));
 
     }
 
@@ -805,8 +774,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 109: mock_007 = 46: mock_007\n" +
-                "  |  equal join conjunct: 153: any_value = 86: mock_008\n" +
+                "  |  equal join conjunct: 64: mock_007 = 1: mock_007\n" +
+                "  |  equal join conjunct: 108: any_value = 41: mock_008\n" +
                 "  |  \n" +
                 "  |----3:OlapScanNode\n" +
                 "  |       TABLE: tbl_mock_024"));

@@ -461,6 +461,10 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             LOG(WARNING) << alter_msg_header() + err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
+        // Since mv supports where expression, new_chunk may be empty after where expression evalutions.
+        if (new_chunk->num_rows() == 0) {
+            continue;
+        }
 
         if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
             LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
@@ -559,6 +563,10 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
                                                       base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
+        }
+        // Since mv supports where expression, new_chunk may be empty after where expression evalutions.
+        if (new_chunk->num_rows() == 0) {
+            continue;
         }
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());

@@ -162,6 +162,10 @@ public class DateLiteral extends LiteralExpr {
         return new DateLiteral(type, false);
     }
 
+    public static DateLiteral createMaxValue(Type type) {
+        return new DateLiteral(type, true);
+    }
+
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());

@@ -34,10 +34,12 @@
 
 package com.starrocks.leader;
 
+import com.sleepycat.je.config.EnvironmentParams;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,6 +52,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -162,6 +165,14 @@ public class MetaHelper {
                 LOG.error("meta dir {} does not exist", meta.getAbsolutePath());
                 throw new InvalidMetaDirException();
             }
+        }
+
+        long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());
+        FileStore store = Files.getFileStore(Paths.get(Config.meta_dir));
+        if (store.getUsableSpace() < lowerFreeDiskSize) {
+            LOG.error("Free capacity left for meta dir: {} is less than {}",
+                    Config.meta_dir, new ByteSizeValue(lowerFreeDiskSize));
+            throw new InvalidMetaDirException();
         }
 
         Path imageDir = Paths.get(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);

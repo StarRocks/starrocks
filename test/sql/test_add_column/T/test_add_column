@@ -1,5 +1,5 @@
 -- name: test_count_star_after_adding_column @sequential
-ADMIN SET FRONTEND CONFIG ("allow_default_light_schema_change"="false");
+ADMIN SET FRONTEND CONFIG ("enable_fast_schema_evolution"="false");
 
 create table t0(
     k1 INT,
@@ -27,4 +27,4 @@ select count(*) from t0;
 
 select * from t0 order by k1;
 
-ADMIN SET FRONTEND CONFIG ("allow_default_light_schema_change"="true");
+ADMIN SET FRONTEND CONFIG ("enable_fast_schema_evolution"="true");

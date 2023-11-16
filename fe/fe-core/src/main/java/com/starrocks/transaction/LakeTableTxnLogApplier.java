@@ -24,10 +24,13 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
+    private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
     // lake table or lake materialized view
     private final OlapTable table;
 
@@ -57,6 +60,7 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
             Preconditions.checkState(version == partition.getVisibleVersion() + 1);
+
             partition.updateVisibleVersion(version, versionTime);
 
             PartitionIdentifier partitionIdentifier =
@@ -66,7 +70,6 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
-
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
@@ -88,6 +91,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
             }
+        }
+    }
+
+    public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+        for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
+            applyVisibleLog(txnState, tableCommitInfo, db);
         }
     }
 }
