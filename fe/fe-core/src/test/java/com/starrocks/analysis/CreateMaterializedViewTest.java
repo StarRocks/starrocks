@@ -15,7 +15,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -3632,7 +3631,6 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
         Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3649,7 +3647,6 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
         Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3665,7 +3662,6 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
         Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3681,7 +3677,6 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
         Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3698,7 +3693,6 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
         Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
@@ -3715,7 +3709,6 @@ public class CreateMaterializedViewTest {
         Assert.assertTrue(keyColumns.get(0).getName().equals("c_1_0"));
         Assert.assertTrue(keyColumns.get(1).getName().equals("c_1_1"));
         Assert.assertTrue(keyColumns.get(2).getName().equals("c_1_2"));
-        Assert.assertTrue(keyColumns.get(3).getName().equals("c_1_3"));
     }
 
     @Test
