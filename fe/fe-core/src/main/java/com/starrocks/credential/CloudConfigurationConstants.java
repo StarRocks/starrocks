@@ -116,4 +116,7 @@ public class CloudConfigurationConstants {
     public static final String TENCENT_COS_ACCESS_KEY = "tencent.cos.access_key";
     public static final String TENCENT_COS_SECRET_KEY = "tencent.cos.secret_key";
     public static final String TENCENT_COS_ENDPOINT = "tencent.cos.endpoint";
+
+    public static final String ACCESS_ID = "access_id";
+    public static final String ACCESS_KEY = "access_key";
 }

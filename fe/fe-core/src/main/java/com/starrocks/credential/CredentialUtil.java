@@ -53,6 +53,9 @@ public class CredentialUtil {
 
         // Mask for iceberg rest catalog credential
         doMask(properties, IcebergRESTCatalog.KEY_CREDENTIAL_WITH_PREFIX);
+
+        doMask(properties, CloudConfigurationConstants.ACCESS_ID);
+        doMask(properties, CloudConfigurationConstants.ACCESS_KEY);
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {

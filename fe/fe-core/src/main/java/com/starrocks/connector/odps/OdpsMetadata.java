@@ -15,6 +15,7 @@
 package com.starrocks.connector.odps;
 
 import com.aliyun.odps.Odps;
+import com.aliyun.odps.OdpsException;
 import com.aliyun.odps.Partition;
 import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.table.TableIdentifier;
@@ -145,6 +146,11 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     private OdpsTable loadTable(OdpsTableName odpsTableName) {
         com.aliyun.odps.Table table = odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
+        try {
+            table.reload();
+        } catch (OdpsException e) {
+            return null;
+        }
         return new OdpsTable(catalogName, table);
     }
 
