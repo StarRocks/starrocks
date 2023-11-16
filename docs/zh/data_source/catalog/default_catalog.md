@@ -9,7 +9,7 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
 1. 连接 StarRocks。
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
-2. （可选）执行以下语句查看当前 StarRocks 集群中的所有数据库。关于返回值说明，请参见 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md)。
+2. （可选）执行以下语句查看当前 StarRocks 集群中的所有数据库。关于返回值说明，请参见 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md)。
 
     ```SQL
     SHOW DATABASES;
@@ -21,7 +21,7 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
     SHOW DATABASES FROM default_catalog;
     ```
 
-3. （可选）执行如下语句切换到指定数据库。有关参数说明和示例，请参见 [USE](/sql-reference/sql-statements/data-definition/USE.md)。
+3. （可选）执行如下语句切换到指定数据库。有关参数说明和示例，请参见 [USE](../../sql-reference/sql-statements/data-definition/USE.md)。
 
     ```SQL
     USE db_name;
@@ -33,7 +33,7 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
     USE default_catalog.db_name;
     ```
 
-4. 查询内部数据。更多 SELECT 的使用方法，请参见 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
+4. 查询内部数据。更多 SELECT 的使用方法，请参见 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
     ```SQL
     SELECT * FROM table_name;
@@ -74,4 +74,4 @@ SELECT * FROM default_catalog.olap_db.olap_table limit 1;
 
 ## 更多操作
 
-如要查询外部数据，请参见[查询外部数据](/data_source/catalog/query_external_data.md)。
+如要查询外部数据，请参见[查询外部数据](./query_external_data.md)。
