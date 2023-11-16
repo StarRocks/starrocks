@@ -69,7 +69,6 @@ const config = {
           // By default Docusaurus shows an "unsupported" banner, but we support multiple
           // versions, so the banner is set to none on the versions other than latest (latest
           // doesn't get a banner by default).
-          disableVersioning: isVersioningDisabled,
           lastVersion: (() => {
               if (isVersioningDisabled) {
                 return 'current';

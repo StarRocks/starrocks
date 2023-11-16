@@ -3,6 +3,7 @@
 
 # Production
 /build
+/docs
 **/versioned_docs/**
 **/docusaurus-plugin-content-docs/**
 i18n/zh/docusaurus-plugin-content-docs-releasenotes/current/*.md
