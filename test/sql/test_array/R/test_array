@@ -144,50 +144,54 @@ select c2 <=> c3 from array_data_type;
 -- !result
 select c2 = c3 from array_data_type;
 -- result:
-None
-None
-1
-None
+13336
 -- !result
-select c3 = c4 from array_data_type;
+-- name: testEmptyArray
+with t0 as (
+    select c1 from (values([])) as t(c1)
+)
+select 
+array_concat(c1, [1])
+from t0;
 -- result:
-None
-1
-1
-None
+[1]
 -- !result
-select c4 = c5 from array_data_type;
+with t0 as (
+    select c1 from (values([])) as t(c1)
+)
+select 
+array_concat([1], c1)
+from t0;
 -- result:
-1
-1
-1
-1
+[1]
 -- !result
-insert into array_data_type (c1, c2, c3, c4,c5) values 
-    (5,[22, 11, 33],[22, 11, 33],[22, 11, 44],[22, 11, 33]);
+select array_concat(c1, [[]])
+from (select c1 from (values([])) as t(c1)) t;
 -- result:
+[[]]
 -- !result
-select c4 = c5 from array_data_type;
+select array_concat(c1, [[1]])
+from (select c1 from (values([])) as t(c1)) t;
 -- result:
-1
-1
-1
-1
-0
+[[1]]
 -- !result
-select c4 > c5 from array_data_type;
+select array_concat(c1, [[1]])
+from (select c1 from (values([[]])) as t(c1)) t;
 -- result:
-0
-0
-0
-0
-1
+[[],[1]]
 -- !result
-select * from (select array_map(x -> x*2 + x*2, [1,3]) col1) t1 join (select array_map(x -> x*2 + x*2, c3) col2 from  array_data_type) t2;
+select array_concat(c1, [map{'a':1}])
+from (select c1 from (values([map()])) as t(c1)) t;
 -- result:
-[4,12]	None
-[4,12]	[88,44,132]
-[4,12]	None
-[4,12]	[88,44,132]
-[4,12]	[88,44,132]
+[{},{"a":1}]
+-- !result
+select array_concat(c1, [map{'a':1}])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[{"a":1}]
+-- !result
+select array_concat(c1, [named_struct('a', 1, 'b', 2, 'c', 3)])
+from (select c1 from (values([])) as t(c1)) t;
+-- result:
+[{"a":1,"b":2,"c":3}]
 -- !result
