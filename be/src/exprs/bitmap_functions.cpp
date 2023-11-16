@@ -611,6 +611,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_subset_limit(FunctionContext* contex
         auto range_start = range_start_viewer.value(row);
         auto limit = limit_viewer.value(row);
 
+        // TODO: the result of bitmap_subset_limit(bitmap, -1, -1) maybe invalid
         if (range_start < 0) {
             range_start = 0;
         }

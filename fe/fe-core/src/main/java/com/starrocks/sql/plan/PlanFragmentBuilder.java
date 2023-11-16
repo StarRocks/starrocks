@@ -739,7 +739,8 @@ public class PlanFragmentBuilder {
 
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
-                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap().get(physicalPartition.getId());
+                        List<Long> selectTabletIds = scanNode.getPartitionToScanTabletMap()
+                                .get(physicalPartition.getId());
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
                         List<Long> allTabletIds = selectedTable.getTabletIdsInOrder();
@@ -2796,7 +2797,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());

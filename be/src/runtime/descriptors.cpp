@@ -320,23 +320,9 @@ const std::string& HudiTableDescriptor::get_serde_lib() const {
 
 PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
-    _catalog_type = tdesc.paimonTable.catalog_type;
-    _metastore_uri = tdesc.paimonTable.metastore_uri;
-    _warehouse_path = tdesc.paimonTable.warehouse_path;
     _database_name = tdesc.dbName;
     _table_name = tdesc.tableName;
-}
-
-const std::string& PaimonTableDescriptor::get_catalog_type() const {
-    return _catalog_type;
-}
-
-const std::string& PaimonTableDescriptor::get_metastore_uri() const {
-    return _metastore_uri;
-}
-
-const std::string& PaimonTableDescriptor::get_warehouse_path() const {
-    return _warehouse_path;
+    _paimon_options = tdesc.paimonTable.paimon_options;
 }
 
 const std::string& PaimonTableDescriptor::get_database_name() const {
@@ -345,6 +331,10 @@ const std::string& PaimonTableDescriptor::get_database_name() const {
 
 const std::string& PaimonTableDescriptor::get_table_name() const {
     return _table_name;
+}
+
+const std::string& PaimonTableDescriptor::get_paimon_options() const {
+    return _paimon_options;
 }
 
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
