@@ -1941,6 +1941,10 @@ public class OlapTable extends Table {
      */
     public Partition replacePartition(Partition newPartition) {
         Partition oldPartition = nameToPartition.remove(newPartition.getName());
+        if (oldPartition == null) {
+            LOG.warn("replace partition failed, old partition: {} not exist", newPartition.getName());
+            return null;
+        }
 
         oldPartition.getSubPartitions().forEach(physicalPartition -> {
             physicalPartitionIdToPartitionId.remove(physicalPartition.getId());

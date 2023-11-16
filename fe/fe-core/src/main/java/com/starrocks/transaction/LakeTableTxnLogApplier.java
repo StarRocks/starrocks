@@ -43,6 +43,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("apply commit log failed, partition is null, partition info: {}", partitionCommitInfo);
+                continue;
+            }
             partition.setNextVersion(partition.getNextVersion() + 1);
         }
     }
@@ -56,6 +60,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             PhysicalPartition partition = table.getPhysicalPartition(partitionCommitInfo.getPartitionId());
+            if (partition == null) {
+                LOG.warn("apply commit log failed, partition is null, partition info: {}", partitionCommitInfo);
+                continue;
+            }
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();

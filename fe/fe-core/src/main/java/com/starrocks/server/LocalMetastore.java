@@ -4850,6 +4850,9 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Tablet> oldTablets = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
             Partition oldPartition = olapTable.replacePartition(newPartition);
+            if (oldPartition == null) {
+                continue;
+            }
             // save old tablets to be removed
             for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 // let HashSet do the deduplicate work
@@ -4888,6 +4891,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
                 for (Partition partition : info.getPartitions()) {
                     long partitionId = partition.getId();
+                    if (olapTable.getPartitionInfo().getDataProperty(partitionId) == null) {
+                        LOG.warn("replay truncate talbe failed, partitionId {} not exist, partition: {}", partitionId, partition);
+                        continue;
+                    }
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
                     for (MaterializedIndex mIndex : partition.getMaterializedIndices(
