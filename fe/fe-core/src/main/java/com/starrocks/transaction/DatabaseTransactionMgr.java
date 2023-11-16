@@ -1179,7 +1179,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if ((Config.enable_new_publish_mechanism || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) &&
+            if ((Config.enable_new_publish_mechanism || RunMode.isSharedDataMode()) &&
                     transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }

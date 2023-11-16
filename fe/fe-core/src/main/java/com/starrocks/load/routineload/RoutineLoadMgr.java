@@ -175,7 +175,7 @@ public class RoutineLoadMgr implements Writable {
         try {
             List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                     ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
