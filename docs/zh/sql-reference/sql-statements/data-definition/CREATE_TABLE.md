@@ -133,7 +133,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](/using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -414,7 +414,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     * 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     * 仅支持指定一列作为分区列。
 
-    更多信息，请参见[批量创建分区](/table_design/Data_distribution.md#range-分区)。
+    更多信息，请参见[批量创建分区](../../../table_design/Data_distribution.md#range-分区)。
 
     示例：
 
@@ -584,7 +584,7 @@ PROPERTIES (
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
+详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](../../../using_starrocks/Colocate_join.md) 章节。
 
 #### 设置动态分区
 
