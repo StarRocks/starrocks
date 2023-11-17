@@ -150,8 +150,29 @@ public class AstToSQLBuilder {
                         selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
                                 slot.getColumnName(), columnName));
                     } else {
+<<<<<<< HEAD
                         selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
                                 columnName));
+=======
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    }
+                }
+            } else {
+                for (SelectListItem item : stmt.getSelectList().getItems()) {
+                    if (item.isStar()) {
+                        if (item.getTblName() != null) {
+                            selectListString.add(item.getTblName() + ".*");
+                        } else {
+                            selectListString.add("*");
+                        }
+                    } else if (item.getExpr() != null) {
+                        Expr expr = item.getExpr();
+                        String str = visit(expr);
+                        if (StringUtils.isNotEmpty(item.getAlias())) {
+                            str += " AS " + ParseUtil.backquote(item.getAlias());
+                        }
+                        selectListString.add(str);
+>>>>>>> 2e61ec3e57 ([BugFix] distinguish function and its alias when ast to sql (#35105))
                     }
                 } else {
                     selectListString.add(
