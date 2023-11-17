@@ -1,7 +1,3 @@
----
-displayed_sidebar: "English"
----
-
 # Contribute to StarRocks
 
 Contributing to StarRocks is cordially welcome from everyone. Contributing to StarRocks is not limited to contributing code. Below, we list different approaches to contributing to our community.
