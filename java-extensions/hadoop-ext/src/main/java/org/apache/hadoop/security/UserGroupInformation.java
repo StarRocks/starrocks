@@ -70,7 +70,6 @@ import javax.security.auth.login.Configuration.Parameters;
 import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 import javax.security.auth.spi.LoginModule;
-import javax.ws.rs.HEAD;
 
 import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.classification.InterfaceAudience;
