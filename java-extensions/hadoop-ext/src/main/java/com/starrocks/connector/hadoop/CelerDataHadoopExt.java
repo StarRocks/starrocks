@@ -106,6 +106,10 @@ public class CelerDataHadoopExt extends HadoopExt {
     @Override
     public UserGroupInformation getHMSUGI(Configuration conf) {
         if (!isHMSKerberosEnabled(conf)) {
+            String user = conf.get(HadoopExt.HADOOP_USERNAME);
+            if (user != null && !user.isEmpty()) {
+                return globalUGIManager.getOrCreateRemoteUser(user);
+            }
             return null;
         }
         String keytab = getHMSKerberosKeytabFile(conf);
@@ -119,7 +123,7 @@ public class CelerDataHadoopExt extends HadoopExt {
             return null;
         }
         try {
-            return globalUGIManager.getOrCreate(keytab, principal);
+            return globalUGIManager.getOrCreateKerberosUser(keytab, principal);
         } catch (IOException e) {
             LOGGER.warn(LOGGER_MESSAGE_PREFIX + " create hms ugi failed", e);
         }
@@ -129,6 +133,10 @@ public class CelerDataHadoopExt extends HadoopExt {
     @Override
     public UserGroupInformation getHDFSUGI(Configuration conf) {
         if (!isHDFSKerberosEnabled(conf)) {
+            String user = conf.get(HadoopExt.HADOOP_USERNAME);
+            if (user != null && !user.isEmpty()) {
+                return globalUGIManager.getOrCreateRemoteUser(user);
+            }
             return null;
         }
         String keytab = getHDFSKerberosKeytabFile(conf);
@@ -142,7 +150,7 @@ public class CelerDataHadoopExt extends HadoopExt {
             return null;
         }
         try {
-            return globalUGIManager.getOrCreate(keytab, principal);
+            return globalUGIManager.getOrCreateKerberosUser(keytab, principal);
         } catch (IOException e) {
             LOGGER.warn(LOGGER_MESSAGE_PREFIX + " create hdfs ugi failed", e);
         }

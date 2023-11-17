@@ -97,11 +97,14 @@ public class CelerDataUGIManager {
         }
     }
 
-    private final ConcurrentHashMap<Key, Value> cache;
+    private final ConcurrentHashMap<Key, Value> kerberosUserCache;
+    private final ConcurrentHashMap<String, UserGroupInformation> remoteUserCache;
+
     private final ExecutorService executorService;
 
     public CelerDataUGIManager() {
-        cache = new ConcurrentHashMap<>();
+        kerberosUserCache = new ConcurrentHashMap<>();
+        remoteUserCache = new ConcurrentHashMap<>();
         executorService = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r);
             thread.setName(CelerDataUGIManager.class.getName());
@@ -112,7 +115,7 @@ public class CelerDataUGIManager {
         });
     }
 
-    private Value create(String keytab, String principal) throws IOException {
+    private Value createKerberosUser(String keytab, String principal) throws IOException {
         KerberosConfiguration.Builder builder = new KerberosConfiguration.Builder();
         builder.withKerberosPrincipal(principal).withKeytabLocation(keytab);
         KerberosConfiguration conf = builder.build();
@@ -128,16 +131,26 @@ public class CelerDataUGIManager {
         return new Value(ugi, subject, auth);
     }
 
-    public UserGroupInformation getOrCreate(String keytab, String principal) throws IOException {
+    public UserGroupInformation getOrCreateKerberosUser(String keytab, String principal) throws IOException {
         requireNonNull(keytab);
         requireNonNull(principal);
         Key k = new Key(keytab, principal);
-        Value v = cache.get(k);
+        Value v = kerberosUserCache.get(k);
         if (v == null) {
-            v = create(keytab, principal);
-            cache.putIfAbsent(k, v);
+            v = createKerberosUser(keytab, principal);
+            kerberosUserCache.putIfAbsent(k, v);
         }
         return v.ugi;
+    }
+
+    public UserGroupInformation getOrCreateRemoteUser(String user) {
+        requireNonNull(user);
+        UserGroupInformation v = remoteUserCache.get(user);
+        if (v == null) {
+            v = UserGroupInformation.createRemoteUser(user);
+            remoteUserCache.putIfAbsent(user, v);
+        }
+        return v;
     }
 
     public void runBackgroundJob() {
@@ -156,7 +169,7 @@ public class CelerDataUGIManager {
 
     public void refreshTickets() {
         LOGGER.debug(HadoopExt.LOGGER_MESSAGE_PREFIX + " refresh tickets");
-        cache.forEach((key, value) -> {
+        kerberosUserCache.forEach((key, value) -> {
             CachingKerberosAuthentication auth = value.auth;
             auth.reauthenticateIfSoonWillBeExpired();
         });
