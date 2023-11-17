@@ -97,7 +97,7 @@ Before you create an external table to query data from a database, you need to c
 Execute the following statement to create a JDBC resource named `jdbc0`:
 
 ~~~SQL
-CREATE EXTERNAL RESOUCE jdbc0
+CREATE EXTERNAL RESOURCE jdbc0
 PROPERTIES (
     "type"="jdbc",
     "user"="postgres",
