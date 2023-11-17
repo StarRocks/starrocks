@@ -412,6 +412,16 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         return dataSize;
     }
 
+    public long getMaxModificationTime() {
+        long maxModificationTime = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            long indexMaxModificationTime = mIndex.getMaxModificationTime();
+            maxModificationTime = maxModificationTime > indexMaxModificationTime ?
+                                    maxModificationTime : indexMaxModificationTime;
+        }
+        return maxModificationTime;
+    }
+
     public long getDataSize() {
         long dataSize = 0;
         for (PhysicalPartition subPartition : getSubPartitions()) {

@@ -307,6 +307,7 @@ public class TabletStatMgr extends FrontendDaemon {
                         LakeTablet lakeTablet = (LakeTablet) tablet;
                         lakeTablet.setRowCount(stat.numRows);
                         lakeTablet.setDataSize(stat.dataSize);
+                        lakeTablet.setMaxModificationTime(System.currentTimeMillis());
                         LOG.debug("update lake tablet info. tablet id: {}, num rows: {}, data size: {}", stat.tabletId,
                                 stat.numRows, stat.dataSize);
                     }

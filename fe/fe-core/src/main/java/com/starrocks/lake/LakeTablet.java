@@ -58,6 +58,8 @@ public class LakeTablet extends Tablet {
     private long dataSize = 0L;
     @SerializedName(value = JSON_KEY_ROW_COUNT)
     private long rowCount = 0L;
+    @SerializedName(value = "maxModificationTime")
+    private long maxModificationTime = 0L;
 
     public LakeTablet(long id) {
         super(id);
@@ -65,6 +67,15 @@ public class LakeTablet extends Tablet {
 
     public long getShardId() {
         return getId();
+    }
+
+    public void setMaxModificationTime(long maxModificationTime) {
+        this.maxModificationTime = maxModificationTime;
+    }
+
+    @Override
+    public long getMaxModificationTime() {
+        return maxModificationTime;
     }
 
     // singleReplica is not used

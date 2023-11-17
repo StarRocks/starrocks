@@ -1728,7 +1728,7 @@ public class ShowExecutor {
                     Pair<Double, String> tableSizePair = DebugUtil.getByteUint(tableSize);
                     String readableSize = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(tableSizePair.first) + " "
                             + tableSizePair.second;
-                    Instant instant = Instant.ofEpochMilli(olapTable.lastVersionUpdateEndTime.get());
+                    Instant instant = Instant.ofEpochMilli(olapTable.getLastModificationTime());
                     ZoneId zoneId = ZoneId.of(connectContext.sessionVariable.getTimeZone());
                     LocalDateTime localDateTime = instant.atZone(zoneId).toLocalDateTime();
                     String formattedDate = localDateTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS"));

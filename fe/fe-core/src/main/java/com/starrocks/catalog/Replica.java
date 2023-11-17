@@ -90,6 +90,8 @@ public class Replica implements Writable {
     // the version could be queried
     @SerializedName(value = "version")
     private volatile long version;
+    @SerializedName(value = "lastModificationTime")
+    private long lastModificationTime;
 
     // minimal readable version for this replica, the value is 0 at beginning and will change to larger values when:
     //   1. replica perform some version GC, and then tablet report from BE
@@ -459,6 +461,7 @@ public class Replica implements Writable {
 
         this.version = newVersion;
         this.dataSize = newDataSize;
+        this.lastModificationTime = System.currentTimeMillis();
         this.rowCount = newRowCount;
 
         // just check it
@@ -685,5 +688,13 @@ public class Replica implements Writable {
 
     public long getLastReportVersion() {
         return this.lastReportVersion;
+    }
+
+    public long getLastModificationTime() {
+        return lastModificationTime;
+    }
+
+    public void setLastModificationTime(long lastModificationTime) {
+        this.lastModificationTime = lastModificationTime;
     }
 }

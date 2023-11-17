@@ -225,6 +225,9 @@ public class OlapTable extends Table {
     @SerializedName(value = "maxColUniqueId")
     protected int maxColUniqueId = -1;
 
+    @SerializedName(value = "lastModificationTime")
+    protected long lastModificationTime = 0L;
+
     protected BinlogConfig curBinlogConfig;
 
     // After ensuring that all binlog config of tablets in BE have taken effect,
@@ -1990,6 +1993,16 @@ public class OlapTable extends Table {
             dataSize += partition.getDataSize();
         }
         return dataSize;
+    }
+
+    public long getLastModificationTime() {
+        long maxModificationTime = 0L;
+        for (Partition partition : getAllPartitions()) {
+            long partitionMaxModificationTime = partition.getMaxModificationTime();
+            maxModificationTime = maxModificationTime > partitionMaxModificationTime ?
+                    maxModificationTime : partitionMaxModificationTime;
+        }
+        return maxModificationTime;
     }
 
     public long getReplicaCount() {
