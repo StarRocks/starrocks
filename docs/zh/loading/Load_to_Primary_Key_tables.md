@@ -535,8 +535,8 @@ SELECT * FROM table3;
       format as "csv"
       (id, name)
   )
-  with broker
-  properties
+  WTIH BROKER
+  PROPERTIES
   (
       "partial_update" = "true"
   );

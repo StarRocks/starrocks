@@ -93,8 +93,8 @@ insert into external_t select * from other_table;
 例如目标数据库为 PostgreSQL，则可以执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源，用于访问 PostgreSQL：
 
 ~~~SQL
-create external resource jdbc0
-properties (
+CREATE EXTERNAL RESOUCE jdbc0
+PROPERTIES (
     "type" = "jdbc",
     "user" = "postgres",
     "password" = "changeme",
@@ -104,7 +104,7 @@ properties (
 );
 ~~~
 
-`properties` 的必填配置项：
+`PROPERTIES` 的必填配置项：
 
 * `type`：资源类型，固定取值为 `jdbc`。
 
@@ -183,17 +183,17 @@ USE jdbc_test;
 执行如下语句，在数据库 `jdbc_test` 中，创建一张名为 `jdbc_tbl` 的 JDBC 外部表：
 
 ~~~SQL
-create external table jdbc_tbl (
+CREATE EXTERNAL TABLE jdbc_tbl (
     `id` bigint NULL, 
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
-properties (
+PROPERTIES (
     "resource" = "jdbc0",
     "table" = "dest_tbl"
 );
 ~~~
 
-`properties` 配置项：
+`PROPERTIES` 配置项：
 
 * `resource`：所使用 JDBC 资源的名称，必填项。
 

@@ -390,7 +390,7 @@ RETURNS return_type
 ```SQL
 CREATE [GLOBAL] FUNCTION MY_UDF_JSON_GET(string, string) 
 RETURNS string
-properties (
+PROPERTIES (
     "symbol" = "com.starrocks.udf.sample.UDFJsonGet", 
     "type" = "StarrocksJar",
     "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
@@ -427,7 +427,7 @@ PROPERTIES 里的参数说明与 [创建 Scalar UDF](#创建-scalar-udf) 相同�
 ```SQL
 CREATE [GLOBAL] AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
 RETURNS Int
-properties 
+PROPERTIES 
 (
     "analytic" = "true",
     "symbol" = "com.starrocks.udf.sample.WindowSumInt", 
@@ -445,7 +445,7 @@ properties
 ```SQL
 CREATE [GLOBAL] TABLE FUNCTION MY_UDF_SPLIT(string)
 RETURNS string
-properties 
+PROPERTIES 
 (
     "symbol" = "com.starrocks.udf.sample.UDFSplit", 
     "type" = "StarrocksJar", 

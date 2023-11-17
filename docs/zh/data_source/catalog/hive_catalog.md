@@ -908,7 +908,7 @@ GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
+[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
 ```
 
 `location` 参数用于指定数据库所在的文件路径，支持 HDFS 和对象存储：
@@ -1002,9 +1002,9 @@ PARTITION BY (par_col1[, par_col2...])
 >
 > 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。而且，`partition_desc` 中声明的分区列的顺序必须与 `column_definition` 中定义的列的顺序一致。
 
-#### properties
+#### PROPERTIES
 
-可以在 `properties` 中通过 `"key" = "value"` 的形式声明 Hive 表的属性。
+可以在 `PROPERTIES` 中通过 `"key" = "value"` 的形式声明 Hive 表的属性。
 
 以下为常见的几个 Hive 表属性：
 
