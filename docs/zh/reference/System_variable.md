@@ -288,6 +288,10 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 是否对所有复合谓词以及 WHERE 子句中的表达式进行隐式转换。默认值：false。
 
+### ENABLE_WRITE_HIVE_EXTERNAL_TABLE（3.2 及以后）
+
+是否开启往 Hive 的 External Table 写数据的功能。默认值：`false`。
+
 ### event_scheduler
 
 用于兼容 MySQL 客户端。无实际作用。

@@ -299,6 +299,10 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * If this feature is disabled, only Local RF works.
 * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
 
+### ENABLE_WRITE_HIVE_EXTERNAL_TABLE (v3.2 and later)
+
+Whether to allow for sinking data to external tables of Hive. Default value: `false`.
+
 ### event_scheduler
 
 Used for MySQL client compatibility. No practical usage.
