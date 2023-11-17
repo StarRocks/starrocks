@@ -2052,23 +2052,23 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  6:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 11: v2, 13: max\n" +
-                    "  |  order by: 13: max ASC\n" +
+                    "  |  partition by: 2: v2, 4: max\n" +
+                    "  |  order by: 4: max ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  5:SORT\n" +
-                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
-                    "  |  partition by: 11: v2 , 13: max \n" +
+                    "  |  partition by: 2: v2 , 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: max(13: max)\n" +
-                    "  |  group by: 11: v2\n" +
+                    "  |  output: max(4: max)\n" +
+                    "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
 
@@ -2077,25 +2077,25 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "w2 as (select v2, max_v1, row_number() over(partition by v2, max_v1 order by max_v1) as rn from w1) " +
                     "select * from w2 order by rn, v2 limit 2";
             plan = getFragmentPlan(sql);
-            assertContains(plan, "6:ANALYTIC\n" +
+            assertContains(plan, "  6:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 11: v2, 13: max\n" +
-                    "  |  order by: 13: max ASC\n" +
+                    "  |  partition by: 2: v2, 4: max\n" +
+                    "  |  order by: 4: max ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  5:SORT\n" +
-                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
-                    "  |  partition by: 11: v2 , 13: max \n" +
+                    "  |  partition by: 2: v2 , 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: max(13: max)\n" +
-                    "  |  group by: 11: v2\n" +
+                    "  |  output: max(4: max)\n" +
+                    "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
         }
@@ -2109,19 +2109,19 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  7:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 13: max\n" +
-                    "  |  order by: 11: v2 ASC\n" +
+                    "  |  partition by: 4: max\n" +
+                    "  |  order by: 2: v2 ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  6:SORT\n" +
-                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
             assertContains(plan, "  4:PARTITION-TOP-N\n" +
-                    "  |  partition by: 13: max \n" +
+                    "  |  partition by: 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
 
             sql = "with " +
@@ -2131,19 +2131,19 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "  7:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 13: max\n" +
-                    "  |  order by: 11: v2 ASC\n" +
+                    "  |  partition by: 4: max\n" +
+                    "  |  order by: 2: v2 ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  6:SORT\n" +
-                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
             assertContains("  4:PARTITION-TOP-N\n" +
-                    "  |  partition by: 13: max \n" +
+                    "  |  partition by: 4: max \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
         }
 
@@ -2153,22 +2153,22 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "select * from w1 where rn = 2";
             plan = getFragmentPlan(sql);
             assertContains(plan, "  4:SELECT\n" +
-                    "  |  predicates: 8: row_number() = 2\n" +
+                    "  |  predicates: 4: row_number() = 2\n" +
                     "  |  \n" +
                     "  3:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 5: v1, 6: v2\n" +
-                    "  |  order by: 7: v3 ASC\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  order by: 3: v3 ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  2:SORT\n" +
-                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
-                    "  |  partition by: 5: v1 , 6: v2 \n" +
+                    "  |  partition by: 1: v1 , 2: v2 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -2177,24 +2177,24 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "select * from w1 order by rn, v1 limit 2";
             plan = getFragmentPlan(sql);
             assertContains(plan, "  4:TOP-N\n" +
-                    "  |  order by: <slot 8> 8: row_number() ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  order by: <slot 4> 4: row_number() ASC, <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  limit: 2\n" +
                     "  |  \n" +
                     "  3:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 5: v1, 6: v2\n" +
-                    "  |  order by: 7: v3 ASC\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  order by: 3: v3 ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  2:SORT\n" +
-                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
-                    "  |  partition by: 5: v1 , 6: v2 \n" +
+                    "  |  partition by: 1: v1 , 2: v2 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -2206,23 +2206,23 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "select * from w1 where rn = 2";
             plan = getFragmentPlan(sql);
             assertContains(plan, "  5:SELECT\n" +
-                    "  |  predicates: 8: row_number() = 2\n" +
+                    "  |  predicates: 4: row_number() = 2\n" +
                     "  |  \n" +
                     "  4:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 6: v2, 7: v3\n" +
-                    "  |  order by: 5: v1 ASC\n" +
+                    "  |  partition by: 2: v2, 3: v3\n" +
+                    "  |  order by: 1: v1 ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  3:SORT\n" +
-                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
-                    "  2:EXCHANGE\n");
+                    "  2:EXCHANGE");
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                    "  |  partition by: 6: v2 , 7: v3 \n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -2231,27 +2231,24 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "select * from w1 order by rn, v1 limit 2";
             plan = getFragmentPlan(sql);
             assertContains(plan, "  5:TOP-N\n" +
-                    "  |  order by: <slot 8> 8: row_number() ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  order by: <slot 4> 4: row_number() ASC, <slot 1> 1: v1 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  limit: 2\n" +
                     "  |  \n" +
                     "  4:ANALYTIC\n" +
                     "  |  functions: [, row_number(), ]\n" +
-                    "  |  partition by: 6: v2, 7: v3\n" +
-                    "  |  order by: 5: v1 ASC\n" +
+                    "  |  partition by: 2: v2, 3: v3\n" +
+                    "  |  order by: 1: v1 ASC\n" +
                     "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                     "  |  \n" +
                     "  3:SORT\n" +
-                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  \n");
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
-                    "  |  partition by: 6: v2 , 7: v3 \n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
                     "  |  partition limit: 2\n" +
-                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  \n" +
-                    "  0:OlapScanNode");
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
         }
     }
 
