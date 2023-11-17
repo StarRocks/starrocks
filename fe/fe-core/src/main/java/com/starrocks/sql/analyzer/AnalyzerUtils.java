@@ -578,8 +578,7 @@ public class AnalyzerUtils {
                 } else {
                     node.setTable(idMap.get(table.getId()));
                 }
-
-            } else if (node.getTable().isMaterializedView()) {
+            } else if (node.getTable().isOlapMaterializedView()) {
                 MaterializedView table = (MaterializedView) node.getTable();
                 if (!idMap.containsKey(table.getId())) {
                     olapTables.add(table);
@@ -591,8 +590,8 @@ public class AnalyzerUtils {
                 } else {
                     node.setTable(idMap.get(table.getId()));
                 }
-
             }
+            // TODO: support cloud native table and mv
             return null;
         }
     }
