@@ -78,7 +78,7 @@
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
-                    <excludes>org/apache/hadoop/fs/**</excludes>
+                    <excludes>org/apache/hadoop/**</excludes>
                 </configuration>
                 <executions>
                     <execution>
