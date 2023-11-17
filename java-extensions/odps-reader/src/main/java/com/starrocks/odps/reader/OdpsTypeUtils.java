@@ -170,8 +170,7 @@ public class OdpsTypeUtils {
         }
     }
 
-    public static Object getData(ArrowVectorAccessor dataAccessor, TypeInfo typeInfo, int rowId)
-            throws IOException {
+    public static Object getData(ArrowVectorAccessor dataAccessor, TypeInfo typeInfo, int rowId) {
         if (dataAccessor.isNullAt(rowId)) {
             return null;
         }
@@ -194,9 +193,12 @@ public class OdpsTypeUtils {
                 return ((ArrowDecimalAccessor) dataAccessor).getDecimal(rowId);
             case STRING:
             case VARCHAR:
-            case CHAR:
                 return new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId),
                         StandardCharsets.UTF_8);
+            // char type need to trim tail spaces
+            case CHAR:
+                return new String(((ArrowVarCharAccessor) dataAccessor).getBytes(rowId),
+                        StandardCharsets.UTF_8).replaceAll("\\s+$", "");
             case BINARY:
                 return new Binary(((ArrowVarBinaryAccessor) dataAccessor).getBinary(rowId));
             case DATE:
