@@ -161,10 +161,14 @@ public class AstToSQLBuilder {
                                     columnName));
                         }
                     } else {
+<<<<<<< HEAD
                         selectListString.add(
                                 expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
                                         visit(expr) + " AS `" + columnName + "`" :
                                         visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+=======
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
+>>>>>>> 2e61ec3e57 ([BugFix] distinguish function and its alias when ast to sql (#35105))
                     }
                 }
             } else {
