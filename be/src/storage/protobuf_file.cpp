@@ -122,17 +122,8 @@ Status ProtobufFile::load(::google::protobuf::Message* message, bool fill_cache)
     RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
     ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, _path));
-    ASSIGN_OR_RETURN(auto file_size, input_file->get_size());
-    TEST_SYNC_POINT_CALLBACK("ProtobufFile::load:get_size", &file_size);
-    if (UNLIKELY(file_size > std::numeric_limits<int>::max())) {
-        return Status::Corruption(fmt::format("protobuf file too large: {}", file_size));
-    }
-    std::string serialized_string;
-    raw::stl_string_resize_uninitialized(&serialized_string, file_size);
-    RETURN_IF_ERROR(input_file->read_at_fully(0, serialized_string.data(), file_size));
-    TEST_SYNC_POINT_CALLBACK("ProtobufFile::load:2", &serialized_string);
-    bool parsed = message->ParseFromArray(serialized_string.data(), static_cast<int>(file_size));
-    if (!parsed) {
+    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+    if (bool parsed = message->ParseFromString(serialized_string); !parsed) {
         return Status::Corruption(fmt::format("failed to parse protobuf file {}", _path));
     }
     return Status::OK();

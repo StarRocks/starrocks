@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include "util/raw_container.h"
+
 namespace starrocks::io {
 
 StatusOr<int64_t> SeekableInputStream::read_at(int64_t offset, void* data, int64_t count) {
@@ -34,5 +36,13 @@ Status SeekableInputStream::skip(int64_t count) {
 }
 
 void SeekableInputStream::set_size(int64_t count) {}
+
+StatusOr<std::string> SeekableInputStream::read_all() {
+    ASSIGN_OR_RETURN(auto size, get_size());
+    std::string ret;
+    raw::stl_string_resize_uninitialized(&ret, size);
+    RETURN_IF_ERROR(read_at_fully(0, ret.data(), ret.size()));
+    return std::move(ret);
+}
 
 } // namespace starrocks::io

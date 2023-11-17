@@ -87,4 +87,17 @@ void S3InputStream::set_size(int64_t value) {
     _size = value;
 }
 
+StatusOr<std::string> S3InputStream::read_all() {
+    Aws::S3::Model::GetObjectRequest request;
+    request.SetBucket(_bucket);
+    request.SetKey(_object);
+    Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
+    if (outcome.IsSuccess()) {
+        Aws::IOStream& body = outcome.GetResult().GetBody();
+        return std::string(std::istreambuf_iterator<char>(body), {});
+    } else {
+        return make_error_status(outcome.GetError());
+    }
+}
+
 } // namespace starrocks::io
