@@ -584,6 +584,7 @@ public class ExternalOlapTable extends OlapTable {
                 systemInfoService.addBackend(backend);
             } else {
                 backend.setId(backendMeta.getBackend_id());
+                backend.setHost(backendMeta.getHost());
                 backend.setBePort(backendMeta.getBe_port());
                 backend.setHttpPort(backendMeta.getHttp_port());
                 backend.setBrpcPort(backendMeta.getRpc_port());
