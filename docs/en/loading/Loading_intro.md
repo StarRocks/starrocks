@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Overview of data loading
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'

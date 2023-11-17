@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # BINARY/VARBINARY
 
 ## 描述

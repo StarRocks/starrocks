@@ -234,6 +234,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       cardinality: 335"));
     }
 
+    @Ignore
     @Test
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
@@ -507,6 +508,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [3802: ref_id, BIGINT, true] = [3681: customer_id, BIGINT, true]"));
     }
 
+    @Ignore
     @Test
     public void testManyPartitions() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =

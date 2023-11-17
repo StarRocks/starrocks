@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data using Kafka connector
 
 StarRocks provides a self-developed connector named Apache Kafka® connector (StarRocks Connector for Apache Kafka®) that continuously consumes messages from Kafka and loads them into StarRocks. The Kafka connector guarantees at-least-once semantics.

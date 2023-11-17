@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Hive catalog
 
 A Hive catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards. Within Hive catalogs, you can:
@@ -937,13 +941,13 @@ DROP DATABASE <database_name>
 
 ## Create a Hive table
 
-Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that Hive database. This feature is supported from v3.2 onwards.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a Hive database, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a managed table in that Hive database. This feature is supported from v3.2 onwards.
 
 > **NOTE**
 >
 > You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-[Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to create a Hive table in that database.
+[Switch to a Hive catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it), and then use the following syntax to create a Hive managed table in that database.
 
 ### Syntax
 
@@ -999,9 +1003,9 @@ The following table describes a few key properties.
 
 | **Property**      | **Description**                                              |
 | ----------------- | ------------------------------------------------------------ |
-| location          | The file path in which you want to create the Hive table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
-| file_format       | The file format of the Hive table. Only the Parquet format is supported. Default value: `parquet`. |
-| compression_codec | The compression algorithm used for the Hive table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
+| location          | The file path in which you want to create the managed table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Hive catalog. When you use AWS Glue as metadata service:<ul><li>If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs. </li><li>If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.</li></ul> |
+| file_format       | The file format of the managed table. Only the Parquet format is supported. Default value: `parquet`. |
+| compression_codec | The compression algorithm used for the managed table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. |
 
 ### Examples
 
@@ -1037,7 +1041,7 @@ The following table describes a few key properties.
 
 ## Sink data to a Hive table
 
-Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a Hive table, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to that Hive table (currently only Parquet-formatted Hive tables are supported). This feature is supported from v3.2 onwards.
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a Hive table (which can be a managed table or an external table), you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) statement to sink the data of a StarRocks table to that Hive table (currently only Parquet-formatted Hive tables are supported). This feature is supported from v3.2 onwards.
 
 > **NOTE**
 >

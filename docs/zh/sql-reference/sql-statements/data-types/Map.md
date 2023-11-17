@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # MAP
 
 ## 描述

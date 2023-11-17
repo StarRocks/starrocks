@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Function list
 
 StarRocks offers a rich set of functions to facilitate data queries and analysis. In addition to commonly used functions, StarRocks supports semi-structured functions such as ARRAY, JSON, MAP, and STRUCT functions. It also supports higher-order [Lambda functions](Lambda_expression.md). If these functions cannot meet your business requirements, you can use [Java UDF](JAVA_UDF.md) to compile functions.
