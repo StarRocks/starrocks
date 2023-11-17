@@ -395,6 +395,8 @@ public class GlobalTransactionMgrTest {
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -468,6 +470,8 @@ public class GlobalTransactionMgrTest {
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
