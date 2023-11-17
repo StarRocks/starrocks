@@ -85,9 +85,7 @@ public class AstToSQLBuilder {
                 res += ".";
             }
 
-            res +=  fieldName.startsWith("`") ?
-                    fieldName
-                    : '`' + fieldName + '`';
+            res += '`' + fieldName + '`';
             if (!fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
@@ -163,10 +161,7 @@ public class AstToSQLBuilder {
                                     columnName));
                         }
                     } else {
-                        selectListString.add(
-                                expr.getFn() == null || expr.getFn().getFunctionName().getDb() == null ?
-                                        visit(expr) + " AS `" + columnName.replace("`", "") + "`" :
-                                        visit(expr) + " AS `" + expr.getFn().getFunctionName().getFunction() + "`");
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
                     }
                 }
             } else {
