@@ -31,7 +31,14 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 ## 参数说明
 
-在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+### table_name
+
+要创建的表的名称。
+
+> **注意**
+>
+> - 不能直接创建以 [StarRocks 保留关键字](../keywords.md#保留关键字)命名的数据库、表或列。如需创建这样的表，必须使用反引号（`）括起表名。
+> - 不能直接创建以两个连续下划线 `__` 开头命名的表，因为此类表名被 StarRocks 保留用于特殊目的，创建这样的表可能导致未知行为。如需创建这样的表，必须将 FE 配置 `allow_system_reserved_names` 设置为 `true`。
 
 ### **column_definition**
 
