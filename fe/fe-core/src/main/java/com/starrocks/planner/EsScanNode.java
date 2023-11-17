@@ -183,13 +183,13 @@ public class EsScanNode extends ScanNode {
 
     public List<TScanRangeLocations> computeShardLocations(List<EsShardPartitions> selectedIndex) {
         int size = nodeList.size();
-        int beIndex = random.nextInt(size);
+        int nodeIndex = random.nextInt(size);
         List<TScanRangeLocations> result = Lists.newArrayList();
         for (EsShardPartitions indexState : selectedIndex) {
             for (List<EsShardRouting> shardRouting : indexState.getShardRoutings().values()) {
                 // get compute nodes
                 Set<ComputeNode> colocatedNodes = Sets.newHashSet();
-                int numBe = Math.min(3, size);
+                int numNode = Math.min(3, size);
                 List<TNetworkAddress> shardAllocations = new ArrayList<>();
                 for (EsShardRouting item : shardRouting) {
                     shardAllocations.add(EsTable.KEY_TRANSPORT_HTTP.equals(table.getTransport()) ? item.getHttpAddress() :
@@ -203,17 +203,19 @@ public class EsScanNode extends ScanNode {
                 boolean usingRandomNode = colocatedNodes.size() == 0;
                 List<ComputeNode> candidateNodeList = Lists.newArrayList();
                 if (usingRandomNode) {
-                    for (int i = 0; i < numBe; ++i) {
-                        candidateNodeList.add(nodeList.get(beIndex++ % size));
+                    for (int i = 0; i < numNode; ++i) {
+                        candidateNodeList.add(nodeList.get(nodeIndex++ % size));
                     }
                 } else {
                     candidateNodeList.addAll(colocatedNodes);
-                    Collections.shuffle(candidateNodeList);
+                    if (!candidateNodeList.isEmpty()) {
+                        Collections.shuffle(candidateNodeList);
+                    }
                 }
 
                 // Locations
                 TScanRangeLocations locations = new TScanRangeLocations();
-                for (int i = 0; i < numBe && i < candidateNodeList.size(); ++i) {
+                for (int i = 0; i < numNode && i < candidateNodeList.size(); ++i) {
                     TScanRangeLocation location = new TScanRangeLocation();
                     ComputeNode be = candidateNodeList.get(i);
                     location.setBackend_id(be.getId());
