@@ -275,7 +275,7 @@ PROPERTIES
 
     ~~~sql
     CREATE EXTERNAL RESOURCE hive0
-    properties
+   PROPERTIES
     ( 
         "type" = "hive",
         "hive.metastore.uris" = "thrift://0.0.0.0:8080"
@@ -293,7 +293,7 @@ PROPERTIES
         uuid varchar(100)
     )
     ENGINE=hive
-    properties
+    PROPERTIES
     ( 
         "resource" = "hive0",
         "database" = "tmp",
