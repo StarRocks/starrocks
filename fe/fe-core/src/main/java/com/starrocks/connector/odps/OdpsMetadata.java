@@ -25,6 +25,7 @@ import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplitAssigner;
+import com.aliyun.odps.utils.StringUtils;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -83,17 +84,28 @@ public class OdpsMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final EnvironmentSettings settings;
     private final AliyunCloudCredential aliyunCloudCredential;
+    private final OdpsProperties properties;
 
     private final LoadingCache<String, Set<String>> tableNamesCache;
     private final LoadingCache<OdpsTableName, OdpsTable> tableCache;
     private final LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
 
-    public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential) {
+    public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
+                        OdpsProperties properties) {
         this.odps = odps;
         this.catalogName = catalogName;
         this.aliyunCloudCredential = aliyunCloudCredential;
-        settings = EnvironmentSettings.newBuilder().withServiceEndpoint(odps.getEndpoint())
-                .withCredentials(Credentials.newBuilder().withAccount(odps.getAccount()).build()).build();
+        this.properties = properties;
+        EnvironmentSettings.Builder settingsBuilder =
+                EnvironmentSettings.newBuilder().withServiceEndpoint(odps.getEndpoint())
+                        .withCredentials(Credentials.newBuilder().withAccount(odps.getAccount()).build());
+        if (!StringUtils.isNullOrEmpty(properties.get(OdpsProperties.TUNNEL_ENDPOINT))) {
+            settingsBuilder.withTunnelEndpoint(properties.get(OdpsProperties.TUNNEL_ENDPOINT));
+        }
+        if (!StringUtils.isNullOrEmpty(properties.get(OdpsProperties.TUNNEL_QUOTA))) {
+            settingsBuilder.withQuotaName(properties.get(OdpsProperties.TUNNEL_QUOTA));
+        }
+        settings = settingsBuilder.build();
         Executor executor = MoreExecutors.newDirectExecutorService();
         // TODO: enable user set cache time
         tableNamesCache = newCacheBuilder(DEFAULT_EXPIRES_TIME, DEFAULT_REFRESH_TIME, DEFAULT_CACHE_SIZE)

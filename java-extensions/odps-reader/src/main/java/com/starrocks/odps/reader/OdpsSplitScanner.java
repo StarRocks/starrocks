@@ -52,6 +52,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
 
     private final String projectName;
     private final String tableName;
+    private final String endpoint;
     private final String sessionId;
     private final int splitIndex;
     private final String[] requiredFields;
@@ -71,6 +72,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
         this.requiredFields = params.get("required_fields").split(",");
         this.sessionId = params.get("session_id");
         this.splitIndex = Integer.parseInt(params.get("split_index"));
+        this.endpoint = params.get("endpoint");
         String serializedScan = params.get("read_session");
         try {
             this.scan = (TableBatchReadSession) deserialize(serializedScan);
@@ -79,6 +81,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
         Account account = new AliyunAccount(params.get("access_id"), params.get("access_key"));
         Odps odps = new Odps(account);
+        odps.setEndpoint(endpoint);
         TableSchema schema = odps.tables().get(projectName, tableName).getSchema();
         Map<String, Column> nameColumnMap = schema.getColumns().stream()
                 .collect(Collectors.toMap(Column::getName, o -> o));
@@ -92,10 +95,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
             nameIndexMap.put(requiredFields[i], i);
         }
         settings =
-                EnvironmentSettings.newBuilder().withServiceEndpoint(params.get("endpoint"))
+                EnvironmentSettings.newBuilder().withServiceEndpoint(endpoint)
                         .withCredentials(Credentials.newBuilder().withAccount(account).build()).build();
         this.classLoader = this.getClass().getClassLoader();
-        LOG.info("endpoint: {}", params.get("endpoint"));
     }
 
     @Override

@@ -31,47 +31,35 @@ import java.util.Map;
 public class OdpsConnector implements Connector {
 
     private static final Logger LOG = LogManager.getLogger(OdpsConnector.class);
-
-    private final Map<String, String> properties;
     private final String catalogName;
     private final Odps odps;
+    private final OdpsProperties properties;
     private final AliyunCloudCredential aliyunCloudCredential;
 
     private ConnectorMetadata metadata;
 
     public OdpsConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
-        this.properties = context.getProperties();
-        validate(OdpsResource.ACCESS_ID);
-        validate(OdpsResource.ACCESS_KEY);
-        validate(OdpsResource.DEFAULT_PROJECT);
-        validate(OdpsResource.ENDPOINT);
-        this.odps = newOdps(properties);
-        aliyunCloudCredential = new AliyunCloudCredential(properties.get(OdpsResource.ACCESS_ID),
-                properties.get(OdpsResource.ACCESS_KEY), properties.get(OdpsResource.ENDPOINT));
+        this.properties = new OdpsProperties(context.getProperties());
+        this.odps = initOdps();
+        aliyunCloudCredential = new AliyunCloudCredential(properties.get(OdpsProperties.ACCESS_ID),
+                properties.get(OdpsProperties.ACCESS_KEY), properties.get(OdpsProperties.ENDPOINT));
     }
 
-    private Odps newOdps(Map<String, String> properties) {
+    private Odps initOdps() {
         Account account =
-                new AliyunAccount(properties.get(OdpsResource.ACCESS_ID), properties.get(OdpsResource.ACCESS_KEY));
-        Odps odps = new Odps(account);
-        odps.setEndpoint(properties.get(OdpsResource.ENDPOINT));
-        odps.setDefaultProject(properties.get(OdpsResource.DEFAULT_PROJECT));
-        return odps;
-    }
-
-    private void validate(String propertyKey) {
-        String value = properties.get(propertyKey);
-        if (value == null) {
-            throw new IllegalArgumentException("Missing " + propertyKey + " in properties");
-        }
+                new AliyunAccount(properties.get(OdpsProperties.ACCESS_ID), properties.get(OdpsProperties.ACCESS_KEY));
+        Odps odpsIns = new Odps(account);
+        odpsIns.setEndpoint(properties.get(OdpsProperties.ENDPOINT));
+        odpsIns.setDefaultProject(properties.get(OdpsProperties.PROJECT));
+        return odpsIns;
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             try {
-                metadata = new OdpsMetadata(odps, catalogName, aliyunCloudCredential);
+                metadata = new OdpsMetadata(odps, catalogName, aliyunCloudCredential, properties);
             } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
                 throw e;
