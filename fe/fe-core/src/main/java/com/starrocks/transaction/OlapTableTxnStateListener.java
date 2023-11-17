@@ -64,6 +64,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
         Set<Long> allCommittedBackends = new HashSet<>();
 
+        // 1. record tablet commit infos in TransactionState,
+        // so we can decide to update version in replica when finish transaction
+        if (tabletCommitInfos != null && !tabletCommitInfos.isEmpty()) {
+            txnState.setTabletCommitInfos(tabletCommitInfos);
+        }
+
         // 2. validate potential exists problem: db->table->partition
         // guarantee exist exception during a transaction
         // if index is dropped, it does not matter.
