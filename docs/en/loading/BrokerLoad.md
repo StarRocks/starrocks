@@ -1,7 +1,3 @@
----
-displayed_sidebar: "English"
----
-
 # Load data from HDFS or cloud storage
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'

@@ -1,7 +1,3 @@
----
-displayed_sidebar: "English"
----
-
 # Deploy FE Cluster with High Availability
 
 This topic introduces StarRocks' high-availability (HA) deployment of the FE nodes.

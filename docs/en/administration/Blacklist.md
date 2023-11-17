@@ -1,7 +1,3 @@
----
-displayed_sidebar: "English"
----
-
 # Blacklist Management
 
 In some cases, administrators need to disable certain patterns of SQL to avoid SQL from triggering cluster crashes or unexpected high concurrent queries.
