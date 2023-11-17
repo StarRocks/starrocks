@@ -53,11 +53,8 @@ private:
     StatusOr<ChunkPtr> _pull_chunk_for_inner_join(size_t chunk_size);
     StatusOr<ChunkPtr> _pull_chunk_for_other_join(size_t chunk_size);
 
-    bool _is_build_side_empty() const;
     int _num_build_chunks() const;
     void _move_build_chunk_index(int index);
-    void _reset_build_chunk_index();
-    void _next_build_chunk_index();
 
     ChunkPtr _init_output_chunk(size_t chunk_size) const;
     Status _probe_for_other_join(const ChunkPtr& chunk);
