@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /*
@@ -32,7 +33,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     // threadId -> lockTime
     Map<Long, Long> sharedLockThreads = new ConcurrentHashMap<>();
 
-    long exclusiveLockTime = -1L;
+    AtomicLong exclusiveLockTime = new AtomicLong(-1L);
 
     public QueryableReentrantReadWriteLock(boolean fair) {
         super(fair);
@@ -58,20 +59,20 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     public void exclusiveLock() {
         this.writeLock().lock();
-        this.exclusiveLockTime = System.currentTimeMillis();
+        this.exclusiveLockTime.set(System.currentTimeMillis());
     }
 
     public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
         boolean succ = this.writeLock().tryLock(timeout, unit);
         if (succ) {
-            this.exclusiveLockTime = System.currentTimeMillis();
+            this.exclusiveLockTime.set(System.currentTimeMillis());
         }
         return succ;
     }
 
     public void exclusiveUnlock() {
         this.writeLock().unlock();
-        this.exclusiveLockTime = -1L;
+        this.exclusiveLockTime.set(-1L);
     }
 
     @Override
@@ -88,7 +89,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     }
 
     public long getExclusiveLockTime() {
-        return exclusiveLockTime;
+        return exclusiveLockTime.get();
     }
 
     @Override
