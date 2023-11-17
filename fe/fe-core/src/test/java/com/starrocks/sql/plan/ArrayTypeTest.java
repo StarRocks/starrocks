@@ -123,7 +123,7 @@ public class ArrayTypeTest extends PlanTestBase {
                 "from t0;";
         plan = getFragmentPlan(sql);
         getThriftPlan(sql); // Check null type handling
-        assertContains(plan, "<slot 3> : array_concat(CAST(2: c1 AS ARRAY<TINYINT>), [1])");
+        assertContains(plan, "<slot 2> : array_concat(CAST(1: c1 AS ARRAY<TINYINT>), [1])");
 
         sql = "with t0 as (\n" +
                 "    select c1 from (values([])) as t(c1)\n" +
@@ -133,7 +133,7 @@ public class ArrayTypeTest extends PlanTestBase {
                 "from t0;";
         plan = getFragmentPlan(sql);
         getThriftPlan(sql); // Check null type handling
-        assertContains(plan, "<slot 3> : array_concat(CAST(2: c1 AS ARRAY<TINYINT>), [1])");
+        assertContains(plan, "<slot 2> : array_concat(CAST(1: c1 AS ARRAY<TINYINT>), [1])");
     }
 
     @Test
