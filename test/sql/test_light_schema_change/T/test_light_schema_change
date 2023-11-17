@@ -1,7 +1,7 @@
--- name: test_light_schema_change
-create database test_light_schema_change;
-use test_light_schema_change;
-create table t1(k int, v int not null) ENGINE=OLAP DUPLICATE KEY(k) PROPERTIES ("replication_num" = "1", 'light_schema_change' = 'true');
+-- name: test_fast_schema_evolution
+create database test_fast_schema_evolution;
+use test_fast_schema_evolution;
+create table t1(k int, v int not null) ENGINE=OLAP DUPLICATE KEY(k) PROPERTIES ("replication_num" = "1", 'fast_schema_evolution' = 'true');
 insert into t1 values(1, 1);
 select * from t1 order by k;
 
@@ -45,7 +45,7 @@ PRIMARY KEY(`k1`,`k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
-    "light_schema_change" = "true"
+    "fast_schema_evolution" = "true"
 );
 
 
@@ -61,7 +61,7 @@ alter table tab1 add column v6 varchar(200) default "0" after v3;
 function: wait_alter_table_finish()
 select * from tab1;
 
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123432 -H column_separator:, -H columns:k1,k2,v6,v2 ${url}/api/test_light_schema_change/tab1/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123432 -H column_separator:, -H columns:k1,k2,v6,v2 ${url}/api/test_fast_schema_evolution/tab1/_stream_load
 sync;
 select * from tab1;
 
@@ -72,7 +72,7 @@ update tab1 set v3 = 999;
 select * from tab1;
 
 
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123433 -H column_separator:, -H columns:k1,k2,v6,v3 ${url}/api/test_light_schema_change/tab1/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:stream_load_partial_update_123433 -H column_separator:, -H columns:k1,k2,v6,v3 ${url}/api/test_fast_schema_evolution/tab1/_stream_load
 sync;
 select * from tab1;
 
@@ -92,7 +92,7 @@ select * from tab1;
 
 drop table t1;
 drop table tab1;
-drop database test_light_schema_change;
+drop database test_fast_schema_evolution;
 
 
 -- name: test_meta_scan
@@ -110,7 +110,7 @@ PROPERTIES (
     "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
-    "light_schema_change" = "true"
+    "fast_schema_evolution" = "true"
 );
 
 insert into reproducex4 values (1,2),(3,4),(5,6);
@@ -141,7 +141,7 @@ PROPERTIES (
     "in_memory" = "false",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
-    "light_schema_change" = "false"
+    "fast_schema_evolution" = "false"
 );
 
 insert into reproducex4 values (1,2),(3,4),(5,6);
