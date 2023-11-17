@@ -37,6 +37,7 @@ package com.starrocks.load.routineload;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -52,6 +53,8 @@ import com.starrocks.transaction.TransactionStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -101,6 +104,7 @@ public abstract class RoutineLoadTaskInfo {
     protected String label;
 
     protected StreamLoadTask streamLoadTask = null;
+    protected LocalDateTime lastSuccessTime;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
                                long timeToExecuteMs, long taskTimeoutMs) {
@@ -186,6 +190,8 @@ public abstract class RoutineLoadTaskInfo {
         this.msg = msg;
     }
 
+    abstract String getAssignment();
+
     public boolean isRunningTimeout() {
         if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
             // the corresponding txn is already finished, this task can not be treated as timeout.
@@ -227,6 +233,7 @@ public abstract class RoutineLoadTaskInfo {
         if (streamLoadTask != null) {
             streamLoadTask.afterCommitted(txnState, txnOperated);
         }
+        lastSuccessTime = LocalDateTime.now();
     }
 
     public void afterVisible(TransactionState txnState, boolean txnOperated) throws UserException {
@@ -240,6 +247,17 @@ public abstract class RoutineLoadTaskInfo {
         // StreamLoadTask is null, if not specify session variable `enable_profile = true`
         if (streamLoadTask != null) {
             streamLoadTask.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        }
+        if (lastSuccessTime == null) {
+            lastSuccessTime = LocalDateTime.now();
+        } else if (ChronoUnit.SECONDS.between(lastSuccessTime, LocalDateTime.now())
+                > Config.routine_load_failure_pause_interval_second) {
+            throw new UserException("Routine load task has failed consistently for more than " +
+                    "routine_load_failure_pause_interval_second, last err: " + txnStatusChangeReason +
+                    ", assignment: " + getAssignment() +
+                    ", lastSuccessTime: " + lastSuccessTime +
+                    ", routine_load_failure_pause_interval_second: "
+                    + Config.routine_load_failure_pause_interval_second);
         }
     }
 

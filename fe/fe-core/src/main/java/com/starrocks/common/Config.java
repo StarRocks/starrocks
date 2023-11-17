@@ -2612,4 +2612,11 @@ public class Config extends ConfigBase {
     // This limit limits the maximum size of json file to load.
     @ConfField(mutable = true)
     public static long json_file_size_limit = 4294967296L;
+
+    /*
+     * The routine load is set as paused after any task of this job has failed for more than the interval.
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_failure_pause_interval_second = 24L * 3600L;
+
 }

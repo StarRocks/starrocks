@@ -55,10 +55,16 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
                 timeToExecuteMs, pulsarTaskInfo.getBeId());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
+        this.lastSuccessTime = pulsarTaskInfo.lastSuccessTime;
     }
 
     public List<String> getPartitions() {
         return partitions;
+    }
+
+    @Override
+    public String getAssignment() {
+        return "Partitions: " + getPartitions().toString();
     }
 
     public Map<String, Long> getInitialPositions() {

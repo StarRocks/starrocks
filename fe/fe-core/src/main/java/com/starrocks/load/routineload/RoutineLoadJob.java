@@ -1113,12 +1113,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                         txnStatusChangeReasonString);
             }
         } catch (Exception e) {
-            String msg =
-                    "be " + taskBeId + " abort task " + txnState.getLabel() + " failed with error " + e.getMessage();
+            String msg = "Routine load job is paused due to error: " + e.getMessage() + ", be: " + taskBeId;
             updateState(JobState.PAUSED, new ErrorReason(InternalErrorCode.TASKS_ABORT_ERR, msg),
                     false /* not replay */);
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                    .add("task_id", txnState.getLabel())
+                    .add("task_id", txnState.getLabel()).add("be", taskBeId)
                     .add("error_msg",
                             "change job state to paused when task has been aborted with error " + e.getMessage())
                     .build(), e);
