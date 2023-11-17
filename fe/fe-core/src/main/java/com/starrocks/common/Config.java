@@ -2614,5 +2614,5 @@ public class Config extends ConfigBase {
     public static long json_file_size_limit = 4294967296L;
 
     @ConfField(mutable = true)
-    public static boolean prohibit_op_column_name = true;
+    public static boolean allow_system_reserved_names = false;
 }
