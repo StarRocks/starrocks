@@ -215,7 +215,7 @@ StarRocks 访问存储系统的认证配置。
   - 如果使用简单认证，请按如下配置 `StorageCredentialParams`：
 
     ```Plain
-    "hadoop.security.authentication" = "simple"
+    "hadoop.security.authentication" = "simple",
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
     ```
