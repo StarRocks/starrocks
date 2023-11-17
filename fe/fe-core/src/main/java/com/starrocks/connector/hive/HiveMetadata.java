@@ -148,9 +148,14 @@ public class HiveMetadata implements ConnectorMetadata {
                         " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
             }
 
-            if (getTable(dbName, tableName) == null && stmt.isSetIfExists()) {
+            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
+            if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
+            }
+
+            if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE) {
+                throw new StarRocksConnectorException("Only support to drop hive managed table");
             }
 
             hmsOps.dropTable(dbName, tableName);

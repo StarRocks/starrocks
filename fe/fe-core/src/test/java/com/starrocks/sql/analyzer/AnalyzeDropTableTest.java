@@ -14,11 +14,20 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -34,6 +43,9 @@ public class AnalyzeDropTableTest {
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         starRocksAssert.withCatalog(createIcebergCatalogStmt);
+
+        starRocksAssert.withCatalog("create external catalog hive_catalog properties (\"type\"=\"hive\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\")");
     }
 
     @Test
@@ -71,5 +83,29 @@ public class AnalyzeDropTableTest {
             }
         };
         analyzeSuccess("DROP TABLE iceberg_catalog.iceberg_db.iceberg_table");
+    }
+
+    @Test
+    public void testDropHiveNonManagedTable(@Mocked HiveTable hiveTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new Expectations(hiveTable) {
+            {
+                hiveTable.getHiveTableType();
+                result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+            }
+        };
+
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return hiveTable;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Only support to drop hive managed table",
+                () -> metadata.dropTable(
+                        new DropTableStmt(false, new TableName("hive_catalog", "hive_db", "hive_table"), true)));
     }
 }
