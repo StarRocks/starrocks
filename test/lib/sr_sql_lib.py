@@ -1004,8 +1004,8 @@ class StarrocksSQLApiLib(object):
             if status != "PENDING":
                 break
             time.sleep(0.5)
-
-    def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
+    
+    def wait_optimize_table_finish(self, alter_type="OPTIMIZE", expect_status="FINISHED"):
         """
         wait alter table job finish and return status
         """
@@ -1022,7 +1022,7 @@ class StarrocksSQLApiLib(object):
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
             time.sleep(0.5)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        tools.assert_equal(expect_status, status, "wait alter table finish error")
 
     def wait_optimize_table_finish(self, alter_type="OPTIMIZE"):
         """
