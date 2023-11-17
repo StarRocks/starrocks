@@ -750,6 +750,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 0
 - **Description**: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.
 
+##### allow_system_reserved_names
+
+- **Default**: FALSE
+- Whether to allow users to create objects with names initiated with with two consecutive underscores `__`. TRUE indicates this feature is enabled. Please note that such names are reserved for special purposes in StarRocks. Creating such objects may result in undefined behavior. This item is supported from vx.x.x onwards.
+
 ### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
