@@ -161,7 +161,7 @@ ADD ROLLUP rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)];
 ```
 
-properties: 支持设置超时时间，默认超时时间为 1 天。
+PROPERTIES: 支持设置超时时间，默认超时时间为 1 天。
 
 例子：
 
