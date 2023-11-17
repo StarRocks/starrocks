@@ -64,9 +64,6 @@ WHERE
 ### 示例一：通过精确匹配查看特定物化视图
 
 ```Plain
-<<<<<<< HEAD
-MySQL > SHOW MATERIALIZED VIEW WHERE NAME = "lo_mv1"\G
-=======
 -- Create Table: customer
 CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,
                         C_NAME        VARCHAR(25) NOT NULL,
@@ -107,7 +104,6 @@ REFRESH MATERIALIZED VIEW customer_mv;
 
 ```Plain
 mysql> show materialized views  where name='customer_mv'\G;
->>>>>>> fe40bbc1 (delete-in_memory-property (#5393))
 *************************** 1. row ***************************
            id: 475899
          name: lo_mv1
