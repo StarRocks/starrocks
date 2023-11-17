@@ -6,6 +6,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -50,6 +51,40 @@ public class TaskBuilder {
         return task;
     }
 
+<<<<<<< HEAD
+=======
+    public static String getAnalyzeMVStmt(String tableName) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return "";
+        }
+        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        String stmt;
+        String async = Config.mv_auto_analyze_async ? " WITH ASYNC MODE" : "";
+        if ("sample".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + async;
+        } else if ("full".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE TABLE " + tableName + async;
+        } else {
+            stmt = "";
+        }
+        if (FeConstants.runningUnitTest) {
+            stmt = "";
+        }
+        return stmt;
+    }
+
+    public static OptimizeTask buildOptimizeTask(String name, Map<String, String> properties, String sql, String dbName) {
+        OptimizeTask task = new OptimizeTask(name);
+        task.setSource(Constants.TaskSource.INSERT);
+        task.setDbName(dbName);
+        task.setProperties(properties);
+        task.setDefinition(sql);
+        task.setExpireTime(0L);
+        return task;
+    }
+
+>>>>>>> 73bbb9547e ([Enhancement][branch-3.1] Increase jdk11 compatibility (#35317))
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
