@@ -16,7 +16,7 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 ALTER LOAD FOR <label_name>
-properties
+PROPERTIES
 (
     'priority'='{LOWEST | LOW | NORMAL | HIGH | HIGHEST}'
 )
@@ -35,7 +35,7 @@ properties
 
 ```SQL
 ALTER LOAD FOR test_db.label1
-properties
+PROPERTIES
 (
     'priority'='HIGHEST'
 );
