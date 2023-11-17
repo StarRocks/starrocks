@@ -7,8 +7,6 @@ alter table t distributed by hash(k);
 function: wait_optimize_table_finish()
 select * from t;
 show partitions from t;
-<<<<<<< HEAD
-=======
 
 -- name: test_optimize_table_by_partition_name
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -105,4 +103,3 @@ show create table t;
 
 alter table t partitions(p202006,p202008) distributed by random;
 show create table t;
->>>>>>> d2ce0f137b ([BugFix] Fix optimize table change distribution info but show create table's info are not change in some case (#34930))
