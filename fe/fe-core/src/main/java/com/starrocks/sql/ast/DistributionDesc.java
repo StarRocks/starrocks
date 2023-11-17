@@ -47,6 +47,10 @@ public class DistributionDesc implements ParseNode, Writable {
         throw new NotImplementedException();
     }
 
+    public DistributionInfoType getType() {
+        return type;
+    }
+
     public int getBuckets() {
         throw new NotImplementedException();
     }

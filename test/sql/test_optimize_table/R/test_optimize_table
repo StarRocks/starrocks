@@ -33,6 +33,14 @@ show partitions from t;
 [REGEX].*k	1	3	HDD	9999-12-31 23:59:59	None.*
 -- !result
 
+
+
+
+
+
+
+
+
 -- name: test_optimize_table_by_partition_name
 CREATE TABLE `duplicate_table_with_null_partition` (
     `k1` date,
@@ -70,4 +78,326 @@ alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202007,p2020
 function: wait_optimize_table_finish()
 -- result:
 None
+-- !result
+
+
+
+
+-- name: test_change_no_partition_distribution
+create table t(k int) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1),(2),(3);
+-- result:
+-- !result
+select * from t;
+-- result:
+3
+1
+2
+-- !result
+alter table t distributed by hash(k) buckets 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 4 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+3
+1
+2
+-- !result
+alter table t distributed by random;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"bucket_size" = "4294967296",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+1
+2
+3
+-- !result
+-- name: test_change_partition_distribution
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+-- result:
+-- !result
+alter table t distributed by hash(k) buckets 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 4 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+3	2020-08-01
+1	2020-06-01
+2	2020-07-01
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+3	2020-08-01
+2	2020-07-01
+1	2020-06-01
+-- !result
+alter table t distributed by hash(k1) buckets 4;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: not support change distribution column when specify partitions.')
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+2	2020-07-01
+3	2020-08-01
+1	2020-06-01
+-- !result
+alter table t distributed by random;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"replication_num" = "3",
+"bucket_size" = "4294967296",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+1	2020-06-01
+2	2020-07-01
+3	2020-08-01
+-- !result
+-- name: test_change_partial_partition_distribution
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+-- result:
+-- !result
+alter table t partitions(p202006,p202008) distributed by hash(k) buckets 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from t;
+-- result:
+1	2020-06-01
+2	2020-07-01
+3	2020-08-01
+-- !result
+alter table t partitions(p202006,p202008) distributed by hash(k1) buckets 4;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: not support change distribution column when specify partitions.')
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+alter table t partitions(p202006,p202008) distributed by random;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: not support change distribution type when specify partitions.')
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "3",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
 -- !result
