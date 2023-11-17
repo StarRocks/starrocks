@@ -111,7 +111,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       cardinality: 30"));
     }
 
-    @Ignore
     @Test
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
@@ -235,8 +234,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |       cardinality: 335"));
     }
 
-    @Test
     @Ignore
+    @Test
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
