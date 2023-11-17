@@ -399,12 +399,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
     fi
 fi
 
-PROGUARD=
-  if [[ $JAVA_VER -gt 18 ]]; then
-    PROGUARD=${STARROCKS_HOME}/build-support/proguard-java11.cfg
-  else
-    PROGUARD=${STARROCKS_HOME}/build-support/proguard-java8.cfg
-  fi
+PROGUARD=${STARROCKS_HOME}/build-support/proguard-java11.cfg
 
 # Clean and build Frontend
 if [ ${FE_MODULES}x != ""x ]; then
