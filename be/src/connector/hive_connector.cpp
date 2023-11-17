@@ -672,9 +672,7 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(FSOptions& options) {
     jni_scanner_params["project_name"] = odps_table->get_database_name();
     jni_scanner_params["table_name"] = odps_table->get_table_name();
     jni_scanner_params["required_fields"] = required_fields;
-    jni_scanner_params["session_id"] = _scan_range.odps_split_info;
-    jni_scanner_params["split_index"] = std::to_string(_scan_range.offset);
-    jni_scanner_params["read_session"] = _scan_range.odps_scan_reader_info;
+    jni_scanner_params.insert(_scan_range.odps_split_info.begin(), _scan_range.odps_split_info.end());
     jni_scanner_params["nested_fields"] = nested_fields;
 
     const AliyunCloudConfiguration aliyun_cloud_configuration =

@@ -24,7 +24,10 @@ import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
+import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.InputSplitAssigner;
+import com.aliyun.odps.table.read.split.InputSplitWithRowRange;
+import com.aliyun.odps.table.read.split.impl.RowRangeInputSplitAssigner;
 import com.aliyun.odps.utils.StringUtils;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
@@ -267,16 +270,53 @@ public class OdpsMetadata implements ConnectorMetadata {
         try {
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
                     odpsTable.getTableName(), columnNames);
-            TableBatchReadSession
-                    scan =
+            Map<String, String> splitProperties = new HashMap<>();
+            splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
+            splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
+            TableReadSessionBuilder tableReadSessionBuilder =
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
-                            .requiredPartitions(partitionSpecs)
+                            .requiredPartitions(partitionSpecs);
+            OdpsSplitsInfo odpsSplitsInfo;
+            switch (properties.get(OdpsProperties.SPLIT_POLICY)) {
+                case OdpsProperties.ROW_OFFSET:
+                    List<InputSplit> splits = new ArrayList<>();
+                    TableBatchReadSession rowScan = tableReadSessionBuilder
+                            .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
+                            .buildBatchReadSession();
+                    RowRangeInputSplitAssigner inputSplitAssigner =
+                            (RowRangeInputSplitAssigner) rowScan.getInputSplitAssigner();
+                    long rowsPerSplit = Long.parseLong(properties.get(OdpsProperties.SPLIT_ROW_COUNT));
+                    long totalRowCount = inputSplitAssigner.getTotalRowCount();
+                    if (limit != -1) {
+                        totalRowCount = Math.min(inputSplitAssigner.getTotalRowCount(), limit);
+                    }
+                    long numRecord = 0;
+                    for (long i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
+                        InputSplitWithRowRange splitByRowOffset =
+                                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, i);
+                        splits.add(splitByRowOffset);
+                        numRecord = i;
+                    }
+                    InputSplitWithRowRange splitByRowOffset =
+                            (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount);
+                    splits.add(splitByRowOffset);
+                    odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
+                            OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);
+                    break;
+                case OdpsProperties.SIZE:
+                    TableBatchReadSession sizeScan = tableReadSessionBuilder
                             .withSplitOptions(SplitOptions.createDefault())
                             .buildBatchReadSession();
-            InputSplitAssigner assigner = scan.getInputSplitAssigner();
-            OdpsSplitsInfo odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), scan);
+                    InputSplitAssigner assigner = sizeScan.getInputSplitAssigner();
+                    odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), sizeScan,
+                            OdpsSplitsInfo.SplitPolicy.SIZE, splitProperties);
+                    break;
+                default:
+                    throw new StarRocksConnectorException(
+                            "unsupported split policy: " + properties.get(OdpsProperties.SPLIT_POLICY));
+            }
             RemoteFileDesc odpsRemoteFileDesc = RemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(odpsRemoteFileDesc);
             remoteFileInfo.setFiles(remoteFileDescs);

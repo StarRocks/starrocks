@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
+import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
@@ -26,6 +27,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,7 +46,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -81,7 +85,8 @@ public class OdpsScanNode extends ScanNode {
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
-    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, List<PartitionKey> partitionKeys) {
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate,
+                                        List<PartitionKey> partitionKeys) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
@@ -93,21 +98,38 @@ public class OdpsScanNode extends ScanNode {
                     table.getDbName(), table.getTableName(), predicate);
             return;
         }
+        Map<String, String> commonSplitInfo = new HashMap<>();
         String serializeSession = splitsInfo.getSerializeSession();
+        commonSplitInfo.put("read_session", serializeSession);
+        commonSplitInfo.putAll(splitsInfo.getProperties());
+        commonSplitInfo.put("split_policy", splitsInfo.getSplitPolicy().name().toLowerCase());
         for (InputSplit inputSplit : splitsInfo.getSplits()) {
-            IndexedInputSplit split = (IndexedInputSplit) inputSplit;
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
-
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
-            hdfsScanRange.setOdps_split_info(split.getSessionId());
-            hdfsScanRange.setOdps_scan_reader_info(serializeSession);
-            hdfsScanRange.setOffset(split.getSplitIndex());
+            Map<String, String> splitInfo = new HashMap<>(commonSplitInfo);
+            splitInfo.put("session_id", inputSplit.getSessionId());
+            switch (splitsInfo.getSplitPolicy()) {
+                case SIZE:
+                    IndexedInputSplit split = (IndexedInputSplit) inputSplit;
+                    splitInfo.put("split_index", String.valueOf(split.getSplitIndex()));
+                    break;
+                case ROW_OFFSET:
+                    RowRangeInputSplit split1 = (RowRangeInputSplit) inputSplit;
+                    splitInfo.put("start_index", String.valueOf(split1.getRowRange().getStartIndex()));
+                    splitInfo.put("num_record", String.valueOf(split1.getRowRange().getNumRecord()));
+                    hdfsScanRange.setOffset(split1.getRowRange().getStartIndex());
+                    hdfsScanRange.setLength(split1.getRowRange().getNumRecord());
+                    break;
+                default:
+                    throw new StarRocksConnectorException(
+                            "unsupported split policy: " + splitsInfo.getSplitPolicy().name());
+            }
+            hdfsScanRange.setOdps_split_info(splitInfo);
             hdfsScanRange.setUse_odps_jni_reader(true);
             hdfsScanRange.setFile_length(1);
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocations.setScan_range(scanRange);
-
             com.starrocks.thrift.TScanRangeLocation
                     scanRangeLocation =
                     new com.starrocks.thrift.TScanRangeLocation(new com.starrocks.thrift.TNetworkAddress("-1", -1));

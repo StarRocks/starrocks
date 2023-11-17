@@ -17,7 +17,6 @@ package com.starrocks.connector.odps;
 import com.aliyun.odps.Odps;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
-import com.starrocks.catalog.OdpsResource;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -25,8 +24,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.util.Map;
 
 public class OdpsConnector implements Connector {
 

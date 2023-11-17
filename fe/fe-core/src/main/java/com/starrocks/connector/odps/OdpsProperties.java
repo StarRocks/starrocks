@@ -29,6 +29,11 @@ public class OdpsProperties {
     public static final String PROJECT = "odps.project";
     public static final String TUNNEL_ENDPOINT = "odps.tunnel.endpoint";
     public static final String TUNNEL_QUOTA = "odps.tunnel.quota";
+    public static final String SPLIT_POLICY = "odps.split.policy";
+    public static final String SPLIT_ROW_COUNT = "odps.split.row.count";
+    public static final String ROW_OFFSET = "row_offset";
+    public static final String SIZE = "size";
+    private static final long DEFAULT_SPLIT_ROW_COUNT = 4 * 1024 * 1024;
 
     static {
         defaultValues = new java.util.HashMap<>();
@@ -38,6 +43,8 @@ public class OdpsProperties {
         newProperty(ACCESS_KEY).isRequired();
         newProperty(ENDPOINT).isRequired();
         newProperty(PROJECT).isRequired();
+        newProperty(SPLIT_POLICY).withDefaultValue(SIZE);
+        newProperty(SPLIT_ROW_COUNT).withDefaultValue(String.valueOf(DEFAULT_SPLIT_ROW_COUNT));
         newProperty(TUNNEL_ENDPOINT);
         newProperty(TUNNEL_QUOTA);
     }

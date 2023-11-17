@@ -26,7 +26,10 @@ import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
 import com.aliyun.odps.table.read.SplitReader;
 import com.aliyun.odps.table.read.TableBatchReadSession;
+import com.aliyun.odps.table.read.split.InputSplit;
 import com.aliyun.odps.table.read.split.impl.IndexedInputSplit;
+import com.aliyun.odps.table.read.split.impl.RowRangeInputSplit;
+import com.aliyun.odps.utils.StringUtils;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
@@ -53,8 +56,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
     private final String projectName;
     private final String tableName;
     private final String endpoint;
-    private final String sessionId;
-    private final int splitIndex;
+    private final InputSplit inputSplit;
     private final String[] requiredFields;
     private final Column[] requireColumns;
     private final ColumnType[] requiredTypes;
@@ -70,8 +72,19 @@ public class OdpsSplitScanner extends ConnectorScanner {
         this.projectName = params.get("project_name");
         this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
-        this.sessionId = params.get("session_id");
-        this.splitIndex = Integer.parseInt(params.get("split_index"));
+        String splitPolicy = params.get("split_policy");
+        String sessionId = params.get("session_id");
+        switch (splitPolicy) {
+            case "size":
+                this.inputSplit = new IndexedInputSplit(sessionId, Integer.parseInt(params.get("split_index")));
+                break;
+            case "row_offset":
+                this.inputSplit = new RowRangeInputSplit(sessionId, Long.parseLong(params.get("start_index")),
+                        Long.parseLong(params.get("num_record")));
+                break;
+            default:
+                throw new RuntimeException("unknown split policy: " + splitPolicy);
+        }
         this.endpoint = params.get("endpoint");
         String serializedScan = params.get("read_session");
         try {
@@ -94,18 +107,24 @@ public class OdpsSplitScanner extends ConnectorScanner {
             requiredTypes[i] = OdpsTypeUtils.convertToColumnType(requireColumns[i]);
             nameIndexMap.put(requiredFields[i], i);
         }
-        settings =
-                EnvironmentSettings.newBuilder().withServiceEndpoint(endpoint)
-                        .withCredentials(Credentials.newBuilder().withAccount(account).build()).build();
+        EnvironmentSettings.Builder builder = EnvironmentSettings.newBuilder().withServiceEndpoint(endpoint)
+                .withCredentials(Credentials.newBuilder().withAccount(account).build());
+        if (!StringUtils.isNullOrEmpty(params.get("tunnel_endpoint"))) {
+            builder.withTunnelEndpoint(params.get("tunnel_endpoint"));
+        }
+        if (!StringUtils.isNullOrEmpty(params.get("quota_name"))) {
+            builder.withQuotaName(params.get("quota_name"));
+        }
+        settings = builder.build();
         this.classLoader = this.getClass().getClassLoader();
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            reader = scan.createArrowReader(
-                    new IndexedInputSplit(sessionId, splitIndex),
-                    ReaderOptions.newBuilder().withMaxBatchRowCount(fetchSize).withCompressionCodec(CompressionCodec.ZSTD)
+            reader = scan.createArrowReader(this.inputSplit,
+                    ReaderOptions.newBuilder().withMaxBatchRowCount(fetchSize)
+                            .withCompressionCodec(CompressionCodec.ZSTD)
                             .withSettings(settings).build());
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
         } catch (Exception e) {
@@ -153,8 +172,9 @@ public class OdpsSplitScanner extends ConnectorScanner {
                     String filedName = fields.get(rowId).getName();
                     int fieldIndex = nameIndexMap.get(filedName);
                     for (int index = 0; index < vectorSchemaRoot.getRowCount(); index++) {
-                        Object data = OdpsTypeUtils.getData(columnAccessors[rowId], requireColumns[fieldIndex].getTypeInfo(),
-                                index);
+                        Object data =
+                                OdpsTypeUtils.getData(columnAccessors[rowId], requireColumns[fieldIndex].getTypeInfo(),
+                                        index);
                         if (data == null) {
                             appendData(fieldIndex, null);
                         } else {

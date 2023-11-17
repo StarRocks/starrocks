@@ -24,18 +24,34 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
  */
 public class OdpsSplitsInfo {
+    public enum SplitPolicy {
+        /**
+         * 按字节数切分
+         */
+        SIZE,
+        /**
+         * 按行数切分
+         */
+        ROW_OFFSET;
+    }
+
     private final List<InputSplit> splits;
-
+    private final Map<String, String> properties;
     private final TableBatchReadSession session;
+    private final SplitPolicy splitPolicy;
 
-    public OdpsSplitsInfo(List<InputSplit> splits, TableBatchReadSession session) {
+    public OdpsSplitsInfo(List<InputSplit> splits, TableBatchReadSession session, SplitPolicy splitPolicy,
+                          Map<String, String> properties) {
         this.splits = splits;
         this.session = session;
+        this.splitPolicy = splitPolicy;
+        this.properties = properties;
     }
 
     public boolean isEmpty() {
@@ -48,6 +64,14 @@ public class OdpsSplitsInfo {
 
     public TableBatchReadSession getSession() {
         return session;
+    }
+
+    public SplitPolicy getSplitPolicy() {
+        return splitPolicy;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     public String getSerializeSession() {

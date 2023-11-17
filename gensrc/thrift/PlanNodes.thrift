@@ -359,9 +359,7 @@ struct THdfsScanRange {
 
     19: optional bool use_odps_jni_reader
 
-    20: optional string odps_scan_reader_info
-
-    21: optional string odps_split_info
+    20: optional map<string, string> odps_split_info
 }
 
 struct TBinlogScanRange {
