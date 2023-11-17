@@ -177,6 +177,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         try {
             PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                     optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), optimizeClause.getDistributionDesc());
+            LOG.debug("create temp partitions {} success. job: {}", getTmpPartitionIds(), jobId);
         } catch (Exception e) {
             LOG.warn("create temp partitions failed", e);
             throw new AlterCancelException("create temp partitions failed " + e);
@@ -215,7 +216,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException(e.getMessage());
         }
 
-        LOG.info("previous transactions are all finished, begin to rewrite data. job: {}", jobId);
+        LOG.info("previous transactions are all finished, begin to optimize table. job: {}", jobId);
 
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
@@ -261,6 +262,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             try {
                 taskManager.createTask(rewriteTask, false);
                 taskManager.executeTask(rewriteTask.getName());
+                LOG.debug("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
                 LOG.warn("create rewrite task failed", e);
@@ -342,6 +344,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
 
         this.progress = 99;
+
+        LOG.debug("all insert overwrite tasks finished, optimize job: {}", jobId);
 
         // replace partition
         db.writeLock();
