@@ -64,8 +64,8 @@ public class DeadlockChecker extends FrontendDaemon {
                 if (lockStartTime > 0L && System.currentTimeMillis() - lockStartTime > Config.slow_lock_threshold_ms) {
                     hasSlowLock = true;
                     ownerInfo.addProperty("lockState", "writeLocked");
-                    ownerInfo.addProperty("dumpThread", Util.dumpThread(exclusiveLockThread, 50));
                     ownerInfo.addProperty("lockHoldTime", (System.currentTimeMillis() - lockStartTime) + " ms");
+                    ownerInfo.addProperty("dumpThread", Util.dumpThread(exclusiveLockThread, 50));
                 }
             } else if (sharedLockThreadIds.size() > 0) {
                 StringBuilder infos = new StringBuilder();
