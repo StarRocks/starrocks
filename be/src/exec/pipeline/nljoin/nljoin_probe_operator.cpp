@@ -220,6 +220,7 @@ void NLJoinProbeOperator::_next_build_row_index_for_inner_join() {
     if (_build_row_current >= _curr_build_chunk->num_rows()) {
         // next build chunk
         _curr_build_chunk_index++;
+        _build_row_current = 0;
         // all build chunks iter over
         if (_curr_build_chunk_index >= _num_build_chunks()) {
             _probe_chunk = nullptr;
