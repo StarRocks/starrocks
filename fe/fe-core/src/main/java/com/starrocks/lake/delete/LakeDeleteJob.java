@@ -122,6 +122,7 @@ public class LakeDeleteJob extends DeleteJob {
                 DeleteDataResponse response = responseFuture.get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
                     LOG.warn("Failed to execute delete. failed tablet: {}", response.failedTablets);
+
                     throw new DdlException("Failed to execute delete. failed tablet num: "
                             + response.failedTablets.size());
                 }
