@@ -461,6 +461,20 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return id == tablet.id;
     }
 
+    @Override
+    public long getMaxModificationTime() {
+        long maxModificationTime = 0;
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            for (Replica replica : replicas) {
+                long replicaModificationTime = replica.getLastModificationTime();
+                maxModificationTime = maxModificationTime > replicaModificationTime ?
+                        maxModificationTime : replicaModificationTime;
+
+            }
+            return maxModificationTime;
+        }
+    }
+
     // Get total data size of all replicas if singleReplica is true, else get max replica data size.
     // Replica state must be NORMAL or SCHEMA_CHANGE.
     @Override
