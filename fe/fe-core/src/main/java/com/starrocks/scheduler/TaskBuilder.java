@@ -19,6 +19,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -75,6 +76,9 @@ public class TaskBuilder {
         } else if ("full".equalsIgnoreCase(analyze)) {
             stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
         } else {
+            stmt = "";
+        }
+        if (FeConstants.runningUnitTest) {
             stmt = "";
         }
         return stmt;
