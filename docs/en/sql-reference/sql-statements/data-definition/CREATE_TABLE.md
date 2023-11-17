@@ -38,7 +38,7 @@ The name of the table to create.
 > **NOTE**
 >
 > - You cannot directly create a table named with [StarRocks Reserved Keywords](../keywords.md#reserved-keywords). To create such a table, you must enclose the table name with backticks (`).
-> - You cannot directly create a table with a named initiated with two consecutive underscores `__` because it is reserved for special purposes. To create such a table, you must set the FE configuration `allow_system_reserved_names` to `true`.
+> - You cannot directly create a table with a named initiated with two consecutive underscores `__` because it is reserved for special purposes and creating such tables may result in undefined behavior. To create such a table, you must set the FE configuration `allow_system_reserved_names` to `true`.
 
 ### column_definition
 
