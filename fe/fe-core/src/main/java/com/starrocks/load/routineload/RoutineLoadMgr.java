@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -225,6 +226,11 @@ public class RoutineLoadMgr implements Writable {
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
+    @VisibleForTesting
+    public Map<Long, Integer> getBeTasksNum() {
+        return beTasksNum;
+    }
+
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
         int beNum = 0;
         slotLock.lock();
@@ -240,17 +246,23 @@ public class RoutineLoadMgr implements Writable {
                 throw new DdlException("Name " + routineLoadJob.getName() + " already used in db "
                         + dbName);
             }
-            long allSlotNum = beNum * Config.max_routine_load_task_num_per_be;
+            long maxConcurrentTasks = beNum * Config.max_routine_load_task_num_per_be;
+            // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+<<<<<<< HEAD
                     RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED));
             long curSlotNum = 0;
+=======
+                        RoutineLoadJob.JobState.RUNNING));
+            long curTaskNum = 0;
+>>>>>>> 770b34bc2e ([BugFix] Fix issue with incorrect limitation of Routine load task count (#34029))
             for (RoutineLoadJob job : jobs) {
-                curSlotNum += job.calculateCurrentConcurrentTaskNum();
+                curTaskNum += job.calculateCurrentConcurrentTaskNum();
             }
-            int needSlotNum = routineLoadJob.calculateCurrentConcurrentTaskNum();
-            if (curSlotNum + needSlotNum > allSlotNum) {
-                throw new DdlException("Current routine load job is " + curSlotNum + ". "
-                        + "The new job need " + needSlotNum + " tasks. "
+            int newTaskNum = routineLoadJob.calculateCurrentConcurrentTaskNum();
+            if (curTaskNum + newTaskNum > maxConcurrentTasks) {
+                throw new DdlException("Current routine load tasks is " + curTaskNum + ". "
+                        + "The new job need " + newTaskNum + " tasks. "
                         + "But we only support " + beNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
                         + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
             }
