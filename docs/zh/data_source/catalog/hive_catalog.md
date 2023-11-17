@@ -1141,7 +1141,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Hive 表
 
-同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
 
 > **说明**
 >
