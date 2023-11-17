@@ -652,16 +652,16 @@ public class TrinoQueryTest extends TrinoTestBase {
     @Test
     public void testSelectCTE() throws Exception {
         String sql = "with c1(a,b,c) as (select * from t0) select c1.* from c1";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1(a,b,c) as (select * from t0) select t.* from c1 t";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1 as (select * from t0) select c1.* from c1";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1 as (select * from t0) select a.* from c1 a";
-        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with c1(a,b,c) as (select * from t0), c2 as (select * from t1) select c2.*,t.* from c1 t,c2";
         assertPlanContains(sql, "3:NESTLOOP JOIN");
@@ -671,16 +671,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 7: v1 = 10: v4");
+                "  |  equal join conjunct: 1: v1 = 4: v4");
 
         sql = "with cte1 as ( with cte1 as (select * from t0) select * from cte1) select * from cte1";
-        assertPlanContains(sql, "10: v1 | 11: v2 | 12: v3");
+        assertPlanContains(sql, "1: v1 | 2: v2 | 3: v3");
 
         sql = "with cte1 as (select * from test.t0), cte2 as (select * from cte1) select * from cte1";
-        assertPlanContains(sql, "7: v1 | 8: v2 | 9: v3");
+        assertPlanContains(sql, "4: v1 | 5: v2 | 6: v3");
 
         sql = "with cte1(c1,c2) as (select v1,v2 from test.t0) select c1,c2 from cte1";
-        assertPlanContains(sql, "4: v1 | 5: v2");
+        assertPlanContains(sql, "1: v1 | 2: v2");
 
         sql = "with x0 as (select * from t0), x1 as (select * from t1) " +
                 "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
@@ -695,7 +695,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 7: v4 = 10: v1");
+                "  |  equal join conjunct: 1: v4 = 4: v1");
 
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
