@@ -54,6 +54,7 @@ void OlapTableColumnParam::to_protobuf(POlapTableColumnParam* pcolumn) const {
 void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);
     pindex->set_schema_hash(schema_hash);
+    pindex->set_schema_version(schema_version);
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
