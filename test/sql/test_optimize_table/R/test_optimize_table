@@ -30,9 +30,6 @@ select * from t;
 -- !result
 show partitions from t;
 -- result:
-<<<<<<< HEAD
-[REGEX].*0	NORMAL			k	1	3	HDD	9999-12-31 23:59:59	None.*
-=======
 [REGEX].*k	1	3	HDD	9999-12-31 23:59:59	None.*
 -- !result
 
@@ -81,7 +78,6 @@ alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202007,p2020
 function: wait_optimize_table_finish()
 -- result:
 None
->>>>>>> d2ce0f137b ([BugFix] Fix optimize table change distribution info but show create table's info are not change in some case (#34930))
 -- !result
 
 
