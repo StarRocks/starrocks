@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # is_role_in_session
 
 ## Description

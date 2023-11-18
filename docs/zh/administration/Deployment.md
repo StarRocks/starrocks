@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署 FE 高可用集群
 
 本文介绍如何部署 StarRocks 集群 FE 节点高可用集群。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Hive catalog
 
 Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。

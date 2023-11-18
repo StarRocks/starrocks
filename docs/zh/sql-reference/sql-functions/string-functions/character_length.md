@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # character_length
 
 ## 功能
