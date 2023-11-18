@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data distribution
 
 When you create a table, you must specify the data distribution method by configuring the number of partitions and the number of tablets in a table. An appropriate data distribution method helps evenly distribute data across the nodes of your StarRocks cluster, reduces table scans, makes full use of the concurrency of the cluster, thereby improving query performance.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Change data through loading
 
 [Primary Key tables](../table_design/table_types/primary_key_table.md) provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, Primary Key tables do not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).

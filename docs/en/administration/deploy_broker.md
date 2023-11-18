@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy Broker
 
 This topic describes how to deploy Broker. With Broker, StarRocks can read data from source such as HDFS and S3, and pre-process, load, and backup the data with its own computing resources.

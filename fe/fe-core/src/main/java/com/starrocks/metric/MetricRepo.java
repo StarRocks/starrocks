@@ -731,8 +731,8 @@ public final class MetricRepo {
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                                RoutineLoadJob.JobState.PAUSED,
-                                RoutineLoadJob.JobState.RUNNING));
+                        RoutineLoadJob.JobState.PAUSED,
+                        RoutineLoadJob.JobState.RUNNING));
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
@@ -863,23 +863,22 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(table.getId());
-                    for (Metric m : entity.getMetrics()) {
-                        if (minifyTableMetrics && (null == m.getValue() ||
-                                (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
-                            continue;
-                        }
-                        m.addLabel(new MetricLabel("db_name", dbName))
-                                .addLabel(new MetricLabel("tbl_name", table.getName()))
-                                .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
-                        visitor.visit(m);
+
+            // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
+            for (Table table : db.getTables()) {
+                long tableId = table.getId();
+                String tableName = table.getName();
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                for (Metric m : entity.getMetrics()) {
+                    if (minifyTableMetrics && (null == m.getValue() ||
+                            (MetricType.COUNTER == m.type && (Long) m.getValue() == 0L))) {
+                        continue;
                     }
+                    m.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(m);
                 }
-            } finally {
-                db.readUnlock();
             }
         }
     }

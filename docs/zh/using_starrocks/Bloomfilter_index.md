@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Bloom filter 索引
 
 本文介绍了 Bloom filter（布隆过滤器）索引的原理，以及如何创建和修改 Bloom filter 索引。

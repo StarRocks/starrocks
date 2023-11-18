@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy StarRocks manually
 
 This topic describes how to manually deploy StarRocks. For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).

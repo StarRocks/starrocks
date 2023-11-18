@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Iceberg catalog
 
 An Iceberg catalog is a kind of external catalog that enables you to query data from Apache Iceberg without ingestion.

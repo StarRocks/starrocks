@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Data Cache
 
 本文介绍 Data Cache 的原理，以及如何开启 Data Cache 加速外部数据查询。

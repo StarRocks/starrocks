@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data from HDFS or cloud storage
 
 StarRocks provides the loading method MySQL-based Broker Load to help you load a large amount of data from HDFS or cloud storage into StarRocks.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Aggregate table
 
 When you create a table that uses the Aggregate table, you can define sort key columns and metric columns and can specify an aggregate function for the metric columns. If the records to be loaded have the same sort key, the metric columns are aggregated. The Aggregate table helps reduce the amount of data that needs to be processed for queries, thereby accelerating queries.

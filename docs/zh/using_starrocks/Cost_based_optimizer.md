@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CBO 统计信息
 
 本文介绍 StarRocks CBO（Cost-based Optimizer）优化器的基本概念，以及如何为 CBO 优化器采集统计信息。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。

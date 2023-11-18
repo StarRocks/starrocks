@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Iceberg catalog
 
 Iceberg Catalog 是一种 External Catalog。通过 Iceberg Catalog，您不需要执行数据导入就可以直接查询 Apache Iceberg 里的数据。

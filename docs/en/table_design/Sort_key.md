@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Sort keys and prefix indexes
 
 When you create a table, you can select one or more of its columns to comprise a sort key. The sort key determines the order in which the data of the table is sorted before the data is stored on disk. You can use the sort key columns as filter conditions for queries. As such, StarRocks can quickly locate the data of interest, saving it from scanning the entire table to find the data that it needs to process. This reduces search complexity and therefore accelerates queries.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Primary Key table
 
 StarRocks has started to support the Primary Key table since v1.19. When you create a table that uses the Primary Key table, you can define primary key columns and metric columns. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
