@@ -93,6 +93,7 @@ import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
+import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
@@ -1648,6 +1649,9 @@ public class ShowExecutor {
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
         } else if (procNodeI instanceof OptimizeProcDir) {
             rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
+                    showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
+        } else if (procNodeI instanceof RollupProcDir) {
+            rows = ((RollupProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
         } else {
             rows = procNodeI.fetchResult().getRows();

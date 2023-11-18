@@ -20,13 +20,27 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.RollupJobV2;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.OrderByPair;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class RollupProcDir implements ProcDirInterface {
@@ -35,6 +49,8 @@ public class RollupProcDir implements ProcDirInterface {
             .add("BaseIndexName").add("RollupIndexName").add("RollupId").add("TransactionId")
             .add("State").add("Msg").add("Progress").add("Timeout")
             .build();
+
+    private static final Logger LOG = LogManager.getLogger(RollupProcDir.class);
 
     private MaterializedViewHandler materializedViewHandler;
     private Database db;
@@ -59,6 +75,104 @@ public class RollupProcDir implements ProcDirInterface {
                 oneInfo.add(element.toString());
             }
             result.addRow(oneInfo);
+        }
+        return result;
+    }
+
+    boolean filterResult(String columnName, Comparable element, HashMap<String, Expr> filter) throws AnalysisException {
+        if (filter == null) {
+            return true;
+        }
+        Expr subExpr = filter.get(columnName.toLowerCase());
+        if (subExpr == null) {
+            return true;
+        }
+        BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
+        if (subExpr.getChild(1) instanceof StringLiteral && binaryPredicate.getOp() == BinaryType.EQ) {
+            return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
+        }
+        if (subExpr.getChild(1) instanceof DateLiteral) {
+            Long leftVal = (new DateLiteral((String) element, Type.DATETIME)).getLongValue();
+            Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
+            switch (binaryPredicate.getOp()) {
+                case EQ:
+                case EQ_FOR_NULL:
+                    return leftVal.equals(rightVal);
+                case GE:
+                    return leftVal >= rightVal;
+                case GT:
+                    return leftVal > rightVal;
+                case LE:
+                    return leftVal <= rightVal;
+                case LT:
+                    return leftVal < rightVal;
+                case NE:
+                    return !leftVal.equals(rightVal);
+                default:
+                    Preconditions.checkState(false, "No defined binary operator.");
+            }
+        }
+        return true;
+    }
+
+    public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, ArrayList<OrderByPair> orderByPairs,
+                                          LimitElement limitElement) throws AnalysisException {
+        Preconditions.checkNotNull(db);
+        Preconditions.checkNotNull(materializedViewHandler);
+
+        List<List<Comparable>> rollupJobInfos = materializedViewHandler.getAlterJobInfosByDb(db);
+
+        //where
+        List<List<Comparable>> jobInfos;
+        if (filter == null || filter.size() == 0) {
+            jobInfos = rollupJobInfos;
+        } else {
+            jobInfos = Lists.newArrayList();
+            for (List<Comparable> infoStr : rollupJobInfos) {
+                if (infoStr.size() != TITLE_NAMES.size()) {
+                    LOG.warn("RollupJobInfos.size() " + rollupJobInfos.size()
+                            + " not equal TITLE_NAMES.size() " + TITLE_NAMES.size());
+                    continue;
+                }
+                boolean isNeed = true;
+                for (int i = 0; i < infoStr.size(); i++) {
+                    isNeed = filterResult(TITLE_NAMES.get(i), infoStr.get(i), filter);
+                    if (!isNeed) {
+                        break;
+                    }
+                }
+                if (isNeed) {
+                    jobInfos.add(infoStr);
+                }
+            }
+        }
+
+        // order by
+        if (orderByPairs != null) {
+            ListComparator<List<Comparable>> comparator = null;
+            OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
+            comparator = new ListComparator<List<Comparable>>(orderByPairs.toArray(orderByPairArr));
+            Collections.sort(jobInfos, comparator);
+        }
+
+        // limit
+        if (limitElement != null && limitElement.hasLimit()) {
+            int beginIndex = (int) limitElement.getOffset();
+            int endIndex = (int) (beginIndex + limitElement.getLimit());
+            if (endIndex > jobInfos.size()) {
+                endIndex = jobInfos.size();
+            }
+            jobInfos = jobInfos.subList(beginIndex, endIndex);
+        }
+
+        BaseProcResult result = new BaseProcResult();
+        result.setNames(TITLE_NAMES);
+        for (List<Comparable> jobInfo : jobInfos) {
+            List<String> oneResult = new ArrayList<String>(jobInfos.size());
+            for (Comparable column : jobInfo) {
+                oneResult.add(column.toString());
+            }
+            result.addRow(oneResult);
         }
         return result;
     }
