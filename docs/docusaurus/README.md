@@ -36,7 +36,7 @@ to disk.
   >
   > Run the script from the `docusaurus` directory
 
-### Make an optimized build with both English and Chinese kanguages
+### Make an optimized build with both English and Chinese languages
 
 It is important to do a full build so that you can see the effect of
 switching languages and make sure that the nav is good for both English
