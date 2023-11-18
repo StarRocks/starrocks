@@ -56,11 +56,7 @@ const config = {
 
           // Edit links for English and Chinese
           editUrl: ({locale, docPath}) => {
-            if (locale == 'en') {
-              return 'https://github.com/StarRocks/starrocks/edit/main/docs/' + docPath
-            } else {
-              return 'https://github.com/StarRocks/docs.zh-cn/edit/main/' + docPath
-            }
+              return 'https://github.com/StarRocks/starrocks/edit/main/docs/' + locale + '/' + docPath
           },
           // Versions:
           // We don't want to show `main` or `current`, we want to show the released versions.
