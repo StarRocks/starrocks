@@ -130,7 +130,7 @@ Run the `__Stage` one and view the docs at `https://docs-stage.docusaurus.io` an
 
 ### Change the name of a doc
 
-Sometimes we have really long titles in our docs, and don't want the long thing used in the nav. Alternatively, sometimes we have docs with the title `# Rules` (see the Developers > Style Guides for two examples!). There are two choices, but for now I will only give you one as we cannot use the second choice yet until I fix another problem. 
+Sometimes we have really long titles in our docs, and don't want the long thing used in the nav. Alternatively, sometimes we have docs with the title `# Rules` (see the Developers > Style Guides for two examples!). There are two choices, but for now I will only give you one as we cannot use the second choice yet until I fix another problem.
 
 To change the name shown in the sidebar, just edit the title of the doc:
 
@@ -212,8 +212,6 @@ I think User Priv and Performance Tuning need to be moved to the same level as M
 
 **Ignore anything below here**
 
-Live URL: https://danroscigno.github.io/doc/docs/introduction/StarRocks_intro
-
 ## Building with GitHub actions
 
 There are test build and deploy to GitHub Pages jobs in `.github/workflows/`.
@@ -242,7 +240,7 @@ Once we go into production the three changes above can be removed as we will:
 
 Docusaurus v3 requires Node 18
 
-I use 8GB for Node, in Netlify I set the build command in the file `netlify.toml` 
+I use 8GB for Node, in Netlify I set the build command in the file `netlify.toml`
 and locally I use:
 
 ```shell
@@ -259,7 +257,7 @@ yarn install
 
 The script `_IGNORE/testbuild`
 
-- pulls the Chinese and English docs for versions 3.1, 3.0, and 2.5 
+- pulls the Chinese and English docs for versions 3.1, 3.0, and 2.5
 - Removes the intro page while we update it to use built-in nav components
 - Removes the TOC while we migrate those to JSON format
 - Runs an MDX checker
