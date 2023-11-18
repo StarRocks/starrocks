@@ -2002,7 +2002,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_new_publish_mechanism = false;
 
     @ConfField(mutable = true)
