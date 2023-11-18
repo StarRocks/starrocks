@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # starrocks-kubernetes-operator
 
 ## 发布说明

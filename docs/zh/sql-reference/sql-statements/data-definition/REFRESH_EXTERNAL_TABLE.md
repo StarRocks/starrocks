@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # REFRESH EXTERNAL TABLE
 
 ## 功能

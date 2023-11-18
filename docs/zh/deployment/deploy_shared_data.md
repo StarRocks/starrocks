@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署使用 StarRocks 存算分离集群
 
 本文介绍如何部署和使用 StarRocks 存算分离集群。该功能从 3.0 版本开始支持。
@@ -415,7 +419,7 @@ SET def_volume AS DEFAULT STORAGE VOLUME;
 
 创建默认存储卷后，您可以使用该存储卷创建数据库和云原生表。
 
-StarRocks 存算分离集群支持所有[数据模型](../table_design/table_types/table_types.md)。
+StarRocks 存算分离集群支持所有[表模型](../table_design/table_types/table_types.md)。
 
 以下示例创建数据库 `cloud_db`，并基于明细模型创建表 `detail_demo`，启用本地磁盘缓存，将热数据有效期设置为一个月，并禁用异步数据导入：
 

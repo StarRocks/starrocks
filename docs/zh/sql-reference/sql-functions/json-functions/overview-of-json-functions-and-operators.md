@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # JSON 函数概述
 
 StarRocks 支持如下 JSON 构造函数、JSON 查询和处理函数、JSON 运算符以及查询 JSON 对象的 JSON Path。

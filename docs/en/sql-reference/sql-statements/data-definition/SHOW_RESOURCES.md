@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW RESOURCES
 
 ## Description

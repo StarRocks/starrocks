@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Transform data at loading
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'

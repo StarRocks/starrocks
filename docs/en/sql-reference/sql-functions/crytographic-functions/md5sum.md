@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # md5sum
 
 Calculates the 128-bit checksum of multiple strings. The checksum is represented by a 32-character hexadecimal string.

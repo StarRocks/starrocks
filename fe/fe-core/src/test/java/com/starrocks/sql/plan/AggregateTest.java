@@ -2491,10 +2491,10 @@ public class AggregateTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 10001) from lineitem";
+                String sql = "select approx_top_k(L_LINENUMBER, 100001) from lineitem";
                 getFragmentPlan(sql);
             });
-            String expectedMessage = "The maximum number of the second parameter is 10000";
+            String expectedMessage = "The maximum number of the second parameter is 100000";
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
@@ -2509,10 +2509,10 @@ public class AggregateTest extends PlanTestBase {
         }
         {
             Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
-                String sql = "select approx_top_k(L_LINENUMBER, 1, 10001) from lineitem";
+                String sql = "select approx_top_k(L_LINENUMBER, 1, 100001) from lineitem";
                 getFragmentPlan(sql);
             });
-            String expectedMessage = "The maximum number of the third parameter is 10000";
+            String expectedMessage = "The maximum number of the third parameter is 100000";
             String actualMessage = exception.getMessage();
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }

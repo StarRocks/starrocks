@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # STRUCT
 
 ## 描述

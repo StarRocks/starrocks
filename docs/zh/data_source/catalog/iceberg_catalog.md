@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Iceberg catalog
 
 Iceberg Catalog 是一种 External Catalog。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。您可以：
@@ -875,7 +879,7 @@ DROP Catalog iceberg_catalog_glue;
 
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
+[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
 ```
 
 您可以通过 `location` 参数来为该数据库设置具体的文件路径，支持 HDFS 和对象存储。如果您不指定 `location` 参数，则 StarRocks 会在当前 Iceberg Catalog 的默认路径下创建该数据库。
@@ -966,9 +970,9 @@ PARTITION BY (par_col1[, par_col2...])
 >
 > 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。
 
-#### properties
+#### PROPERTIES
 
-可以在 `properties` 中通过 `"key" = "value"` 的形式声明 Iceberg 表的属性。具体请参见 [Iceberg 表属性](https://iceberg.apache.org/docs/latest/configuration/)。
+可以在 `PROPERTIES` 中通过 `"key" = "value"` 的形式声明 Iceberg 表的属性。具体请参见 [Iceberg 表属性](https://iceberg.apache.org/docs/latest/configuration/)。
 
 以下为常见的几个 Iceberg 表属性：
 

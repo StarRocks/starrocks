@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # named_struct
 
 ## 功能
