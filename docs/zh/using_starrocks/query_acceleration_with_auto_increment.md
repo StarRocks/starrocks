@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 AUTO INCREMENT 列构建全局字典以加速精确去重计算和 Join
 
 ## 应用场景
@@ -45,7 +49,7 @@
 
 订单数据需要来源于一张外部表，其形式可以是 [External Catalog 外部表](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)、或者 [FILES](../sql-reference/sql-functions/table-functions/files.md) 表函数（可以理解为一个外部表）。
 
-本解决方案以  Hive Catalog 外部表 `source_table` 为例，其中 `order_uuid` 列表示订单编号并且为 STRING 类型。
+本解决方案以 Hive Catalog 外部表 `source_table` 为例，其中 `order_uuid` 列表示订单编号并且为 STRING 类型。
 
 > **说明**
 >

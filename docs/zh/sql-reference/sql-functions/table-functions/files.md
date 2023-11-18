@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # FILES
 
 ## 功能
@@ -23,7 +27,7 @@
 
 ```SQL
 FILES( data_location , data_format [, StorageCredentialParams ] 
-    [, columns_from_path ] [, schema_detect ] [, unload_data ] )
+    [, columns_from_path ] [, unload_data ] )
 
 data_location ::=
     "path" = { "hdfs://<hdfs_host>:<hdfs_port>/<hdfs_path>"
@@ -36,16 +40,9 @@ data_location ::=
 data_format ::=
     "format" = { "parquet" | "orc" }
 
-
 -- 自 v3.2 起支持。
 columns_from_path ::=
     "columns_from_path" = <column_name> [, ...]
-
-
--- 自 v3.2 起支持。
-schema_detect::=
-    [ "schema_auto_detect_sample_rows" = "<INT>" ]
-    [, "schema_auto_detect_sample_files" = "<INT>" ]
 
 -- 自 v3.2 起支持。
 unload_data::=
@@ -183,6 +180,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
 
+<!--
+
 ### schema_detect
 
 自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
@@ -202,6 +201,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 > **注意**
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
+
+-->
 
 ### unload_data
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Change data through loading
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
@@ -538,8 +542,8 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       format as "csv"
       (id, name)
   )
-  with broker "broker1"
-  properties
+  WITH BROKER "broker1"
+  PROPERTIES
   (
       "partial_update" = "true"
   );

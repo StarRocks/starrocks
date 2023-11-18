@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Bitmap 实现精确去重
 
 本文介绍如何通过 Bitmap 实现精确去重（Exact Count Distinct）。

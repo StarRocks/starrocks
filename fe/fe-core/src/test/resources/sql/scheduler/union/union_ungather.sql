@@ -4,7 +4,7 @@ with
     w2 as (select * from w1 UNION ALL select * from w1)
 select /*+SET_VAR(cbo_cte_reuse=true,cbo_cte_reuse_rate=0)*/ count(1) from w2 group by L_SUPPKEY
 [scheduler]
-PLAN FRAGMENT 0(F04)
+    PLAN FRAGMENT 0(F04)
   DOP: 16
   INSTANCES
     INSTANCE(0-F04#0)
@@ -40,21 +40,20 @@ PLAN FRAGMENT 4(F00)
       SCAN RANGES
         0:OlapScanNode
           1. partitionID=1001,tabletID=1006
-
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:120: count
-  PARTITION: HASH_PARTITIONED: 105: L_SUPPKEY
+ OUTPUT EXPRS:69: count
+  PARTITION: HASH_PARTITIONED: 54: L_SUPPKEY
 
   RESULT SINK
 
   12:Project
-  |  <slot 120> : 120: count
-  |  
+  |  <slot 69> : 69: count
+  |
   11:AGGREGATE (merge finalize)
-  |  output: count(120: count)
-  |  group by: 105: L_SUPPKEY
-  |  
+  |  output: count(69: count)
+  |  group by: 54: L_SUPPKEY
+  |
   10:EXCHANGE
 
 PLAN FRAGMENT 1
@@ -62,18 +61,18 @@ PLAN FRAGMENT 1
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 10
-    HASH_PARTITIONED: 105: L_SUPPKEY
+  EXCHANGE ID: 10
+  HASH_PARTITIONED: 54: L_SUPPKEY
 
   9:AGGREGATE (update serialize)
   |  STREAMING
   |  output: count(1)
-  |  group by: 105: L_SUPPKEY
-  |  
+  |  group by: 54: L_SUPPKEY
+  |
   2:UNION
-  |  
+  |
   |----8:EXCHANGE
-  |    
+  |
   5:EXCHANGE
 
 PLAN FRAGMENT 2
@@ -85,8 +84,8 @@ PLAN FRAGMENT 2
     RANDOM
 
   7:Project
-  |  <slot 88> : 3: L_SUPPKEY
-  |  
+  |  <slot 37> : 3: L_SUPPKEY
+  |
   6:EXCHANGE
 
 PLAN FRAGMENT 3
@@ -98,8 +97,8 @@ PLAN FRAGMENT 3
     RANDOM
 
   4:Project
-  |  <slot 71> : 3: L_SUPPKEY
-  |  
+  |  <slot 20> : 3: L_SUPPKEY
+  |
   3:EXCHANGE
 
 PLAN FRAGMENT 4

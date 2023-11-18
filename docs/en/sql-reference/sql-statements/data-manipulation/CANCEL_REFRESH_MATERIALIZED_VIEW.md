@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # CANCEL REFRESH MATERIALIZED VIEW
 
 ## Description

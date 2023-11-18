@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW ALTER TABLE
 
 ## Description
