@@ -11,7 +11,13 @@ and `docs/zh` directories where Docusaurus expects to find them.
 
 ### Build a Docker image for Docusaurus
 
-- Open terminal and cd into the `docusaurus` dir
+In order to run Docusaurus in Docker we need a Docker image
+with the correct Docusausaurus config files, Nodejs version,
+etc. If you change the configuration file `docusaurus.config.js`
+or the  `sidebars.json` then you will need to build. The build
+is very quick, and you will have to do it at least once.
+
+- Open Terminal and cd into the `docusaurus` dir
 - Run the script `./scripts/docker-image.sh`
 
   > Note:
@@ -29,6 +35,16 @@ to disk.
   > Note:
   >
   > Run the script from the `docusaurus` directory
+
+### Make an optimized build with both English and Chinese kanguages
+
+It is important to do a full build so that you can see the effect of
+switching languages and make sure that the nav is good for both English
+and Chinese. Run a full build with `./scripts/docker-build.sh`
+
+  > Note:
+  >
+  > This build generates the HTML and then serves it. The pages will not update as you edit them, you will have to stop the container and restart it. Remember to run the `./scripts/docker-image.sh` command if you are editing the sidebars.json file.
 
 ### Navigation
 
