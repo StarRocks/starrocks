@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Hive catalog
 
 A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion.

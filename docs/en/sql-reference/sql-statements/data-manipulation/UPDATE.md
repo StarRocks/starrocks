@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # UPDATE
 
 Updates rows in a Primary Key table.

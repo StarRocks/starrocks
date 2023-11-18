@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # coalesce
 
 ## 功能

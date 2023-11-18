@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # BROKER LOAD
 
 ## Description
@@ -212,7 +216,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
   - If you use simple authentication, configure `StorageCredentialParams` as follows:
 
     ```Plain
-    "hadoop.security.authentication" = "simple"
+    "hadoop.security.authentication" = "simple",
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
     ```

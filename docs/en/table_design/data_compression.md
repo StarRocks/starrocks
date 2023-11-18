@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data compression
 
 StarRocks supports data compression for table and index storage. Data compression not only helps save storage space, but also improves performance of I/O intensive tasks because StarRocks can read fewer pages from disk for each request. Note that extra CPU resource is required to compress and decompress the data.

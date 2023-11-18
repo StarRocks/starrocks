@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # TPC-DS test SQL
 
 ```sql

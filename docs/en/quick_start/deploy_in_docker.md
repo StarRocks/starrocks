@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Quick start: Deploy StarRocks with Docker
 
 This quickstart provides a guide to:
