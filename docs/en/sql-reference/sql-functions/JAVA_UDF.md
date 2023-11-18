@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Java UDFs
 
 From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language.
@@ -386,7 +390,7 @@ Run the following command to create the scalar UDF you have compiled in the prec
 ```SQL
 CREATE [GLOBAL] FUNCTION MY_UDF_JSON_GET(string, string) 
 RETURNS string
-properties (
+PROPERTIES (
     "symbol" = "com.starrocks.udf.sample.UDFJsonGet", 
     "type" = "StarrocksJar",
     "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"

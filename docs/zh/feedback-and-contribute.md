@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # How to feedback and contribute
 
 非常感谢您参与 StarRocks 文档建设，您的帮助和意见是文档改进的关键！<br />

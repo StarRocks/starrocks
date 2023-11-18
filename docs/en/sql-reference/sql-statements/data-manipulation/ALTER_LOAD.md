@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # ALTER LOAD
 
 ## Description
@@ -12,7 +16,7 @@ Changes the priority of a Broker Load job that is in the **QUEUEING** or **LOADI
 
 ```SQL
 ALTER LOAD FOR <label_name>
-properties
+PROPERTIES
 (
     'priority'='{LOWEST | LOW | NORMAL | HIGH | HIGHEST}'
 )
@@ -22,7 +26,7 @@ properties
 
 | **Parameter** | **Required** | Description                                                  |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| label_name    | Yes          | The label of the load job. Format: `[<database_name>.]<label_name>`. See [BROKER LOAD](../data-manipulation/BROKER_LOAD.md#label). |
+| label_name    | Yes          | The label of the load job. Format: `[<database_name>.]<label_name>`. See [BROKER LOAD](../data-manipulation/BROKER_LOAD.md#database_name-and-label_name). |
 | priority      | Yes          | The new priority that you want to specify for the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. See [BROKER LOAD](../data-manipulation/BROKER_LOAD.md). |
 
 ## Examples
@@ -31,7 +35,7 @@ Suppose that you have a Broker Load job whose label is `test_db.label1` and the 
 
 ```SQL
 ALTER LOAD FOR test_db.label1
-properties
+PROPERTIES
 (
     'priority'='HIGHEST'
 );

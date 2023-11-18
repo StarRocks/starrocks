@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # array_difference
 
 ## 功能

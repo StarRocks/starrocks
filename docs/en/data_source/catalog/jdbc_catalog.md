@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # JDBC catalog
 
 StarRocks supports JDBC catalogs from v3.0 onwards.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # md5
 
 Uses the MD5 Message-Digest Algorithm to calculate the 128-bit checksum of a string. The checksum is represented by a 32-character hexadecimal string.
