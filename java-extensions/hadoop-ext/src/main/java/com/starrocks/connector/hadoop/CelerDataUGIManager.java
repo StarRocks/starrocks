@@ -171,7 +171,7 @@ public class CelerDataUGIManager {
         LOGGER.debug(HadoopExt.LOGGER_MESSAGE_PREFIX + " refresh tickets");
         kerberosUserCache.forEach((key, value) -> {
             CachingKerberosAuthentication auth = value.auth;
-            auth.reauthenticateIfSoonWillBeExpired();
+            auth.authenticateIfSoonWillBeExpired();
         });
     }
 }

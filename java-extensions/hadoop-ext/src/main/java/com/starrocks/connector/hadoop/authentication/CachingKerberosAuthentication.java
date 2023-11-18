@@ -14,6 +14,10 @@
 
 package com.starrocks.connector.hadoop.authentication;
 
+import com.starrocks.connector.hadoop.HadoopExt;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import javax.annotation.concurrent.GuardedBy;
 import javax.security.auth.Subject;
 import javax.security.auth.kerberos.KerberosTicket;
@@ -22,6 +26,9 @@ import static com.starrocks.connector.hadoop.authentication.KerberosTicketUtils.
 import static java.util.Objects.requireNonNull;
 
 public class CachingKerberosAuthentication {
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(CachingKerberosAuthentication.class);
+
     private final KerberosAuthentication kerberosAuthentication;
 
     @GuardedBy("this")
@@ -43,12 +50,13 @@ public class CachingKerberosAuthentication {
         return subject;
     }
 
-    public synchronized void reauthenticateIfSoonWillBeExpired() {
+    public synchronized void authenticateIfSoonWillBeExpired() {
         requireNonNull(subject, "subject is null, getSubject() must be called before reauthenticate()");
         if (ticketNeedsRefresh()) {
             kerberosAuthentication.attemptLogin(subject);
             KerberosTicket tgtTicket = getTicketGrantingTicket(subject);
             nextRefreshTime = KerberosTicketUtils.getRefreshTime(tgtTicket);
+            LOGGER.info(HadoopExt.LOGGER_MESSAGE_PREFIX + " authenticate subject. subject = " + subject);
         }
     }
 
