@@ -146,7 +146,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
     std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet->update_mgr();
     std::priority_queue<RowsetCandidate> rowset_queue;
-    const auto tablet_data_size = _get_data_size(tablet_metadata);
+    const int64_t compaction_data_size_threshold =
+            static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
     for (const auto& rowset_pb : tablet_metadata->rowsets()) {
         RowsetStat stat;
         stat.num_rows = rowset_pb.num_rows();
@@ -160,10 +161,6 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
     while (!rowset_queue.empty()) {
         const auto& rowset_candidate = rowset_queue.top();
         cur_compaction_result_bytes += rowset_candidate.read_bytes();
-        if (input_rowsets.size() > 0 &&
-            cur_compaction_result_bytes > std::max(config::update_compaction_result_bytes * 2, tablet_data_size / 2)) {
-            break;
-        }
         input_rowsets.emplace_back(
                 std::make_shared<Rowset>(_tablet.get(), std::move(rowset_candidate.rowset_meta_ptr)));
         if (has_dels != nullptr) {
@@ -171,8 +168,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
         }
         input_infos << input_rowsets.back()->id() << "|";
 
-        // Allow to merge half of this tablet
-        if (cur_compaction_result_bytes > std::max(config::update_compaction_result_bytes, tablet_data_size / 2) ||
+        if (cur_compaction_result_bytes >
+                    std::max(config::update_compaction_result_bytes, compaction_data_size_threshold) ||
             input_rowsets.size() >= config::max_update_compaction_num_singleton_deltas) {
             break;
         }
