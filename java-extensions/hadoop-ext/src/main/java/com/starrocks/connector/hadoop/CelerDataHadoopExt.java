@@ -167,7 +167,7 @@ public class CelerDataHadoopExt extends HadoopExt {
         if (ugi == null) {
             return action.run();
         }
-        try (CelerDataUGIManager.SwitchUserRequest _ = new CelerDataUGIManager.SwitchUserRequest(ugi)) {
+        try (CelerDataUGIManager.SwitchUserRequest request = new CelerDataUGIManager.SwitchUserRequest(ugi)) {
             return executeActionInDoAs(ugi, action);
         } catch (Exception e) {
             throw new RuntimeException(e);
