@@ -26,19 +26,13 @@ StarRocks 通过实现全面向量化引擎，充分发挥了 CPU 的处理能�
 
 ## 存储计算分离
 
-StarRocks 3.0 版本支持了全新的[存算分离模式](./Architecture.md)，实现了计算与存储的完全解耦、计算节点弹性扩缩容、高性能热数据缓存。存算分离模式下 StarRocks 具备灵活弹性、高性能、高可靠、低成本等特点。
+StarRocks 3.0 版本支持了全新的[存算分离模式](../deployment/deploy_shared_data.md)，实现了计算与存储的完全解耦、计算节点弹性扩缩容、高性能热数据缓存。存算分离模式下 StarRocks 具备灵活弹性、高性能、高可靠、低成本等特点。
 
-![shared-data](../assets/share_data_arch.png)
-
-存算分离模式下，存储与计算解耦，各自独立服务，独立扩缩容，解决了在存算一体模式下的计算与存储等比例扩缩容所带来的资源浪费问题。计算节点可以实现秒级的动态扩缩容，提升计算资源的利用率。
-
-存储层利用对象存储近乎无限的容量，以及数据高可用的特性实现数据的海量存储和持久化。支持包括 AWS S3，Azure Blob Storage，Google Cloud Storage，阿里云 OSS，腾讯云 COS，火山引擎 TOS，华为云 OBS，以及各类兼容 S3 协议的对象存储，同时也支持 HDFS 存储。
-
-部署模式上用户可以选择基于公有云、私有云、本地机房部署。StarRocks 存算分离也支持基于 Kubernetes 部署，并提供了相应的 Operator 方便用户自动化部署。
+存算分离模式下，计算节点可以实现秒级的动态扩缩容，提升计算资源的利用率。存储层利用对象存储近乎无限的容量，以及数据高可用的特性实现数据的海量存储和持久化。支持包括 AWS S3，Azure Blob Storage，Google Cloud Storage，阿里云 OSS，腾讯云 COS，火山引擎 TOS，华为云 OBS，以及各类兼容 S3 协议的对象存储，同时也支持 HDFS 存储。部署模式上用户可以选择基于公有云、私有云、本地机房部署。StarRocks 存算分离也支持基于 Kubernetes 部署，并提供了相应的 Operator 方便用户自动化部署。
 
 StarRocks 存算分离模式与存算一体模式功能保持一致，写入及热数据查询性能也与存算一体基本持平。用户在存储分离模式下也可以实现数据更新、数据湖分析、物化视图加速等多种场景。
 
-[存算分离模式](../deployment/deploy_shared_data.md)
+![shared-data](../assets/share_data_arch.png)
 
 ## CBO 优化器
 
