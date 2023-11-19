@@ -56,8 +56,6 @@ StatusOr<ChunkPtr> SchemaTableSinkOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status SchemaTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
-    // otherwise it will cause memory statistics errors.
     Columns result_columns(_output_expr_ctxs.size());
     for (int i = 0; i < _output_expr_ctxs.size(); ++i) {
         ASSIGN_OR_RETURN(result_columns[i], _output_expr_ctxs[i]->evaluate(chunk.get()));
@@ -65,7 +63,7 @@ Status SchemaTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
     if (_table_name == "be_configs") {
         return write_be_configs_table(result_columns);
     }
-    return Status::OK();
+    return Status::InternalError("only support updating table be_config");
 }
 
 Status SchemaTableSinkOperator::write_be_configs_table(Columns& columns) {
@@ -86,23 +84,31 @@ Status SchemaTableSinkOperator::write_be_configs_table(Columns& columns) {
         int64_t be_id = columns[0]->get(i).get_int64();
         const auto& name = columns[1]->get(i).get_slice().to_string();
         const auto& value = columns[2]->get(i).get_slice().to_string();
-        Status s;
+
+        StatusOr<std::string> readStatus = config::get_config(name);
+        if (!readStatus.ok()) {
+            LOG(WARNING) << "set_config "
+                         << " " << name << "=" << value << " failed " << readStatus.status().to_string();
+            return readStatus.status();
+        }
+
+        Status updateStatus;
         if (be_id == -1) {
             LOG(INFO) << strings::Substitute("set_config ignored: be_id=-1 name:$0 value:$1", name, value);
             continue;
         } else if (be_id == self_be_id) {
-            s = update_config->update_config(name, value);
+            updateStatus = update_config->update_config(name, value);
         } else {
             continue;
         }
-        if (s.ok()) {
+        if (updateStatus.ok()) {
             LOG(INFO) << "set_config "
-                      << " " << name << "=" << value << " success";
+                      << " " << name << " from " << readStatus.value() << " to " << value << " success";
         } else {
             LOG(WARNING) << "set_config "
-                         << " " << name << "=" << value << " failed " << s.to_string();
+                         << " " << name << "=" << value << " failed " << updateStatus.to_string();
         }
-        ret.update(s);
+        ret.update(updateStatus);
     }
     return ret;
 }

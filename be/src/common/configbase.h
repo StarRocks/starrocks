@@ -22,6 +22,8 @@
 #include <string>
 #include <vector>
 
+#include "common/statusor.h"
+
 namespace starrocks {
 class Status;
 
@@ -132,6 +134,8 @@ Status set_config(const std::string& field, const std::string& value);
 std::mutex* get_mstring_conf_lock();
 
 std::vector<ConfigInfo> list_configs();
+
+StatusOr<std::string> get_config(const std::string& field);
 
 } // namespace config
 } // namespace starrocks
