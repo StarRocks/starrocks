@@ -155,10 +155,18 @@ bool ScanOperator::has_output() const {
     DCHECK(!_unpluging);
     bool buffer_full = is_buffer_full();
     if (buffer_full) {
+        if (chunk_number == 0) {
+            LOG(WARNING) << "scan has_output fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                         << " driver " << CurrentThread::current().get_driver_id()
+                         << " buff is full but no local chunks";
+        }
         return chunk_number > 0;
     }
 
     if (is_running_all_io_tasks()) {
+        LOG(WARNING) << "scan has_output fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id() << " is_running_all_io_tasks "
+                     << chunk_number;
         return false;
     }
 
@@ -172,8 +180,12 @@ bool ScanOperator::has_output() const {
             return true;
         }
     }
-
-    return num_buffered_chunks() > 0;
+    chunk_number = num_buffered_chunks();
+    if (chunk_number == 0) {
+        LOG(WARNING) << "scan has_output fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id() << " no local chunks ";
+    }
+    return chunk_number > 0;
 }
 
 bool ScanOperator::pending_finish() const {
@@ -192,16 +204,24 @@ bool ScanOperator::is_finished() const {
 
     // Any io task is running or needs to run.
     if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+        LOG(WARNING) << "scan is_finished fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id()
+                     << " _num_running_io_tasks = " << _num_running_io_tasks
+                     << " morsel_queue_empty = " << _morsel_queue->empty();
         return false;
     }
 
     // Any shared chunk source from other ScanOperator
-    if (has_shared_chunk_source()) { /// here always return false
+    if (has_shared_chunk_source()) {
+        LOG(WARNING) << "scan is_finished fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id() << " has_shared_chunk_source";
         return false;
     }
 
     // Remain some data in the buffer
     if (num_buffered_chunks() > 0) {
+        LOG(WARNING) << "scan is_finished fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id() << " hash buffered chunks";
         return false;
     }
 
@@ -226,6 +246,7 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 
     _detach_chunk_sources();
     _is_finished = true;
+    // set_buffer_finished();
     return Status::OK();
 }
 
@@ -362,6 +383,8 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     ChunkBufferTokenPtr buffer_token;
     if (buffer_token = pin_chunk(1); buffer_token == nullptr) {
+        LOG(ERROR) << "scan fragment " << print_id(CurrentThread::current().fragment_instance_id()) << " driver "
+                   << CurrentThread::current().get_driver_id() << " pin failed";
         return Status::OK();
     }
 
