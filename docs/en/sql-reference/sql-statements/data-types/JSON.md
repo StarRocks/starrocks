@@ -36,7 +36,7 @@ PROPERTIES (
 
 ### Load data and store the data as JSON data
 
-StarRocks provides the following three methods for you to load data and store the data as JSON data:
+StarRocks provides the following methods for you to load data and store the data as JSON data:
 
 - Method 1: Use `INSERT INTO` to write data to a JSON column of a table. In the following example, a table named `tj` is used, and the `j` column of the table is a JSON column.
 
@@ -68,6 +68,8 @@ StarRocks supports the following data type conversions at Parquet file loading.
 | STRUCT                                                       | OBJECT         |
 | LIST                                                         | ARRAY          |
 | Other data types such as UNION and TIMESTAMP                 | Not supported  |
+
+- Method 4: Use [Routine](../../../loading/RoutineLoad.md) load to continuously load JSON data from Kafka into StarRocks.
 
 ### Query and process JSON data
 
