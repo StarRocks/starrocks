@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
@@ -35,6 +36,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -298,6 +300,43 @@ public class IcebergMetadataTest extends TableTestBase {
         } catch (Exception e) {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
             Assert.assertTrue(e.getMessage().contains("Database iceberg_db not empty"));
+        }
+    }
+
+    @Test
+    public void testDropTable() {
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+        List<TableIdentifier> mockTables = new ArrayList<>();
+        mockTables.add(TableIdentifier.of("table1"));
+        mockTables.add(TableIdentifier.of("table2"));
+
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            Table getTable(String dbName, String tblName) {
+                return new IcebergTable(1, "srTableName", "iceberg_catalog",
+                        "iceberg_catalog", "iceberg_db",
+                        "iceberg_table", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+            }
+        };
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.dropTable("iceberg_db", "table1", true);
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadata.dropTable(new DropTableStmt(false, new TableName("iceberg_catalog",
+                    "iceberg_db", "table1"), true));
+        } catch (Exception e) {
+            Assert.fail();
         }
     }
 
