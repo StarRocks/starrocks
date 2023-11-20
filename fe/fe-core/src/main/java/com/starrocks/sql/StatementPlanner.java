@@ -243,8 +243,11 @@ public class StatementPlanner {
         try {
             lock(dbs);
             Analyzer.analyze(queryStmt, session);
+<<<<<<< HEAD
             // only copy olap table
             AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
+=======
+>>>>>>> 7a574790c4 ([BugFix] update lastSchemaUpdateTime in table after fast schema evolution (#35408))
             return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
             unLock(dbs);
