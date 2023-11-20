@@ -40,6 +40,11 @@ public abstract class FileListRepo {
     public abstract List<PipeFileRecord> listFilesByState(PipeFileState state, long limit);
 
     /**
+     * List file by path
+     */
+    public abstract PipeFileRecord listFilesByPath(String path);
+
+    /**
      * Add files into the list, as unloaded state
      * If some files have already been loaded, they will be ignored
      */

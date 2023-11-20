@@ -60,6 +60,7 @@ import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.util.Strings;
 import org.apache.thrift.TException;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -284,6 +285,11 @@ public class PipeManagerTest {
             }
 
             @Mock
+            public PipeFileRecord listFilesByPath(String path) {
+                return records.stream().filter(x -> x.getFileName().equals(path)).findFirst().orElse(null);
+            }
+
+            @Mock
             public void stageFiles(List<PipeFileRecord> records) {
                 this.records.addAll(records);
             }
@@ -395,7 +401,7 @@ public class PipeManagerTest {
         }
     }
 
-    private void pipeRetryFailedTask(Pipe p3) throws Exception {
+    private void pipeRetryFailedTask(Pipe p3, boolean retryAll) throws Exception {
         // retry several times, until failed
         for (int i = 0; i < Pipe.FAILED_TASK_THRESHOLD; i++) {
             // submit task, turn into running
@@ -422,9 +428,24 @@ public class PipeManagerTest {
         Assert.assertEquals(Pipe.State.ERROR, p3.getState());
 
         // retry all
-        {
-            AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser("alter pipe p3 retry all", ctx);
+        if (retryAll) {
+            String sql = String.format("alter pipe %s retry all", p3.getName());
+            AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
+            List<PipeFileRecord> unloadedFiles =
+                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
+            Assert.assertEquals(1, unloadedFiles.size());
+            Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
+        } else {
+            List<PipeFileRecord> errorFiles =
+                    p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.ERROR, 0);
+            for (PipeFileRecord file : errorFiles) {
+                String sql =
+                        String.format("alter pipe %s retry file %s", p3.getName(), Strings.quote(file.getFileName()));
+                AlterPipeStmt alter = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                p3.retry((AlterPipeClauseRetry) alter.getAlterPipeClause());
+            }
+            Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
             List<PipeFileRecord> unloadedFiles =
                     p3.getPipeSource().getFileListRepo().listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0);
             Assert.assertEquals(1, unloadedFiles.size());
@@ -450,7 +471,7 @@ public class PipeManagerTest {
         mockRepoExecutor();
 
         // mock execution failed
-        {
+        for (boolean retryAll : Lists.newArrayList(true, false)) {
             final String pipeName = "p3";
             Pipe p3 = preparePipe(pipeName);
             new mockit.Expectations(taskManager) {
@@ -464,11 +485,12 @@ public class PipeManagerTest {
                 }
             };
             Assert.assertEquals(0, p3.getRunningTasks().size());
-            pipeRetryFailedTask(p3);
+            pipeRetryFailedTask(p3, retryAll);
+            dropPipe(pipeName);
         }
 
         // mock execution cancelled
-        {
+        for (boolean retryAll : Lists.newArrayList(true, false)) {
             final String pipeName = "p4";
             Pipe p4 = preparePipe(pipeName);
             new mockit.Expectations(taskManager) {
@@ -482,7 +504,8 @@ public class PipeManagerTest {
                 }
             };
             Assert.assertEquals(0, p4.getRunningTasks().size());
-            pipeRetryFailedTask(p4);
+            pipeRetryFailedTask(p4, retryAll);
+            dropPipe(pipeName);
         }
     }
 

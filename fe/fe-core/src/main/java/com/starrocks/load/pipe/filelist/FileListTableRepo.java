@@ -74,6 +74,8 @@ public class FileListTableRepo extends FileListRepo {
 
     protected static final String SELECT_FILES_BY_STATE = SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s";
 
+    protected static final String SELECT_FILES_BY_PATH = SELECT_FILES + " WHERE `pipe_id` = %d AND `file_name` = %s";
+
     protected static final String SELECT_FILES_BY_STATE_WITH_LIMIT =
             SELECT_FILES + " WHERE `pipe_id` = %d AND `state` = %s LIMIT %d";
 
@@ -97,6 +99,11 @@ public class FileListTableRepo extends FileListRepo {
     @Override
     public List<PipeFileRecord> listFilesByState(PipeFileState state, long limit) {
         return RepoAccessor.getInstance().listFilesByState(pipeId.getId(), state, limit);
+    }
+
+    @Override
+    public PipeFileRecord listFilesByPath(String path) {
+        return RepoAccessor.getInstance().listFilesByPath(pipeId.getId(), path);
     }
 
     @Override
