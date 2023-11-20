@@ -821,7 +821,7 @@ public class Config extends ConfigBase {
      * Check of deadlock is time consuming. Open it only when tracking problems.
      */
     @ConfField(mutable = true)
-    public static boolean enable_deadlock_check = false;
+    public static boolean lock_checker_enable_deadlock_check = false;
 
     /**
      * Default broker load timeout

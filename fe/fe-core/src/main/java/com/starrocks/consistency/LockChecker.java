@@ -113,11 +113,13 @@ public class LockChecker extends FrontendDaemon {
     }
 
     private void checkDeadlocks() {
-        if (Config.enable_deadlock_check) {
+        if (Config.lock_checker_enable_deadlock_check) {
             ThreadMXBean tmx = ManagementFactory.getThreadMXBean();
             long[] ids = tmx.findDeadlockedThreads();
             if (ids != null) {
-                LOG.info("deadlock threads: {}", ids);
+                for (long id : ids) {
+                    LOG.info("deadlock thread: {}", Util.dumpThread(tmx.getThreadInfo(id, 50), 50));
+                }
             }
         }
     }
