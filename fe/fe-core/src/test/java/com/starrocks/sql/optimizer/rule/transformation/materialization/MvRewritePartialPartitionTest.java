@@ -50,7 +50,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
 
     @After
     public void after() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(startCaseTime);
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     @Test

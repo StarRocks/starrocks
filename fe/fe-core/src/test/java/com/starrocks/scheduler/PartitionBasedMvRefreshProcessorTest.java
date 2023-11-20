@@ -316,7 +316,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(startSuiteTime);
+        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
     }
 
     @Before
@@ -326,7 +326,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
     @After
     public void after() throws Exception {
-        cleanupEphemeralMVs(startCaseTime);
+        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {

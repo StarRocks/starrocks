@@ -314,7 +314,7 @@ public class CreateMaterializedViewTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(startSuiteTime);
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
     }
 
     @Before
@@ -325,7 +325,7 @@ public class CreateMaterializedViewTest {
     @After
     public void after() throws Exception {
         // cleanup mv after each case
-        PlanTestBase.cleanupEphemeralMVs(startCaseTime);
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     private static void dropMv(String mvName) throws Exception {

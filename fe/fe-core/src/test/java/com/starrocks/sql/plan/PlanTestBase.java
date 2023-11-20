@@ -28,6 +28,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.collections.CollectionUtils;
@@ -1090,7 +1091,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         };
     }
 
-    public static void cleanupEphemeralMVs(long startTime) throws Exception {
+    public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
             Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
