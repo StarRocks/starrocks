@@ -121,14 +121,11 @@ static Status decode_date_min_max(const orc::proto::ColumnStatistics& colStats, 
 static Status decode_datetime_min_max(const orc::Type* orc_type, const orc::proto::ColumnStatistics& colStats,
                                       int64_t tz_offset_in_seconds, const ColumnPtr& min_col,
                                       const ColumnPtr& max_col) {
-    bool is_instant = false;
-    if (orc_type->getKind() == orc::TypeKind::TIMESTAMP_INSTANT) {
-        is_instant = true;
-    } else if (orc_type->getKind() == orc::TypeKind::TIMESTAMP) {
-        is_instant = false;
-    } else {
-        return Status::NotFound("OrcMinMaxFilter: orc_type must be timestamp type");
+    if (orc_type->getKind() != orc::TypeKind::TIMESTAMP && orc_type->getKind() != orc::TypeKind::TIMESTAMP_INSTANT) {
+        return Status::InvalidArgument("OrcMinMaxFilter: Invalid ORC timestamp kind");
     }
+    bool is_instant = orc_type->getKind() == orc::TypeKind::TIMESTAMP_INSTANT;
+
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
