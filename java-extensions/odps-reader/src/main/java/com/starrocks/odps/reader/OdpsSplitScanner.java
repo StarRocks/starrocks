@@ -199,14 +199,10 @@ public class OdpsSplitScanner extends ConnectorScanner {
         sb.append("projectName: ");
         sb.append(projectName);
         sb.append("\n");
-        sb.append("splitIndex: ");
-        sb.append(splitIndex);
         sb.append("\n");
         sb.append("tableName: ");
         sb.append(tableName);
         sb.append("\n");
-        sb.append("sessionId: ");
-        sb.append(sessionId);
         sb.append("\n");
         sb.append("requiredFields: ");
         sb.append(Arrays.toString(requiredFields));
