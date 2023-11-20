@@ -457,7 +457,7 @@ When you create an external table, you need to specify the data types of columns
 > **Note**
 >
 > * StarRocks reads the data of the NESTED type by using JSON-related functions.
-> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. The support for querying ARRAY data from Elasticsearch is added from v2.5.
+> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. **The support for querying ARRAY data from Elasticsearch is added from v2.5.**
 
 ### Predicate pushdown
 
