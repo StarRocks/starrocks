@@ -1054,15 +1054,14 @@ Stripe Statistics:
        Column 1: count: 4 hasNull: false bytesOnDisk: 21 min: 10 max: 11 sum: 15
  */
 TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
-    SlotDesc timezone_datetime_slot_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                               {""}};
+    SlotDesc slot_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
 
     // They are a timestamp type, we will ignore all timezone information
     const std::string orc_file = "./be/test/exec/test_data/orc_scanner/type_mismatch.orc";
 
     // _create_runtime_state(c.query_timezone);
     auto* range = _create_scan_range(orc_file, 0, 0);
-    auto* tuple_desc = _create_tuple_desc(timezone_datetime_slot_descs);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
     auto* param = _create_param(orc_file, range, tuple_desc);
 
     param->min_max_tuple_desc = tuple_desc;
