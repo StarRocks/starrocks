@@ -437,6 +437,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
