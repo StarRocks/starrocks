@@ -248,10 +248,14 @@ public class StatementPlanner {
     public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
         try {
             lock(dbs);
+<<<<<<< HEAD
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
             AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
+=======
+            Analyzer.analyze(queryStmt, session);
+>>>>>>> 7a574790c4 ([BugFix] update lastSchemaUpdateTime in table after fast schema evolution (#35408))
             return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
             unLock(dbs);
