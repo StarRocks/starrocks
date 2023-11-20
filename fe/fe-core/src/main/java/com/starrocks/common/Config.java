@@ -2608,4 +2608,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
 }
