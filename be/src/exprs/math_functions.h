@@ -15,7 +15,6 @@
 #pragma once
 
 #include <cmath>
-#include <random>
 
 #include "column/column.h"
 #include "column/column_builder.h"
@@ -524,9 +523,6 @@ private:
     static const int32_t MIN_BASE = 2;
     static const int32_t MAX_BASE = 36;
     static const char* _s_alphanumeric_chars;
-    constexpr static const double lower_bound = 0.0;
-    constexpr static const double upper_bound = 1.0;
-    static std::uniform_real_distribution<double>* _distribution;
 
 public:
     constexpr static double EPSILON = 1e-9;
