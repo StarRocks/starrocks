@@ -249,11 +249,7 @@ FROM KAFKA
 
 - **数据格式**
 
-<<<<<<< HEAD
-  需要`PROPERTIES`子句的`"format" ="json"`中指定数据格式为 JSON。
-=======
   需要 `PROPERTIES` 子句的 `"format" = "json"` 中指定数据格式为 JSON。
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 - **数据提取和转换**
 
