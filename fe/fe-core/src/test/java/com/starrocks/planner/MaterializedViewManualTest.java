@@ -201,5 +201,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropTable("test_partition_expr_tbl1");
     }
 }
