@@ -177,25 +177,15 @@ public class StatementPlanner {
         boolean isSchemaValid = true;
 
         // Because we don't hold db lock outer, if the olap table schema change, we need to regenerate the query plan
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
+        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        // TODO: double check relatedMvs for OlapTable
+        // only collect once to save the original olapTable info
+        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = System.currentTimeMillis();
-
-            // TODO: double check relatedMvs for OlapTable
-            Set<OlapTable> olapTables = Sets.newHashSet();
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
-            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-
-            try {
-                // Need lock to avoid olap table metas ConcurrentModificationException
-                lock(dbs);
-                AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
-
-                // Only need to re analyze and re transform when schema isn't valid
-                if (!isSchemaValid) {
-                    Analyzer.analyze(queryStmt, session);
-                }
-            } finally {
-                unLock(dbs);
+            if (!isSchemaValid) {
+                reAnalyzeStmt(queryStmt, dbs, session);
             }
 
             LogicalPlan logicalPlan;
@@ -241,6 +231,28 @@ public class StatementPlanner {
         Preconditions.checkState(false, "The tablet write operation update metadata " +
                 "take a long time");
         return null;
+    }
+
+    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+        Set<OlapTable> olapTables = Sets.newHashSet();
+        try {
+            // Need lock to avoid olap table metas ConcurrentModificationException
+            lock(dbs);
+            AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+            return olapTables;
+        } finally {
+            unLock(dbs);
+        }
+    }
+
+    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+        try {
+            lock(dbs);
+            Analyzer.analyze(queryStmt, session);
+            return queryStmt.getQueryRelation().getColumnOutputNames();
+        } finally {
+            unLock(dbs);
+        }
     }
 
     // Lock all database before analyze
