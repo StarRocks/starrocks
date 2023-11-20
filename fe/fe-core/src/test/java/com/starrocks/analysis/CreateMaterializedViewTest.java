@@ -3176,6 +3176,18 @@ public class CreateMaterializedViewTest {
         starRocksAssert.withView("create view view_1 as select tb1.k1, k2 s2 from tbl1 tb1;");
         starRocksAssert.withView("create view view_2 as select v1.k1, v1.s2 from view_1 v1;");
         starRocksAssert.withView("create view view_3 as select date_trunc('month',k1) d1, v1.s2 from view_1 v1;");
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month', k1)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select * from view_1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
         {
             String sql = "create materialized view mv1\n" +
                     "partition by date_trunc('month',k1)\n" +
