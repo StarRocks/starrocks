@@ -287,6 +287,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     @SerializedName("tts")
     protected long taskTimeoutSecond = Config.routine_load_task_timeout_second;
 
+    @SerializedName("fpi")
+    protected long failurePauseIntervalSecond;
+
     // The tasks belong to this job
     protected List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
 
@@ -394,6 +397,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
+
+        failurePauseIntervalSecond = stmt.getFailurePauseIntervalSecond();
     }
 
     private void setRoutineLoadDesc(RoutineLoadDesc routineLoadDesc) {
@@ -456,6 +461,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public long getTaskTimeoutSecond() {
         return taskTimeoutSecond;
+    }
+
+    public long getFailurePauseIntervalSecond() {
+        return failurePauseIntervalSecond;
     }
 
     public boolean isTrimspace() {
@@ -1533,6 +1542,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
         jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
         jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
+        if (failurePauseIntervalSecond != -1) {
+            jobProperties.put("failurePauseIntervalSecond", String.valueOf(failurePauseIntervalSecond));
+        }
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -1858,6 +1870,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
             this.taskTimeoutSecond = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND)) {
+            this.failurePauseIntervalSecond = Long.parseLong(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND));
         }
         this.jobProperties.putAll(copiedJobProperties);
     }

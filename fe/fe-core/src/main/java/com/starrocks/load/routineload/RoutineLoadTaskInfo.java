@@ -104,21 +104,24 @@ public abstract class RoutineLoadTaskInfo {
     protected String label;
 
     protected StreamLoadTask streamLoadTask = null;
-    protected LocalDateTime lastSuccessTime;
+
+    private long pauseIntervalS;
+    private LocalDateTime lastSuccessTime;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
-                               long timeToExecuteMs, long taskTimeoutMs) {
+                               long timeToExecuteMs, long taskTimeoutMs, long pauseIntervalS) {
         this.id = id;
         this.jobId = jobId;
         this.createTimeMs = System.currentTimeMillis();
         this.taskScheduleIntervalMs = taskScheduleIntervalMs;
         this.timeoutMs = taskTimeoutMs;
         this.timeToExecuteMs = timeToExecuteMs;
+        this.pauseIntervalS = pauseIntervalS;
     }
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskSchedulerIntervalMs,
-                               long timeToExecuteMs, long previousBeId, long taskTimeoutMs) {
-        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs, taskTimeoutMs);
+                               long timeToExecuteMs, long previousBeId, long taskTimeoutMs, long pauseIntervalS) {
+        this(id, jobId, taskSchedulerIntervalMs, timeToExecuteMs, taskTimeoutMs, pauseIntervalS);
         this.previousBeId = previousBeId;
     }
 
@@ -164,6 +167,13 @@ public abstract class RoutineLoadTaskInfo {
 
     public void setLastScheduledTime(long lastScheduledTime) {
         this.lastScheduledTime = lastScheduledTime;
+    }
+
+    public LocalDateTime getLastSuccessTime() {
+        return lastSuccessTime;
+    }
+    public void setLastSuccessTime(LocalDateTime successTime) {
+        this.lastSuccessTime = successTime;
     }
 
     public long getTaskScheduleIntervalMs() {
@@ -250,14 +260,16 @@ public abstract class RoutineLoadTaskInfo {
         }
         if (lastSuccessTime == null) {
             lastSuccessTime = LocalDateTime.now();
-        } else if (ChronoUnit.SECONDS.between(lastSuccessTime, LocalDateTime.now())
-                > Config.routine_load_failure_pause_interval_second) {
-            throw new UserException("Routine load task has failed consistently for more than " +
-                    "routine_load_failure_pause_interval_second, last err: " + txnStatusChangeReason +
-                    ", assignment: " + getAssignment() +
-                    ", lastSuccessTime: " + lastSuccessTime +
-                    ", routine_load_failure_pause_interval_second: "
-                    + Config.routine_load_failure_pause_interval_second);
+        } else {
+            long interval = pauseIntervalS != -1 ? pauseIntervalS : Config.routine_load_failure_pause_interval_second;
+
+            if (ChronoUnit.SECONDS.between(lastSuccessTime, LocalDateTime.now()) > interval) {
+                throw new UserException("Routine load task has failed consistently for more than " +
+                        "routine_load_failure_pause_interval_second, last err: " + txnStatusChangeReason +
+                        ", assignment: " + getAssignment() +
+                        ", lastSuccessTime: " + lastSuccessTime +
+                        ", pause_interval: " + interval);
+            }
         }
     }
 

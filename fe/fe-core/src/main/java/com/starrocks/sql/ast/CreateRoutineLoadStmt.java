@@ -138,6 +138,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
     private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
 
+    public static final String FAILURE_PAUSE_INTERVAL_SECOND = "failure_pause_interval_second";
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
             .add(MAX_ERROR_NUMBER_PROPERTY)
@@ -239,6 +240,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     // custom pulsar property map<key, value>
     private Map<String, String> customPulsarProperties = Maps.newHashMap();
 
+    private long failurePauseIntervalSecond;
+
     public static final Predicate<Long> DESIRED_CONCURRENT_NUMBER_PRED = (v) -> v > 0L;
     public static final Predicate<Long> MAX_ERROR_NUMBER_PRED = (v) -> v >= 0L;
     public static final Predicate<Long> MAX_BATCH_INTERVAL_PRED = (v) -> v >= 5;
@@ -279,6 +282,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public long getTaskTimeoutSecond() {
         return taskTimeoutSecond;
+    }
+
+    public long getFailurePauseIntervalSecond() {
+        return failurePauseIntervalSecond;
     }
 
     public boolean isTrimspace() {
@@ -645,6 +652,17 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         } else {
             taskConsumeSecond = Config.routine_load_task_consume_second;
             taskTimeoutSecond = Config.routine_load_task_timeout_second;
+        }
+
+        if (jobProperties.containsKey(FAILURE_PAUSE_INTERVAL_SECOND)) {
+            String property = jobProperties.get(FAILURE_PAUSE_INTERVAL_SECOND);
+            try {
+                failurePauseIntervalSecond = Long.parseLong(property);
+            } catch (NumberFormatException e) {
+                throw new UserException(e.getMessage());
+            }
+        } else {
+            failurePauseIntervalSecond = -1;
         }
     }
 

@@ -73,22 +73,22 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     private Map<Integer, Long> latestPartOffset;
 
     public KafkaTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs, long timeToExecuteMs,
-                         Map<Integer, Long> partitionIdToOffset, long taskTimeoutMs) {
-        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, taskTimeoutMs);
+                         Map<Integer, Long> partitionIdToOffset, long taskTimeoutMs, long pauseIntervalS) {
+        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, taskTimeoutMs, pauseIntervalS);
         this.partitionIdToOffset = partitionIdToOffset;
     }
 
     public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
-                         Map<Integer, Long> latestPartOffset) {
-        this(timeToExecuteMs, kafkaTaskInfo, partitionIdToOffset, kafkaTaskInfo.getTimeoutMs());
+                         Map<Integer, Long> latestPartOffset, long pauseIntervalS) {
+        this(timeToExecuteMs, kafkaTaskInfo, partitionIdToOffset, kafkaTaskInfo.getTimeoutMs(), pauseIntervalS);
     }
 
     public KafkaTaskInfo(long timeToExecuteMs, KafkaTaskInfo kafkaTaskInfo, Map<Integer, Long> partitionIdToOffset,
-                         long tastTimeoutMs) {
+                         long tastTimeoutMs, long pauseIntervalS) {
         super(UUID.randomUUID(), kafkaTaskInfo.getJobId(),
-                kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs, kafkaTaskInfo.getBeId(), tastTimeoutMs);
+                kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs, kafkaTaskInfo.getBeId(), tastTimeoutMs,
+                pauseIntervalS);
         this.partitionIdToOffset = partitionIdToOffset;
-        this.lastSuccessTime = kafkaTaskInfo.lastSuccessTime;
     }
 
     public List<Integer> getPartitions() {

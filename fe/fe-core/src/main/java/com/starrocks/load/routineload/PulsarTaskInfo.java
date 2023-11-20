@@ -44,18 +44,20 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     private Map<String, Long> initialPositions = Maps.newHashMap();
 
     public PulsarTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs, long timeToExecuteMs,
-                          List<String> partitions, Map<String, Long> initialPositions, long tastTimeoutMs) {
-        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs);
+                          List<String> partitions, Map<String, Long> initialPositions, long tastTimeoutMs,
+                          long pauseIntervalS) {
+        super(id, jobId, taskScheduleIntervalMs, timeToExecuteMs, tastTimeoutMs, pauseIntervalS);
         this.partitions = partitions;
         this.initialPositions.putAll(initialPositions);
     }
 
-    public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions) {
+    public PulsarTaskInfo(long timeToExecuteMs, PulsarTaskInfo pulsarTaskInfo, Map<String, Long> initialPositions,
+                          long pauseIntervalS) {
         super(UUID.randomUUID(), pulsarTaskInfo.getJobId(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
-                timeToExecuteMs, pulsarTaskInfo.getBeId());
+                timeToExecuteMs, pulsarTaskInfo.getBeId(), pauseIntervalS);
+        super.setLastSuccessTime(pulsarTaskInfo.getLastSuccessTime());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
-        this.lastSuccessTime = pulsarTaskInfo.lastSuccessTime;
     }
 
     public List<String> getPartitions() {

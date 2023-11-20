@@ -61,7 +61,8 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset1,
-                Config.routine_load_task_timeout_second * 1000);
+                Config.routine_load_task_timeout_second * 1000,
+                Config.routine_load_failure_pause_interval_second);
         Assert.assertTrue(kafkaTaskInfo1.readyToExecute());
 
         Map<Integer, Long> offset2 = Maps.newHashMap();
@@ -71,7 +72,8 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset2,
-                Config.routine_load_task_timeout_second * 1000);
+                Config.routine_load_task_timeout_second * 1000,
+                Config.routine_load_failure_pause_interval_second);
         Assert.assertFalse(kafkaTaskInfo2.readyToExecute());
     }
 
@@ -103,7 +105,8 @@ public class KafkaTaskInfoTest {
                 System.currentTimeMillis(),
                 System.currentTimeMillis(),
                 offset,
-                Config.routine_load_task_timeout_second * 1000);
+                Config.routine_load_task_timeout_second * 1000,
+                Config.routine_load_failure_pause_interval_second);
         // call readyExecute to cache latestPartOffset
         kafkaTaskInfo.readyToExecute();
 
