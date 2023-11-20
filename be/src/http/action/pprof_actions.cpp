@@ -45,6 +45,7 @@
 #include <mutex>
 
 #include "common/config.h"
+#include "common/prof/heap_prof.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "http/ev_http_server.h"
@@ -69,6 +70,7 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str = "Heap profiling is not available with address sanitizer builds.";
 
     HttpChannel::send_reply(req, str);
+<<<<<<< HEAD
 #elif defined(USE_JEMALLOC)
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
 
@@ -109,6 +111,18 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str = profile;
     delete profile;
 
+=======
+#else
+    std::lock_guard<std::mutex> lock(kPprofActionMutex);
+    std::string str = HeapProf::getInstance().snapshot();
+
+    if (str.empty()) {
+        str = "dump jemalloc prof file failed";
+    } else {
+        std::ifstream f(str);
+        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+>>>>>>> 2d9613b496 ([Feature] support heap profile using script (#35322))
     HttpChannel::send_reply(req, str);
 #endif
 }

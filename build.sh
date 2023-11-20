@@ -436,7 +436,13 @@ if [ ${BUILD_BE} -eq 1 ]; then
     if [ "${BUILD_TYPE}" == "ASAN" ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
+<<<<<<< HEAD
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
+=======
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
+>>>>>>> 2d9613b496 ([Feature] support heap profile using script (#35322))
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
