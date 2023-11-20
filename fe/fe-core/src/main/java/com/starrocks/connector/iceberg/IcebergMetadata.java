@@ -55,6 +55,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -70,6 +71,9 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.ManifestEvaluator;
+import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
@@ -371,6 +375,22 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
         TableScan scan = nativeTbl.newScan().useSnapshot(snapshotId);
+
+        boolean useSrManifestGroup = false;
+        if (icebergTable.isPartitioned() && !icebergTable.isV2Format() && !icebergTable.hasPartitionTransformedEvolution()) {
+            ManifestEvaluator manifestListEvaluator = ManifestEvaluator.forPartitionFilter(
+                    Projections.inclusive(nativeTbl.spec(), true).project(icebergPredicate), nativeTbl.spec(), true);
+            List<ManifestFile> matchingManifests = snapshot.get().dataManifests(nativeTbl.io()).stream()
+                    .filter(manifestListEvaluator::eval).collect(Collectors.toList());
+            if (matchingManifests.size() > 5 || matchingManifests.stream().mapToLong(ManifestFile::length).sum() > 8 * 1024 * 1024) {
+                useSrManifestGroup = true;
+            }
+        }
+
+        if (useSrManifestGroup) {
+            scan = scan.option("use_sr", "true");
+        }
+
         if (enableCollectColumnStatistics()) {
             scan = scan.includeColumnStats();
         }
@@ -379,9 +399,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             scan = scan.filter(icebergPredicate);
         }
 
-        CloseableIterable<FileScanTask> fileScanTaskIterable = TableScanUtil.splitFiles(
-                scan.planFiles(), scan.targetSplitSize());
-        CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator();
+        CloseableIterator<FileScanTask> fileScanTaskIterator = scan.planFiles().iterator();
         Iterator<FileScanTask> fileScanTasks;
 
         // Under the condition of ensuring that the data is correct, we disabled the limit optimization when table has
@@ -418,16 +436,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
             FileScanTask scanTask = fileScanTaskIterator.next();
-            statisticProvider.updateIcebergFileStats(
-                    icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
-
-            FileScanTask icebergSplitScanTask = scanTask;
-            if (enableCollectColumnStatistics()) {
-                icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate);
-            }
-            icebergScanTasks.add(icebergSplitScanTask);
-
-            String filePath = icebergSplitScanTask.file().path().toString();
+            icebergScanTasks.add(scanTask);
+            String filePath = scanTask.file().path().toString();
             if (!filePaths.contains(filePath)) {
                 filePaths.add(filePath);
                 totalReadCount += scanTask.file().recordCount();
@@ -439,7 +449,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         try {
-            fileScanTaskIterable.close();
             fileScanTaskIterator.close();
         } catch (IOException e) {
             // Ignored
