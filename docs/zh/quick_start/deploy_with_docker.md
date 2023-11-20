@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+sidebar_position: 1
 ---
 
 # 使用 Docker 部署 StarRocks
