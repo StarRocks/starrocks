@@ -185,7 +185,7 @@ public class StatementPlanner {
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = System.currentTimeMillis();
             if (!isSchemaValid) {
-                reAnalyzeStmt(queryStmt, dbs, session);
+                colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
 
             LogicalPlan logicalPlan;
