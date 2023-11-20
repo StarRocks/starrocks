@@ -2501,4 +2501,14 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+<<<<<<< HEAD
+=======
+
+    // This limit limits the maximum size of json file to load.
+    @ConfField(mutable = true)
+    public static long json_file_size_limit = 4294967296L;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
+>>>>>>> 094fc0a412 ([BugFix] Forbid the usage of user-defined op column name __op (#33270))
 }
