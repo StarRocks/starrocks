@@ -93,7 +93,7 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
     // streams and produce one output stream piping into the sort operator.
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_op = source_operator(pred_operators);
-    if (!force && source_op->degree_of_parallelism() == num_receivers) {
+    if (!force && source_op->degree_of_parallelism() == num_receivers && !source_op->is_skewed()) {
         return pred_operators;
     }
 
