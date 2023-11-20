@@ -893,6 +893,7 @@ GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 ## Create a Hive database
 
@@ -1148,6 +1149,8 @@ DROP TABLE <table_name> FORCE
 
 >>>>>>> 7c8bd4e35f ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 >>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
+=======
+>>>>>>> be78aaac71 (Update hive_catalog.md)
 ## Manually or automatically update metadata cache
 
 ### Manual update
