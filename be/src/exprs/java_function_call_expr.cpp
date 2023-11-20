@@ -243,14 +243,14 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         };
 
         auto function_cache = UserFunctionCache::instance();
-        if (!_fn.cacheable) {
+        if (_fn.__isset.isolated && !_fn.isolated) {
+            ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(_fn.fid, _fn.hdfs_location,
+                                                                                _fn.checksum, get_func_desc));
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+        } else {
             std::string libpath;
             RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &libpath));
             ASSIGN_OR_RETURN(auto desc, get_func_desc(libpath));
-            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
-        } else {
-            ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(_fn.fid, _fn.hdfs_location,
-                                                                                _fn.checksum, get_func_desc));
             _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
         }
 

@@ -425,7 +425,7 @@ public class CreateFunctionStmt extends DdlStmt {
         function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, mainClass.getCanonicalName(), "", "", isolation);
+                objectFile, mainClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
         function.setChecksum(checksum);
     }
 

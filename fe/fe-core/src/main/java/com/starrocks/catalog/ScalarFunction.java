@@ -68,10 +68,8 @@ public class ScalarFunction extends Function {
     @SerializedName(value = "closeFnSymbol")
     private String closeFnSymbol;
     // isolated/shared
-    private static final String ISOLATED = "isolated";
-    private static final String SHARED = "shared";
-    @SerializedName(value = "isolation")
-    private String isolationType = ISOLATED;
+    @SerializedName(value = "isolated")
+    private boolean isolationType = true;
 
     // Only used for serialization
     protected ScalarFunction() {
@@ -149,7 +147,7 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, String isolationType) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType) {
         ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
@@ -167,7 +165,7 @@ public class ScalarFunction extends Function {
             TFunctionBinaryType binaryType,
             String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
         return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
-                symbol, prepareFnSymbol, closeFnSymbol, ISOLATED);
+                symbol, prepareFnSymbol, closeFnSymbol, true);
     }
 
     public void setSymbolName(String s) {
@@ -194,11 +192,11 @@ public class ScalarFunction extends Function {
         return closeFnSymbol;
     }
 
-    public String getIsolationType() {
-        return isolationType == null ? "isolated" : isolationType;
+    public boolean getIsolationType() {
+        return isolationType;
     }
 
-    public void setIsolationType(String isolationType) {
+    public void setIsolationType(boolean isolationType) {
         this.isolationType = isolationType;
     }
 
@@ -227,7 +225,7 @@ public class ScalarFunction extends Function {
             scalarFunction.setClose_fn_symbol(closeFnSymbol);
         }
         fn.setScalar_fn(scalarFunction);
-        fn.setCacheable("shared".equals(isolationType));
+        fn.setIsolated(isolationType);
         return fn;
     }
 
