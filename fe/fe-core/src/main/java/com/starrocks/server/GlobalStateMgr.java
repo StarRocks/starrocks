@@ -142,7 +142,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
-import com.starrocks.consistency.DeadlockChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -481,7 +481,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
-    private DeadlockChecker deadlockChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
@@ -743,7 +743,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
-        this.deadlockChecker = new DeadlockChecker();
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
@@ -1445,7 +1445,7 @@ public class GlobalStateMgr {
 
         slotManager.start();
 
-        deadlockChecker.start();
+        lockChecker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {

@@ -33,12 +33,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public class DeadlockChecker extends FrontendDaemon {
+public class LockChecker extends FrontendDaemon {
 
-    private static final Logger LOG = LogManager.getLogger(DeadlockChecker.class);
+    private static final Logger LOG = LogManager.getLogger(LockChecker.class);
 
-    public DeadlockChecker() {
-        super("DeadlockChecker", 1000 * Config.deadlock_checker_interval_second);
+    public LockChecker() {
+        super("DeadlockChecker", 1000 * Config.lock_checker_interval_second);
     }
 
     @Override
@@ -46,7 +46,7 @@ public class DeadlockChecker extends FrontendDaemon {
         checkDeadlocks();
         checkSlowLocks();
 
-        setInterval(Config.deadlock_checker_interval_second * 1000);
+        setInterval(Config.lock_checker_interval_second * 1000);
     }
 
     private void checkSlowLocks() {
@@ -113,10 +113,12 @@ public class DeadlockChecker extends FrontendDaemon {
     }
 
     private void checkDeadlocks() {
-        ThreadMXBean tmx = ManagementFactory.getThreadMXBean();
-        long[] ids = tmx.findDeadlockedThreads();
-        if (ids != null) {
-            LOG.info("deadlock threads: {}", ids);
+        if (Config.enable_deadlock_check) {
+            ThreadMXBean tmx = ManagementFactory.getThreadMXBean();
+            long[] ids = tmx.findDeadlockedThreads();
+            if (ids != null) {
+                LOG.info("deadlock threads: {}", ids);
+            }
         }
     }
 }
