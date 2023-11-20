@@ -31,6 +31,7 @@
 #include <sstream>
 
 #include "common/config.h"
+#include "common/prof/heap_prof.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "http/ev_http_server.h"
@@ -38,7 +39,10 @@
 #include "http/http_handler.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
+<<<<<<< HEAD
 #include "http/http_response.h"
+=======
+>>>>>>> 2d9613b496 ([Feature] support heap profile using script (#35322))
 #include "util/bfd_parser.h"
 
 namespace starrocks {
@@ -59,6 +63,7 @@ void HeapAction::handle(HttpRequest* req) {
     HttpChannel::send_reply(req, str);
 #else
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
+<<<<<<< HEAD
 
     int seconds = kPprofDefaultSampleSecs;
     const std::string& seconds_str = req->param(SECOND_KEY);
@@ -78,6 +83,16 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str = profile;
     delete profile;
 
+=======
+    std::string str = HeapProf::getInstance().snapshot();
+
+    if (str.empty()) {
+        str = "dump jemalloc prof file failed";
+    } else {
+        std::ifstream f(str);
+        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
+>>>>>>> 2d9613b496 ([Feature] support heap profile using script (#35322))
     HttpChannel::send_reply(req, str);
 #endif
 }
