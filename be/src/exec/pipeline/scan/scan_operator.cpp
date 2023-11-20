@@ -219,11 +219,13 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
                  (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0 ||
                   _peak_io_tasks_counter->value() == 0))) {
-        LOG(WARNING) << "set_finishing scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
-                     << " driver " << CurrentThread::current().get_driver_id() << " _num_running_io_tasks"
-                     << _num_running_io_tasks << " _submit_task_counter " << _submit_task_counter->value()
-                     << " _morsels_counter  " << _morsels_counter->value() << " _peak_io_tasks_counter "
-                     << _peak_io_tasks_counter->value();
+        LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
+                     << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
+                     << " _submit_task_counter= " << _submit_task_counter->value()
+                     << " _morsels_counter= " << _morsels_counter->value()
+                     << " _peak_io_tasks_counter= " << _peak_io_tasks_counter->value()
+                     << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
+                                                                          : "");
     }
     _detach_chunk_sources();
     _is_finished = true;
@@ -407,9 +409,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(ERROR) << "scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
-                           << " driver " << CurrentThread::current().get_driver_id() << get_name()
-                           << " Scan tasks error: " << status.to_string();
+                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 

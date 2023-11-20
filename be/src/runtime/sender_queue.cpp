@@ -789,11 +789,10 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
             _recvr->_num_buffered_bytes += chunk_bytes;
             COUNTER_ADD(metrics.peak_buffer_mem_bytes, chunk_bytes);
         }
+    }
 
-        if (_is_cancelled) {
-            clean_buffer_queues();
-            return Status::OK();
-        }
+    if (_is_cancelled) {
+        clean_buffer_queues();
     }
 
     return Status::OK();
