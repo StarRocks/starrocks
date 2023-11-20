@@ -216,7 +216,9 @@ void ScanOperator::_detach_chunk_sources() {
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
     std::lock_guard guard(_task_mutex);
-    if (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0 || _peak_io_tasks_counter->value() == 0) {
+    if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
+                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0 ||
+                  _peak_io_tasks_counter->value() == 0))) {
         LOG(WARNING) << "set_finishing scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
                      << " driver " << CurrentThread::current().get_driver_id() << " _num_running_io_tasks"
                      << _num_running_io_tasks << " _submit_task_counter " << _submit_task_counter->value()
