@@ -6,9 +6,6 @@ displayed_sidebar: "English"
 
 ## Description
 
-<<<<<<< HEAD
-Modifies an existing table.
-=======
 Modifies an existing table, including:
 
 - [Rename table, partition, index](#rename)
@@ -18,10 +15,6 @@ Modifies an existing table, including:
 - [Create/delete rollup index](#modify-rollup-index)
 - [Modify bitmap index](#modify-bitmap-indexes)
 
-> **NOTE**
->
-> This operation requires the ALTER privilege on the destination table.
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 ## Syntax
 
