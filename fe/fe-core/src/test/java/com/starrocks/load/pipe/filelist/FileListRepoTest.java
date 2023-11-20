@@ -157,6 +157,12 @@ public class FileListRepoTest {
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
 
+        // listFilesByPath
+        sql = RepoAccessor.getInstance().buildListFileByPath(1, "file1.parquet");
+        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+                "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
+                "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `file_name` = 'file1.parquet'", sql);
+
         // select staged
         sql = RepoAccessor.getInstance().buildSelectStagedFiles(records);
         Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
@@ -227,7 +233,6 @@ public class FileListRepoTest {
     }
 
     @Test
-    @Ignore("jvm crash FIXME(murphy)")
     public void testRepo() {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
@@ -248,6 +253,10 @@ public class FileListRepoTest {
         // listUnloadedFiles
         Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
         Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
+
+        // listFileByPath
+        Assert.assertThrows(IllegalArgumentException.class, () -> repo.listFilesByPath("not-exists"));
+        Assert.assertThrows(IllegalArgumentException.class, () -> accessor.listFilesByPath(1, "not-exists"));
 
         // selectStagedFiles
         PipeFileRecord record = new PipeFileRecord();
