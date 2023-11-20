@@ -1348,7 +1348,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(),
-                    timeoutSecond, resp, false, warehouse.getId());
+                    timeoutSecond * 1000, resp, false, warehouse.getId());
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);
