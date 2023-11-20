@@ -23,8 +23,19 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/FeNameFormat.java
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+>>>>>>> 094fc0a412 ([BugFix] Forbid the usage of user-defined op column name __op (#33270)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/FeNameFormat.java
 import com.starrocks.mysql.privilege.Role;
 import com.starrocks.sql.analyzer.SemanticException;
+
+import java.util.HashSet;
+import java.util.Set;
 
 public class FeNameFormat {
     private FeNameFormat() {}
@@ -46,7 +57,19 @@ public class FeNameFormat {
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/common/FeNameFormat.java
     public static void checkDbName(String dbName) throws AnalysisException {
+=======
+    private static final Set<String> FORBIDDEN_COLUMN_NAMES;
+
+    static {
+        FORBIDDEN_COLUMN_NAMES = new HashSet<>();
+        FORBIDDEN_COLUMN_NAMES.add("__op");
+        FORBIDDEN_COLUMN_NAMES.add("__row");
+    }
+
+    public static void checkDbName(String dbName) {
+>>>>>>> 094fc0a412 ([BugFix] Forbid the usage of user-defined op column name __op (#33270)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/FeNameFormat.java
         if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_DB_NAME, dbName);
         }
@@ -77,6 +100,14 @@ public class FeNameFormat {
         }
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
+
+        if (!Config.allow_system_reserved_names) {
+            if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] is a system reserved name. " +
+                        "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+            }
         }
     }
 
