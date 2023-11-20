@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
 
 import java.util.List;
 import java.util.Optional;
