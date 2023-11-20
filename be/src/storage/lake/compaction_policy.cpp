@@ -107,6 +107,7 @@ public:
     }
     double delete_bytes() const {
         if (stat.num_rows == 0) return 0.0;
+        if (stat.num_dels >= stat.num_rows) return (double)stat.bytes;
         return (double)stat.bytes * ((double)stat.num_dels / (double)stat.num_rows);
     }
     double read_bytes() const { return (double)stat.bytes - delete_bytes() + 1; }
@@ -152,7 +153,11 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
         RowsetStat stat;
         stat.num_rows = rowset_pb.num_rows();
         stat.bytes = rowset_pb.data_size();
-        stat.num_dels = mgr->get_rowset_num_deletes(_tablet->id(), tablet_metadata->version(), rowset_pb);
+        if (rowset_pb.has_num_dels()) {
+            stat.num_dels = rowset_pb.num_dels();
+        } else {
+            stat.num_dels = mgr->get_rowset_num_deletes(_tablet->id(), tablet_metadata->version(), rowset_pb);
+        }
         rowset_queue.emplace(std::make_shared<const RowsetMetadata>(rowset_pb), stat);
     }
     size_t cur_compaction_result_bytes = 0;

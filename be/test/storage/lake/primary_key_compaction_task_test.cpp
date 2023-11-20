@@ -224,6 +224,9 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     ASSERT_EQ(kChunkSize, read(version));
     ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
+    EXPECT_EQ(new_tablet_metadata1->rowsets(0).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata1->rowsets(1).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata1->rowsets(2).num_dels(), 0);
 
     ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
     // make sure delvecs have been generated
@@ -255,6 +258,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
     EXPECT_EQ(3, new_tablet_metadata2->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata2->has_prev_garbage_version());
+    EXPECT_EQ(new_tablet_metadata2->rowsets(0).num_dels(), 0);
 }
 
 // test write 3 diff chunk
@@ -306,6 +310,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
     EXPECT_EQ(3, new_tablet_metadata->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
 }
 
 // test write empty chunk
@@ -364,6 +369,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
     EXPECT_EQ(2, new_tablet_metadata->compaction_inputs_size());
     EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
 }
