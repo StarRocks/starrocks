@@ -2612,4 +2612,7 @@ public class Config extends ConfigBase {
     // This limit limits the maximum size of json file to load.
     @ConfField(mutable = true)
     public static long json_file_size_limit = 4294967296L;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
 }

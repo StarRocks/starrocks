@@ -34,7 +34,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-3.2
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.2')
@@ -47,7 +47,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-3.1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
@@ -60,7 +60,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-3.0
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.0')
@@ -73,7 +73,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-2.5
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.5')

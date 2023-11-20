@@ -904,7 +904,7 @@ Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](
 
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
+[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
 ```
 
 The `location` parameter specifies the file path in which you want to create the database, which can be in either HDFS or cloud storage.
@@ -995,7 +995,7 @@ Currently StarRocks only supports identity transforms, which means that StarRock
 >
 > Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value. Additionally, the sequence of the partition columns declared in `partition_desc` must be consistent with the sequence of the columns defined in `column_definition`.
 
-#### properties
+#### PROPERTIES
 
 You can specify the table attributes in the `"key" = "value"` format in `properties`.
 
