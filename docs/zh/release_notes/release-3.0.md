@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 3.0.8
 
-发布日期：2023 年 11 月 20 日
+发布日期：2023 年 11 月 17 日
 
 ### 功能优化
 
@@ -25,7 +25,7 @@ displayed_sidebar: "Chinese"
 - BINARY 或 VARBINARY 类型在 `information_schema.columns` 视图里面的 `DATA_TYPE` 和 `COLUMN_TYPE` 显示为 `unknown`。[#32678](https://github.com/StarRocks/starrocks/pull/32678)
 - 长时间向持久化索引打开的主键模型表高频导入，可能会引起 BE crash。[#33220](https://github.com/StarRocks/starrocks/pull/33220)
 - Query Cache 开启后查询结果有错。[#32778](https://github.com/StarRocks/starrocks/pull/32778)
-- 重启后 RESTORE 的表中的数据和 BACKUP 前的表中的数据在某些情况话会出现不一致的情况。[#33567](https://github.com/StarRocks/starrocks/pull/33567)
+- 重启后 RESTORE 的表中的数据和 BACKUP 前的表中的数据在某些情况下会不一致。[#33567](https://github.com/StarRocks/starrocks/pull/33567)
 - 执行 RESTORE 时如果 Compaction 正好同时在进行，可能引起 BE crash。[#32902](https://github.com/StarRocks/starrocks/pull/32902)
 
 ## 3.0.7
