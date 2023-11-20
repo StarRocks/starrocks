@@ -6,7 +6,28 @@ displayed_sidebar: "English"
 
 ## Description
 
+<<<<<<< HEAD
 Modifies an existing table.
+=======
+Modifies an existing table, including:
+
+- [Rename table, partition, index](#rename)
+<<<<<<< HEAD
+- [Atomic swap](#swap)
+=======
+- [Modify table comment](#alter-table-comment-from-v31)
+- [Atomic swap](#swap)
+- [Add/delete partitions and modify partition attributes](#modify-partition)
+- [Schema change](#schema-change)
+- [Create/delete rollup index](#modify-rollup-index)
+- [Modify bitmap index](#modify-bitmap-indexes)
+- [Manual data version compaction](#manual-compaction-from-31)
+>>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
+
+> **NOTE**
+>
+> This operation requires the ALTER privilege on the destination table.
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 ## Syntax
 
@@ -17,18 +38,62 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, and swap.
 
-- partition: modifies partition properties, drops a partition, or adds a partition.
-- rollup: creates or drops a rollup index.
-- schema change: adds, drops, or reorders columns, or modifies column type.
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- index: modifies index (only Bitmap index can be modified).
+- comment: modifies the table comment (supported from **v3.1 onwards**).
 - swap: atomic exchange of two tables.
+<<<<<<< HEAD
 
 > **NOTE**
 >
 > - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
 > - Schema change and rollup are asynchronous operations and are returned if the task is submitted successfully. Users can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 > - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
+=======
+- partition: modifies partition properties, drops a partition, or adds a partition.
+- schema change: adds, drops, or reorders columns, or modifies column type.
+- rollup: creates or drops a rollup index.
+- index: modifies index (only Bitmap index can be modified).
+- compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
+
+:::NOTE
+
+- Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
+- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
+- Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
+:::
+
+### Rename
+
+Rename supports modification of table name, rollup index, and partition name.
+
+#### Rename a table
+
+```sql
+ALTER TABLE <tbl_name> RENAME <new_tbl_name>
+```
+
+#### Rename a rollup index
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME ROLLUP <old_rollup_name> <new_rollup_name>
+```
+
+#### Rename a partition
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME PARTITION <old_partition_name> <new_partition_name>
+```
+
+### Alter table comment (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
+```
+>>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 ### Modify partition
 
@@ -49,7 +114,7 @@ Note:
 
     ```plain
     VALUES LESS THAN [MAXVALUE|("value1", ...)]
-    VALUES [("value1", ...), ("value1", ...))
+    VALUES ("value1", ...), ("value1", ...)
     ```
 
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
@@ -129,6 +194,7 @@ Note:
 
 2. For single-partition tables, partition name is the same as the table name.
 
+<<<<<<< HEAD
 ### Modify rollup index
 
 #### Create a rollup index
@@ -207,6 +273,8 @@ ALTER TABLE [database.]table DROP ROLLUP r1, r2;
 
 Note: You cannot drop the base index.
 
+=======
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ### Schema change
 
 Schema change supports the following modifications.
@@ -314,7 +382,20 @@ Note:
 
 #### Modify table properties
 
+<<<<<<< HEAD
 Currently, StarRocks supports modifying bloomfilter columns, colocate_with property, dynamic_partition property, enable_persistent_index property, replication_num property and default.replication_num property.
+=======
+Currently, StarRocks supports modifying the following table properties:
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 Syntax:
 
@@ -325,29 +406,98 @@ PROPERTIES ("key"="value")
 Note:
 You can also modify the properties by merging into the above schema change operation. See the following examples.
 
-### Rename
+### Modify rollup index
 
-Rename supports modification of table name, rollup index, and partition name.
+#### Create a rollup index
 
-#### Rename a table
+Syntax:
 
+<<<<<<< HEAD
 ```sql
 ALTER TABLE <table_name> RENAME <new_table_name>
+=======
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)]
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ```
 
-#### Rename a rollup index
+PROPERTIES: Support setting timeout time and the default timeout time is one day.
+
+Example:
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD ROLLUP r1(col1,col2) from r0;
+```
+
+#### Create rollup indexes in batches
+
+Syntax:
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)],...];
+```
+
+Example:
 
 ```sql
+<<<<<<< HEAD
 ALTER TABLE [database.]table
 RENAME ROLLUP <old_rollup_name> <new_rollup_name>
+=======
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ```
 
-#### Rename a partition
+Note:
+
+1. If from_index_name is not specified, then create from base index by default.
+2. The columns in the rollup table must be existing columns in from_index.
+3. In properties, user can specify the storage format. See CREATE TABLE for details.
+
+#### Drop a rollup index
+
+Syntax:
 
 ```sql
+<<<<<<< HEAD
 ALTER TABLE [database.]table
 RENAME PARTITION <old_partition_name> <new_partition_name>
+=======
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ```
+
+Example:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
+```
+
+#### Batch drop rollup indexes
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
+```
+
+Example:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
+```
+
+Note: You cannot drop the base index.
 
 ### Modify bitmap indexes
 
@@ -388,6 +538,41 @@ ALTER TABLE [database.]table
 SWAP WITH table_name;
 ```
 
+<<<<<<< HEAD
+=======
+### Manual compaction (from 3.1)
+
+StarRocks uses a compaction mechanism to merge different versions of loaded data. This feature can combine small files into large files, which effectively improves query performance.
+
+Before v3.1, compaction is performed in two ways:
+
+- Automatic compaction by system: Compaction is performed at the BE level in the background. Users cannot specify database or table for compaction.
+- Users can perform compaction by calling an HTTP interface.
+
+Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
+
+Syntax:
+
+```sql
+-- Perform compaction on the entire table.
+ALTER TABLE <tbl_name> COMPACT
+
+-- Perform compaction on a single partition.
+ALTER TABLE <tbl_name> COMPACT <partition_name>
+
+-- Perform compaction on multiple partitions.
+ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
+
+-- Perform cumulative compaction.
+ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
+
+-- Perform base compaction.
+ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
+```
+
+The `be_compactions` table in the `information_schema` database records compaction results. You can run `SELECT * FROM information_schema.be_compactions;` to query data versions after compaction.
+
+>>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ## Examples
 
 ### Table
