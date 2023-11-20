@@ -115,6 +115,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
+            context.checkTimeout();
             MvRewriteContext mvRewriteContext;
             if (mvContext.getMv().getRefreshScheme().isSync()) {
                 if (queryPredicateWithoutCompensate == null) {
