@@ -162,87 +162,6 @@ Note:
 
 2. For single-partition tables, partition name is the same as the table name.
 
-<<<<<<< HEAD
-### Modify rollup index
-
-#### Create a rollup index
-
-Syntax:
-
-```SQL
-ALTER TABLE [database.]table 
-ADD ROLLUP rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
-
-PROPERTIES: Support setting timeout time and the default timeout time is one day.
-
-Example:
-
-```SQL
-ALTER TABLE [database.]table 
-ADD ROLLUP r1(col1,col2) from r0;
-```
-
-#### Create rollup indexes in batches
-
-Syntax:
-
-```SQL
-ALTER TABLE [database.]table
-ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)],...];
-```
-
-Example:
-
-```sql
-ALTER TABLE [database.]table
-ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
-```
-
-Note:
-
-1. If from_index_name is not specified, then create from base index by default.
-2. The columns in the rollup table must be existing columns in from_index.
-3. In properties, user can specify the storage format. See CREATE TABLE for details.
-
-#### Drop a rollup index
-
-Syntax:
-
-```sql
-ALTER TABLE [database.]table
-DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
-```
-
-Example:
-
-```sql
-ALTER TABLE [database.]table DROP ROLLUP r1;
-```
-
-#### Batch drop rollup indexes
-
-Syntax:
-
-```sql
-ALTER TABLE [database.]table
-DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
-```
-
-Example:
-
-```sql
-ALTER TABLE [database.]table DROP ROLLUP r1, r2;
-```
-
-Note: You cannot drop the base index.
-
-=======
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ### Schema change
 
 Schema change supports the following modifications.
@@ -350,9 +269,6 @@ Note:
 
 #### Modify table properties
 
-<<<<<<< HEAD
-Currently, StarRocks supports modifying bloomfilter columns, colocate_with property, dynamic_partition property, enable_persistent_index property, replication_num property and default.replication_num property.
-=======
 Currently, StarRocks supports modifying the following table properties:
 
 - `replication_num`
@@ -363,7 +279,6 @@ Currently, StarRocks supports modifying the following table properties:
 - `enable_persistent_index`
 - `bloom_filter_columns`
 - `colocate_with`
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 Syntax:
 
@@ -380,16 +295,11 @@ You can also modify the properties by merging into the above schema change opera
 
 Syntax:
 
-<<<<<<< HEAD
-```sql
-ALTER TABLE <table_name> RENAME <new_table_name>
-=======
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ```
 
 PROPERTIES: Support setting timeout time and the default timeout time is one day.
@@ -415,13 +325,8 @@ ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
 Example:
 
 ```sql
-<<<<<<< HEAD
-ALTER TABLE [database.]table
-RENAME ROLLUP <old_rollup_name> <new_rollup_name>
-=======
 ALTER TABLE [<db_name>.]<tbl_name>
 ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ```
 
 Note:
@@ -435,13 +340,8 @@ Note:
 Syntax:
 
 ```sql
-<<<<<<< HEAD
-ALTER TABLE [database.]table
-RENAME PARTITION <old_partition_name> <new_partition_name>
-=======
 ALTER TABLE [<db_name>.]<tbl_name>
 DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ```
 
 Example:
