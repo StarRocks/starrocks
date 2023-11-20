@@ -1360,7 +1360,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
+<<<<<<< HEAD
         Map<String, String> properties = extractVarHints(hintMap.get(context));
+=======
+        Map<String, String> properties = new HashMap<>();
+        if (context.setVarHint() != null) {
+            properties = visitVarHints(context.setVarHint());
+        }
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -1721,10 +1728,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             queryStatement.setIsExplain(true, getExplainType(context.explainDesc()));
         }
 
+<<<<<<< HEAD
         return new InsertStmt(targetTableName, partitionNames,
                 context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                 getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                 createPos(context));
+=======
+        if (context.qualifiedName() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            TableName targetTableName = qualifiedNameToTableName(qualifiedName);
+            PartitionNames partitionNames = null;
+            if (context.partitionNames() != null) {
+                partitionNames = (PartitionNames) visit(context.partitionNames());
+            }
+
+            InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
+                    context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
+                    getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
+                    createPos(context));
+            stmt.setOptHints(visitVarHints(context.setVarHint()));
+            return stmt;
+        }
+
+        // INSERT INTO FILES(...)
+        Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
+        InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
+        res.setOptHints(visitVarHints(context.setVarHint()));
+        return res;
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
     }
 
     @Override
@@ -1754,6 +1785,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo("analyze"));
             }
         }
+        ret.setOptHints(visitVarHints(context.setVarHint()));
         return ret;
     }
 
@@ -1779,6 +1811,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOpWithInfo("analyze"));
             }
         }
+        ret.setOptHints(visitVarHints(context.setVarHint()));
         return ret;
     }
 
@@ -3849,6 +3882,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+    private Map<String, String> visitVarHints(List<StarRocksParser.SetVarHintContext> hints) {
+        Map<String, String> selectHints = new HashMap<>();
+        for (StarRocksParser.SetVarHintContext hintContext : ListUtils.emptyIfNull(hints)) {
+            for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
+                selectHints.put(hintMapContext.k.getText(),
+                        ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
+            }
+        }
+        return selectHints;
+    }
+
     @Override
     public ParseNode visitQuerySpecification(StarRocksParser.QuerySpecificationContext context) {
         Relation from = null;
@@ -3886,7 +3930,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
+<<<<<<< HEAD
         selectList.setOptHints(extractVarHints(hintMap.get(context)));
+=======
+        if (context.setVarHint() != null) {
+            selectList.setOptHints(visitVarHints(context.setVarHint()));
+        }
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
 
         SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,

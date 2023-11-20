@@ -992,17 +992,21 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
+<<<<<<< HEAD
     : explainDesc? INSERT (INTO | OVERWRITE) qualifiedName partitionNames?
+=======
+    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList)) partitionNames?
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
 updateStatement
-    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE setVarHint* qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE setVarHint* FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------

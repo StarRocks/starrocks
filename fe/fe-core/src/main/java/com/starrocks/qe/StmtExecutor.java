@@ -170,6 +170,11 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.commons.collections.MapUtils;
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -221,7 +226,14 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+<<<<<<< HEAD
     private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
+=======
+
+    private HttpResultSender httpResultSender;
+
+    private PrepareStmtContext prepareStmtContext;
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -427,6 +439,7 @@ public class StmtExecutor {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
 
+<<<<<<< HEAD
             // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
             if (parsedStmt != null) {
                 Map<String, String> optHints = null;
@@ -439,19 +452,12 @@ public class StmtExecutor {
                     SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
                     optHints = selectRelation.getSelectList().getOptHints();
                 }
+=======
+            processVarHint(sessionVariableBackup);
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
 
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    context.setSessionVariable(sessionVariable);
-                }
-
-                if (parsedStmt.isExplain()) {
-                    context.setExplainLevel(parsedStmt.getExplainLevel());
-                }
+            if (parsedStmt.isExplain()) {
+                context.setExplainLevel(parsedStmt.getExplainLevel());
             }
 
             // execPlan is the output of new planner
@@ -479,6 +485,22 @@ public class StmtExecutor {
                             parsedStmt = selectStmt;
                             execPlan = StatementPlanner.plan(parsedStmt, context);
                         }
+<<<<<<< HEAD
+=======
+                    } else if (parsedStmt instanceof ExecuteStmt) {
+                        ExecuteStmt executeStmt = (ExecuteStmt) parsedStmt;
+                        com.starrocks.sql.analyzer.Analyzer.analyze(executeStmt, context);
+                        prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
+                        if (null == prepareStmtContext) {
+                            throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
+                                    "prepare statement can't be found @ %s, maybe has expired",
+                                    executeStmt.getStmtName());
+                        }
+                        PrepareStmt prepareStmt = prepareStmtContext.getStmt();
+                        parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
+                        parsedStmt.setOrigStmt(originStmt);
+                        execPlan = StatementPlanner.plan(parsedStmt, context);
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
                     } else {
                         execPlan = StatementPlanner.plan(parsedStmt, context);
                         if (parsedStmt instanceof QueryStatement && context.shouldDumpQuery()) {
@@ -701,9 +723,35 @@ public class StmtExecutor {
         }
     }
 
+<<<<<<< HEAD
     private boolean isStatisticsJob(StatementBase stmt) {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(context, stmt);
         return dbs.values().stream().anyMatch(db -> STATISTICS_DB_NAME.equals(db.getFullName()));
+=======
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    private void processVarHint(SessionVariable variables) throws DdlException, CloneNotSupportedException {
+        if (parsedStmt == null) {
+            return;
+        }
+        Map<String, String> optHints = null;
+        if (parsedStmt instanceof QueryStatement &&
+                ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        } else if (parsedStmt instanceof DmlStmt) {
+            DmlStmt dml = (DmlStmt) parsedStmt;
+            optHints = dml.getOptHints();
+        }
+
+        if (MapUtils.isNotEmpty(optHints)) {
+            SessionVariable sessionVariable = (SessionVariable) variables.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setSystemVariable(sessionVariable,
+                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+            }
+            context.setSessionVariable(sessionVariable);
+        }
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
@@ -1483,6 +1531,108 @@ public class StmtExecutor {
         ExportStmt exportStmt = (ExportStmt) parsedStmt;
         exportStmt.setExportStartTime(context.getStartTime());
         context.getGlobalStateMgr().getExportMgr().addExportJob(queryId, exportStmt);
+<<<<<<< HEAD
+=======
+
+        if (!exportStmt.getSync()) {
+            return;
+        }
+        // poll and check export job state
+        int timeoutSeconds = Config.export_task_default_timeout_second + Config.export_checker_interval_second;
+        long start = System.currentTimeMillis();
+        while (System.currentTimeMillis() < (start + timeoutSeconds * 1000L)) {
+            ExportJob exportJob = context.getGlobalStateMgr().getExportMgr().getExportByQueryId(queryId);
+            if (exportJob != null) {
+                timeoutSeconds = exportJob.getTimeoutSecond() + Config.export_checker_interval_second;
+            }
+            if (exportJob == null ||
+                    (exportJob.getState() != ExportJob.JobState.FINISHED
+                            && exportJob.getState() != ExportJob.JobState.CANCELLED)) {
+                try {
+                    Thread.sleep(Config.export_checker_interval_second * 1000L);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                continue;
+            }
+            break;
+        }
+
+        // proxy send show export result
+        String db = exportStmt.getTblName().getDb();
+        String showStmt = String.format("SHOW EXPORT FROM %s WHERE QueryId = \"%s\";", db, queryId);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
+        ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
+        showExportStmt.setQueryId(queryId);
+        ShowExecutor executor = new ShowExecutor(context, showExportStmt);
+        ShowResultSet resultSet = executor.execute();
+        if (resultSet == null) {
+            // state changed in execute
+            return;
+        }
+        if (isProxy) {
+            proxyResultSet = resultSet;
+            context.getState().setEof();
+            return;
+        }
+
+        sendShowResult(resultSet);
+    }
+
+    private void handleUpdateFailPointStatusStmt() throws Exception {
+        FailPointExecutor executor = new FailPointExecutor(context, parsedStmt);
+        executor.execute();
+    }
+
+    private void handleDeallocateStmt() throws Exception {
+        DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
+        String stmtName = deallocateStmt.getStmtName();
+        if (context.getPreparedStmt(stmtName) == null) {
+            throw new UserException("PrepareStatement `" + stmtName + "` not exist");
+        }
+        context.removePreparedStmt(stmtName);
+        context.getState().setOk();
+    }
+
+    private void handlePrepareStmt(ExecPlan execPlan) throws Exception {
+        PrepareStmt prepareStmt = (PrepareStmt) parsedStmt;
+        boolean isBinaryRowFormat = context.getCommand() == MysqlCommand.COM_STMT_PREPARE;
+        // register prepareStmt
+        LOG.debug("add prepared statement {}, isBinaryProtocol {}", prepareStmt.getName(), isBinaryRowFormat);
+        context.putPreparedStmt(prepareStmt.getName(), new PrepareStmtContext(prepareStmt, context, execPlan));
+        if (isBinaryRowFormat) {
+            sendStmtPrepareOK(prepareStmt);
+        }
+    }
+
+    private void sendStmtPrepareOK(PrepareStmt prepareStmt) throws IOException {
+        // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response
+        serializer.reset();
+        // 0x00 OK
+        serializer.writeInt1(0);
+        // statement_id
+        serializer.writeInt4(Integer.valueOf(prepareStmt.getName()));
+        // num_columns
+        int numColumns = 0;
+        serializer.writeInt2(numColumns);
+        // num_params
+        int numParams = prepareStmt.getParameters().size();
+        serializer.writeInt2(numParams);
+        // reserved_1
+        serializer.writeInt1(0);
+        context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        if (numParams > 0) {
+            List<String> colNames = prepareStmt.getParameterLabels();
+            List<Parameter> parameters = prepareStmt.getParameters();
+            for (int i = 0; i < colNames.size(); ++i) {
+                serializer.reset();
+                serializer.writeField(colNames.get(i), parameters.get(i).getType());
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
+        }
+        context.getState().setEof();
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
     }
 
     public void setQueryStatistics(PQueryStatistics statistics) {
@@ -1645,6 +1795,7 @@ public class StmtExecutor {
             authenticateParams.setHost(context.getRemoteIP());
             authenticateParams.setDb_name(externalTable.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
+<<<<<<< HEAD
             transactionId =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr()
                             .beginRemoteTransaction(externalTable.getSourceTableDbId(),
@@ -1658,6 +1809,20 @@ public class StmtExecutor {
                                     authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
             // schema table and iceberg table does not need txn
+=======
+            transactionId = transactionMgr.beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                    Lists.newArrayList(externalTable.getSourceTableId()), label,
+                    externalTable.getSourceTableHost(),
+                    externalTable.getSourceTablePort(),
+                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                            FrontendOptions.getLocalHostAddress()),
+                    sourceType,
+                    context.getSessionVariable().getQueryTimeoutS(),
+                    authenticateParams);
+        } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
+                || targetTable.isTableFunctionTable()) {
+            // schema table and iceberg and hive table does not need txn
+>>>>>>> cc2e5ad571 ([Feature] support set_var hint for DML (#35283))
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
