@@ -132,8 +132,8 @@ insert into external_t select * from other_table;
 例如目标数据库为 PostgreSQL，则可以执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源，用于访问 PostgreSQL：
 
 ~~~SQL
-create external resource jdbc0
-properties (
+CREATE EXTERNAL RESOURCE jdbc0
+PROPERTIES (
     "type" = "jdbc",
     "user" = "postgres",
     "password" = "changeme",
@@ -508,7 +508,7 @@ POST /_analyze
 > **说明**
 >
 > * StarRocks 会通过 JSON 相关函数读取嵌套字段。
-> * 关于 ARRAY 类型，因为在 Elasticsearch 中，多维数组会被自动打平成一维数组，所以 StarRocks 也会做相同行为的转换。从 2.5 版本开始，支持查询 Elasticsearch 中的 ARRAY 数据。
+> * 关于 ARRAY 类型，因为在 Elasticsearch 中，多维数组会被自动打平成一维数组，所以 StarRocks 也会做相同行为的转换。**从 2.5 版本开始，支持查询 Elasticsearch 中的 ARRAY 数据。**
 
 ### 谓词下推
 
