@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -60,8 +61,6 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -315,7 +314,7 @@ public class CreateMaterializedViewTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(startSuiteTime);
+        PlanTestBase.cleanupEphemeralMVs(startSuiteTime);
     }
 
     @Before
@@ -326,20 +325,7 @@ public class CreateMaterializedViewTest {
     @After
     public void after() throws Exception {
         // cleanup mv after each case
-        cleanupEphemeralMVs(startCaseTime);
-    }
-
-    private static void cleanupEphemeralMVs(long startTime) throws Exception {
-        for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
-            if (startTime > 0 && mv.getCreateTime() >= startTime) {
-                dropMv(mv.getName());
-                LOG.warn("cleanup mv after test case: {}", mv.getName());
-            }
-        }
-        if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
-            LOG.warn("database [{}] still contains {} materialized views",
-                    testDb.getFullName(), testDb.getMaterializedViews().size());
-        }
+        PlanTestBase.cleanupEphemeralMVs(startCaseTime);
     }
 
     private static void dropMv(String mvName) throws Exception {
