@@ -27,4 +27,4 @@ select utc_timestamp(),utc_timestamp() + 1;
 +---------------------+---------------------+
 ```
 
-UTC_TIMESTAMP() + N 表示在当前时间加上 N 秒。
+`UTC_TIMESTAMP() + N` 表示在当前时间加上 N 秒。
