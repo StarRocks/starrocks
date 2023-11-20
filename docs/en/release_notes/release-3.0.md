@@ -6,11 +6,11 @@ displayed_sidebar: "English"
 
 ## 3.0.8
 
-Release date: November 20, 2023
+Release date: November 17, 2023
 
 ## Improvements
 
-- The `COLUMNS` table in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- The `COLUMNS` view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 
 ## Bug Fixes
 
