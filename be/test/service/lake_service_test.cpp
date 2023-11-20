@@ -729,6 +729,7 @@ TEST_F(LakeServiceTest, test_abort) {
 
     lake::AbortTxnRequest request;
     request.add_tablet_ids(_tablet_id);
+    request.set_skip_cleanup(false);
     for (auto&& log : logs) {
         request.add_txn_ids(log.txn_id());
     }
@@ -1697,6 +1698,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         lake::AbortTxnResponse response;
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(txn_id);
+        request.set_skip_cleanup(false);
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
     }
 
