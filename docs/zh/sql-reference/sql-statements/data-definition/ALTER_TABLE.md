@@ -10,15 +10,10 @@ displayed_sidebar: "Chinese"
 
 - [修改表名、分区名、索引名](#rename-对名称进行修改)
 - [对表进行原子替换](#swap-将两个表原子替换)
-<<<<<<< HEAD
-=======
-- [修改表注释](#修改表的注释31-版本起)
 - [增加或删除分区，修改分区属性](#操作-partition-相关语法)
 - [执行 schema change 增加或删除列，修改列顺序和表属性](#schema-change)
 - [创建或删除 rollup index](#操作-rollup-相关语法)
 - [修改 Bitmap 索引](#bitmap-index-修改)
-- [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
->>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 > **注意**
 >
@@ -35,23 +30,12 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 partition、rollup、schema change、rename、index、swap 操作，不同操作的应用场景为：
 
-<<<<<<< HEAD
-- partition: 修改分区属性，删除分区，增加分区。
-- rollup: 创建或删除 rollup index。
-- schema change: 增加列，删除列，调整列顺序，修改列类型。
-- rename: 修改表名，rollup index 名称，修改 partition 名称，注意列名不支持修改。
-- index: 修改索引(目前支持 bitmap 索引)。
-- swap: 原子替换两张表。
-=======
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
 - swap: 原子替换两张表。
-- comment: 修改已有表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - schema change: 增加列，删除列，调整列顺序，修改列类型。
 - rollup: 创建或删除 rollup index。
 - index: 修改索引（目前支持 bitmap 索引）。
-- compact: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
->>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 :::NOTE
 
@@ -195,91 +179,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 - 对于单分区表，分区名同表名。对于多分区表，如果需要修改所有分区的属性，则使用 `(*)` 更加方便。
 - 执行 `SHOW PARTITIONS FROM <tbl_name>` 查看修改后分区属性。
 
-<<<<<<< HEAD
-### 操作 rollup 相关语法
-
-#### 创建 rollup index (ADD ROLLUP)
-
-**RollUp 表索引**: shortkey index 可加速数据查找，但 shortkey index 依赖维度列排列次序。如果使用非前缀的维度列构造查找谓词，用户可以为数据表创建若干 RollUp 表索引。 RollUp 表索引的数据组织和存储和数据表相同，但 RollUp 表拥有自身的 shortkey index。用户创建 RollUp 表索引时，可选择聚合的粒度，列的数量，维度列的次序。使频繁使用的查询条件能够命中相应的 RollUp 表索引。
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD ROLLUP rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)];
-```
-
-properties: 支持设置超时时间，默认超时时间为 1 天。
-
-例子：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD ROLLUP r1(col1,col2) from r0;
-```
-
-#### 批量创建 rollup index
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)],...];
-```
-
-例子：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
-```
-
-> 注意
->
-1. 如果没有指定 from_index_name，则默认从 base index 创建。
-2. rollup 表中的列必须是 from_index 中已有的列。
-3. 在 properties 中，可以指定存储格式。具体请参阅 [CREATE TABLE](../data-definition/CREATE_TABLE.md) 章节。
-
-#### 删除 rollup index (DROP ROLLUP)
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
-```
-
-例子：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
-```
-
-#### 批量删除 rollup index
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
-```
-
-例子：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
-```
-
-注意：
-
-不能删除 base index。
-
-=======
->>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ### Schema change
 
 下文中的 index 为物化索引。建表成功后表为 base 表 (base index)，基于 base 表可 [创建 rollup index](#创建-rollup-index-add-rollup)。
@@ -537,41 +436,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
-<<<<<<< HEAD
-=======
-### 手动 Compaction（3.1 版本起）
-
-StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，将小文件合并成大文件，有效提升了查询性能。
-
-3.1 版本之前，支持通过两种方式来做 Compaction：
-
-- 系统自动在后台执行 Compaction。Compaction 的粒度是 BE 级，由后台自动执行，用户无法控制具体的数据库或者表。
-- 用户通过 HTTP 接口指定 Tablet 来执行 Compaction。
-
-3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
-
-语法：
-
-```sql
--- 对整张表做 compaction。
-ALTER TABLE <tbl_name> COMPACT
-
--- 指定一个分区进行 compaction。
-ALTER TABLE <tbl_name> COMPACT <partition_name>
-
--- 指定多个分区进行 compaction。
-ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
-
--- 对多个分区进行 cumulative compaction。
-ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
-
--- 对多个分区进行 base compaction。
-ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
-```
-
-执行完 Compaction 后，您可以通过查询 `information_schema` 数据库下的 `be_compactions` 表来查看 Compaction 后的数据版本变化 （`SELECT * FROM information_schema.be_compactions;`）。
-
->>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 ## 示例
 
 ### table
