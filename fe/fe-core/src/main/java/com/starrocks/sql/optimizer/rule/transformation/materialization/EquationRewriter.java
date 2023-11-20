@@ -21,6 +21,7 @@ import com.google.common.collect.Multimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -29,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.Map;
 import java.util.Optional;
@@ -36,12 +38,14 @@ import java.util.Optional;
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
+    private Multimap<ScalarOperator, Pair<ColumnRefOperator, PredicateReplaceChecker>> predicateProbMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private AggregateFunctionRewriter aggregateFunctionRewriter;
     boolean underAggFunctionRewriteContext;
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
+        this.predicateProbMap = ArrayListMultimap.create();
     }
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
@@ -78,6 +82,26 @@ public class EquationRewriter {
                 Optional<ScalarOperator> tmp = replace(predicate);
                 if (tmp.isPresent()) {
                     return tmp.get();
+                }
+                ScalarOperator left = predicate.getChild(0);
+                ScalarOperator right = predicate.getChild(1);
+
+                if (predicateProbMap.containsKey(left)) {
+                    Pair<ColumnRefOperator, PredicateReplaceChecker> pair = predicateProbMap.get(left).iterator().next();
+                    if (pair.second.canReplace(right)) {
+                        if (columnMapping == null) {
+                            ScalarOperator clonePredicate = predicate.clone();
+                            clonePredicate.setChild(0, pair.first.clone());
+                            return clonePredicate;
+                        } else {
+                            ColumnRefOperator replaced = columnMapping.get(pair.first);
+                            if (replaced != null) {
+                                ScalarOperator clonePredicate = predicate.clone();
+                                clonePredicate.setChild(0, replaced.clone());
+                                return clonePredicate;
+                            }
+                        }
+                    }
                 }
                 return super.visitBinaryPredicate(predicate, context);
             }
@@ -193,6 +217,12 @@ public class EquationRewriter {
                 if (newAggFunc != null && newAggFunc != aggFunc) {
                     equationMap.put(newAggFunc,  Pair.create(col, null));
                 }
+            } else if (aggFunc.getFnName().equals(FunctionSet.DATE_TRUNC)) {
+                // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
+                // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
+                // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
+                ScalarOperator first = expr.getChild(1);
+                predicateProbMap.put(first, Pair.create(col, new DateTruncReplaceChecker(((CallOperator) expr))));
             }
         }
     }
@@ -249,7 +279,28 @@ public class EquationRewriter {
         private Function findArithmeticFunction(CallOperator call, String fnName) {
             return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
         }
-
     }
 
+    private interface PredicateReplaceChecker {
+        boolean canReplace(ScalarOperator operator);
+    }
+
+    private static class DateTruncReplaceChecker implements PredicateReplaceChecker {
+        private final CallOperator mvDateTrunc;
+
+        public DateTruncReplaceChecker(CallOperator mvDateTrunc) {
+            this.mvDateTrunc = mvDateTrunc;
+        }
+
+        @Override
+        public boolean canReplace(ScalarOperator operator) {
+            if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
+                ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
+                        ((ConstantOperator) mvDateTrunc.getChild(0)),
+                        (ConstantOperator) operator);
+                return sliced.equals(operator);
+            }
+            return false;
+        }
+    }
 }
