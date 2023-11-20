@@ -20,6 +20,7 @@
 
 #include "common/greplog.h"
 #include "common/logging.h"
+#include "common/prof/heap_prof.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
@@ -127,7 +128,7 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
-static std::string exec(const std::string& cmd) {
+std::string exec(const std::string& cmd) {
     std::string ret;
 
     FILE* fp = popen(cmd.c_str(), "r");
@@ -228,6 +229,16 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
         REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
         REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
+    }
+    {
+        auto& cls = m.klass<HeapProf>("HeapProf");
+        REG_STATIC_METHOD(HeapProf, getInstance);
+        REG_METHOD(HeapProf, enable_prof);
+        REG_METHOD(HeapProf, disable_prof);
+        REG_METHOD(HeapProf, has_enable);
+        REG_METHOD(HeapProf, snapshot);
+        REG_METHOD(HeapProf, to_dot_format);
+        REG_METHOD(HeapProf, dump_dot_snapshot);
     }
 }
 
@@ -495,7 +506,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {
