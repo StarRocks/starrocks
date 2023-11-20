@@ -32,7 +32,7 @@ alter_clause1[, alter_clause2, ...]
 - rollup: creates or drops a rollup index.
 - index: modifies index (only Bitmap index can be modified).
 
-:::NOTE
+:::note
 
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
 - Schema change and rollup are asynchronous operations. A success message is returned immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
