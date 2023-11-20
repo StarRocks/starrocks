@@ -286,7 +286,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         }
     }
 
-    if (request->has_skip_cleanup() && request->skip_cleanup()) {
+    if (!request->has_skip_cleanup() || request->skip_cleanup()) {
         return;
     }
 
