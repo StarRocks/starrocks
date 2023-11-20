@@ -72,14 +72,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```
 
-### 修改表的注释（3.1 版本起）
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
-```
-
 ### 操作 partition 相关语法
 
 #### 增加分区 (ADD PARTITION)
