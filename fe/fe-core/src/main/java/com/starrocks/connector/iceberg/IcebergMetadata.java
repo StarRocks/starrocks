@@ -37,6 +37,7 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -55,6 +56,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
@@ -70,6 +72,9 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.expressions.Expressions;
+import org.apache.iceberg.expressions.ManifestEvaluator;
+import org.apache.iceberg.expressions.Projections;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
@@ -371,6 +376,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
         TableScan scan = nativeTbl.newScan().useSnapshot(snapshotId);
+
+        if (ConnectContext.get().getSessionVariable().isEnableSr()) {
+            scan = scan.option("use_sr", "true");
+        }
+
         if (enableCollectColumnStatistics()) {
             scan = scan.includeColumnStats();
         }
@@ -412,17 +422,13 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .collect(toImmutableList());
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
-        long totalReadCount = 0;
-
         // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
             FileScanTask scanTask = fileScanTaskIterator.next();
-            statisticProvider.updateIcebergFileStats(
-                    icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
 
             FileScanTask icebergSplitScanTask = scanTask;
-            if (enableCollectColumnStatistics()) {
+            if (ConnectContext.get().getSessionVariable().isEnableCopySplit()) {
                 icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate);
             }
             icebergScanTasks.add(icebergSplitScanTask);
@@ -430,11 +436,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             String filePath = icebergSplitScanTask.file().path().toString();
             if (!filePaths.contains(filePath)) {
                 filePaths.add(filePath);
-                totalReadCount += scanTask.file().recordCount();
-            }
-
-            if (canPruneManifests && totalReadCount >= limit) {
-                break;
             }
         }
 

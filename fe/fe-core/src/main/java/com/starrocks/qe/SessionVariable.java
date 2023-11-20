@@ -646,6 +646,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SHARED_SCAN)
     private boolean enableSharedScan = false;
 
+    @VariableMgr.VarAttr(name = "enable_sr")
+    private boolean enableSr = false;
+
+    public boolean isEnableSr() {
+        return enableSr;
+    }
+
+    @VariableMgr.VarAttr(name = "enable_copy_split")
+    private boolean enableCopySplit = true;
+
+    public boolean isEnableCopySplit() {
+        return enableCopySplit;
+    }
+
     // max memory used on every backend.
     public static final long DEFAULT_EXEC_MEM_LIMIT = 2147483648L;
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT, flag = VariableMgr.INVISIBLE)
