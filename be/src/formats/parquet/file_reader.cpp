@@ -72,10 +72,13 @@ void FileReader::_build_metacache_key() {
 
 Status FileReader::init(HdfsScannerContext* ctx) {
     _scanner_ctx = ctx;
+#ifdef WITH_STARCACHE
+    // Only support file metacache in starcache engine
     if (ctx->use_file_metacache && config::datacache_enable) {
         _build_metacache_key();
         _cache = BlockCache::instance();
     }
+#endif
     RETURN_IF_ERROR(_get_footer());
 
     if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
