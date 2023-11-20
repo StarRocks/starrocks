@@ -287,20 +287,14 @@ ORDER BY (column_name1, column_name2, ...)
 
 #### 修改表的属性
 
-<<<<<<< HEAD
-目前支持修改 `bloom_filter_columns`，`colocate_with`， `dynamic_partition` 属性，`enable_persistent_index` 属性，`replication_num` 和 `default.replication_num` 属性。
-=======
-支持修改如下表属性：
-
 - `replication_num`
 - `default.replication_num`
 - `storage_cooldown_ttl`
 - `storage_cooldown_time`
-- Dynamic partitioning related properties
+- Dynamic partitioning-related properties
 - `enable_persistent_index`
 - `bloom_filter_columns`
 - `colocate_with`
->>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 
 语法：
 
