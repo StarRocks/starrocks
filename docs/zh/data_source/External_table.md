@@ -96,13 +96,8 @@ insert into external_t select * from other_table;
 例如目标数据库为 PostgreSQL，则可以执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源，用于访问 PostgreSQL：
 
 ~~~SQL
-<<<<<<< HEAD
-create external resource jdbc0
-properties (
-=======
 CREATE EXTERNAL RESOURCE jdbc0
 PROPERTIES (
->>>>>>> 688e819455 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
     "type" = "jdbc",
     "user" = "postgres",
     "password" = "changeme",
