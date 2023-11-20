@@ -19,7 +19,6 @@ DATETIME UTC_TIMESTAMP()
 ## 示例
 
 ```Plain Text
--- UTC_TIMESTAMP() + N 表示在当前时间加上 N 秒。
 select utc_timestamp(),utc_timestamp() + 1;
 +---------------------+---------------------+
 | utc_timestamp()     | utc_timestamp() + 1 |
@@ -27,3 +26,5 @@ select utc_timestamp(),utc_timestamp() + 1;
 | 2019-07-10 12:31:18 |      20190710123119 |
 +---------------------+---------------------+
 ```
+
+UTC_TIMESTAMP() + N 表示在当前时间加上 N 秒。
