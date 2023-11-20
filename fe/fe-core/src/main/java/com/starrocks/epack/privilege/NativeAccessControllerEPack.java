@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class NativeAccessControllerEPack extends NativeAccessController implements AccessControlEPack {
+public class NativeAccessControllerEPack extends NativeAccessController implements AccessControllerEPack {
     @Override
     public void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                   String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {

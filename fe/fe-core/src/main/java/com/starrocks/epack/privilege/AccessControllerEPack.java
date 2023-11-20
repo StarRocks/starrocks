@@ -10,7 +10,7 @@ import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.Set;
 
-public interface AccessControlEPack extends AccessController {
+public interface AccessControllerEPack extends AccessController {
 
     default void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                    String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {

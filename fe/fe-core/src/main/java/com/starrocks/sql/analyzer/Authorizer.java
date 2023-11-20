@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -23,7 +24,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.epack.privilege.AccessControlEPack;
+import com.starrocks.epack.privilege.AccessControllerEPack;
 import com.starrocks.epack.privilege.NativeAccessControllerEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
@@ -39,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
+import org.apache.commons.collections4.ListUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -282,49 +284,48 @@ public class Authorizer {
     }
 
     /**
+     * A lambda function that throws AccessDeniedException
+     */
+    @FunctionalInterface
+    public interface AccessControlChecker {
+        void check() throws AccessDeniedException;
+    }
+
+    /**
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
     public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
         Preconditions.checkNotNull(db, "db should not null");
+        AccessControllerEPack controller = (AccessControllerEPack) getInstance().getAccessControlOrDefault(catalogName);
 
-        try {
-            getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
-        } catch (AccessDeniedException e1) {
+        List<AccessControlChecker> basicCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyPolicy(currentUser, roleIds, PolicyType.MASKING, catalogName, db),
+                () -> controller.checkAnyActionOnAnyPolicy(currentUser, roleIds, PolicyType.ROW_ACCESS, catalogName, db)
+        );
+        List<AccessControlChecker> extraCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
+        );
+        List<AccessControlChecker> appliedCheckers = CatalogMgr.isInternalCatalog(catalogName) ?
+                ListUtils.union(basicCheckers, extraCheckers) : basicCheckers;
+
+        AccessDeniedException lastExcepton = null;
+        for (AccessControlChecker checker : appliedCheckers) {
             try {
-                getInstance().getAccessControlOrDefault(catalogName)
-                        .checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db);
-            } catch (AccessDeniedException e2) {
-                if (CatalogMgr.isInternalCatalog(catalogName)) {
-                    try {
-                        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                .checkAnyActionOnAnyView(currentUser, roleIds, db);
-                    } catch (AccessDeniedException e3) {
-                        try {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db);
-                        } catch (AccessDeniedException e4) {
-                            try {
-                                getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                        .checkAnyActionOnAnyFunction(currentUser, roleIds, db);
-                            } catch (AccessDeniedException e5) {
-                                AccessControlEPack accessControlEPack = (AccessControlEPack) getInstance()
-                                        .getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                                try {
-                                    accessControlEPack.checkAnyActionOnAnyPolicy(
-                                            currentUser, roleIds, PolicyType.MASKING, catalogName, db);
-                                } catch (AccessDeniedException e6) {
-                                    accessControlEPack.checkAnyActionOnAnyPolicy(
-                                            currentUser, roleIds, PolicyType.ROW_ACCESS, catalogName, db);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    throw new AccessDeniedException();
-                }
+                checker.check();
+                return;
+            } catch (AccessDeniedException e) {
+                lastExcepton = e;
             }
+        }
+        if (lastExcepton != null) {
+            throw lastExcepton;
         }
     }
 

@@ -17,20 +17,20 @@ public class AuthorizerEPack extends Authorizer {
     public static void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                          String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
         String catalog = catalogName == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : catalogName;
-        ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalog))
+        ((AccessControllerEPack) getInstance().getAccessControlOrDefault(catalog))
                 .checkPolicyAction(currentUser, roleIds, policyType, catalog, db, policy, privilegeType);
     }
 
     public static void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType,
                                               String catalogName, String db, String policy) throws AccessDeniedException {
         String catalog = catalogName == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : catalogName;
-        ((AccessControlEPack) getInstance().getAccessControlOrDefault(catalog)).checkAnyActionOnPolicy(
+        ((AccessControllerEPack) getInstance().getAccessControlOrDefault(catalog)).checkAnyActionOnPolicy(
                 currentUser, roleIds, policyType, catalog, db, policy);
     }
 
     public static void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
-        ((AccessControlEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+        ((AccessControllerEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
                 .checkWarehouseAction(currentUser, roleIds, name, privilegeType);
     }
 
@@ -38,7 +38,7 @@ public class AuthorizerEPack extends Authorizer {
             throws AccessDeniedException {
         // Any user has an implicit usage permission on the default_warehouse
         if (!WarehouseManager.isDefaultWarehouse(name)) {
-            ((AccessControlEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
+            ((AccessControllerEPack) getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))
                     .checkAnyActionOnWarehouse(currentUser, roleIds, name);
         }
     }
