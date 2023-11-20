@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-set -ex
+
 # check STARROCKS_HOME
 if [[ -z ${STARROCKS_HOME} ]]; then
     echo "Error: STARROCKS_HOME is not set"
