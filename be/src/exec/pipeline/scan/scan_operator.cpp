@@ -82,7 +82,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -217,8 +216,16 @@ void ScanOperator::_detach_chunk_sources() {
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
     std::lock_guard guard(_task_mutex);
+    if (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0 || _peak_io_tasks_counter->value() == 0) {
+        LOG(WARNING) << "set_finishing scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                     << " driver " << CurrentThread::current().get_driver_id() << " _num_running_io_tasks"
+                     << _num_running_io_tasks << " _submit_task_counter " << _submit_task_counter->value()
+                     << " _morsels_counter  " << _morsels_counter->value() << " _peak_io_tasks_counter "
+                     << _peak_io_tasks_counter->value();
+    }
     _detach_chunk_sources();
     _is_finished = true;
+    set_buffer_finished();
     return Status::OK();
 }
 
@@ -398,7 +405,9 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
-                LOG(WARNING) << get_name() << " Scan tasks error: " << status.to_string();
+                LOG(ERROR) << "scan fragment " << print_id(CurrentThread::current().fragment_instance_id())
+                           << " driver " << CurrentThread::current().get_driver_id() << get_name()
+                           << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
