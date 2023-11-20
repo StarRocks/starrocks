@@ -140,7 +140,12 @@ public class UDFJsonGet {
 
 用户自定义类必须实现如下方法：
 
+<<<<<<< HEAD
 > 说明
+=======
+> **说明**
+>
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
 | 方法                        | 含义                                                   |
@@ -192,8 +197,14 @@ public class SumInt {
 
 用户自定义类必须实现如下方法：
 
+<<<<<<< HEAD
 > 说明
+=======
+> **说明**
+>
+>>>>>>> d03703bd50 ([Doc] Fix issues in alter table, datetime func, json data type, and flink connector (#35350))
 > 方法中传入参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
+
 |               **方法**             |                    **含义**                                 |
 | --------------------------------- | ------------------------------------------------------------ |
 | State create()                    | 创建 State。                                                 |
