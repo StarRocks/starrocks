@@ -2273,7 +2273,7 @@ public class Config extends ConfigBase {
             "threshold, auto vacuum operations will no longer be triggered for that partition")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_new_publish_mechanism = false;
 
     @ConfField(mutable = true)
