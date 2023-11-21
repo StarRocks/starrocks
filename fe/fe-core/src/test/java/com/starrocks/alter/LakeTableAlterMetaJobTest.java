@@ -64,6 +64,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -390,4 +391,14 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }
 
+    @Test
+    public void testSetPropertyNotSupport() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM, "all");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+        Assertions.assertThrows(DdlException.class,
+                () -> schemaChangeHandler.createAlterMetaJob(alterList, db, table));
+    }
 }
