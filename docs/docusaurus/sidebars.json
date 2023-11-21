@@ -739,7 +739,7 @@
             },
             {
               "type": "link",
-              "label": "v3.1",
+              "label": "v3.1-Latest",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-3.1.md"
             },
             {
@@ -749,7 +749,7 @@
             },
             {
               "type": "link",
-              "label": "v2.5",
+              "label": "v2.5-Stable",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.5.md"
             },
             {
