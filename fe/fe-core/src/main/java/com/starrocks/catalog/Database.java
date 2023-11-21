@@ -178,7 +178,7 @@ public class Database extends MetaObject implements Writable {
     public void readLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.readLock().lock();
+        this.rwLock.sharedLock();
         logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
     }
 
@@ -186,12 +186,12 @@ public class Database extends MetaObject implements Writable {
     public boolean readLockAndCheckExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.readLock().lock();
+        this.rwLock.sharedLock();
         logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
         if (exist) {
             return true;
         } else {
-            this.rwLock.readLock().unlock();
+            this.rwLock.sharedUnlock();
             return false;
         }
     }
@@ -200,7 +200,7 @@ public class Database extends MetaObject implements Writable {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+            if (!this.rwLock.trySharedLock(timeout, unit)) {
                 logTryLockFailureEvent("readLock", threadDump);
                 return false;
             }
@@ -217,7 +217,7 @@ public class Database extends MetaObject implements Writable {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+            if (!this.rwLock.trySharedLock(timeout, unit)) {
                 logTryLockFailureEvent("readLock", threadDump);
                 return false;
             }
@@ -225,7 +225,7 @@ public class Database extends MetaObject implements Writable {
             if (exist) {
                 return true;
             } else {
-                this.rwLock.readLock().unlock();
+                this.rwLock.sharedUnlock();
                 return false;
             }
         } catch (InterruptedException e) {
@@ -236,17 +236,17 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void readUnlock() {
-        this.rwLock.readLock().unlock();
+        this.rwLock.sharedUnlock();
     }
 
     public boolean isReadLockHeldByCurrentThread() {
-        return this.rwLock.getReadHoldCount() > 0;
+        return this.rwLock.isReadLockHeldByCurrentThread();
     }
 
     public void writeLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.writeLock().lock();
+        this.rwLock.exclusiveLock();
         logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
     }
 
@@ -254,12 +254,12 @@ public class Database extends MetaObject implements Writable {
     public boolean writeLockAndCheckExist() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.writeLock().lock();
+        this.rwLock.exclusiveLock();
         logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
         if (exist) {
             return true;
         } else {
-            this.rwLock.writeLock().unlock();
+            this.rwLock.exclusiveUnlock();
             return false;
         }
     }
@@ -268,7 +268,7 @@ public class Database extends MetaObject implements Writable {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+            if (!this.rwLock.tryExclusiveLock(timeout, unit)) {
                 logTryLockFailureEvent("writeLock", threadDump);
                 return false;
             }
@@ -285,7 +285,7 @@ public class Database extends MetaObject implements Writable {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+            if (!this.rwLock.tryExclusiveLock(timeout, unit)) {
                 logTryLockFailureEvent("tryWriteLock", threadDump);
                 return false;
             }
@@ -293,7 +293,7 @@ public class Database extends MetaObject implements Writable {
             if (exist) {
                 return true;
             } else {
-                this.rwLock.writeLock().unlock();
+                this.rwLock.exclusiveUnlock();
                 return false;
             }
         } catch (InterruptedException e) {
@@ -304,11 +304,15 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void writeUnlock() {
-        this.rwLock.writeLock().unlock();
+        this.rwLock.exclusiveUnlock();
     }
 
     public boolean isWriteLockHeldByCurrentThread() {
-        return this.rwLock.writeLock().isHeldByCurrentThread();
+        return this.rwLock.isWriteLockHeldByCurrentThread();
+    }
+
+    public QueryableReentrantReadWriteLock getLock() {
+        return this.rwLock;
     }
 
     public long getId() {
