@@ -21,7 +21,7 @@ import com.starrocks.server.RunMode;
 
 public class AutoInferUtil {
     public static int calDefaultReplicationNum() throws UserException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return 1;
         }
 

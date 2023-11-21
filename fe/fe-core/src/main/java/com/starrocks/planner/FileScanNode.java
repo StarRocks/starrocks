@@ -513,7 +513,7 @@ public class FileScanNode extends LoadScanNode {
         nodes = Lists.newArrayList();
 
         // TODO: need to refactor after be split into cn + dn
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
 
             for (long cnId : currentWh.getAnyAvailableCluster().getAvailableComputeNodeIds()) {

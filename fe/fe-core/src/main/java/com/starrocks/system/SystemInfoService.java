@@ -741,7 +741,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (CollectionUtils.isNotEmpty(backendIds)) {
             return backendIds.get(0);
         }
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+        if (RunMode.isSharedNothingMode()) {
             throw new UserException("No backend alive.");
         }
         List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
@@ -1134,7 +1134,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void checkClusterCapacity() throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return;
         }
 

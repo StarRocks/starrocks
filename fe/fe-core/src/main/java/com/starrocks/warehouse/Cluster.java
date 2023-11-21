@@ -148,7 +148,7 @@ public class Cluster implements Writable {
 
     public List<Long> getAvailableComputeNodeIds() {
         List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+        if (RunMode.isSharedNothingMode()) {
             final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
             return clusterInfoService.backendAndComputeNodeStream().map(ComputeNode::getId).collect(Collectors.toList());
         }

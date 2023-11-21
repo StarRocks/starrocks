@@ -110,7 +110,7 @@ public class SimpleScheduler {
                 }
 
                 // In shared data mode, we can select any alive node to replace the original dead node for query
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                if (RunMode.isSharedDataMode()) {
                     List<ComputeNode> allNodes = new ArrayList<>(computeNodes.size());
                     allNodes.addAll(computeNodes.values());
                     List<ComputeNode> candidateNodes = allNodes.stream()

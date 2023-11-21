@@ -147,7 +147,7 @@ public class PulsarUtil {
             try {
                 // TODO: need to refactor after be split into cn + dn
                 List<Long> nodeIds = new ArrayList<>();
-                if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
+                if (RunMode.isSharedDataMode()) {
                     long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                     if (request.pulsarMetaRequest != null) {
                         warehouseId = request.pulsarMetaRequest.pulsarInfo.warehouseId;

@@ -1875,7 +1875,7 @@ public class LocalMetastore implements ConnectorMetadata {
             warehouseId = ConnectContext.get().getCurrentWarehouseId();
         }
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             numAliveNodes = 0;
             Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
@@ -1885,7 +1885,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
         if (numAliveNodes == 0) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 throw new DdlException("no alive compute nodes");
             } else {
                 throw new DdlException("no alive backends");

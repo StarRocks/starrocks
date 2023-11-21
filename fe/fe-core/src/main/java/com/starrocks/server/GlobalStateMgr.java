@@ -602,7 +602,7 @@ public class GlobalStateMgr {
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
         Warehouse warehouse = warehouseMgr.getWarehouse(warehouseId);
         // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getAvailableComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);

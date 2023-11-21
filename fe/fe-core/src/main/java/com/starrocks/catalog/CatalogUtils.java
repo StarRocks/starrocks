@@ -309,7 +309,7 @@ public class CatalogUtils {
     public static int calPhysicalPartitionBucketNum() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
 
@@ -319,7 +319,7 @@ public class CatalogUtils {
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
 

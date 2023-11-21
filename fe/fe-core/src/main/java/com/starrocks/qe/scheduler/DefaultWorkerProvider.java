@@ -92,7 +92,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
             ImmutableMap<Long, ComputeNode> idToBackend;
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 idToBackend = idToComputeNode;
             } else {
                 idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
@@ -131,7 +131,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
         this.hasComputeNode = MapUtils.isNotEmpty(availableID2ComputeNode);
         // Backends and compute nodes are identical in the SHARED_DATA mode.
-        this.usedComputeNode = hasComputeNode && (preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA);
+        this.usedComputeNode = hasComputeNode && (preferComputeNode || RunMode.isSharedDataMode());
         this.preferComputeNode = preferComputeNode;
     }
 
@@ -283,7 +283,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes,
                                                                         long warehouseId) {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(warehouseId);
         }
 

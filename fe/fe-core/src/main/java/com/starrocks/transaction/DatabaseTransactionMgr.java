@@ -66,6 +66,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TTransactionStatus;
@@ -1128,7 +1129,8 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            if ((Config.enable_new_publish_mechanism || RunMode.isSharedDataMode()) &&
+                    transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {

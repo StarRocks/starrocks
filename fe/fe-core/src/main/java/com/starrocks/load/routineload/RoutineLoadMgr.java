@@ -181,7 +181,7 @@ public class RoutineLoadMgr implements Writable {
             List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
             // TODO: may compute avail node only in the warehouse of the load job
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 for (Warehouse warehouse : GlobalStateMgr.getCurrentWarehouseMgr().getAllWarehouses()) {
                     for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
                         ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);

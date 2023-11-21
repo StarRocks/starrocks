@@ -100,7 +100,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
             // TODO: need to refactor after be split into cn + dn
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
             }
 

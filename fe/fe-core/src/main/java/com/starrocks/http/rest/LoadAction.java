@@ -117,7 +117,7 @@ public class LoadAction extends RestBaseAction {
 
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
             if (warehouse == null) {
                 throw new DdlException("Warehouse " + warehouseName + " not exists.");
