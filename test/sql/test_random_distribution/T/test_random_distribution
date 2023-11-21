@@ -38,6 +38,7 @@ create table t3(k int, v int) unique key(k);
 create table t3(k int, v int) unique key(k) distributed by random buckets 20;
 create table t4(k int, v int sum) aggregate key(k);
 create table t4(k int, v int sum) aggregate key(k) distributed by random buckets 20;
+drop table t4;
 -- name: test_bucket_shuffle
 create table t(k int);
 insert into t values(1),(1);
