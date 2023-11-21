@@ -426,7 +426,7 @@ public class ConnectContext {
         return returnRows;
     }
 
-    public void resetRetureRows() {
+    public void resetReturnRows() {
         returnRows = 0;
     }
 

@@ -190,6 +190,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -225,6 +226,7 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+    private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -314,15 +316,39 @@ public class StmtExecutor {
         return profile;
     }
 
+    /**
+     * Whether to forward to leader from follower which should be the same in the StmtExecutor's lifecycle.
+     */
     public boolean isForwardToLeader() {
+        return getIsForwardToLeaderOrInit(true);
+    }
+
+    public boolean getIsForwardToLeaderOrInit(boolean isInitIfNoPresent) {
+        if (!isForwardToLeaderOpt.isPresent()) {
+            if (!isInitIfNoPresent) {
+                return false;
+            }
+            isForwardToLeaderOpt = Optional.of(initForwardToLeaderState());
+        }
+        return isForwardToLeaderOpt.get();
+    }
+
+    private boolean initForwardToLeaderState() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if (parsedStmt instanceof QueryStatement && !GlobalStateMgr.getCurrentState().isLeader()
-                && !GlobalStateMgr.getCurrentState().canRead()) {
-            return true;
+        if (parsedStmt instanceof QueryStatement) {
+            // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
+            if (context != null && context.getSessionVariable() != null &&
+                    context.getSessionVariable().isFollowerForwardToLeaderOpt().isPresent()) {
+                return context.getSessionVariable().isFollowerForwardToLeaderOpt().get();
+            }
+
+            if (!GlobalStateMgr.getCurrentState().canRead()) {
+                return true;
+            }
         }
 
         if (redirectStatus == null) {
@@ -380,6 +406,7 @@ public class StmtExecutor {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
 
+<<<<<<< HEAD
             // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
             if (parsedStmt != null) {
                 Map<String, String> optHints = null;
@@ -388,6 +415,15 @@ public class StmtExecutor {
                     SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
                     optHints = selectRelation.getSelectList().getOptHints();
                 }
+=======
+            if (parsedStmt != null) {
+                boolean isQuery = parsedStmt instanceof QueryStatement;
+                // set isQuery before `forwardToLeader` to make it right for audit log.
+                context.getState().setIsQuery(isQuery);
+            }
+
+            processVarHint(sessionVariableBackup);
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
 
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
@@ -464,12 +500,17 @@ public class StmtExecutor {
             }
 
             if (parsedStmt instanceof QueryStatement) {
+<<<<<<< HEAD
                 context.getState().setIsQuery(true);
                 context.setStatisticsJob(AnalyzerUtils.isStatisticsJob(context, parsedStmt));
                 final boolean isStatisticsJob = context.isStatisticsJob();
                 if (!isStatisticsJob) {
                     WarehouseMetricMgr.increaseUnfinishedQueries(context.getCurrentWarehouse(), 1L);
                 }
+=======
+                final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
+                context.setStatisticsJob(isStatisticsJob);
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
