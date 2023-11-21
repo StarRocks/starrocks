@@ -41,7 +41,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**: Column name.
 
-You cannot directly create a column with a name initiated with two consecutive underscores `__` because it is reserved for special purposes and creating such columns may result in undefined behavior. To create such a column, you must set the FE configuration `allow_system_reserved_names` to `true`.
+Note that normally you cannot create a column whose name is initiated with two consecutive underscores `__` because this name format is reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter `allow_system_reserved_names` to `TRUE`.
 
 **col_type**: Column type. Specific column information, such as types and ranges:
 
