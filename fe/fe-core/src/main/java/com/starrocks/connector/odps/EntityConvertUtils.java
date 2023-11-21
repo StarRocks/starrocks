@@ -32,9 +32,6 @@ import com.starrocks.catalog.Type;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
 public class EntityConvertUtils {
 
     public static final int MAX_DECIMAL32_PRECISION = 9;

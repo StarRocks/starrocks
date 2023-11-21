@@ -36,9 +36,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
 public class MockedBase {
     protected AliyunCloudCredential aliyunCloudCredential = new AliyunCloudCredential("ak", "sk", "http://127.0.0.1");
     protected OdpsProperties odpsProperties;

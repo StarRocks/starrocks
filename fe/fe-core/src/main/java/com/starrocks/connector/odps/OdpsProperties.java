@@ -21,9 +21,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
 public class OdpsProperties {
     public static final String ACCESS_ID = "odps.access.id";
     public static final String ACCESS_KEY = "odps.access.key";

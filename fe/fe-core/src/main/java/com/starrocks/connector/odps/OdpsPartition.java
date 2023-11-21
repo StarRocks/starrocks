@@ -17,9 +17,6 @@ package com.starrocks.connector.odps;
 import com.aliyun.odps.Partition;
 import com.starrocks.connector.PartitionInfo;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
 public class OdpsPartition implements PartitionInfo {
     private Partition partition;
 

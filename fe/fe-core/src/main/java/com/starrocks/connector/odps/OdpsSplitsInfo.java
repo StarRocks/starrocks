@@ -26,9 +26,6 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
 public class OdpsSplitsInfo {
     public enum SplitPolicy {
         /**
