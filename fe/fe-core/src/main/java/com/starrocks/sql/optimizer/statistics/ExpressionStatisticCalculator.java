@@ -459,6 +459,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.ROUND:
                 case FunctionSet.DROUND:
                 case FunctionSet.TRUNCATE:
+                case FunctionSet.UPPER:
                     // Just use the input's statistics as output's statistics
                     break;
                 case FunctionSet.TO_BITMAP:
