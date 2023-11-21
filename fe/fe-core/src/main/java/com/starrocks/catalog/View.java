@@ -104,10 +104,10 @@ public class View extends Table {
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
+    // store all refs tables and views in the def
     private AtomicReference<Set<TableIdentifier>> tblIdCache = new AtomicReference<>();
 
-    // store the parsed result
-    // store the analyzed result based on a new parsed queryStatement
+    // store the analyzed result
     private AtomicReference<ViewCache> analyzedCache = new AtomicReference<>();
 
     // Used for read from image
@@ -155,6 +155,8 @@ public class View extends Table {
         this.inlineViewDef = inlineViewDef;
         this.sqlMode = sqlMode;
         this.analyzedCache = new AtomicReference<>();
+        this.tblIdCache = new AtomicReference<>();
+        this.tableRefsCache = Lists.newArrayList();
     }
 
     public String getInlineViewDef() {
