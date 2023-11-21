@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -60,6 +61,12 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -371,6 +378,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
+    // Flag to control whether to proxy follower's query statement to leader/follower.
+    public enum FollowerQueryForwardMode {
+        DEFAULT,    // proxy queries by the follower's replay progress (default)
+        FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
+        LEADER      // proxy queries to leader no matter the follower's replay progress
+    }
+    public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
+
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1246,6 +1268,58 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboEqBaseType;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isEnablePruneIcebergManifest() {
+        return enablePruneIcebergManifest;
+    }
+
+    public void setEnablePruneIcebergManifest(boolean enablePruneIcebergManifest) {
+        this.enablePruneIcebergManifest = enablePruneIcebergManifest;
+    }
+
+    public boolean enableReadIcebergPuffinNdv() {
+        return enableReadIcebergPuffinNdv;
+    }
+
+    public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
+        this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public boolean enableIcebergColumnStatistics() {
+        return enableIcebergColumnStatistics;
+    }
+
+    public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
+        this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public boolean isCboPredicateSubfieldPath() {
+        return cboPredicateSubfieldPath;
+    }
+
+    @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
+    private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
+    private boolean enablePlanSerializeConcurrently = true;
+
+    @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
+    private String followerForwardMode = "";
+
+    public void setFollowerQueryForwardMode(String mode) {
+        this.followerForwardMode = mode;
+    }
+
+    public Optional<Boolean> isFollowerForwardToLeaderOpt() {
+        if (Strings.isNullOrEmpty(this.followerForwardMode) ||
+                followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.DEFAULT.toString())) {
+            return Optional.empty();
+        }
+        return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
+    }
+
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }

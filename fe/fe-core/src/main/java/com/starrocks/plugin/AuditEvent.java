@@ -123,6 +123,20 @@ public class AuditEvent {
     public long bigQueryLogScanBytesThreshold = -1;
     @AuditField(value = "BigQueryLogScanRowsThreshold")
     public long bigQueryLogScanRowsThreshold = -1;
+<<<<<<< HEAD
+=======
+    @AuditField(value = "SpilledBytes", ignore_zero = true)
+    public long spilledBytes = -1;
+
+    // Materialized View usage info
+    @AuditField(value = "CandidateMVs", ignore_zero = true)
+    public String candidateMvs;
+    @AuditField(value = "HitMvs", ignore_zero = true)
+    public String hitMVs;
+
+    @AuditField(value = "IsForwardToLeader")
+    public boolean isForwardToLeader = false;
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
 
     public static class AuditEventBuilder {
 
@@ -278,6 +292,28 @@ public class AuditEvent {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public AuditEventBuilder setCandidateMvs(List<String> mvs) {
+            this.auditEvent.candidateMvs = Joiner.on(",").join(mvs);
+            return this;
+        }
+
+        public AuditEventBuilder setHitMvs(List<String> mvs) {
+            this.auditEvent.hitMVs = Joiner.on(",").join(mvs);
+            return this;
+        }
+
+        public String getHitMvs() {
+            return this.auditEvent.hitMVs;
+        }
+
+        public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
+            auditEvent.isForwardToLeader = isForwardToLeader;
+            return this;
+        }
+
+>>>>>>> ebfa8c15d6 ([BugFix] Make sure isForwardToLeader immutable in the StmtExecutor's lifecycle (#34315))
         public AuditEvent build() {
             return this.auditEvent;
         }
