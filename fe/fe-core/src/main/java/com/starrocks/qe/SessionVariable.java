@@ -425,14 +425,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
-    // Add the flag to control whether to proxy follower's query statement to leader which can be
-    // used for testing.
+    // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
-        DEFAULT,
-        FOLLOWER,
-        LEADER
+        DEFAULT,    // proxy queries by the follower's replay progress (default)
+        FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
+        LEADER      // proxy queries to leader no matter the follower's replay progress
     }
-
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
     public enum MaterializedViewRewriteMode {

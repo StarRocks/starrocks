@@ -351,12 +351,12 @@ public class StmtExecutor {
             if (!isInitIfNoPresent) {
                 return false;
             }
-            isForwardToLeaderOpt = Optional.of(getIsForwardToLeaderState());
+            isForwardToLeaderOpt = Optional.of(initForwardToLeaderState());
         }
         return isForwardToLeaderOpt.get();
     }
 
-    private boolean getIsForwardToLeaderState() {
+    private boolean initForwardToLeaderState() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
@@ -369,7 +369,7 @@ public class StmtExecutor {
                 return context.getSessionVariable().isFollowerForwardToLeaderOpt().get();
             }
 
-            if (!GlobalStateMgr.getCurrentState().isLeader() && !GlobalStateMgr.getCurrentState().canRead()) {
+            if (!GlobalStateMgr.getCurrentState().canRead()) {
                 return true;
             }
         }
