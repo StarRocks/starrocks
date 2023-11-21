@@ -28,26 +28,25 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 } // namespace brpc
 
-void start_be() {
+void start_be(bool as_cn) {
     using starrocks::BackendService;
 
     auto* exec_env = starrocks::ExecEnv::GetInstance();
 
     // Begin to start services
     // 1. Start thrift server with 'be_port'.
-    int thrift_port = config::be_port;
-    if (as_cn && config::thrift_port != 0) {
-        thrift_port = config::thrift_port;
+    int thrift_port = starrocks::config::be_port;
+    if (as_cn && starrocks::config::thrift_port != 0) {
+        thrift_port = starrocks::config::thrift_port;
         LOG(WARNING) << "'thrift_port' is deprecated, please update be.conf to use 'be_port' instead!";
     }
     auto thrift_server = BackendService::create<BackendService>(exec_env, thrift_port);
-    
+
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start BackendService thrift server on port " << thrift_port << ": " << status;
-        shutdown_logging();
+        starrocks::shutdown_logging();
         exit(1);
     }
-
 
     // 2. Start brpc services.
     brpc::FLAGS_max_body_size = starrocks::config::brpc_max_body_size;

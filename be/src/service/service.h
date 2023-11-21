@@ -28,4 +28,4 @@ void wait_for_fragments_finish(ExecEnv* exec_env, size_t max_loop_cnt_cfg);
 } // namespace starrocks
 
 void start_cn();
-void start_be();
+void start_be(bool as_cn=false);
