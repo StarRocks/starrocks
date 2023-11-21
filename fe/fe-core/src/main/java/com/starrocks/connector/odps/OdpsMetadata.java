@@ -57,6 +57,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -235,8 +236,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private List<PartitionSpec> loadPartitions(OdpsTableName odpsTableName) {
         com.aliyun.odps.Table odpsTable =
                 odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
-        List<Partition> partitions =
-                odpsTable.getPartitions();
+        List<Partition> partitions = odpsTable.getPartitions();
         return partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
     }
 
@@ -264,9 +264,17 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> columnNames, long limit) {
+        // add scanBuilder param for mock
+        return getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, columnNames, limit,
+                new TableReadSessionBuilder());
+    }
+
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
+                                                   long snapshotId, ScalarOperator predicate,
+                                                   List<String> columnNames, long limit,
+                                                   TableReadSessionBuilder scanBuilder) {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
-        TableReadSessionBuilder scanBuilder = new TableReadSessionBuilder();
         Set<String> set = new HashSet<>(columnNames);
         List<String> orderedColumnNames = new ArrayList<>();
         for (Column column : odpsTable.getFullSchema()) {
@@ -286,9 +294,6 @@ public class OdpsMetadata implements ConnectorMetadata {
         try {
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getProjectName(),
                     odpsTable.getTableName(), columnNames);
-            Map<String, String> splitProperties = new HashMap<>();
-            splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
-            splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
             TableReadSessionBuilder tableReadSessionBuilder =
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getProjectName(), odpsTable.getTableName()))
                             .withSettings(settings)
@@ -297,37 +302,10 @@ public class OdpsMetadata implements ConnectorMetadata {
             OdpsSplitsInfo odpsSplitsInfo;
             switch (properties.get(OdpsProperties.SPLIT_POLICY)) {
                 case OdpsProperties.ROW_OFFSET:
-                    List<InputSplit> splits = new ArrayList<>();
-                    TableBatchReadSession rowScan = tableReadSessionBuilder
-                            .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
-                            .buildBatchReadSession();
-                    RowRangeInputSplitAssigner inputSplitAssigner =
-                            (RowRangeInputSplitAssigner) rowScan.getInputSplitAssigner();
-                    long rowsPerSplit = Long.parseLong(properties.get(OdpsProperties.SPLIT_ROW_COUNT));
-                    long totalRowCount = inputSplitAssigner.getTotalRowCount();
-                    if (limit != -1) {
-                        totalRowCount = Math.min(inputSplitAssigner.getTotalRowCount(), limit);
-                    }
-                    long numRecord = 0;
-                    for (long i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
-                        InputSplitWithRowRange splitByRowOffset =
-                                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, i);
-                        splits.add(splitByRowOffset);
-                        numRecord = i;
-                    }
-                    InputSplitWithRowRange splitByRowOffset =
-                            (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount);
-                    splits.add(splitByRowOffset);
-                    odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
-                            OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);
+                    odpsSplitsInfo = callRowOffsetSplitsInfo(tableReadSessionBuilder, limit);
                     break;
                 case OdpsProperties.SIZE:
-                    TableBatchReadSession sizeScan = tableReadSessionBuilder
-                            .withSplitOptions(SplitOptions.createDefault())
-                            .buildBatchReadSession();
-                    InputSplitAssigner assigner = sizeScan.getInputSplitAssigner();
-                    odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), sizeScan,
-                            OdpsSplitsInfo.SplitPolicy.SIZE, splitProperties);
+                    odpsSplitsInfo = callSizeSplitsInfo(tableReadSessionBuilder);
                     break;
                 default:
                     throw new StarRocksConnectorException(
@@ -341,6 +319,53 @@ public class OdpsMetadata implements ConnectorMetadata {
             LOG.error("getRemoteFileInfos error", e);
         }
         return Collections.emptyList();
+    }
+
+    private OdpsSplitsInfo callSizeSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder)
+            throws IOException {
+        Map<String, String> splitProperties = new HashMap<>();
+        splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
+        splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
+        OdpsSplitsInfo odpsSplitsInfo;
+        TableBatchReadSession sizeScan = tableReadSessionBuilder
+                .withSplitOptions(SplitOptions.createDefault())
+                .buildBatchReadSession();
+        InputSplitAssigner assigner = sizeScan.getInputSplitAssigner();
+        odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), sizeScan,
+                OdpsSplitsInfo.SplitPolicy.SIZE, splitProperties);
+        return odpsSplitsInfo;
+    }
+
+    private OdpsSplitsInfo callRowOffsetSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder, long limit)
+            throws IOException {
+        Map<String, String> splitProperties = new HashMap<>();
+        splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
+        splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
+        OdpsSplitsInfo odpsSplitsInfo;
+        List<InputSplit> splits = new ArrayList<>();
+        TableBatchReadSession rowScan = tableReadSessionBuilder
+                .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
+                .buildBatchReadSession();
+        RowRangeInputSplitAssigner inputSplitAssigner =
+                (RowRangeInputSplitAssigner) rowScan.getInputSplitAssigner();
+        long rowsPerSplit = Long.parseLong(properties.get(OdpsProperties.SPLIT_ROW_COUNT));
+        long totalRowCount = inputSplitAssigner.getTotalRowCount();
+        if (limit != -1) {
+            totalRowCount = Math.min(inputSplitAssigner.getTotalRowCount(), limit);
+        }
+        long numRecord = 0;
+        for (long i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
+            InputSplitWithRowRange splitByRowOffset =
+                    (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, i);
+            splits.add(splitByRowOffset);
+            numRecord = i;
+        }
+        InputSplitWithRowRange splitByRowOffset =
+                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount);
+        splits.add(splitByRowOffset);
+        odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
+                OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);
+        return odpsSplitsInfo;
     }
 
     @Override
