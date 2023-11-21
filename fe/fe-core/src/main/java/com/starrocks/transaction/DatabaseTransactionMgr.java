@@ -402,9 +402,6 @@ public class DatabaseTransactionMgr {
                 && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             throw new TransactionCommitFailedException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
         }
-        if (tabletCommitInfos != null && !tabletCommitInfos.isEmpty()) {
-            transactionState.setTabletCommitInfos(tabletCommitInfos);
-        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {

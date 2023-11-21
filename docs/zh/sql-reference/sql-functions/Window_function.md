@@ -273,12 +273,11 @@ from mail_merge;
 * 字符串类型：CHAR、VARCHAR
 * 时间类型：DATE、DATETIME
 * 从 2.5 版本开始，`LAG()` 函数支持查询 BITMAP 和 HLL 类型的数据。
-* 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果指定的当前行之前若干行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回从窗口开始到当前行之前若干行之间的最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 **语法：**
 
 ```SQL
-LAG(expr [IGNORE NULLS] [, offset[, default]])
+LAG(expr [offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
@@ -309,7 +308,7 @@ INSERT INTO test_tbl VALUES
     (10, NULL);
 ```
 
-示例一：lag 中未指定 IGNORE NULLS。
+示例：
 
 ```SQL
 SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
@@ -333,33 +332,7 @@ FROM test_tbl ORDER BY col_1;
 可以看到对于前两行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
 
 对于第 3 行数据 NULL，往前遍历两行对应的值是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
-
-示例二：lag 中指定了 IGNORE NULLS。
-
-依然使用上面的数据表。
-
-```SQL
-SELECT col_1, col_2, LAG(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+---------------------------------------------+
-| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+---------------------------------------------+
-|     1 |  NULL |                                           0 |
-|     2 |     4 |                                           0 |
-|     3 |  NULL |                                           0 |
-|     4 |     2 |                                           0 |
-|     5 |  NULL |                                           4 |
-|     6 |     7 |                                           4 |
-|     7 |     6 |                                           2 |
-|     8 |     5 |                                           7 |
-|     9 |  NULL |                                           6 |
-|    10 |  NULL |                                           6 |
-+-------+-------+---------------------------------------------+
 ```
-
-可以看到对于第 1-4 行，因为在当前行之前不存在 2 个 非 NULL 值，因此返回默认值 0。
-
-对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
 <br/>
 
@@ -370,7 +343,7 @@ FROM test_tbl ORDER BY col_1;
 语法：
 
 ```SQL
-LAST_VALUE(expr [IGNORE NULLS])) OVER(partition_by_clause order_by_clause [window_clause])
+LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ```
 
 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果最后一个值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回最后一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
@@ -410,12 +383,10 @@ from mail_merge;
 
 `LEAD()` 支持的数据类型与 [LAG](#使用-lag-窗口函数) 相同。
 
-* 从 2.5 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果指定的当前行之后若干行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回从当前行之后若干行到窗口结束之间的第一个非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
-
 语法：
 
 ```Haskell
-LEAD(expr [IGNORE NULLS] [, offset[, default]])
+LEAD(expr [offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ```
 
@@ -448,7 +419,7 @@ INSERT INTO test_tbl VALUES
     (10, NULL);
 ```
 
-示例一：lag 中未指定 IGNORE NULLS。
+示例：
 
 ```SQL
 SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
@@ -472,33 +443,6 @@ FROM test_tbl ORDER BY col_1;
 可以看到对于第 1 行数据 NULL，往后遍历两行对应的数据是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
 
 对于最后两行，因为往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
-
-示例二：lead 中指定了 IGNORE NULLS。
-
-依然使用上面的数据表。
-
-```SQL
-SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+----------------------------------------------+
-| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+----------------------------------------------+
-|     1 |  NULL |                                            2 |
-|     2 |     4 |                                            7 |
-|     3 |  NULL |                                            7 |
-|     4 |     2 |                                            6 |
-|     5 |  NULL |                                            6 |
-|     6 |     7 |                                            5 |
-|     7 |     6 |                                            0 |
-|     8 |     5 |                                            0 |
-|     9 |  NULL |                                            0 |
-|    10 |  NULL |                                            0 |
-+-------+-------+----------------------------------------------+
-```
-
-可以看到对于第 7-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
-
-对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
 <br />
 
