@@ -238,7 +238,9 @@ public class View extends Table {
                 if (table.get().isView()) {
                     joiner.add(table.get().getId() + "-" + ((View) table.get()).lastSchemaUpdateTime.get());
                 } else if (table.get().isNativeTableOrMaterializedView()) {
-                    joiner.add(table.get().getId() + "-" + ((OlapTable) table.get()).lastSchemaUpdateTime.get());
+                    OlapTable olapTable = (OlapTable) table.get();
+                    joiner.add(olapTable.getId() + "-" + olapTable.lastSchemaUpdateTime.get() + "-"
+                            + olapTable.lastVersionUpdateEndTime);
                 } else {
                     // external table set a cache ttl of 180s
                     long now = System.currentTimeMillis();
