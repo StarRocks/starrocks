@@ -19,7 +19,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.JdkUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
@@ -177,11 +176,6 @@ public class PseudoFrontend {
                 // init config
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
                 Config.statistic_collect_query_timeout = 60;
-
-                // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
-                if (!JdkUtils.checkJavaVersion()) {
-                    throw new IllegalArgumentException("Java version doesn't match");
-                }
 
                 Log4jConfig.initLogging();
 
