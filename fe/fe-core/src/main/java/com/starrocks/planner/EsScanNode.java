@@ -198,6 +198,9 @@ public class EsScanNode extends ScanNode {
 
                 Collections.shuffle(shardAllocations, random);
                 for (TNetworkAddress address : shardAllocations) {
+                    if (address == null) {
+                        continue;
+                    }
                     colocatedNodes.addAll(nodeMap.get(address.getHostname()));
                 }
                 boolean usingRandomNode = colocatedNodes.size() == 0;
