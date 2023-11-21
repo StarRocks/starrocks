@@ -113,7 +113,10 @@ jobs:
           path: 'docusaurus'
       # mv the docs into the docusaurus dir where the
       # docusaurus build job expects them to be
-      - run: mv docs docusaurus/
+      - run: mv docs/en docusaurus/docs
+      - run: mkdir -p docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
+      - run: mv docs/zh docusaurus/i18n/zh/docusaurus-plugin-content-docs/current
+      - run: mv docs/docusaurus/sidebars.json docusaurus/
       # The README and contrib files have some sample markdown that fails
       # link checking. StarRocks_intro.md uses a Gatsby component and will
       # be replaced when we switch Gatsby off. Release notes we grab from
