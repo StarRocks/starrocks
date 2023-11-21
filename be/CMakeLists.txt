@@ -682,7 +682,7 @@ set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -g -Wno-unused-local-typedefs")
 
 if (WITH_GCOV)
     # To generate flags to code coverage
-    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage -mcmodel=medium")
+    set(CXX_GCC_FLAGS "${CXX_GCC_FLAGS} -fprofile-arcs -ftest-coverage -gsplit-dwarf")
 endif()
 
 if (WITH_COMPRESS)
