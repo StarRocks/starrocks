@@ -221,6 +221,8 @@ public class StatementPlanner {
         try {
             lock(dbs);
             Analyzer.analyze(queryStmt, session);
+            // only copy olap table
+            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
             return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
             unLock(dbs);
