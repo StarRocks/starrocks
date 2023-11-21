@@ -16,6 +16,8 @@ package com.starrocks.connector.odps;
 
 import com.aliyun.odps.utils.StringUtils;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,28 +33,46 @@ public class OdpsProperties {
     public static final String TUNNEL_QUOTA = "odps.tunnel.quota";
     public static final String SPLIT_POLICY = "odps.split.policy";
     public static final String SPLIT_ROW_COUNT = "odps.split.row.count";
+
+    public static final String ENABLE_TABLE_CACHE = "odps.cache.table.enable";
+    public static final String TABLE_CACHE_EXPIRE_TIME = "odps.cache.table.expire";
+    public static final String TABLE_CACHE_SIZE = "odps.cache.table.size";
+    public static final String ENABLE_PARTITION_CACHE = "odps.cache.partition.enable";
+    public static final String PARTITION_CACHE_EXPIRE_TIME = "odps.cache.partition.expire";
+    public static final String PARTITION_CACHE_SIZE = "odps.cache.partition.size";
+    public static final String ENABLE_PROJECT_CACHE = "odps.cache.project.enable";
+    public static final String PROJECT_CACHE_EXPIRE_TIME = "odps.cache.project.expire";
+    public static final String PROJECT_CACHE_SIZE = "odps.cache.project.size";
+
     public static final String ROW_OFFSET = "row_offset";
     public static final String SIZE = "size";
-    private static final long DEFAULT_SPLIT_ROW_COUNT = 4 * 1024 * 1024;
+    private static final long DEFAULT_SPLIT_ROW_COUNT = 4 * 1024 * 1024L;
 
     static {
-        defaultValues = new java.util.HashMap<>();
-        requiredProperties = new java.util.HashSet<>();
-
         newProperty(ACCESS_ID).isRequired();
         newProperty(ACCESS_KEY).isRequired();
         newProperty(ENDPOINT).isRequired();
         newProperty(PROJECT).isRequired();
         newProperty(SPLIT_POLICY).withDefaultValue(SIZE);
         newProperty(SPLIT_ROW_COUNT).withDefaultValue(String.valueOf(DEFAULT_SPLIT_ROW_COUNT));
-        newProperty(TUNNEL_ENDPOINT);
-        newProperty(TUNNEL_QUOTA);
+        newProperty(TUNNEL_ENDPOINT).noDefaultValue();
+        newProperty(TUNNEL_QUOTA).noDefaultValue();
+
+        newProperty(ENABLE_TABLE_CACHE).withDefaultValue(true);
+        newProperty(TABLE_CACHE_EXPIRE_TIME).withDefaultValue(86400);
+        newProperty(TABLE_CACHE_SIZE).withDefaultValue(1000);
+        newProperty(ENABLE_PARTITION_CACHE).withDefaultValue(true);
+        newProperty(PARTITION_CACHE_EXPIRE_TIME).withDefaultValue(86400);
+        newProperty(PARTITION_CACHE_SIZE).withDefaultValue(1000);
+        newProperty(ENABLE_PROJECT_CACHE).withDefaultValue(true);
+        newProperty(PROJECT_CACHE_EXPIRE_TIME).withDefaultValue(86400);
+        newProperty(PROJECT_CACHE_SIZE).withDefaultValue(1000);
     }
 
-    private Map<String, String> properties;
+    private final Map<String, String> properties;
 
-    private static Map<String, String> defaultValues;
-    private static Set<String> requiredProperties;
+    private static final Map<String, String> DEFAULT_VALUES = new HashMap<>();
+    private static final Set<String> REQUIRED_PROPERTIES = new HashSet<>();
 
     public OdpsProperties(Map<String, String> properties) {
         this.properties = properties;
@@ -60,7 +80,7 @@ public class OdpsProperties {
     }
 
     public String get(String key) {
-        return properties.getOrDefault(key, defaultValues.get(key));
+        return properties.getOrDefault(key, DEFAULT_VALUES.get(key));
     }
 
     static Property newProperty(String key) {
@@ -68,7 +88,7 @@ public class OdpsProperties {
     }
 
     private void validate() {
-        for (String value : requiredProperties) {
+        for (String value : REQUIRED_PROPERTIES) {
             if (StringUtils.isNullOrEmpty(properties.get(value))) {
                 throw new IllegalArgumentException("Missing " + value + " in properties");
             }
@@ -82,13 +102,18 @@ public class OdpsProperties {
             this.key = key;
         }
 
-        Property withDefaultValue(String defaultValue) {
-            defaultValues.put(key, defaultValue);
+        Property withDefaultValue(Object defaultValue) {
+            DEFAULT_VALUES.put(key, defaultValue.toString());
+            return this;
+        }
+
+        Property noDefaultValue() {
+            DEFAULT_VALUES.put(key, "");
             return this;
         }
 
         Property isRequired() {
-            requiredProperties.add(key);
+            REQUIRED_PROPERTIES.add(key);
             return this;
         }
     }

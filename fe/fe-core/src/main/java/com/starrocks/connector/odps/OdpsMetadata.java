@@ -74,24 +74,19 @@ import java.util.stream.Collectors;
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static java.util.concurrent.TimeUnit.HOURS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class OdpsMetadata implements ConnectorMetadata {
-
     private static final Logger LOG = LogManager.getLogger(OdpsMetadata.class);
-    private static final long DEFAULT_EXPIRES_TIME = 24;
-    private static final long DEFAULT_REFRESH_TIME = 0;
-    private static final long DEFAULT_CACHE_SIZE = 1000;
-
+    public static final long NEVER_CACHE = 0;
     private final Odps odps;
     private final String catalogName;
     private final EnvironmentSettings settings;
     private final AliyunCloudCredential aliyunCloudCredential;
     private final OdpsProperties properties;
 
-    private final LoadingCache<String, Set<String>> tableNamesCache;
-    private final LoadingCache<OdpsTableName, OdpsTable> tableCache;
-    private final LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
+    private LoadingCache<String, Set<String>> projectCache;
+    private LoadingCache<OdpsTableName, OdpsTable> tableCache;
+    private LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
                         OdpsProperties properties) {
@@ -109,14 +104,35 @@ public class OdpsMetadata implements ConnectorMetadata {
             settingsBuilder.withQuotaName(properties.get(OdpsProperties.TUNNEL_QUOTA));
         }
         settings = settingsBuilder.build();
+        initMetaCache();
+    }
+
+    private void initMetaCache() {
         Executor executor = MoreExecutors.newDirectExecutorService();
-        // TODO: enable user set cache time
-        tableNamesCache = newCacheBuilder(DEFAULT_EXPIRES_TIME, DEFAULT_REFRESH_TIME, DEFAULT_CACHE_SIZE)
-                .build(asyncReloading(CacheLoader.from(this::loadProjects), executor));
-        tableCache = newCacheBuilder(DEFAULT_EXPIRES_TIME, DEFAULT_REFRESH_TIME, DEFAULT_CACHE_SIZE)
-                .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
-        partitionCache = newCacheBuilder(DEFAULT_EXPIRES_TIME, DEFAULT_REFRESH_TIME, DEFAULT_CACHE_SIZE)
-                .build(asyncReloading(CacheLoader.from(this::loadPartitions), executor));
+        if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PROJECT_CACHE))) {
+            projectCache = newCacheBuilder(Long.parseLong(OdpsProperties.PROJECT_CACHE_EXPIRE_TIME),
+                    Long.parseLong(OdpsProperties.PROJECT_CACHE_SIZE))
+                    .build(asyncReloading(CacheLoader.from(this::loadProjects), executor));
+        } else {
+            projectCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
+                    .build(CacheLoader.from(this::loadProjects));
+        }
+        if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_TABLE_CACHE))) {
+            tableCache = newCacheBuilder(Long.parseLong(OdpsProperties.TABLE_CACHE_EXPIRE_TIME),
+                    Long.parseLong(OdpsProperties.TABLE_CACHE_SIZE))
+                    .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
+        } else {
+            tableCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
+                    .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
+        }
+        if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PARTITION_CACHE))) {
+            partitionCache = newCacheBuilder(Long.parseLong(OdpsProperties.PARTITION_CACHE_EXPIRE_TIME),
+                    Long.parseLong(OdpsProperties.PARTITION_CACHE_SIZE))
+                    .build(asyncReloading(CacheLoader.from(this::loadPartitions), executor));
+        } else {
+            partitionCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
+                    .build(asyncReloading(CacheLoader.from(this::loadPartitions), executor));
+        }
     }
 
     @Override
@@ -136,7 +152,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public List<String> listTableNames(String dbName) {
         try {
-            return new ArrayList<>(tableNamesCache.get(dbName));
+            return new ArrayList<>(projectCache.get(dbName));
         } catch (ExecutionException e) {
             LOG.error("listTableNames error", e);
             return Collections.emptyList();
@@ -334,17 +350,11 @@ public class OdpsMetadata implements ConnectorMetadata {
         return configuration;
     }
 
-    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec,
-                                                                long maximumSize) {
+    private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         if (expiresAfterWriteSec >= 0) {
             cacheBuilder.expireAfterWrite(expiresAfterWriteSec, HOURS);
         }
-
-        if (refreshSec > 0 && expiresAfterWriteSec > refreshSec) {
-            cacheBuilder.refreshAfterWrite(refreshSec, SECONDS);
-        }
-
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
     }

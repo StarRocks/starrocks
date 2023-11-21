@@ -38,7 +38,7 @@ public class OdpsSplitsInfo {
         /**
          * 按行数切分
          */
-        ROW_OFFSET;
+        ROW_OFFSET
     }
 
     private final List<InputSplit> splits;
