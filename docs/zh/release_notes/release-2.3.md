@@ -15,7 +15,7 @@ displayed_sidebar: "Chinese"
 - 第三方库 librdkafka 的缺陷，会导致 Routine Load 中导入任务消费时被卡住，新建的导入任务也无法执行。[#28301](https://github.com/StarRocks/starrocks/pull/28301)
 - 由于内存统计不准确有几率会导致 Spark 或者 Flink connector 读取数据报错。[#31200](https://github.com/StarRocks/starrocks/pull/31200) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
 - Stream Load 中包括 `if` 关键字时，会引起 BE crash。[#31926](https://github.com/StarRocks/starrocks/pull/31926)
-- 向有分区的 StarRocks 外表写入数据时有报错 `"get TableMeta failed from TNetworkAddress"`。[#30466](https://github.com/StarRocks/starrocks/pull/30466) 
+- 向有分区的 StarRocks 外表写入数据时有报错 `"get TableMeta failed from TNetworkAddress"`。[#30466](https://github.com/StarRocks/starrocks/pull/30466)
 
 ## 2.3.17
 
@@ -25,7 +25,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- Routine Load 消费失败。[#29883](https://github.com/StarRocks/starrocks/issues/29883) [#18550](
+- Routine Load 消费失败。[#29883](https://github.com/StarRocks/starrocks/issues/29883) [#18550](https://github.com/StarRocks/starrocks/pull/18550)
 
 ## 2.3.16
 
