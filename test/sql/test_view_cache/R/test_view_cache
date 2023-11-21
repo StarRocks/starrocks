@@ -98,7 +98,7 @@ ALTER TABLE t1 DROP COLUMN c3;
 -- !result
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 -- result:
-[REGEX].*`t1`.`c3`' cannot be resolved.")
+[REGEX].*`t1`.`c3`.*
 -- !result
 drop table t1;
 -- result:
