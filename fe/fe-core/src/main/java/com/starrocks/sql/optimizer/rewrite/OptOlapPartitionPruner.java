@@ -318,7 +318,7 @@ public class OptOlapPartitionPruner {
         } catch (AnalysisException e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
-        return null;
+        return specifyPartitionIds;
     }
 
     private static List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
@@ -343,7 +343,7 @@ public class OptOlapPartitionPruner {
         } catch (Exception e) {
             LOG.warn("PartitionPrune Failed. ", e);
         }
-        return null;
+        return Lists.newArrayList(keyRangeById.keySet());
     }
 
     private static boolean isNeedFurtherPrune(List<Long> candidatePartitions, LogicalOlapScanOperator olapScanOperator,
