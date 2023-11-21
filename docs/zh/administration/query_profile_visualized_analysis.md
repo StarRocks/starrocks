@@ -84,3 +84,18 @@ Operator 花费的时间比例越大，其对应卡片的颜色就越深。您�
 - 对于 Scan 节点（可以是 OLAP_SCAN、HDFS_SCAN 等等），其耗时相当于 `OperatorTotalTime + ScanTime`。因为 Scan Operator 在异步 I/O 线程池中进行 I/O 操作，所以 ScanTime 为异步 I/O 时间。
 - 对于 Exchange 节点，其耗时相当于 `OperatorTotalTime + NetworkTime`。因为 Exchange Operator 在 BRPC 线程池中收发数据包，NetworkTime 即为网络传输消耗的时间。
 - 对于其他 Operator，其耗时为 `OperatorTotalTime`。
+
+## Runtime Query Profile
+
+[Query Profile 概述](query_profile_overview.md) 中介绍了 Runtime Query Profile 的使用方式，这里不再赘述。
+
+对于开启了 Query Profile 功能，且运行超过 10s 仍未结束的查询，我们可以像正常 Query Profile 一样对其进行可视化分析，如下图所示：
+
+* ![img](../assets/Profile/visualized_runtime_profile_pending.jpeg)
+* ![img](../assets/Profile/visualized_runtime_profile_running.jpeg)
+
+此外，Runtime Query Profile 除了包含普通 Query Profile 的所有功能外，还对节点状态进行额外的标记，便于您识别尚在运行中的节点：
+
+* 无标记：已经执行完毕的节点
+* Pending：由于依赖关系，尚未开始执行的节点
+* Running：已经开始执行，且尚未结束执行的节点
