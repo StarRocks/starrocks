@@ -182,6 +182,7 @@ import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.meta.MetaContext;
+import com.starrocks.meta.lock.LockManager;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
@@ -552,6 +553,8 @@ public class GlobalStateMgr {
     private PipeScheduler pipeScheduler;
     private MVActiveChecker mvActiveChecker;
 
+    private LockManager lockManager;
+
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
@@ -781,6 +784,8 @@ public class GlobalStateMgr {
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
+
+        this.lockManager = new LockManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1041,6 +1046,10 @@ public class GlobalStateMgr {
 
     public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
         return connectorTableMetadataProcessor;
+    }
+
+    public LockManager getLockManager() {
+        return lockManager;
     }
 
     // Use tryLock to avoid potential deadlock
