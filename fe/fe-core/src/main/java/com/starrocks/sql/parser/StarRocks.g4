@@ -1258,12 +1258,12 @@ typeList
 // ------------------------------------------- Load Statement ----------------------------------------------------------
 
 loadStatement
-    : LOAD LABEL label=labelName
+    : LOAD setVarHint* LABEL label=labelName
         data=dataDescList?
         broker=brokerDesc?
         (BY system=identifierOrString)?
         (PROPERTIES props=propertyList)?
-    | LOAD LABEL label=labelName
+    | LOAD setVarHint* LABEL label=labelName
         data=dataDescList?
         resource=resourceDesc
         (PROPERTIES props=propertyList)?

@@ -725,6 +725,9 @@ public class StmtExecutor {
         } else if (parsedStmt instanceof DmlStmt) {
             DmlStmt dml = (DmlStmt) parsedStmt;
             optHints = dml.getOptHints();
+        } else if (parsedStmt instanceof DdlStmt) {
+            DdlStmt ddl = (DdlStmt) parsedStmt;
+            optHints = ddl.getOptHints();
         }
 
         if (MapUtils.isNotEmpty(optHints)) {
