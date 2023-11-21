@@ -243,7 +243,7 @@ public class View extends Table {
                     // external table set a cache ttl of 180s
                     long now = System.currentTimeMillis();
                     now = now - now % (1000 * 60 * 3) + (1000 * 60 * 3);
-                    joiner.add(tableId + "-" + now);
+                    joiner.add(table.get().getId() + "-" + now);
                 }
             } else {
                 return "";

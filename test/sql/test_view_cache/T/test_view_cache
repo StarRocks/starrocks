@@ -33,6 +33,8 @@ ALTER TABLE t1 DROP COLUMN c3;
 
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 
+alter view v5 as select UPPER(c_0_0), c1 from v4;
+
 drop table t1;
 
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
@@ -40,7 +42,7 @@ SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 CREATE TABLE `t1` (
   `c1` bigint DEFAULT NULL,
   `c2` bigint DEFAULT NULL,
-  `c3` bigint DEFAULT NULL
+  `c3` varchar(20) DEFAULT NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`c1`)
 COMMENT "OLAP"
@@ -48,6 +50,8 @@ DISTRIBUTED BY HASH(`c2`) BUCKETS 2
 PROPERTIES (
 "replication_num" = "1"
 );
+
+insert into t1 values (1, 2, 'a');
 
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 
