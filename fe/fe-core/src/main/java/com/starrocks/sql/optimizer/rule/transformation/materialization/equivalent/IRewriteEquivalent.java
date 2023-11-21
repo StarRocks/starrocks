@@ -33,12 +33,12 @@ public interface IRewriteEquivalent {
      * @param operator : The input scalar operator to be checked
      * @return: The input operator can be replaced by the {@code IRewriteEquivalent}
      */
-    boolean canReplace(ScalarOperator operator);
+    boolean isEquivalent(ScalarOperator operator);
 
     /**
      * @param operator : The input scalar operator eg:date_trunc/time_slice expression
      * @param constantOperator : const operator of the binary predicate's right child
      * @return : The input operator can be replaced by the {@code IRewriteEquivalent}
      */
-    boolean canReplace(ScalarOperator operator, ConstantOperator constantOperator);
+    boolean isEquivalent(ScalarOperator operator, ConstantOperator constantOperator);
 }

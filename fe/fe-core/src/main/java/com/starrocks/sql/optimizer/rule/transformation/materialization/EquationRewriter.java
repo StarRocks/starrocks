@@ -100,7 +100,7 @@ public class EquationRewriter {
                     return null;
                 }
                 Pair<ColumnRefOperator, IRewriteEquivalent> pair = predicateProbMap.get(left).iterator().next();
-                if (!pair.second.canReplace(right)) {
+                if (!pair.second.isEquivalent(right)) {
                     return null;
 
                 }

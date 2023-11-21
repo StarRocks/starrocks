@@ -133,11 +133,11 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             return null;
         }
 
-        if (DateTruncReplaceChecker.INSTANCE.canReplace(op1, op2)) {
+        if (DateTruncReplaceChecker.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), op2));
             return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
-        } else if (TimeSliceReplaceChecker.INSTANCE.canReplace(op1, op2)) {
+        } else if (TimeSliceReplaceChecker.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), op2));
             return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);

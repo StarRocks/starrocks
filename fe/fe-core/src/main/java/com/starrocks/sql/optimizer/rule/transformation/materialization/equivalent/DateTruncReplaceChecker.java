@@ -33,18 +33,18 @@ public class DateTruncReplaceChecker implements IRewriteEquivalent {
     }
 
     @Override
-    public boolean canReplace(ScalarOperator operator) {
+    public boolean isEquivalent(ScalarOperator operator) {
         if (mvDateTrunc == null) {
             return false;
         }
         if (!operator.isConstantRef()) {
             return false;
         }
-        return canReplace(mvDateTrunc, (ConstantOperator) operator);
+        return isEquivalent(mvDateTrunc, (ConstantOperator) operator);
     }
 
     @Override
-    public boolean canReplace(ScalarOperator op1, ConstantOperator op2) {
+    public boolean isEquivalent(ScalarOperator op1, ConstantOperator op2) {
         if (!(op1 instanceof CallOperator)) {
             return false;
         }

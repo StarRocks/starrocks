@@ -34,18 +34,18 @@ public class TimeSliceReplaceChecker implements IRewriteEquivalent {
     }
 
     @Override
-    public boolean canReplace(ScalarOperator operator) {
+    public boolean isEquivalent(ScalarOperator operator) {
         if (mvTimeSlice == null) {
             return false;
         }
         if (!operator.isConstantRef()) {
             return false;
         }
-        return canReplace(mvTimeSlice, (ConstantOperator) operator);
+        return isEquivalent(mvTimeSlice, (ConstantOperator) operator);
     }
 
     @Override
-    public boolean canReplace(ScalarOperator op1, ConstantOperator op2) {
+    public boolean isEquivalent(ScalarOperator op1, ConstantOperator op2) {
         if (!(op1 instanceof CallOperator)) {
             return false;
         }
