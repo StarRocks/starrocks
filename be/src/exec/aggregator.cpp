@@ -804,37 +804,53 @@ Status Aggregator::_evaluate_const_columns(int i) {
 
 Status Aggregator::convert_to_chunk_no_groupby(ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
-    // TODO(kks): we should approve memory allocate here
-    auto use_intermediate = _use_intermediate_as_output();
-    Columns agg_result_column = _create_agg_result_columns(1, use_intermediate);
-    if (!use_intermediate) {
+    if (_agg_functions[0]->get_name() == "group_concat2") {
+        Columns agg_result_column = _create_agg_result_columns(_state->chunk_size(), false);
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
+        RETURN_IF_ERROR(check_has_error());
+
+        TupleDescriptor* tuple_desc = _output_tuple_desc;
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        for (size_t i = 0; i < agg_result_column.size(); i++) {
+            result_chunk->append_column(std::move(agg_result_column[i]), tuple_desc->slots()[i]->id());
+        }
+        auto result_rows = result_chunk->num_rows();
+        _num_rows_returned += result_rows;
+        _num_rows_processed += result_rows;
+        *chunk = std::move(result_chunk);
+        _is_ht_eos = (result_rows == 0);
     } else {
-        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
-    }
-    RETURN_IF_ERROR(check_has_error());
-    // For agg function column is non-nullable and table is empty
-    // sum(zero_row) should be null, not 0.
-    if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
-        for (size_t i = 0; i < _agg_fn_types.size(); i++) {
-            if (_agg_fn_types[i].is_nullable) {
-                agg_result_column[i] = ColumnHelper::create_column(_agg_fn_types[i].result_type, true);
-                agg_result_column[i]->append_default();
+        // TODO(kks): we should approve memory allocate here
+        auto use_intermediate = _use_intermediate_as_output();
+        Columns agg_result_column = _create_agg_result_columns(1, use_intermediate);
+        if (!use_intermediate) {
+            TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
+        } else {
+            TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
+        }
+        RETURN_IF_ERROR(check_has_error());
+        // For agg function column is non-nullable and table is empty
+        // sum(zero_row) should be null, not 0.
+        if (UNLIKELY(_num_input_rows == 0 && _group_by_expr_ctxs.empty() && !use_intermediate)) {
+            for (size_t i = 0; i < _agg_fn_types.size(); i++) {
+                if (_agg_fn_types[i].is_nullable) {
+                    agg_result_column[i] = ColumnHelper::create_column(_agg_fn_types[i].result_type, true);
+                    agg_result_column[i]->append_default();
+                }
             }
         }
+
+        TupleDescriptor* tuple_desc = use_intermediate ? _intermediate_tuple_desc : _output_tuple_desc;
+
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        for (size_t i = 0; i < agg_result_column.size(); i++) {
+            result_chunk->append_column(std::move(agg_result_column[i]), tuple_desc->slots()[i]->id());
+        }
+        ++_num_rows_returned;
+        ++_num_rows_processed;
+        *chunk = std::move(result_chunk);
+        _is_ht_eos = true;
     }
-
-    TupleDescriptor* tuple_desc = use_intermediate ? _intermediate_tuple_desc : _output_tuple_desc;
-
-    ChunkPtr result_chunk = std::make_shared<Chunk>();
-    for (size_t i = 0; i < agg_result_column.size(); i++) {
-        result_chunk->append_column(std::move(agg_result_column[i]), tuple_desc->slots()[i]->id());
-    }
-    ++_num_rows_returned;
-    ++_num_rows_processed;
-    *chunk = std::move(result_chunk);
-    _is_ht_eos = true;
-
     return Status::OK();
 }
 
