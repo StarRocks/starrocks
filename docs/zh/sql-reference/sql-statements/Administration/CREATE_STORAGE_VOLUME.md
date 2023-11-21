@@ -293,6 +293,17 @@ PROPERTIES
     "dfs.client.failover.proxy.provider.<ha_cluster_name>" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
     ```
 
+    更多信息，请参考 [HDFS HA 文档](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithNFS.html)。
+
+    - 如果您使用 WebHDFS（自 v3.2 起支持），请设置以下属性：
+
+    ```SQL
+    "enabled" = "{ true | false }"
+    ```
+
+    更多信息，请参考 [WebHDFS 文档](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/WebHDFS.html)。
+
+
   - 如果您使用 Hadoop ViewFS（自 v3.2 起支持），请设置以下属性：
 
     ```SQL
