@@ -145,8 +145,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select n1.n_name as supp_nation, n2.n_name as cust_nation, " +
                 "n2.n_nationkey, C_NATIONKEY from nation n1, nation n2, customer " +
                 "where ((n1.n_name = 'CANADA' and n2.n_name = 'IRAN') " +
-                "or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')) a" +
-                "nd  c_nationkey = n2.n_nationkey limit 10;";
+                "or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')) " +
+                "and  c_nationkey = n2.n_nationkey limit 10;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "|  equal join conjunct: 14: C_NATIONKEY = 6: N_NATIONKEY\n"
                 + "  |  limit: 10");

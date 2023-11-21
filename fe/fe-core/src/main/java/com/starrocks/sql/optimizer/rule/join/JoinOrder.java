@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.join;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -25,6 +24,10 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionProperty;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -278,31 +281,45 @@ public abstract class JoinOrder {
     }
 
     protected void computeCost(ExpressionInfo exprInfo) {
-        double cost = exprInfo.expr.getStatistics().getOutputRowCount();
-        exprInfo.rowCount = cost;
-        if (exprInfo.leftChildExpr != null) {
+        if (exprInfo.leftChildExpr == null) {
+            exprInfo.cost = exprInfo.expr.getStatistics().getComputeSize();
+        } else {
+            double cost;
+            List<PhysicalPropertySet> inputPropertySet = Lists.newArrayList();
+            ExpressionContext expressionContext = new ExpressionContext(exprInfo.expr);
+
+            double shuffleJoinCost = CostModel.calculateCostWithInputProperty(expressionContext, inputPropertySet);
+            shuffleJoinCost +=
+                    CostModel.getRealCost(CostModel.computeDistributionCost(DistributionSpec.DistributionType.SHUFFLE,
+                            expressionContext.getChildOutputColumns(0),
+                            expressionContext.getChildStatistics(0),
+                            Optional.empty()));
+            shuffleJoinCost +=
+                    CostModel.getRealCost(CostModel.computeDistributionCost(DistributionSpec.DistributionType.SHUFFLE,
+                            expressionContext.getChildOutputColumns(1),
+                            expressionContext.getChildStatistics(1),
+                            Optional.empty()));
+
+            PhysicalPropertySet rightBroadcastProperty =
+                    new PhysicalPropertySet(
+                            DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
+            inputPropertySet.add(PhysicalPropertySet.EMPTY);
+            inputPropertySet.add(rightBroadcastProperty);
+
+            double broadcastJoinCost = CostModel.calculateCostWithInputProperty(expressionContext, inputPropertySet);
+            broadcastJoinCost += CostModel.getRealCost(
+                    CostModel.computeDistributionCost(DistributionSpec.DistributionType.BROADCAST,
+                            expressionContext.getChildOutputColumns(1),
+                            expressionContext.getChildStatistics(1),
+                            Optional.empty()));
+            cost = shuffleJoinCost < broadcastJoinCost ? shuffleJoinCost : broadcastJoinCost;
             cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
                     StatisticsEstimateCoefficient.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
 
             cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
                     StatisticsEstimateCoefficient.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
-
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
-            if (joinOperator.getJoinType().isCrossJoin()) {
-                // punish cross join
-                long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
-                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST / crossJoinCostPenalty) ?
-                        StatisticsEstimateCoefficient.MAXIMUM_COST :
-                        cost * crossJoinCostPenalty;
-            } else if (!existsEqOnPredicate(exprInfo.expr)) {
-                // punish nestloop join
-                cost = cost > (StatisticsEstimateCoefficient.MAXIMUM_COST /
-                        StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY) ?
-                        StatisticsEstimateCoefficient.MAXIMUM_COST :
-                        cost * StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
-            }
+            exprInfo.cost = cost;
         }
-        exprInfo.cost = cost;
     }
 
     protected Optional<ExpressionInfo> buildJoinExpr(GroupInfo leftGroup, GroupInfo rightGroup) {

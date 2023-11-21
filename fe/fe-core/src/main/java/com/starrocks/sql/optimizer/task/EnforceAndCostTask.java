@@ -319,6 +319,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
     private void recordCostsAndEnforce(PhysicalPropertySet outputProperty,
                                        List<PhysicalPropertySet> childrenOutputProperties) {
+        // re-calculate local cost and update total cost
+        curTotalCost -= localCost;
+        localCost = CostModel.calculateCostWithInputProperty(new ExpressionContext(groupExpression), childrenOutputProperties);
+        curTotalCost += localCost;
+
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);
         PhysicalPropertySet requiredProperty = context.getRequiredProperty();
         recordPlanEnumInfo(groupExpression, outputProperty, childrenOutputProperties);

@@ -95,21 +95,33 @@ public class CostModel {
         return expressionContext.getOp().accept(costEstimator, expressionContext);
     }
 
-    public static double calculateCostWithChildrenOutProperty(GroupExpression expression,
-                                                              List<PhysicalPropertySet> childrenOutputProperties) {
-        ExpressionContext expressionContext = new ExpressionContext(expression);
-        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
+    public static double calculateCostWithInputProperty(ExpressionContext expressionContext,
+                                                        List<PhysicalPropertySet> inputProperties) {
+        CostEstimator costEstimator = new CostEstimator(inputProperties);
         CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
         double realCost = getRealCost(costEstimate);
 
-        LOG.debug("operator: {}, group id: {}, child group id: {}, " +
-                        "inputProperties: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
-                expressionContext.getOp(), expression.getGroup().getId(),
-                expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()),
-                childrenOutputProperties,
-                expressionContext.getStatistics().getOutputRowCount(),
-                expressionContext.getStatistics().getComputeSize(),
-                costEstimate, realCost);
+        if (LOG.isDebugEnabled()) {
+            if (expressionContext.isGroupExprContext()) {
+                GroupExpression expression = expressionContext.getGroupExpression();
+                LOG.debug("operator: {}, group id: {}, child group id: {}, " +
+                                "inputProperties: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
+                        expressionContext.getOp(), expression.getGroup().getId(),
+                        expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()),
+                        inputProperties,
+                        expressionContext.getStatistics().getOutputRowCount(),
+                        expressionContext.getStatistics().getComputeSize(),
+                        costEstimate, realCost);
+            } else {
+                LOG.debug("operator: {}, inputProperties: {}, outputRowCount: {}, " +
+                                "outPutSize: {}, costEstimate: {}, realCost: {}",
+                        expressionContext.getOp(),
+                        inputProperties,
+                        expressionContext.getStatistics().getOutputRowCount(),
+                        expressionContext.getStatistics().getComputeSize(),
+                        costEstimate, realCost);
+            }
+        }
         return realCost;
     }
 
@@ -120,6 +132,68 @@ public class CostModel {
         return costEstimate.getCpuCost() * cpuCostWeight +
                 costEstimate.getMemoryCost() * memoryCostWeight +
                 costEstimate.getNetworkCost() * networkCostWeight;
+    }
+
+    public static CostEstimate computeDistributionCost(DistributionSpec.DistributionType distributionType,
+                                                       ColumnRefSet inputCols, Statistics inputStatistics,
+                                                       Optional<Operator> childOperator) {
+        Preconditions.checkNotNull(inputStatistics);
+
+        CostEstimate result;
+        ConnectContext ctx = ConnectContext.get();
+        SessionVariable sessionVariable = ctx.getSessionVariable();
+        double outputSize = inputStatistics.getOutputSize(inputCols);
+        double penalty = 1.0;
+        if (childOperator.isPresent() && childOperator.get() instanceof PhysicalHashAggregateOperator) {
+            PhysicalHashAggregateOperator childAggOp = (PhysicalHashAggregateOperator) childOperator.get();
+            DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+            if (skewInfo != null && skewInfo.getStage() == 3) {
+                penalty = skewInfo.getPenaltyFactor();
+            }
+        }
+        // set network start cost 1 at least
+        // avoid choose network plan when the cost is same as colocate plans
+        switch (distributionType) {
+            case ANY:
+                result = CostEstimate.ofCpu(outputSize);
+                break;
+            case BROADCAST:
+                // beNum is the number of right table should broadcast, now use alive backends
+                int aliveBackendNumber = ctx.getAliveBackendNumber();
+                int beNum = Math.max(1, aliveBackendNumber);
+
+                result = CostEstimate.of(outputSize * aliveBackendNumber,
+                        outputSize * beNum,
+                        Math.max(outputSize * beNum, 1));
+                if (outputSize > sessionVariable.getMaxExecMemByte()) {
+                    result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
+                }
+                LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
+                break;
+            case SHUFFLE:
+                // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+                // which contains two steps:
+                // 1. Ignore the network cost for ExchangeNode when estimating cost model.
+                // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+                boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
+                        && sessionVariable.isEnablePipelineEngine()
+                        && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
+
+                result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);
+                break;
+            case GATHER:
+                result = CostEstimate.of(outputSize, 0,
+                        Math.max(inputStatistics.getOutputSize(inputCols), 1));
+                break;
+            default:
+                throw new StarRocksPlannerException(
+                        "not support " + distributionType + "distribution type",
+                        ErrorType.UNSUPPORTED);
+        }
+        LOG.debug("distribution type {}, cost: {}.", distributionType, result);
+        return result;
+
     }
 
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
