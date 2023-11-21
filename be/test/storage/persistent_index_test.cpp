@@ -35,7 +35,18 @@
 #include "util/faststring.h"
 
 namespace starrocks {
-PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
+
+struct PersistentIndexTestParam {
+    bool enable_pindex_compression;
+};
+
+class PersistentIndexTest : public testing::TestWithParam<PersistentIndexTestParam> {
+public:
+    virtual ~PersistentIndexTest() {}
+    void SetUp() override { config::enable_pindex_compression = GetParam().enable_pindex_compression; }
+};
+
+TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     using Key = uint64_t;
     const int N = 1000;
     vector<Key> keys;
@@ -133,7 +144,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index) {
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index) {
+TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     using Key = std::string;
     const int N = 1000;
     vector<Key> keys(N);
@@ -243,7 +254,7 @@ static std::string gen_random_string_of_random_length(size_t floor, size_t ceil)
     return str;
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index) {
+TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     using Key = std::string;
     const int N = 1000;
     vector<Key> keys(N);
@@ -351,7 +362,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index) {
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
+TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_fixlen_mutable_index_wal";
     const std::string kIndexFile = "./PersistentIndexTest_test_fixlen_mutable_index_wal/index.l0.0.0";
@@ -508,7 +519,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
+TEST_P(PersistentIndexTest, test_l0_max_file_size) {
     int64_t l0_max_file_size = config::l0_max_file_size;
     config::l0_max_file_size = 200000;
     config::l0_max_mem_usage = 10240;
@@ -589,7 +600,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
     config::l0_max_file_size = l0_max_file_size;
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_l0_max_memory_usage) {
+TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     write_pindex_bf = false;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_max_memory_usage";
@@ -651,7 +662,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_max_memory_usage) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_l0_min_memory_usage) {
+TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {
     write_pindex_bf = false;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_min_memory_usage";
@@ -722,7 +733,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l0_min_memory_usage) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
+TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot";
     const std::string kIndexFile = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot/index.l0.0.0";
@@ -790,7 +801,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
+TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot_wal";
     const std::string kIndexFile = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot_wal/index.l0.0.0";
@@ -887,7 +898,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot_wal)
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
+TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_small_varlen_mutable_index_wal";
     const std::string kIndexFile = "./PersistentIndexTest_test_small_varlen_mutable_index_wal/index.l0.0.0";
@@ -1014,7 +1025,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
+TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_large_varlen_mutable_index_wal";
     const std::string kIndexFile = "./PersistentIndexTest_test_large_varlen_mutable_index_wal/index.l0.0.0";
@@ -1140,7 +1151,7 @@ PARALLEL_TEST(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_flush_fixlen_to_immutable) {
+TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     using Key = uint64_t;
     const int N = 200000;
     vector<Key> keys(N);
@@ -1207,7 +1218,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     ASSERT_TRUE(fs::remove_all("./index.l1.1.1").ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_flush_varlen_to_immutable) {
+TEST_P(PersistentIndexTest, test_flush_varlen_to_immutable) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_varlen_to_immutable";
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
     bool created;
@@ -1453,7 +1464,7 @@ void build_persistent_index_from_tablet(size_t N) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
+TEST_P(PersistentIndexTest, test_build_from_tablet) {
     auto manager = StorageEngine::instance()->update_manager();
     config::l0_max_mem_usage = 104857600;
     manager->mem_tracker()->set_limit(-1);
@@ -1470,7 +1481,7 @@ PARALLEL_TEST(PersistentIndexTest, test_build_from_tablet) {
     config::l0_max_mem_usage = 104857600;
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_fixlen_replace) {
+TEST_P(PersistentIndexTest, test_fixlen_replace) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_fixlen_replace";
     const std::string kIndexFile = "./PersistentIndexTest_test_fixlen_replace/index.l0.0.0";
@@ -1544,7 +1555,7 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_replace) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_varlen_replace) {
+TEST_P(PersistentIndexTest, test_varlen_replace) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_varlen_replace";
     const std::string kIndexFile = "./PersistentIndexTest_test_varlen_replace/index.l0.0.0";
@@ -1618,7 +1629,7 @@ PARALLEL_TEST(PersistentIndexTest, test_varlen_replace) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
+TEST_P(PersistentIndexTest, test_get_move_buckets) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_get_move_buckets";
     PersistentIndex index(kPersistentIndexDir);
     std::vector<uint8_t> bucket_packs_in_page;
@@ -1644,7 +1655,7 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
+TEST_P(PersistentIndexTest, test_flush_l1_advance) {
     config::l0_max_mem_usage = 10240;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
@@ -1760,7 +1771,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
+TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_for_pindex";
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
     bool created;
@@ -1904,7 +1915,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_multi_l2_tmp_l1) {
+TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
     config::l0_max_mem_usage = 1024;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
@@ -2037,7 +2048,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_tmp_l1) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
+TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
     config::l0_max_mem_usage = 1 * 1024 * 1024; // 1MB
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_not_tmp_l1";
@@ -2138,7 +2149,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
+TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
     config::l0_max_mem_usage = 1 * 1024 * 1024; // 1MB
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_not_tmp_l1_fixlen";
@@ -2234,7 +2245,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_multi_l2_delete) {
+TEST_P(PersistentIndexTest, test_multi_l2_delete) {
     config::l0_max_mem_usage = 1024;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
@@ -2339,7 +2350,7 @@ PARALLEL_TEST(PersistentIndexTest, test_multi_l2_delete) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_l2_versions) {
+TEST_P(PersistentIndexTest, test_l2_versions) {
     EditVersionWithMerge m1(INT64_MAX, INT64_MAX, true);
     EditVersionWithMerge m2(INT64_MAX, INT64_MAX, false);
     EditVersionWithMerge m3(10, 0, true);
@@ -2365,7 +2376,7 @@ PARALLEL_TEST(PersistentIndexTest, test_l2_versions) {
     ASSERT_TRUE(m10 < m9);
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
+TEST_P(PersistentIndexTest, test_index_keep_delete) {
     config::l0_max_mem_usage = 1024;
     config::enable_pindex_minor_compaction = false;
     FileSystem* fs = FileSystem::Default();
@@ -2440,5 +2451,8 @@ PARALLEL_TEST(PersistentIndexTest, test_index_keep_delete) {
     }
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
+
+INSTANTIATE_TEST_SUITE_P(PersistentIndexTest, PersistentIndexTest,
+                         ::testing::Values(PersistentIndexTestParam{true}, PersistentIndexTestParam{false}));
 
 } // namespace starrocks

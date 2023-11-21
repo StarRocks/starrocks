@@ -43,7 +43,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
     PERSISTENT_INDEX_VERSION_2,
-    PERSISTENT_INDEX_VERSION_3
+    PERSISTENT_INDEX_VERSION_3,
+    PERSISTENT_INDEX_VERSION_4
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -535,12 +536,14 @@ private:
         uint32_t value_size;
         uint32_t nbucket;
         uint64_t data_size;
+        uint64_t uncompressed_size;
     };
 
     std::vector<ShardInfo> _shards;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
     mutable std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
     std::vector<size_t> _bf_off;
+    CompressionTypePB _compression_type;
 };
 
 class ImmutableIndexWriter {
