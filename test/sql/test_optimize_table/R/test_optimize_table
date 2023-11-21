@@ -33,6 +33,18 @@ show partitions from t;
 [REGEX].*k	1	3	HDD	9999-12-31 23:59:59	None.*
 -- !result
 
+<<<<<<< HEAD
+=======
+
+
+
+
+
+
+
+
+
+>>>>>>> 94335534d4 ([BugFix] Fix optimize table change distribution column without specify partitions (#35440))
 -- name: test_optimize_table_by_partition_name
 CREATE TABLE `duplicate_table_with_null_partition` (
     `k1` date,
@@ -71,6 +83,7 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
+
 
 
 
@@ -147,6 +160,7 @@ select * from t;
 2
 3
 -- !result
+
 -- name: test_change_partition_distribution
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
@@ -189,8 +203,8 @@ PROPERTIES (
 -- !result
 select * from t;
 -- result:
-3	2020-08-01
 1	2020-06-01
+3	2020-08-01
 2	2020-07-01
 -- !result
 alter table t distributed by hash(k);
@@ -223,13 +237,12 @@ PROPERTIES (
 -- !result
 select * from t;
 -- result:
+1	2020-06-01
 3	2020-08-01
 2	2020-07-01
-1	2020-06-01
 -- !result
 alter table t distributed by hash(k1) buckets 4;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: not support change distribution column when specify partitions.')
 -- !result
 function: wait_optimize_table_finish()
 -- result:
@@ -246,7 +259,7 @@ PARTITION BY RANGE(`k1`)
 (PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
 PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
 PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
-DISTRIBUTED BY HASH(`k`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 4 
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
@@ -258,9 +271,9 @@ PROPERTIES (
 -- !result
 select * from t;
 -- result:
+1	2020-06-01
 2	2020-07-01
 3	2020-08-01
-1	2020-06-01
 -- !result
 alter table t distributed by random;
 -- result:
@@ -294,8 +307,8 @@ PROPERTIES (
 select * from t;
 -- result:
 1	2020-06-01
-2	2020-07-01
 3	2020-08-01
+2	2020-07-01
 -- !result
 -- name: test_change_partial_partition_distribution
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
