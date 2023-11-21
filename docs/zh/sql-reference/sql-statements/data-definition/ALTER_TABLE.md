@@ -37,7 +37,7 @@ alter_clause1[, alter_clause2, ...]
 - rollup: 创建或删除 rollup index。
 - index: 修改索引（目前支持 bitmap 索引）。
 
-:::NOTE
+:::note
 
 - partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
 - rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
