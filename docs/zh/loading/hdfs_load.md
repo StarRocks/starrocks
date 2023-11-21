@@ -44,7 +44,7 @@ StarRocks 支持通过以下方式从 HDFS 导入数据：
 
 - 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 HDFS 查询数据。
 - 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md) 导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入数据。
 
 ### 操作示例
 
