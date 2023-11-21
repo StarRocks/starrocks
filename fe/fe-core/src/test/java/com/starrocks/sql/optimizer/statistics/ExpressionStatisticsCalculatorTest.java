@@ -385,6 +385,11 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assert.assertEquals(columnStatistic.getMaxValue(), 100, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        // test upper function
+        callOperator = new CallOperator(FunctionSet.UPPER, Type.VARCHAR, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assert.assertEquals(columnStatistic.getMaxValue(), 100, 0.001);
+        Assert.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
     }
 
     @Test
