@@ -41,6 +41,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -63,7 +65,8 @@ public class ShowDataAction extends RestBaseAction {
 
     public long getDataSizeOfDatabase(Database db) {
         long totalSize = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // sort by table name
             List<Table> tables = db.getTables();
@@ -75,7 +78,7 @@ public class ShowDataAction extends RestBaseAction {
                 totalSize += tableSize;
             } // end for tables
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return totalSize;
     }

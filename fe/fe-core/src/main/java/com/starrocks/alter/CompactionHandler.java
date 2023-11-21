@@ -45,6 +45,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelStmt;
@@ -82,7 +84,7 @@ public class CompactionHandler extends AlterHandler {
 
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
-    public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database database,
+    public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
                                               OlapTable olapTable) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
@@ -91,7 +93,8 @@ public class CompactionHandler extends AlterHandler {
             ArrayListMultimap<Long, Long> backendToTablets = ArrayListMultimap.create();
             AgentBatchTask batchTask = new AgentBatchTask();
 
-            database.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 List<Partition> allPartitions = new ArrayList<>();
                 if (compactionClause.getPartitionNames().isEmpty()) {
@@ -111,7 +114,7 @@ public class CompactionHandler extends AlterHandler {
                 for (Partition partition : allPartitions) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
-                                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                                MaterializedIndex.IndexExtState.VISIBLE)) {
                             for (Tablet tablet : index.getTablets()) {
                                 for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
                                     backendToTablets.put(backendId, tablet.getId());
@@ -123,12 +126,12 @@ public class CompactionHandler extends AlterHandler {
             } catch (Exception e) {
                 throw new UserException(e.getMessage());
             } finally {
-                database.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             for (Long backendId : backendToTablets.keySet()) {
                 CompactionTask task = new CompactionTask(null, backendId,
-                        database.getId(),
+                        db.getId(),
                         olapTable.getId(),
                         backendToTablets.get(backendId),
                         ((CompactionClause) alterClause).isBaseCompaction()
