@@ -118,7 +118,7 @@ public class OdpsScanNode extends ScanNode {
                     splitInfo.put("start_index", String.valueOf(split1.getRowRange().getStartIndex()));
                     splitInfo.put("num_record", String.valueOf(split1.getRowRange().getNumRecord()));
                     hdfsScanRange.setOffset(split1.getRowRange().getStartIndex());
-                    hdfsScanRange.setLength(split1.getRowRange().getNumRecord());
+                    hdfsScanRange.setLength(split1.getRowRange().getNumRecord() - split1.getRowRange().getStartIndex());
                     break;
                 default:
                     throw new StarRocksConnectorException(
