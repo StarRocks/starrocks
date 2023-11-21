@@ -156,6 +156,6 @@ public class PartitionPruneTest extends PlanTestBase {
     public void testNullException() throws Exception {
         String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "partitions=0/4");
+        assertCContains(plan, "0:EMPTYSET");
     }
 }
