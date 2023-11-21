@@ -69,9 +69,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author dingxin (zhangdingxin.zdx@alibaba-inc.com)
- */
 public class OdpsTypeUtils {
     public static ColumnType convertToColumnType(Column column) {
         switch (column.getTypeInfo().getOdpsType()) {
