@@ -248,7 +248,10 @@ public class StatementPlanner {
     public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
         try {
             lock(dbs);
+            // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
+            // only copy the latest olap table
+            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
             return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
             unLock(dbs);
