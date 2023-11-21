@@ -1,4 +1,7 @@
--- name: test_sync_materialized_view_rewrite 
+-- name: test_sync_materialized_view_rewrite
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- result:
+-- !result
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   
@@ -221,9 +224,9 @@ None
 -- !result
 SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
 -- result:
-3	smallcity
 1	smallcity
 2	bigcity
+3	smallcity
 -- !result
 SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1;
 -- result:
@@ -249,9 +252,9 @@ None
 -- !result
 SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
 -- result:
+3	smallcity
 1	smallcity
 2	bigcity
-3	smallcity
 -- !result
 SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1;
 -- result:
