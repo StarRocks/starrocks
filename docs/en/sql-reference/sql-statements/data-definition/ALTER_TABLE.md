@@ -39,7 +39,7 @@ alter_clause1[, alter_clause2, ...]
 - index: modifies index (only Bitmap index can be modified).
 - compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
-:::NOTE
+:::note
 
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
 - Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
