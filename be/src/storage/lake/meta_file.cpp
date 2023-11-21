@@ -146,7 +146,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
             if (!config::experimental_lake_ignore_pk_consistency_check) {
-                return Status::InternalError(err_msg);
+                return Status::InvalidPrimaryIndex(err_msg);
             }
         } else {
             const int64_t prev_num_dels = segment_id_to_rowset[each.first]->num_dels();

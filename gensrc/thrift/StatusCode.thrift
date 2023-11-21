@@ -104,6 +104,11 @@ enum TStatusCode {
 
     SR_EAGAIN = 54,
 
-    REMOTE_FILE_NOT_FOUND = 55 // for hive external table
+    REMOTE_FILE_NOT_FOUND = 55, // for hive external table
+
+    // for primary key
+    DUPLICATE_PRIMARY_KEY = 56,
+
+    INVALID_PRIMARY_INDEX = 57
 }
 

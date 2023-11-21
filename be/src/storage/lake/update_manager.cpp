@@ -26,6 +26,7 @@
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "testutil/sync_point.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
 
@@ -75,7 +76,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata&
         _index_cache.remove(index_entry);
         std::string msg = strings::Substitute("prepare_primary_index: load primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
-        return Status::InternalError(msg);
+        return st;
     }
     st = index.prepare(EditVersion(new_version, 0), 0);
     if (!st.ok()) {
@@ -83,7 +84,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata&
         std::string msg =
                 strings::Substitute("prepare_primary_index: prepare primary index failed: $0", st.to_string());
         LOG(ERROR) << msg;
-        return Status::InternalError(msg);
+        return st;
     }
     builder->set_has_update_index();
     return index_entry;
@@ -110,7 +111,7 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
     return Status::OK();
 }
 
-void UpdateManager::release_primary_index(IndexEntry* index_entry) {
+void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
         _index_cache.release(index_entry);
     }
@@ -211,6 +212,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         idx++;
     }
     new_deletes.clear();
+    TEST_ERROR_POINT("publish_primary_key_tablet.1");
 
     // 5. update TabletMeta and write to meta file
     for (auto&& each : new_del_vecs) {
