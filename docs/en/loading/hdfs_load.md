@@ -280,7 +280,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema.md).
+For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
 
 > **NOTE**
 >
@@ -380,7 +380,7 @@ You can query the progress of Broker Load jobs from the `information_schema.load
 SELECT * FROM information_schema.loads;
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema.md).
+For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md)).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -533,7 +533,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   1 row in set (0.00 sec)
   ```
 
-- Query the progress of Pipe jobs from the [`information_schema.pipes`](../administration/information_schema.md) view.
+- Query the progress of Pipe jobs from the [`information_schema.pipes`](../reference/information_schema/pipes.md) view.
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -557,7 +557,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
 
 #### Check file status
 
-You can query the load status of the files loaded from the [`information_schema.pipe_files`](../administration/information_schema.md) view.
+You can query the load status of the files loaded from the [`information_schema.pipe_files`](../reference/information_schema/pipe_files.md) view.
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;
