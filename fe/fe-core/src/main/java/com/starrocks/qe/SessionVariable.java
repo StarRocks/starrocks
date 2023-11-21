@@ -1523,6 +1523,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
 
+    public void setFollowerQueryForwardMode(String mode) {
+        this.followerForwardMode = mode;
+    }
+
     public Optional<Boolean> isFollowerForwardToLeaderOpt() {
         if (Strings.isNullOrEmpty(this.followerForwardMode) ||
                 followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.DEFAULT.toString())) {
