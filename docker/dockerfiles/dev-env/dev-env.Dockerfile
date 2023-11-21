@@ -26,7 +26,7 @@ ARG starlet_tag=v3.2-rc3
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 
-FROM starrocks/toolchains-${distro}:main-20230823 as base
+FROM starrocks/toolchains-${distro}:main-20231121 as base
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root
