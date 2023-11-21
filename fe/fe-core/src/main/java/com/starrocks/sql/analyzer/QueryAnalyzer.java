@@ -47,6 +47,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -923,8 +925,9 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
-            Database database = metadataMgr.getDb(catalogName, dbName);
-            MetaUtils.checkDbNullAndReport(database, dbName);
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            MetaUtils.checkDbNullAndReport(db, dbName);
+            Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
@@ -936,14 +939,14 @@ public class QueryAnalyzer {
                     Preconditions.checkState(mvTable instanceof OlapTable);
                     try {
                         // Add read lock to avoid concurrent problems.
-                        database.readLock();
+                        locker.lockDatabase(db, LockType.READ);
                         OlapTable mvOlapTable = new OlapTable();
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
                         table = mvOlapTable;
                     } finally {
-                        database.readUnlock();
+                        locker.unLockDatabase(db, LockType.READ);
                     }
                 }
             } else {

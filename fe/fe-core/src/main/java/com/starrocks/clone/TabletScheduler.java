@@ -69,6 +69,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.leader.ReportHandler;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -308,17 +310,18 @@ public class TabletScheduler extends FrontendDaemon {
     public Pair<Boolean, Long> blockingAddTabletCtxToScheduler(Database db, TabletSchedCtx tabletSchedCtx,
                                                                boolean forceAdd) {
         // first: added or not, second: total sleep time in ms
+        Locker locker = new Locker();
         Pair<Boolean, Long> result = new Pair<>(false, 0L);
         try {
             do {
                 AddResult res = addTablet(tabletSchedCtx, forceAdd /* force or not */);
                 if (res == AddResult.LIMIT_EXCEED) {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                     // It's ok to sleep a relative long time here so that the scheduler will spare more
                     // slots after the sleep and the following adding won't block.
                     Thread.sleep(BLOCKING_ADD_SLEEP_DURATION_MS);
                     result.second += BLOCKING_ADD_SLEEP_DURATION_MS;
-                    db.readLock();
+                    locker.lockDatabase(db, LockType.READ);
                 } else {
                     result.first = (res == AddResult.ADDED);
                     break;
@@ -326,7 +329,7 @@ public class TabletScheduler extends FrontendDaemon {
             } while (true);
         } catch (InterruptedException e) {
             LOG.warn(e);
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
         }
 
         return result;
@@ -686,7 +689,8 @@ public class TabletScheduler extends FrontendDaemon {
         }
 
         Pair<TabletStatus, TabletSchedCtx.Priority> statusPair;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState()
                     .getTableIncludeRecycleBin(db, tabletCtx.getTblId());
@@ -812,7 +816,7 @@ public class TabletScheduler extends FrontendDaemon {
                         tabletCtx.getTablet().getReplicaInfos());
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         handleTabletByTypeAndStatus(statusPair.first, tabletCtx, batchTask);
@@ -1043,8 +1047,9 @@ public class TabletScheduler extends FrontendDaemon {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
+        Locker locker = new Locker();
         try {
-            db.writeLock();
+            locker.lockDatabase(db, LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1060,7 +1065,7 @@ public class TabletScheduler extends FrontendDaemon {
                 throw new SchedException(Status.FINISHED, "redundant replica is deleted");
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas");
     }
@@ -1234,8 +1239,9 @@ public class TabletScheduler extends FrontendDaemon {
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
+        Locker locker = new Locker();
         try {
-            db.writeLock();
+            locker.lockDatabase(db, LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
@@ -1256,7 +1262,7 @@ public class TabletScheduler extends FrontendDaemon {
             }
             throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas");
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -1378,7 +1384,7 @@ public class TabletScheduler extends FrontendDaemon {
      * 4. For the primary key tablet, get the max rowset creation time
      *    of all replica which updated in tablets reported.
      * 5. Check (now - maxRowsetCreationTime) is greater than Config.primary_key_disk_schedule_time
-    */
+     */
     private List<TabletSchedCtx> filterUnschedulableTablets(List<TabletSchedCtx> alternativeTablets) {
         List<TabletSchedCtx> newAlternativeTablets = Lists.newArrayList();
         for (TabletSchedCtx schedCtx : alternativeTablets) {
@@ -1394,11 +1400,12 @@ public class TabletScheduler extends FrontendDaemon {
             }
 
             Table tbl = null;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 tbl = db.getTable(tableId);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             if (!(tbl instanceof OlapTable)) {
