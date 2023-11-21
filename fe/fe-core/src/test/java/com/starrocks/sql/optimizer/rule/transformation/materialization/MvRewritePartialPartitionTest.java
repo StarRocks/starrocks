@@ -20,9 +20,13 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.time.Instant;
 
 public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     private static MockedHiveMetadata mockedHiveMetadata;
@@ -37,6 +41,16 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
+    }
+
+    @Before
+    public void before() {
+        startCaseTime = Instant.now().getEpochSecond();
+    }
+
+    @After
+    public void after() throws Exception {
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     @Test
