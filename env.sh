@@ -87,16 +87,15 @@ fi
 export JAVA=${JAVA_HOME}/bin/java
 JAVA_VER=$(${JAVA} -version 2>&1 | grep -oP 'version "\K[^"]+')
 
-# extract major_version
+# split version
 IFS='.' read -ra ADDR <<< "$JAVA_VER"
 major_version=${ADDR[0]}
 
-# compare major_version
+# compare version
 if [[ $major_version -lt 11 ]]; then
-    echo "Error: require JAVA with JDK version at least 11"
+    echo "Error: require JAVA with JDK version at least 11, but got $JAVA_VER"
     exit 1
 fi
-
 
 # check maven
 MVN_CMD=mvn
