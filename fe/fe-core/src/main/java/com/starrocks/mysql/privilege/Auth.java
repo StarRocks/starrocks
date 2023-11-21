@@ -1531,36 +1531,42 @@ public class Auth implements Writable {
     public List<List<String>> getGrantsSQLs(UserIdentity currentUser) {
         List<List<String>> ret = Lists.newArrayList();
 
-        // 1. get all possible users
-        Set<UserIdentity> identities;
-        if (currentUser != null) {
-            identities = new HashSet<>();
-            identities.add(currentUser);
-        } else {
-            identities = getAllUserIdents(false);
+        readLock();
+        try {
+            // 1. get all possible users
+            Set<UserIdentity> identities;
+            if (currentUser != null) {
+                identities = new HashSet<>();
+                identities.add(currentUser);
+            } else {
+                identities = getAllUserIdents(false);
+            }
+
+            // 2. loop for grants SQL
+            List<PrivTable> allTables = Arrays.asList(
+                    userPrivTable, dbPrivTable, tablePrivTable, resourcePrivTable, impersonateUserPrivTable);
+            for (UserIdentity userIdentity : identities) {
+                List<String> line = Lists.newArrayList();
+                line.add(userIdentity.toString());
+
+                // loop all privilege tables
+                List<String> allSQLs = new ArrayList<>();
+                for (PrivTable table : allTables) {
+                    Iterator<PrivEntry> iter = table.getReadOnlyIteratorByUser(userIdentity);
+                    while (iter.hasNext()) {
+                        String sql = iter.next().toGrantSQL();
+                        if (sql != null) {
+                            allSQLs.add(sql);
+                        }
+                    } // for entity
+                } // for table
+                line.add(String.join("\n", allSQLs));
+                ret.add(line);
+            }
+        } finally {
+            readUnlock();
         }
 
-        // 2. loop for grants SQL
-        List<PrivTable> allTables = Arrays.asList(
-                userPrivTable, dbPrivTable, tablePrivTable, resourcePrivTable, impersonateUserPrivTable);
-        for (UserIdentity userIdentity : identities) {
-            List<String> line = Lists.newArrayList();
-            line.add(userIdentity.toString());
-
-            // loop all privilege tables
-            List<String> allSQLs = new ArrayList<>();
-            for (PrivTable table : allTables) {
-                Iterator<PrivEntry> iter = table.getReadOnlyIteratorByUser(userIdentity);
-                while (iter.hasNext()) {
-                    String sql = iter.next().toGrantSQL();
-                    if (sql != null) {
-                        allSQLs.add(sql);
-                    }
-                } // for entity
-            } // for table
-            line.add(String.join("\n", allSQLs));
-            ret.add(line);
-        }
         return ret;
     }
 
