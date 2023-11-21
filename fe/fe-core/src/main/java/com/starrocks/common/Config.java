@@ -2545,7 +2545,7 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
-    public static boolean allow_default_light_schema_change = true;
+    public static boolean enable_fast_schema_evolution = true;
   
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
@@ -2612,4 +2612,7 @@ public class Config extends ConfigBase {
     // This limit limits the maximum size of json file to load.
     @ConfField(mutable = true)
     public static long json_file_size_limit = 4294967296L;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
 }

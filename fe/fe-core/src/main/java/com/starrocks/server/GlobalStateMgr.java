@@ -582,7 +582,7 @@ public class GlobalStateMgr {
         // use default warehouse
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
@@ -2768,10 +2768,10 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // show lightSchemaChange only when it is set true
-                if (olapTable.getUseLightSchemaChange()) {
-                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_LIGHT_SCHEMA_CHANGE).append("\" = \"");
-                    sb.append(olapTable.getUseLightSchemaChange()).append("\"");
+                // show fastSchemaEvolution only when it is set true
+                if (olapTable.getUseFastSchemaEvolution()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).append("\" = \"");
+                    sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
                 }
 
                 // storage media

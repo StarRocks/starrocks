@@ -411,9 +411,6 @@ public class DatabaseTransactionMgr {
         if (transactionState.getWriteEndTimeMs() < 0) {
             transactionState.setWriteEndTimeMs(System.currentTimeMillis());
         }
-        if (!tabletCommitInfos.isEmpty()) {
-            transactionState.setTabletCommitInfos(tabletCommitInfos);
-        }
 
         // update transaction state extra if exists
         if (txnCommitAttachment != null) {
@@ -1182,7 +1179,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if ((Config.enable_new_publish_mechanism || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) &&
+            if ((Config.enable_new_publish_mechanism || RunMode.isSharedDataMode()) &&
                     transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
