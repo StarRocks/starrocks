@@ -47,6 +47,9 @@ public class OdpsProperties {
     public static final String ROW_OFFSET = "row_offset";
     public static final String SIZE = "size";
     private static final long DEFAULT_SPLIT_ROW_COUNT = 4 * 1024 * 1024L;
+    private final Map<String, String> properties;
+    private static final Map<String, String> DEFAULT_VALUES = new HashMap<>();
+    private static final Set<String> REQUIRED_PROPERTIES = new HashSet<>();
 
     static {
         newProperty(ACCESS_ID).isRequired();
@@ -68,11 +71,6 @@ public class OdpsProperties {
         newProperty(PROJECT_CACHE_EXPIRE_TIME).withDefaultValue(86400);
         newProperty(PROJECT_CACHE_SIZE).withDefaultValue(1000);
     }
-
-    private final Map<String, String> properties;
-
-    private static final Map<String, String> DEFAULT_VALUES = new HashMap<>();
-    private static final Set<String> REQUIRED_PROPERTIES = new HashSet<>();
 
     public OdpsProperties(Map<String, String> properties) {
         this.properties = properties;
