@@ -141,6 +141,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     @SerializedName(value = "rollupSchema")
     private List<Column> rollupSchema = Lists.newArrayList();
+    @SerializedName(value = "rollupSchemaVersion")
+    private int rollupSchemaVersion;
     @SerializedName(value = "baseSchemaHash")
     private int baseSchemaHash;
     @SerializedName(value = "rollupSchemaHash")
@@ -168,15 +170,16 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                        long baseIndexId, long rollupIndexId, String baseIndexName, String rollupIndexName,
-                       List<Column> rollupSchema, Expr whereClause, int baseSchemaHash, int rollupSchemaHash,
-                       KeysType rollupKeysType, short rollupShortKeyColumnCount, OriginStatement origStmt,
-                       String viewDefineSql, boolean isColocateMVIndex) {
+                       int rollupSchemaVersion, List<Column> rollupSchema, Expr whereClause, int baseSchemaHash, 
+                       int rollupSchemaHash, KeysType rollupKeysType, short rollupShortKeyColumnCount, 
+                       OriginStatement origStmt, String viewDefineSql, boolean isColocateMVIndex) {
         super(jobId, JobType.ROLLUP, dbId, tableId, tableName, timeoutMs);
 
         this.baseIndexId = baseIndexId;
         this.rollupIndexId = rollupIndexId;
         this.baseIndexName = baseIndexName;
         this.rollupIndexName = rollupIndexName;
+        this.rollupSchemaVersion = rollupSchemaVersion;
 
         this.rollupSchema = rollupSchema;
         this.baseSchemaHash = baseSchemaHash;
@@ -277,6 +280,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                                 tabletType, tbl.getCompressionType(), index.getSortKeyIdxes(),
                                 index.getSortKeyUniqueIds(), true);
                         createReplicaTask.setBaseTablet(tabletIdMap.get(rollupTabletId), baseSchemaHash);
+                        createReplicaTask.setSchemaVersion(rollupSchemaVersion);
                         batchTask.addTask(createReplicaTask);
                     } // end for rollupReplicas
                 } // end for rollupTablets
@@ -458,6 +462,9 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
+                    TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                    long baseIndexId = invertedIndex.getTabletMeta(baseTabletId).getIndexId();
+                    List<Column> baseColumn = tbl.getIndexMetaByIndexId(baseIndexId).getSchema();
 
                     DescriptorTable descTable = new DescriptorTable();
                     TupleDescriptor tupleDesc = descTable.createTupleDescriptor();
@@ -547,7 +554,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         AlterReplicaTask rollupTask = AlterReplicaTask.rollupLocalTablet(
                                 rollupReplica.getBackendId(), dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                                 baseTabletId, rollupReplica.getId(), rollupSchemaHash, baseSchemaHash, visibleVersion, jobId,
-                                rollupJobV2Params);
+                                rollupJobV2Params, baseColumn);
                         rollupBatchTask.addTask(rollupTask);
                     }
                 }
