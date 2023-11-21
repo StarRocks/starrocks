@@ -31,9 +31,13 @@
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
 ##############################################################
+<<<<<<< HEAD
 
 set -eo pipefail
 
+=======
+startTime=$(date +%s)
+>>>>>>> 3f33fc7daa ([Enhancement] build shell add startTime,endTime and totalTime print (#35484))
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -418,8 +422,15 @@ fi
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
 
+endTime=$(date +%s)
+totalTime=$((endTime - startTime))
+
 echo "***************************************"
+<<<<<<< HEAD
 echo "Successfully build StarRocks"
+=======
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
+>>>>>>> 3f33fc7daa ([Enhancement] build shell add startTime,endTime and totalTime print (#35484))
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then
