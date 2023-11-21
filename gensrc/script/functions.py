@@ -592,26 +592,6 @@ vectorized_functions = [
 
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
-    [70500, 'ifs', 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
-    [70501, 'ifs', 'TINYINT', ['TINYINT', '...'], 'nullptr'],
-    [70502, 'ifs', 'SMALLINT', ['SMALLINT', '...'], 'nullptr'],
-    [70503, 'ifs', 'INT', ['INT', '...'], 'nullptr'],
-    [70504, 'ifs', 'BIGINT', ['BIGINT', '...'], 'nullptr'],
-    [70505, 'ifs', 'LARGEINT', ['LARGEINT', '...'], 'nullptr'],
-    [70506, 'ifs', 'FLOAT', ['FLOAT', '...'], 'nullptr'],
-    [70507, 'ifs', 'DOUBLE', ['DOUBLE', '...'], 'nullptr'],
-    [70508, 'ifs', 'DATETIME', ['DATETIME', '...'], 'nullptr'],
-    [70509, 'ifs', 'DATE', ['DATE', '...'], 'nullptr'],
-    [70510, 'ifs', 'DECIMALV2', ['DECIMALV2', '...'], 'nullptr'],
-    [705100, 'ifs', 'DECIMAL32', ['DECIMAL32', '...'], 'nullptr'],
-    [705101, 'ifs', 'DECIMAL64', ['DECIMAL64', '...'], 'nullptr'],
-    [705102, 'ifs', 'DECIMAL128', ['DECIMAL128', '...'], 'nullptr'],
-    [70511, 'ifs', 'VARCHAR', ['VARCHAR', '...'], 'nullptr'],
-    [70512, 'ifs', 'BITMAP', ['BITMAP', '...'], 'nullptr'],
-    [70513, 'ifs', 'PERCENTILE', ['PERCENTILE', '...'], 'nullptr'],
-    [70514, 'ifs', 'HLL', ['HLL', '...'], 'nullptr'],
-    [70515, 'ifs', 'TIME', ['TIME', '...'], 'nullptr'],
-
     # hyperloglog function
     [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunctions::hll_cardinality'],
     [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
