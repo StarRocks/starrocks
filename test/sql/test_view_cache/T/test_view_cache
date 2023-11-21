@@ -33,8 +33,6 @@ ALTER TABLE t1 DROP COLUMN c3;
 
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 
-alter view v5 as select UPPER(c_0_0), c1 from v4;
-
 drop table t1;
 
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
@@ -52,6 +50,10 @@ PROPERTIES (
 );
 
 insert into t1 values (1, 2, 'a');
+
+SELECT * FROM v5 UNION ALL SELECT * FROM v6;
+
+alter view v5 as select UPPER(c_0_0), c1 from v4;
 
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 

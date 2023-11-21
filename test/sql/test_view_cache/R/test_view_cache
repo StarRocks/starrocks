@@ -62,14 +62,14 @@ SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 1	3
 1	3
 1	3
-4	6
-4	6
-4	6
-4	6
 1	3
 1	3
 1	3
 1	3
+4	6
+4	6
+4	6
+4	6
 -- !result
 ALTER TABLE t1 DROP COLUMN c4;
 -- result:
@@ -98,19 +98,19 @@ ALTER TABLE t1 DROP COLUMN c3;
 -- !result
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 -- result:
-[REGEX].*`t1`.`c3`.*
+[REGEX].*`t1`.`c3`' cannot be resolved.")
 -- !result
 drop table t1;
 -- result:
 -- !result
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 -- result:
-[REGEX].*t1.*
+[REGEX].*Unknown table.*
 -- !result
 CREATE TABLE `t1` (
   `c1` bigint DEFAULT NULL,
   `c2` bigint DEFAULT NULL,
-  `c3` bigint DEFAULT NULL
+  `c3` varchar(20) DEFAULT NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`c1`)
 COMMENT "OLAP"
@@ -120,9 +120,38 @@ PROPERTIES (
 );
 -- result:
 -- !result
+insert into t1 values (1, 2, 'a');
+-- result:
+-- !result
 SELECT * FROM v5 UNION ALL SELECT * FROM v6;
 -- result:
+1	a
+1	a
+1	a
+1	a
+1	a
+1	a
+1	a
+1	a
+-- !result
+alter view v5 as select UPPER(c_0_0), c1 from v4;
+-- result:
+-- !result
+SELECT * FROM v5 UNION ALL SELECT * FROM v6;
+-- result:
+B	1
+A	1
+1	a
+1	a
+1	a
+1	a
 -- !result
 SELECT /*+ set_var(enable_query_dump = true) */ * FROM v5 UNION ALL SELECT * FROM v6;
 -- result:
+A	1
+B	1
+1	a
+1	a
+1	a
+1	a
 -- !result
