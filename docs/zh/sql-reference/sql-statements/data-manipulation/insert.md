@@ -14,8 +14,8 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 INSERT { INTO | OVERWRITE } [db_name.]<table_name>
-[ PARTITION (<partition_name> [, ...]) ]
-[ TEMPORARY PARTITION (<temporary_partition_name>[, ...]) ]
+[ PARTITION (<partition_name> [, ...) ]
+[ TEMPORARY PARTITION (<temporary_partition_name>[, ...) ]
 [ WITH LABEL <label>]
 [ (<column_name>[, ...]) ]
 { VALUES ( { <expression> | DEFAULT }[, ...] )
