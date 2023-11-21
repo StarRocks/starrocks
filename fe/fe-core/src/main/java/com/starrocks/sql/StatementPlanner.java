@@ -253,7 +253,10 @@ public class StatementPlanner {
         Locker locker = new Locker();
         try {
             lock(locker, dbs);
+            // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
+            // only copy the latest olap table
+            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
             return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
             unLock(locker, dbs);
