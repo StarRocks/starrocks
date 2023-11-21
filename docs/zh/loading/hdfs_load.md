@@ -280,7 +280,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
 
 > **NOTE**
 >
@@ -380,7 +380,7 @@ PROPERTIES
 SELECT * FROM information_schema.loads;
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../administration/information_schema.md)。
+有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
@@ -533,7 +533,7 @@ SELECT * FROM FILES
   1 row in set (0.00 sec)
   ```
 
-- 通过 [`information_schema.pipes`](../administration/information_schema.md) 视图查看当前数据库中的导入作业。
+- 通过 [`information_schema.pipes`](../reference/information_schema/pipes.md) 视图查看当前数据库中的导入作业。
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -557,7 +557,7 @@ SELECT * FROM FILES
 
 #### 查看导入的文件信息
 
-您可以通过 [`information_schema.pipe_files`](../administration/information_schema.md) 视图查看导入的文件信息。
+您可以通过 [`information_schema.pipe_files`](../reference/information_schema/pipe_files.md) 视图查看导入的文件信息。
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;
