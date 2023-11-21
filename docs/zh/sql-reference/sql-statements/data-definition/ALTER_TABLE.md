@@ -1,17 +1,21 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ALTER TABLE
 
 ## 功能
 
-该语句用于修改已有表的结构，包括：
+该语句用于修改已有表，包括：
 
-- [增加或删除分区，修改分区属性](#操作-partition-相关语法)
-- [创建或删除 rollup index](#操作-rollup-相关语法)
-- [执行 schema change](#schema-change)
 - [修改表名、分区名、索引名](#rename-对名称进行修改)
-- [修改 Bitmap 索引](#bitmap-index-修改)
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [修改表注释](#修改表的注释31-版本起)
-- [手动执行 compaction](#手动-compaction31-版本起)
+- [增加或删除分区，修改分区属性](#操作-partition-相关语法)
+- [执行 schema change 增加或删除列，修改列顺序和表属性](#schema-change)
+- [创建或删除 rollup index](#操作-rollup-相关语法)
+- [修改 Bitmap 索引](#bitmap-index-修改)
+- [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
 
 > **注意**
 >
@@ -28,20 +32,57 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 partition、rollup、schema change、rename、index、swap、comment、compact 操作，不同操作的应用场景为：
 
-- partition: 修改分区属性，删除分区，增加分区。
-- rollup: 创建或删除 rollup index。
-- schema change: 增加列，删除列，调整列顺序，修改列类型。
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- index: 修改索引（目前支持 bitmap 索引）。
 - swap: 原子替换两张表。
 - comment: 修改已有表的注释。**从 3.1 版本开始支持。**
+- partition: 修改分区属性，删除分区，增加分区。
+- schema change: 增加列，删除列，调整列顺序，修改列类型。
+- rollup: 创建或删除 rollup index。
+- index: 修改索引（目前支持 bitmap 索引）。
 - compact: 对指定表或分区手动执行 Compaction（数据版本合并）。**从 3.1 版本开始支持。**
 
-> **说明**
->
-> - partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
-> - rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
-> - partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
+:::note
+
+- partition、rollup 和 schema change 这三种操作不能同时出现在一条 `ALTER TABLE` 语句中。
+- rollup、schema change 是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。
+- partition、rename、swap 和 index 是同步操作，命令返回表示执行完毕。
+:::
+
+### Rename 对名称进行修改
+
+#### 修改表名
+
+语法：
+
+```sql
+ALTER TABLE <tbl_name> RENAME <new_tbl_name>;
+```
+
+#### 修改 rollup index 名称 (RENAME ROLLUP)
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME ROLLUP old_rollup_name new_rollup_name;
+```
+
+#### 修改 partition 名称 (RENAME PARTITION)
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME PARTITION <old_partition_name> <new_partition_name>;
+```
+
+### 修改表的注释（3.1 版本起）
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
+```
 
 ### 操作 partition 相关语法
 
@@ -141,88 +182,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 
 - 对于单分区表，分区名同表名。对于多分区表，如果需要修改所有分区的属性，则使用 `(*)` 更加方便。
 - 执行 `SHOW PARTITIONS FROM <tbl_name>` 查看修改后分区属性。
-
-### 操作 rollup 相关语法
-
-#### 创建 rollup index (ADD ROLLUP)
-
-**RollUp 表索引**: shortkey index 可加速数据查找，但 shortkey index 依赖维度列排列次序。如果使用非前缀的维度列构造查找谓词，用户可以为数据表创建若干 RollUp 表索引。 RollUp 表索引的数据组织和存储和数据表相同，但 RollUp 表拥有自身的 shortkey index。用户创建 RollUp 表索引时，可选择聚合的粒度，列的数量，维度列的次序。使频繁使用的查询条件能够命中相应的 RollUp 表索引。
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD ROLLUP rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)];
-```
-
-properties: 支持设置超时时间，默认超时时间为 1 天。
-
-例子：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD ROLLUP r1(col1,col2) from r0;
-```
-
-#### 批量创建 rollup index
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)],...];
-```
-
-例子：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
-```
-
-> 注意
->
-1. 如果没有指定 from_index_name，则默认从 base index 创建。
-2. rollup 表中的列必须是 from_index 中已有的列。
-3. 在 properties 中，可以指定存储格式。具体请参阅 [CREATE TABLE](../data-definition/CREATE_TABLE.md) 章节。
-
-#### 删除 rollup index (DROP ROLLUP)
-
-语法：
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
-```
-
-例子：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
-```
-
-#### 批量删除 rollup index
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
-```
-
-例子：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
-```
-
-注意：
-
-不能删除 base index。
 
 ### Schema change
 
@@ -355,7 +314,16 @@ ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 
 #### 修改表的属性
 
-支持修改 `bloom_filter_columns`，`colocate_with`， `dynamic_partition` 属性，`enable_persistent_index` 属性，`replication_num` 和 `default.replication_num` 属性，`storage_cooldown_ttl` 和 `storage_cooldown_time` 属性。
+支持修改如下表属性：
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
 
 语法：
 
@@ -363,36 +331,89 @@ ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 PROPERTIES ("key"="value")
 ```
 
+注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
+
+### 操作 rollup 相关语法
+
+#### 创建 rollup index (ADD ROLLUP)
+
+**RollUp 表索引**: shortkey index 可加速数据查找，但 shortkey index 依赖维度列排列次序。如果使用非前缀的维度列构造查找谓词，用户可以为数据表创建若干 RollUp 表索引。 RollUp 表索引的数据组织和存储和数据表相同，但 RollUp 表拥有自身的 shortkey index。用户创建 RollUp 表索引时，可选择聚合的粒度，列的数量，维度列的次序。使频繁使用的查询条件能够命中相应的 RollUp 表索引。
+
+语法：
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)];
+```
+
+PROPERTIES: 支持设置超时时间，默认超时时间为 1 天。
+
+例子：
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD ROLLUP r1(col1,col2) from r0;
+```
+
+#### 批量创建 rollup index
+
+语法：
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)],...];
+```
+
+例子：
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
+```
+
+> 注意
+>
+1. 如果没有指定 from_index_name，则默认从 base index 创建。
+2. rollup 表中的列必须是 from_index 中已有的列。
+3. 在 properties 中，可以指定存储格式。具体请参阅 [CREATE TABLE](../data-definition/CREATE_TABLE.md) 章节。
+
+#### 删除 rollup index (DROP ROLLUP)
+
+语法：
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
+```
+
+例子：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
+```
+
+#### 批量删除 rollup index
+
+语法：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
+```
+
+例子：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
+```
+
 注意：
-也可以合并到上面的 schema change 操作中来修改，见下面例子。
 
-### Rename 对名称进行修改
-
-#### 修改表名
-
-语法：
-
-```sql
-ALTER TABLE <tbl_name> RENAME <new_tbl_name>;
-```
-
-#### 修改 rollup index 名称 (RENAME ROLLUP)
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-RENAME ROLLUP old_rollup_name new_rollup_name;
-```
-
-#### 修改 partition 名称 (RENAME PARTITION)
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-RENAME PARTITION <old_partition_name> <new_partition_name>;
-```
+不能删除 base index。
 
 ### Bitmap index 修改
 
@@ -428,14 +449,6 @@ DROP INDEX index_name;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
-```
-
-### 修改表的注释（3.1 版本起）
-
-语法：
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
 ### 手动 Compaction（3.1 版本起）

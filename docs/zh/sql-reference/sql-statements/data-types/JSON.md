@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # JSON
 
 自 2.2.0 版本起，StarRocks 支持 JSON。本文介绍 JSON 的基本概念，以及 StarRocks 如何创建 JSON 类型的列、导入和查询 JSON 数据，通过 JSON 函数及运算符构造和处理 JSON 数据。
@@ -32,7 +36,7 @@ PROPERTIES (
 
 ### 导入数据并存储为 JSON 类型
 
-StarRocks 支持如下三种方式导入数据并存储为 JSON 类型。
+StarRocks 支持如下方式导入数据并存储为 JSON 类型。
 
 - 方式一：通过 `INSERT INTO` 将数据写入至 JSON 类型的列（例如列 `j`）。
 
@@ -64,11 +68,13 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 | LIST                                                         | JSON 数组型          |
 | UNION、TIMESTAMP 等其他类型                                  | 暂未支持             |
 
+- 方式四：通过 [Routine Load](../../../loading/RoutineLoad.md#导入-json-数据) 持续消费 Kafka 中的 JSON 格式数据，并导入至 StarRocks 中。
+
 ### 查询和处理 JSON 类型的数据
 
 StarRocks 支持查询和处理 JSON 类型的数据，并且支持使用 JSON 函数和运算符。
 
-本示例以表 tj 进行说明。
+本示例以表 `tj` 进行说明。
 
 ```Plain Text
 mysql> select * from tj;

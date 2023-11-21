@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Error Codes
 
 This section describes the common error codes for query requests.

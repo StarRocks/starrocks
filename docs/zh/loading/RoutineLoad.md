@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 从 Apache Kafka® 持续导入
 
 本文介绍 Routine Load 的基本原理、以及如何通过 Routine Load 持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
@@ -211,7 +215,7 @@ FROM KAFKA
 
 #### 目标数据库和表
 
-根据 JSON 数据中需要导入的 key，在StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl2` 。
+根据 JSON 数据中需要导入的 key，在 StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl2` 。
 
 ```SQL
 CREATE TABLE `example_tbl2` ( 
@@ -233,7 +237,7 @@ DISTRIBUTED BY HASH(`commodity_id`);
 
 #### 导入作业
 
-通过如下语句，向 StarRocks  提交一个 Routine Load 导入作业 `example_tbl2_ordertest2`，持续消费 Kafka 集群中 Topic `ordertest2` 的消息，并导入至 `example_tbl2` 表中。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
+通过如下语句，向 StarRocks 提交一个 Routine Load 导入作业 `example_tbl2_ordertest2`，持续消费 Kafka 集群中 Topic `ordertest2` 的消息，并导入至 `example_tbl2` 表中。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl2_ordertest2 ON example_tbl2
@@ -257,7 +261,7 @@ FROM KAFKA
 
 - **数据格式**
 
-  需要`PROPERTIES`子句的`"format" = "json"`中指定数据格式为 JSON。
+  需要 `PROPERTIES` 子句的 `"format" = "json"` 中指定数据格式为 JSON。
 
 - **数据提取和转换**
 

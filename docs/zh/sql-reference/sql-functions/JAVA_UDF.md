@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Java UDF
 
 自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数（User Defined Function，简称 UDF）。
@@ -139,6 +143,7 @@ public class UDFJsonGet {
 用户自定义类必须实现如下方法：
 
 > **说明**
+>
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
 | 方法                        | 含义                                                   |
@@ -191,7 +196,9 @@ public class SumInt {
 用户自定义类必须实现如下方法：
 
 > **说明**
+>
 > 方法中传入参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
+
 |               **方法**             |                    **含义**                                 |
 | --------------------------------- | ------------------------------------------------------------ |
 | State create()                    | 创建 State。                                                 |
@@ -390,7 +397,7 @@ RETURNS return_type
 ```SQL
 CREATE [GLOBAL] FUNCTION MY_UDF_JSON_GET(string, string) 
 RETURNS string
-properties (
+PROPERTIES (
     "symbol" = "com.starrocks.udf.sample.UDFJsonGet", 
     "type" = "StarrocksJar",
     "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
@@ -427,7 +434,7 @@ PROPERTIES 里的参数说明与 [创建 Scalar UDF](#创建-scalar-udf) 相同�
 ```SQL
 CREATE [GLOBAL] AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
 RETURNS Int
-properties 
+PROPERTIES 
 (
     "analytic" = "true",
     "symbol" = "com.starrocks.udf.sample.WindowSumInt", 
@@ -445,7 +452,7 @@ properties
 ```SQL
 CREATE [GLOBAL] TABLE FUNCTION MY_UDF_SPLIT(string)
 RETURNS string
-properties 
+PROPERTIES 
 (
     "symbol" = "com.starrocks.udf.sample.UDFSplit", 
     "type" = "StarrocksJar", 

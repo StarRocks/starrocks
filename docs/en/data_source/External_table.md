@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # External table
 
 :::note
@@ -93,8 +97,8 @@ Before you create an external table to query data from a database, you need to c
 Execute the following statement to create a JDBC resource named `jdbc0`:
 
 ~~~SQL
-create external resource jdbc0
-properties (
+CREATE EXTERNAL RESOURCE jdbc0
+PROPERTIES (
     "type"="jdbc",
     "user"="postgres",
     "password"="changeme",
@@ -104,7 +108,7 @@ properties (
 );
 ~~~
 
-The required parameters in `properties` are as follows:
+The required parameters in `PROPERTIES` are as follows:
 
 * `type`: the type of the resource. Set the value to `jdbc`.
 
@@ -455,7 +459,7 @@ When you create an external table, you need to specify the data types of columns
 > **Note**
 >
 > * StarRocks reads the data of the NESTED type by using JSON-related functions.
-> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. The support for querying ARRAY data from Elasticsearch is added from v2.5.
+> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. **The support for querying ARRAY data from Elasticsearch is added from v2.5.**
 
 ### Predicate pushdown
 

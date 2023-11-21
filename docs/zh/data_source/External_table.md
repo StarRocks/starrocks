@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # (To be deprecated) 外部表
 
 StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
@@ -93,8 +97,8 @@ insert into external_t select * from other_table;
 例如目标数据库为 PostgreSQL，则可以执行如下语句，创建一个名为 `jdbc0` 的 JDBC 资源，用于访问 PostgreSQL：
 
 ~~~SQL
-create external resource jdbc0
-properties (
+CREATE EXTERNAL RESOURCE jdbc0
+PROPERTIES (
     "type" = "jdbc",
     "user" = "postgres",
     "password" = "changeme",
@@ -104,7 +108,7 @@ properties (
 );
 ~~~
 
-`properties` 的必填配置项：
+`PROPERTIES` 的必填配置项：
 
 * `type`：资源类型，固定取值为 `jdbc`。
 
@@ -183,17 +187,17 @@ USE jdbc_test;
 执行如下语句，在数据库 `jdbc_test` 中，创建一张名为 `jdbc_tbl` 的 JDBC 外部表：
 
 ~~~SQL
-create external table jdbc_tbl (
+CREATE EXTERNAL TABLE jdbc_tbl (
     `id` bigint NULL, 
     `data` varchar(200) NULL 
 ) ENGINE=jdbc 
-properties (
+PROPERTIES (
     "resource" = "jdbc0",
     "table" = "dest_tbl"
 );
 ~~~
 
-`properties` 配置项：
+`PROPERTIES` 配置项：
 
 * `resource`：所使用 JDBC 资源的名称，必填项。
 
@@ -469,7 +473,7 @@ POST /_analyze
 > **说明**
 >
 > * StarRocks 会通过 JSON 相关函数读取嵌套字段。
-> * 关于 ARRAY 类型，因为在 Elasticsearch 中，多维数组会被自动打平成一维数组，所以 StarRocks 也会做相同行为的转换。从 2.5 版本开始，支持查询 Elasticsearch 中的 ARRAY 数据。
+> * 关于 ARRAY 类型，因为在 Elasticsearch 中，多维数组会被自动打平成一维数组，所以 StarRocks 也会做相同行为的转换。**从 2.5 版本开始，支持查询 Elasticsearch 中的 ARRAY 数据。**
 
 ### 谓词下推
 

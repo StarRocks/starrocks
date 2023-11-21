@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # money_format
 
 ## 功能

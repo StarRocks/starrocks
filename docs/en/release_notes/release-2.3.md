@@ -1,4 +1,31 @@
+---
+displayed_sidebar: "English"
+---
+
 # StarRocks version 2.3
+
+## 2.3.18
+
+Release date: October 11, 2023
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The bug in the third-party library librdkafka causes the load tasks of Routine Load jobs to get stuck during data loading, and newly created load tasks also fail to execute. [#28301](https://github.com/StarRocks/starrocks/pull/28301)
+- Spark or Flink connectors may fail to export data because of inaccurate memory statistics. [#31200](https://github.com/StarRocks/starrocks/pull/31200) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- BEs crash when a Stream Load job uses the keyword `if`. [#31926](https://github.com/StarRocks/starrocks/pull/31926)
+- An error `"get TableMeta failed from TNetworkAddress"` is reported when data is loaded into partitioned StarRocks external tables.  [#30466](https://github.com/StarRocks/starrocks/pull/30466)
+
+## 2.3.17
+
+Release date: September 4, 2023
+
+### Bug Fixes
+
+Fixed the following issue:
+
+- A Routine Load job fails to consume data. [#29883](https://github.com/StarRocks/starrocks/issues/29883) [#18550](https://github.com/StarRocks/starrocks/pull/18550)
 
 ## 2.3.16
 

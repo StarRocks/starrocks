@@ -66,6 +66,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 
@@ -214,11 +215,12 @@ public class ColumnFilterConverter {
             }
             predicate = predicate.clone();
             ConstantOperator result = (ConstantOperator) evaluation;
-            try {
-                result = result.castTo(predicateExpr.getType());
-            } catch (Exception e) {
+            Optional<ConstantOperator> castResult = result.castTo(predicateExpr.getType());
+
+            if (!castResult.isPresent()) {
                 return predicate;
             }
+            result = castResult.get();
             predicate.setChild(1, result);
         }
         return predicate;

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # RECOVER
 
 ## 功能

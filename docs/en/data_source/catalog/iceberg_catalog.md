@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Iceberg catalog
 
 An Iceberg catalog is a type of external catalog that is supported by StarRocks from v2.4 onwards. With Iceberg catalogs, you can:
@@ -43,7 +47,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
@@ -861,7 +865,7 @@ Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](
 
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
+[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>/")]
 ```
 
 You can use the `location` parameter to specify the file path in which you want to create the database. Both HDFS and cloud storage are supported. If you do not specify the `location` parameter, StarRocks creates the database in the default file path of the Iceberg catalog.
@@ -949,9 +953,9 @@ Currently StarRocks only supports [identity transforms](https://iceberg.apache.o
 >
 > Partition columns must be defined following non-partition columns. Partition columns support all data types excluding FLOAT, DOUBLE, DECIMAL, and DATETIME and cannot use `NULL` as the default value.
 
-#### properties
+#### PROPERTIES
 
-You can specify the table attributes in the `"key" = "value"` format in `properties`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
+You can specify the table attributes in the `"key" = "value"` format in `PROPERTIES`. See [Iceberg table attributes](https://iceberg.apache.org/docs/latest/configuration/).
 
 The following table describes a few key properties.
 

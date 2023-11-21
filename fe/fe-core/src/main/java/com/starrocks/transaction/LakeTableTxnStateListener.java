@@ -30,6 +30,8 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -204,14 +206,15 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             return;
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // Preconditions: has acquired the database's reader or writer lock.
             tabletGroup = Utils.groupTabletID(table);
         } catch (NoAliveBackendException e) {
             LOG.warn(e);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (tabletGroup == null) {

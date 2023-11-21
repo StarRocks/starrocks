@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE RESOURCE
 
 ## 功能
@@ -237,8 +241,8 @@ PROPERTIES (
 示例七：创建一个名为`jdbc0`的 JDBC 资源。
 
 ```SQL
-create external resource jdbc0
-properties (
+CREATE EXTERNAL RESOURCE jdbc0
+PROPERTIES (
     "type"="jdbc",
     "user"="postgres",
     "password"="changeme",

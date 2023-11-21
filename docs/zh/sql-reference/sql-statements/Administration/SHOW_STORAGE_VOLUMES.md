@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW STORAGE VOLUMES
 
 ## 功能

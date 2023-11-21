@@ -54,6 +54,9 @@ public class MVRefreshTestBase {
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
 
+    protected static long startSuiteTime = 0;
+    protected long startCaseTime = 0;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -105,4 +108,5 @@ public class MVRefreshTestBase {
     @AfterClass
     public static void tearDown() throws Exception {
     }
+
 }

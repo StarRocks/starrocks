@@ -68,6 +68,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -189,8 +191,9 @@ public class AnalyzerUtils {
             return null;
         }
 
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
@@ -208,7 +211,7 @@ public class AnalyzerUtils {
 
             return fn;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -600,8 +603,7 @@ public class AnalyzerUtils {
                 } else {
                     node.setTable(idMap.get(table.getId()));
                 }
-
-            } else if (node.getTable().isMaterializedView()) {
+            } else if (node.getTable().isOlapMaterializedView()) {
                 MaterializedView table = (MaterializedView) node.getTable();
                 if (!idMap.containsKey(table.getId())) {
                     olapTables.add(table);
@@ -613,8 +615,8 @@ public class AnalyzerUtils {
                 } else {
                     node.setTable(idMap.get(table.getId()));
                 }
-
             }
+            // TODO: support cloud native table and mv
             return null;
         }
     }

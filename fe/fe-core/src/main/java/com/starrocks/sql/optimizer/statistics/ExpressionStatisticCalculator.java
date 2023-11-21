@@ -35,6 +35,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
@@ -143,12 +144,20 @@ public class ExpressionStatisticCalculator {
                     min = ConstantOperator.createDatetime(
                             Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
                 } else {
-                    max = max.castTo(cast.getType());
-                    min = min.castTo(cast.getType());
+                    Optional<ConstantOperator> maxRes;
+                    Optional<ConstantOperator> minRes;
+                    maxRes = max.castTo(cast.getType());
+                    minRes = max.castTo(cast.getType());
+                    if (maxRes.isPresent() && minRes.isPresent()) {
+                        max = maxRes.get();
+                        min = minRes.get();
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
                 }
             } catch (Exception e) {
-                LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min +
-                        ", to type: " + cast.getType());
+                LOG.debug("expression statistic compute cast failed: max value: {}, min value: {}, to type {}",
+                        max, min, cast.getType());
                 return childStatistic;
             }
 
@@ -459,6 +468,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.ROUND:
                 case FunctionSet.DROUND:
                 case FunctionSet.TRUNCATE:
+                case FunctionSet.UPPER:
                     // Just use the input's statistics as output's statistics
                     break;
                 case FunctionSet.TO_BITMAP:

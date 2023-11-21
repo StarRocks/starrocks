@@ -31,6 +31,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -61,6 +62,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -371,6 +373,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
+
+            if (distributionDesc.getType() != olapTable.getDefaultDistributionInfo().getType()
+                    && clause.getPartitionNames() != null) {
+                throw new SemanticException("not support change distribution type when specify partitions");
+            }
         }
 
         // analyze partitions
@@ -385,6 +392,19 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             List<String> partitionNameList = partitionNames.getPartitionNames();
             if (partitionNameList == null || partitionNameList.isEmpty()) {
                 throw new SemanticException("partition names is empty");
+            }
+
+            if (distributionDesc instanceof HashDistributionDesc
+                    && olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+                HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
+                Set<String> orginalPartitionColumn = hashDistributionInfo.getDistributionColumns()
+                        .stream().map(Column::getName).collect(Collectors.toSet());
+                Set<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames()
+                        .stream().collect(Collectors.toSet());
+                if (!orginalPartitionColumn.equals(newPartitionColumn)) {
+                    throw new SemanticException("not support change distribution column when specify partitions");
+                }
             }
 
             List<Long> partitionIds = Lists.newArrayList();
