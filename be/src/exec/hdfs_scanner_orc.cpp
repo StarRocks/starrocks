@@ -117,7 +117,7 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             column_index = orc_type->getColumnId();
         }
         if (column_index >= 0) {
-            auto row_idx_iter = rowIndexes.find(column_index);
+            const auto& row_idx_iter = rowIndexes.find(column_index);
             // there is no column stats, skip filter process.
             if (row_idx_iter == rowIndexes.end()) {
                 return false;
@@ -129,6 +129,10 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
             int64_t tz_offset_in_seconds = _reader->tzoffset_in_seconds() - _writer_tzoffset_in_seconds;
             Status st = OrcMinMaxDecoder::decode(slot, orc_type, stats, min_col, max_col, tz_offset_in_seconds);
             if (!st.ok()) {
+                LOG(INFO) << strings::Substitute(
+                        "OrcMinMaxDecoder decode failed, may occur performance degradation. Because SR's column($0) "
+                        "can't convert to orc file's column($1)",
+                        slot->debug_string(), orc_type->toString());
                 return false;
             }
         } else {
