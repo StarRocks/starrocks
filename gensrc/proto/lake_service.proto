@@ -16,9 +16,14 @@ syntax="proto2";
 
 package starrocks.lake;
 option java_package = "com.starrocks.proto";
+message StatusPB {
+    required int32 status_code = 1;
+    repeated string error_msgs = 2;
+}
 
 import "types.proto";
 import "status.proto";
+
 
 option cc_generic_services = true;
 
