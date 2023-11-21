@@ -82,7 +82,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select a, b, d, count(distinct t1.c)\n" +
                     " from iceberg0.partitioned_db.part_tbl1 as t1 \n" +
@@ -154,6 +153,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     PREDICATES: 13: d != '2023-08-01', 13: d != '2023-08-02'");
         }
         starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 
     @Test
@@ -828,6 +828,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1\n" +
                     "     rollup: test_mv1");
         }
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -1116,6 +1117,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1\n" +
                     "     rollup: test_mv1");
         }
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
     }
 
@@ -1597,5 +1599,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     rollup: test_mv1");
         }
         starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 }
