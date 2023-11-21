@@ -55,6 +55,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -1025,7 +1026,7 @@ public class ReportHandler extends Daemon {
         return true;
     }
 
-    public static boolean migratableTablet(Database db, OlapTable tbl, long partitionId, long indexId, long tabletId) {
+    public static boolean migratableTablet(Database db, OlapTable tbl, long physicalPartitionId, long indexId, long tabletId) {
         if (tbl.getKeysType() != KeysType.PRIMARY_KEYS) {
             return true;
         }
@@ -1042,12 +1043,12 @@ public class ReportHandler extends Daemon {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Partition partition = tbl.getPartition(partitionId);
-            if (partition == null || partition.getVisibleVersionTime() > maxLastSuccessReportTabletsTime) {
+            PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition == null || physicalPartition.getVisibleVersionTime() > maxLastSuccessReportTabletsTime) {
                 // partition is null or tablet report has not been updated, unmigratable
                 return false;
             }
-            MaterializedIndex idx = partition.getIndex(indexId);
+            MaterializedIndex idx = physicalPartition.getIndex(indexId);
             if (idx == null) {
                 // index is null, unmigratable
                 return false;
@@ -1122,7 +1123,7 @@ public class ReportHandler extends Daemon {
                     locker.unLockDatabase(db, LockType.READ);
                 }
 
-                if (!migratableTablet(db, table, tabletMeta.getPartitionId(), tabletMeta.getIndexId(), tabletId)) {
+                if (!migratableTablet(db, table, tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(), tabletId)) {
                     continue;
                 }
 

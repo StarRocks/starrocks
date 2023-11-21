@@ -486,21 +486,23 @@ public class Utils {
             return Optional.empty();
         }
 
-        try {
-            if (((ConstantOperator) op).isNull()) {
-                return Optional.of(ConstantOperator.createNull(descType));
-            }
+        if (((ConstantOperator) op).isNull()) {
+            return Optional.of(ConstantOperator.createNull(descType));
+        }
 
-            ConstantOperator result = ((ConstantOperator) op).castToStrictly(descType);
-            if (result.toString().equalsIgnoreCase(op.toString())) {
-                return Optional.of(result);
-            } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
-                if (op.toString().equalsIgnoreCase(result.toString().replaceAll("-", ""))) {
-                    return Optional.of(result);
-                }
+        Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
+        if (!result.isPresent()) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("invalid value: {} to type {}", op, descType);
             }
-        } catch (Exception ignored) {
-            LOG.debug("invalid value: {} to type {}", op, descType);
+            return Optional.empty();
+        }
+        if (result.get().toString().equalsIgnoreCase(op.toString())) {
+            return Optional.of(result.get());
+        } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
+            if (op.toString().equalsIgnoreCase(result.get().toString().replaceAll("-", ""))) {
+                return Optional.of(result.get());
+            }
         }
         return Optional.empty();
     }
@@ -533,12 +535,8 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(childType));
         }
 
-        try {
-            ConstantOperator result = rhs.castTo(childType);
-            return Optional.of(result);
-        } catch (Exception ignored) {
-        }
-        return Optional.empty();
+        Optional<ConstantOperator> result = rhs.castTo(childType);
+        return result.isPresent() ? Optional.of(result.get()) : Optional.empty();
     }
 
     public static ScalarOperator transTrue2Null(ScalarOperator predicates) {

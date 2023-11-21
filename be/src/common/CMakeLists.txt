@@ -27,6 +27,7 @@ add_library(Common STATIC
   configbase.cpp
   s3_uri.cpp
   tracer.cpp
+  prof/heap_prof.cpp
 )
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

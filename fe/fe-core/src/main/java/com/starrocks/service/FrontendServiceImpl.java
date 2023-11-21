@@ -68,6 +68,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
+import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -246,6 +247,8 @@ import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodesInfo;
+import com.starrocks.thrift.TObjectDependencyReq;
+import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TRefreshTableRequest;
@@ -635,6 +638,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         return result;
+    }
+
+    @Override
+    public TObjectDependencyRes listObjectDependencies(TObjectDependencyReq params) throws TException {
+        return SysObjectDependencies.listObjectDependencies(params);
     }
 
     // list MaterializedView table match pattern
@@ -1318,7 +1326,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
-            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp, false);
+            streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond * 1000, resp, false);
             if (!resp.stateOK()) {
                 LOG.warn(resp.msg);
                 throw new UserException(resp.msg);

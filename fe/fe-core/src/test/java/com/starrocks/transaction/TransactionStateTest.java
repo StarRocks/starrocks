@@ -40,8 +40,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public class TransactionStateTest {
@@ -149,5 +152,45 @@ public class TransactionStateTest {
             e.printStackTrace();
         }
         Assert.assertTrue(readTransactionState.isNewFinish());
+    }
+
+    @Test
+    public void testIsRunning() {
+        Set<TransactionStatus> nonRunningStatus = new HashSet<>();
+        nonRunningStatus.add(TransactionStatus.UNKNOWN);
+        nonRunningStatus.add(TransactionStatus.VISIBLE);
+        nonRunningStatus.add(TransactionStatus.ABORTED);
+
+        UUID uuid = UUID.randomUUID();
+        for (TransactionStatus status : TransactionStatus.values()) {
+            TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                    3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                    LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                    60 * 1000L);
+            transactionState.setTransactionStatus(status);
+            Assert.assertEquals(nonRunningStatus.contains(status), !transactionState.isRunning());
+        }
+    }
+
+    @Test
+    public void testCommitInfos() {
+        UUID uuid = UUID.randomUUID();
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label123", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(1001, 1001));
+        TabletCommitInfo info1 = new TabletCommitInfo(10001, 10001);
+        TabletCommitInfo info2 = new TabletCommitInfo(10001, 10002);
+        TabletCommitInfo info3 = new TabletCommitInfo(10002, 10002);
+        List<TabletCommitInfo> infos = new ArrayList<>();
+        infos.add(info1);
+        infos.add(info2);
+        infos.add(info3);
+        transactionState.setTabletCommitInfos(infos);
+        Assert.assertFalse(transactionState.tabletCommitInfosContainsReplica(1001, 1001));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10001));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10001, 10002));
+        Assert.assertTrue(transactionState.tabletCommitInfosContainsReplica(10002, 10002));
     }
 }

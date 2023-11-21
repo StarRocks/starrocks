@@ -288,6 +288,11 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
 
+// This config is to limit the max candidate of compaction queue to avoid
+// too many candidates lead to OOM or cpu overload.
+// when candidate num reach this value, the condidate with lowest score will be dropped.
+CONF_mInt64(max_compaction_candidate_num, "40960");
+
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
@@ -296,6 +301,8 @@ CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
 CONF_mInt32(update_compaction_delvec_file_io_amp_ratio, "2");
+// This config defines the maximum percentage of data allowed per compaction
+CONF_mDouble(update_compaction_ratio_threshold, "0.5");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 CONF_Int32(manual_compaction_threads, "4");

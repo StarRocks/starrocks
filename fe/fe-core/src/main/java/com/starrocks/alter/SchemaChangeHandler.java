@@ -1509,6 +1509,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
                     GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
                     return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    return null;
                 }
             }
 
@@ -2450,6 +2453,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
+            olapTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
             LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
         } finally {

@@ -493,7 +493,7 @@ public class PropertyAnalyzer {
         }
 
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
@@ -1096,7 +1096,11 @@ public class PropertyAnalyzer {
             return null;
         }
         properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
-        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        try {
+            return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        } catch (DateTimeParseException ex) {
+            throw new AnalysisException(ex.getMessage());
+        }
     }
 
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {

@@ -196,6 +196,7 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -247,7 +248,6 @@ public class StmtExecutor {
     private HttpResultSender httpResultSender;
 
     private PrepareStmtContext prepareStmtContext;
-
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -409,27 +409,10 @@ public class StmtExecutor {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
 
-            // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-            if (parsedStmt != null) {
-                Map<String, String> optHints = null;
-                if (parsedStmt instanceof QueryStatement &&
-                        ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-                    SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-                    optHints = selectRelation.getSelectList().getOptHints();
-                }
+            processVarHint(sessionVariableBackup);
 
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    context.setSessionVariable(sessionVariable);
-                }
-
-                if (parsedStmt.isExplain()) {
-                    context.setExplainLevel(parsedStmt.getExplainLevel());
-                }
+            if (parsedStmt.isExplain()) {
+                context.setExplainLevel(parsedStmt.getExplainLevel());
             }
 
             // execPlan is the output of new planner
@@ -463,7 +446,8 @@ public class StmtExecutor {
                         prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
                         if (null == prepareStmtContext) {
                             throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
-                                    "prepare statement can't be found @ %s, maybe has expired", executeStmt.getStmtName());
+                                    "prepare statement can't be found @ %s, maybe has expired",
+                                    executeStmt.getStmtName());
                         }
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
@@ -727,6 +711,31 @@ public class StmtExecutor {
             }
 
             context.setSessionVariable(sessionVariableBackup);
+        }
+    }
+
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    private void processVarHint(SessionVariable variables) throws DdlException, CloneNotSupportedException {
+        if (parsedStmt == null) {
+            return;
+        }
+        Map<String, String> optHints = null;
+        if (parsedStmt instanceof QueryStatement &&
+                ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        } else if (parsedStmt instanceof DmlStmt) {
+            DmlStmt dml = (DmlStmt) parsedStmt;
+            optHints = dml.getOptHints();
+        }
+
+        if (MapUtils.isNotEmpty(optHints)) {
+            SessionVariable sessionVariable = (SessionVariable) variables.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setSystemVariable(sessionVariable,
+                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+            }
+            context.setSessionVariable(sessionVariable);
         }
     }
 
@@ -1140,7 +1149,12 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
-        executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        try {
+            executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        } finally {
+            ConnectContext.remove();
+        }
+
     }
 
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
@@ -1555,7 +1569,8 @@ public class StmtExecutor {
         // proxy send show export result
         String db = exportStmt.getTblName().getDb();
         String showStmt = String.format("SHOW EXPORT FROM %s WHERE QueryId = \"%s\";", db, queryId);
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
         ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
         showExportStmt.setQueryId(queryId);
         ShowExecutor executor = new ShowExecutor(context, showExportStmt);
@@ -1799,14 +1814,14 @@ public class StmtExecutor {
             authenticateParams.setDb_name(externalTable.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
             transactionId = transactionMgr.beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                                    Lists.newArrayList(externalTable.getSourceTableId()), label,
-                                    externalTable.getSourceTableHost(),
-                                    externalTable.getSourceTablePort(),
-                                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                                            FrontendOptions.getLocalHostAddress()),
-                                    sourceType,
-                                    context.getSessionVariable().getQueryTimeoutS(),
-                                    authenticateParams);
+                    Lists.newArrayList(externalTable.getSourceTableId()), label,
+                    externalTable.getSourceTableHost(),
+                    externalTable.getSourceTablePort(),
+                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                            FrontendOptions.getLocalHostAddress()),
+                    sourceType,
+                    context.getSessionVariable().getQueryTimeoutS(),
+                    authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable()) {
             // schema table and iceberg and hive table does not need txn

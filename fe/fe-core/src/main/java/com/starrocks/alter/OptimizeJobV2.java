@@ -158,6 +158,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         try {
             PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                     optimizeClause.getSourcePartitionIds(), getTmpPartitionIds(), optimizeClause.getDistributionDesc());
+            LOG.debug("create temp partitions {} success. job: {}", getTmpPartitionIds(), jobId);
         } catch (Exception e) {
             LOG.warn("create temp partitions failed", e);
             throw new AlterCancelException("create temp partitions failed " + e);
@@ -196,7 +197,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             throw new AlterCancelException(e.getMessage());
         }
 
-        LOG.info("previous transactions are all finished, begin to rewrite data. job: {}", jobId);
+        LOG.info("previous transactions are all finished, begin to optimize table. job: {}", jobId);
 
         List<String> tmpPartitionNames;
         List<String> partitionNames = Lists.newArrayList();
@@ -251,6 +252,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             try {
                 taskManager.createTask(rewriteTask, false);
                 taskManager.executeTask(rewriteTask.getName());
+                LOG.debug("create rewrite task {}", rewriteTask.toString());
             } catch (DdlException e) {
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
                 LOG.warn("create rewrite task failed", e);
@@ -334,6 +336,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         this.progress = 99;
 
+        LOG.debug("all insert overwrite tasks finished, optimize job: {}", jobId);
+
         // replace partition
         locker.lockDatabase(db, LockType.WRITE);
         try {
@@ -405,6 +409,23 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
             });
 
+            boolean allPartitionOptimized = false;
+            if (!hasFailedTask && optimizeClause.getDistributionDesc() != null) {
+                Set<String> targetPartitionNames = targetTable.getPartitionNames();
+                long targetPartitionNum = targetPartitionNames.size();
+                targetPartitionNames.retainAll(sourcePartitionNames);
+
+                if (targetPartitionNames.size() == targetPartitionNum && targetPartitionNum == sourcePartitionNames.size()) {
+                    // all partitions of target table are optimized
+                    // so that we can change default distribution info of target table
+                    allPartitionOptimized = true;
+                } else if (optimizeClause.getDistributionDesc().getType() != targetTable.getDefaultDistributionInfo().getType()) {
+                    // partial partitions of target table are optimized
+                    throw new AlterCancelException("can not change distribution type of target table" +
+                            "since partial partitions are not optimized");
+                }
+            }
+
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
@@ -427,6 +448,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
 
                 targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            }
+            if (allPartitionOptimized) {
+                targetTable.setDefaultDistributionInfo(
+                        optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns()));
             }
             targetTable.setState(OlapTableState.NORMAL);
 

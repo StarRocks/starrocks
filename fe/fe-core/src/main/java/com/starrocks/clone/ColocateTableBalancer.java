@@ -793,8 +793,10 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                 tablet.getId(), st);
                                         TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                                 TabletSchedCtx.Type.REPAIR,
-                                                db.getId(), tableId, partition.getId(), index.getId(),
-                                                tablet.getId(),
+                                                // physical partition id is same as partition id
+                                                // since colocate table should have only one physical partition
+                                                db.getId(), tableId, partition.getId(), partition.getId(),
+                                                index.getId(), tablet.getId(),
                                                 System.currentTimeMillis());
                                         // the tablet status will be checked and set again when being scheduled
                                         tabletCtx.setTabletStatus(st);

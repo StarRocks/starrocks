@@ -252,7 +252,7 @@ public class SystemHandler extends AlterHandler {
         }
 
         // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return decommissionBackends;
         }
 

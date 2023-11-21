@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -80,6 +81,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
             ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+        if (!RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+            return Collections.emptyList();
+        }
         List<TabletSchedCtx> alternativeTablets;
         String balanceType = "";
         do {
@@ -562,7 +566,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                         TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                                 tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
-                                tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
+                                tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(),
+                                tabletId, System.currentTimeMillis());
                         schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                         schedCtx.setSrc(replica);
                         schedCtx.setDest(lBackend.getId(), destPathHash);
@@ -780,6 +785,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 TabletSchedCtx schedCtx =
                         new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, tabletMeta.getDbId(),
                                 tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                                tabletMeta.getPhysicalPartitionId(),
                                 tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 schedCtx.setSrc(replica);
@@ -1273,6 +1279,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                     tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                    tabletMeta.getPhysicalPartitionId(),
                     tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
             schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
             schedCtx.setBalanceType(BalanceType.TABLET);

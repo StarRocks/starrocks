@@ -220,7 +220,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             aliveNodeNum = 0;
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {

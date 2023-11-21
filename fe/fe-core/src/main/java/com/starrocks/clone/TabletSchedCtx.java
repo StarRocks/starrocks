@@ -172,6 +172,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private final long dbId;
     private final long tblId;
     private final long partitionId;
+    private final long physicalPartitionId;
     private final long indexId;
     private final long tabletId;
     private int schemaHash;
@@ -215,12 +216,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     private Replica decommissionedReplica;
     private ReplicaState decommissionedReplicaPreviousState;
 
-    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
+    public TabletSchedCtx(Type type, long dbId, long tblId, long partId, long physicalPartitionId,
                           long idxId, long tabletId, long createTime) {
         this.type = type;
         this.dbId = dbId;
         this.tblId = tblId;
         this.partitionId = partId;
+        this.physicalPartitionId = physicalPartitionId;
         this.indexId = idxId;
         this.tabletId = tabletId;
         this.createTime = createTime;
@@ -230,11 +232,18 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     @VisibleForTesting
     public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
+                           long idxId, long tabletId, long createTime) {
+        this(type, dbId, tblId, partId, partId, idxId, tabletId, createTime);
+    }
+
+    @VisibleForTesting
+    public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
                           long idxId, long tabletId, long createTime, SystemInfoService infoService) {
         this.type = type;
         this.dbId = dbId;
         this.tblId = tblId;
         this.partitionId = partId;
+        this.physicalPartitionId = partId;
         this.indexId = idxId;
         this.tabletId = tabletId;
         this.createTime = createTime;
@@ -313,6 +322,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public long getPartitionId() {
         return partitionId;
+    }
+
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getIndexId() {

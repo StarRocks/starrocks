@@ -157,6 +157,7 @@ enum TSchemaTableType {
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
+    STARROCKS_OBJECT_DEPENDENCIES,
     SCH_ROUTINE_LOAD_JOBS,
     SCH_STREAM_LOADS,
     SCH_PIPE_FILES,
@@ -504,14 +505,8 @@ struct THudiTable {
 }
 
 struct TPaimonTable {
-    // paimon table catalog type
-    1: optional string catalog_type
-
-    // paimon table metastore URI
-    2: optional string metastore_uri
-
-    // paimon table warehouse path
-    3: optional string warehouse_path
+    // paimon table options
+    1: optional string paimon_options
 }
 
 struct TDeltaLakeTable {

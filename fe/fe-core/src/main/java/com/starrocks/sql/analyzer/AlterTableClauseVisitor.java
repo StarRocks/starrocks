@@ -31,6 +31,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -43,6 +44,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
@@ -60,6 +62,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -74,6 +77,7 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -274,6 +278,14 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            try {
+                TimeUtils.parseHumanReadablePeriodOrDuration(
+                        properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
+            } catch (DateTimeParseException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+            clause.setNeedTableStable(false);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -361,6 +373,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
+
+            if (distributionDesc.getType() != olapTable.getDefaultDistributionInfo().getType()
+                    && clause.getPartitionNames() != null) {
+                throw new SemanticException("not support change distribution type when specify partitions");
+            }
         }
 
         // analyze partitions
@@ -377,6 +394,19 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 throw new SemanticException("partition names is empty");
             }
 
+            if (distributionDesc instanceof HashDistributionDesc
+                    && olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+                HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
+                Set<String> orginalPartitionColumn = hashDistributionInfo.getDistributionColumns()
+                        .stream().map(Column::getName).collect(Collectors.toSet());
+                Set<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames()
+                        .stream().collect(Collectors.toSet());
+                if (!orginalPartitionColumn.equals(newPartitionColumn)) {
+                    throw new SemanticException("not support change distribution column when specify partitions");
+                }
+            }
+
             List<Long> partitionIds = Lists.newArrayList();
             for (String partitionName : partitionNameList) {
                 Partition partition = olapTable.getPartition(partitionName);
@@ -385,6 +415,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 partitionIds.add(partition.getId());
             }
+            clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
         }

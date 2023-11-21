@@ -90,6 +90,7 @@ import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.FrontendsProcNode;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
@@ -1012,9 +1013,9 @@ public class ShowExecutor {
                     // Auto_increment
                     row.add(null);
                     // Create_time
-                    row.add(DateUtils.formatTimeStampInSeconds(table.getCreateTime(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(table.getCreateTime(), currentTimeZoneId));
                     // Update_time
-                    row.add(DateUtils.formatTimeStampInSeconds(info.getUpdate_time(), currentTimeZoneId));
+                    row.add(DateUtils.formatTimestampInSeconds(info.getUpdate_time(), currentTimeZoneId));
                     // Check_time
                     row.add(null);
                     // Collation
@@ -1066,7 +1067,7 @@ public class ShowExecutor {
         createSqlBuilder.append("CREATE DATABASE `").append(showStmt.getDb()).append("`");
         if (!Strings.isNullOrEmpty(db.getLocation())) {
             createSqlBuilder.append("\nPROPERTIES (\"location\" = \"").append(db.getLocation()).append("\")");
-        } else if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        } else if (RunMode.isSharedDataMode()) {
             String volume = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfDb(db.getId());
             createSqlBuilder.append("\nPROPERTIES (\"storage_volume\" = \"").append(volume).append("\")");
         }
@@ -1644,6 +1645,9 @@ public class ShowExecutor {
         // Only SchemaChangeProc support where/order by/limit syntax
         if (procNodeI instanceof SchemaChangeProcDir) {
             rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
+                    showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
+        } else if (procNodeI instanceof OptimizeProcDir) {
+            rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
         } else {
             rows = procNodeI.fetchResult().getRows();

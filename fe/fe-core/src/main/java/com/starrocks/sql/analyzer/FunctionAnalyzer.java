@@ -29,6 +29,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ExprUtil;
 import com.starrocks.qe.ConnectContext;
 
@@ -385,15 +386,15 @@ public class FunctionAnalyzer {
                 }
                 counterNum = ExprUtil.getIntegerConstant(counterNumExpr);
             }
-            if (k != null && k > 10000) {
-                throw new SemanticException("The maximum number of the second parameter is 10000" +
-                        functionCallExpr.toSql(), kExpr.getPos());
+            if (k != null && k > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
+                throw new SemanticException("The maximum number of the second parameter is "
+                        + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), kExpr.getPos());
             }
             if (counterNum != null) {
                 Preconditions.checkNotNull(k);
-                if (counterNum > 10000) {
-                    throw new SemanticException("The maximum number of the third parameter is 10000" +
-                            functionCallExpr.toSql(), counterNumExpr.getPos());
+                if (counterNum > FeConstants.MAX_COUNTER_NUM_OF_TOP_K) {
+                    throw new SemanticException("The maximum number of the third parameter is "
+                            + FeConstants.MAX_COUNTER_NUM_OF_TOP_K + ", " + functionCallExpr.toSql(), counterNumExpr.getPos());
                 }
                 if (k > counterNum) {
                     throw new SemanticException(
