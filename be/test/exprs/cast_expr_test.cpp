@@ -30,7 +30,9 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/datetime_value.h"
+#include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
+#include "testutil/exprs_test_helper.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
@@ -52,6 +54,7 @@ public:
     }
 
 public:
+    RuntimeState runtime_state;
     TExprNode expr_node;
 };
 
@@ -289,18 +292,20 @@ TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
 
-        // right cast
-        auto v = std::static_pointer_cast<Int32Column>(ptr);
-        ASSERT_EQ(10, v->size());
+            // right cast
+            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            ASSERT_EQ(10, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
 
-        // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
     }
 }
 
@@ -317,18 +322,20 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
 
-        // right cast
-        auto v = std::static_pointer_cast<FloatColumn>(ptr);
-        ASSERT_EQ(10, v->size());
+            // right cast
+            auto v = std::static_pointer_cast<FloatColumn>(ptr);
+            ASSERT_EQ(10, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
 
-        // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
     }
 }
 
@@ -344,19 +351,20 @@ TEST_F(VectorizedCastExprTest, intToInt8CastExpr) {
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
 
-        ASSERT_TRUE(ptr->is_numeric());
+            // right cast
+            auto v = std::static_pointer_cast<Int8Column>(ptr);
+            ASSERT_EQ(10, v->size());
 
-        // right cast
-        auto v = std::static_pointer_cast<Int8Column>(ptr);
-        ASSERT_EQ(10, v->size());
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, v->get_data()[j]);
-        }
-
-        // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
     }
 }
 
@@ -373,18 +381,20 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
 
-        // right cast
-        auto v = std::static_pointer_cast<Int64Column>(ptr);
-        ASSERT_EQ(10, v->size());
+            // right cast
+            auto v = std::static_pointer_cast<Int64Column>(ptr);
+            ASSERT_EQ(10, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, v->get_data()[j]);
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
 
-        // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int8Column>(ptr));
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int8Column>(ptr));
+        });
     }
 }
 
@@ -401,19 +411,22 @@ TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ASSERT_FALSE(ptr->is_numeric());
-        ASSERT_TRUE(ptr->is_nullable());
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_numeric());
+            ASSERT_TRUE(ptr->is_nullable());
 
-        // right cast
-        auto v = std::static_pointer_cast<BooleanColumn>(std::static_pointer_cast<NullableColumn>(ptr)->data_column());
-        ASSERT_EQ(10, v->size());
+            // right cast
+            auto v = std::static_pointer_cast<BooleanColumn>(
+                    std::static_pointer_cast<NullableColumn>(ptr)->data_column());
+            ASSERT_EQ(10, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(1, (v->get_data()[j]));
-        }
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(1, (v->get_data()[j]));
+            }
 
-        // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            // error cast
+            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        });
     }
 }
 
@@ -1335,11 +1348,14 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt) {
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ASSERT_TRUE(ptr->is_nullable());
 
-        for (int j = 0; j < ptr->size(); ++j) {
-            ASSERT_TRUE(ptr->is_null(j));
-        }
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_nullable());
+
+            for (int j = 0; j < ptr->size(); ++j) {
+                ASSERT_TRUE(ptr->is_null(j));
+            }
+        });
     }
 }
 
@@ -1355,15 +1371,18 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt2) {
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ASSERT_TRUE(ptr->is_numeric());
 
-        // right cast
-        auto v = std::static_pointer_cast<Int32Column>(ptr);
-        ASSERT_EQ(10, v->size());
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_TRUE(ptr->is_numeric());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, v->get_data()[j]);
-        }
+            // right cast
+            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            ASSERT_EQ(10, v->size());
+
+            for (int j = 0; j < v->size(); ++j) {
+                ASSERT_EQ(10, v->get_data()[j]);
+            }
+        });
     }
 }
 
@@ -1379,12 +1398,15 @@ TEST_F(VectorizedCastExprTest, IntCastToBigInt3) {
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ASSERT_FALSE(ptr->is_nullable());
 
-        auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ptr);
-        for (int j = 0; j < p->size(); ++j) {
-            ASSERT_EQ(INT_MAX, p->get_data()[j]);
-        }
+        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+            ASSERT_FALSE(ptr->is_nullable());
+
+            auto p = ColumnHelper::cast_to<TYPE_BIGINT>(ptr);
+            for (int j = 0; j < p->size(); ++j) {
+                ASSERT_EQ(INT_MAX, p->get_data()[j]);
+            }
+        });
     }
 }
 
