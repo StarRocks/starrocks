@@ -17,8 +17,28 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-public interface PredicateReplaceChecker {
+/**
+ * Two expression can be equivalent even they are not the same expressions especially for partition datetime functions,
+ * example1:
+ *   a. time_slice(dt, INTERVAL 1 HOUR) >= '2023-11-21 00:00:00'
+ *   b. dt >= '2023-11-21 00:00:00'
+ * example2:
+ *   a. date_trunc('hour', dt) >= '2023-11-21 00:00:00'
+ *   b. dt >= '2023-11-21 00:00:00'
+ *
+ * {@code IRewriteEquivalent} is used to check whether different expression are equivalent or not.
+ */
+public interface IRewriteEquivalent {
+    /**
+     * @param operator : The input scalar operator to be checked
+     * @return: The input operator can be replaced by the {@code IRewriteEquivalent}
+     */
     boolean canReplace(ScalarOperator operator);
 
+    /**
+     * @param operator : The input scalar operator eg:date_trunc/time_slice expression
+     * @param constantOperator : const operator of the binary predicate's right child
+     * @return : The input operator can be replaced by the {@code IRewriteEquivalent}
+     */
     boolean canReplace(ScalarOperator operator, ConstantOperator constantOperator);
 }

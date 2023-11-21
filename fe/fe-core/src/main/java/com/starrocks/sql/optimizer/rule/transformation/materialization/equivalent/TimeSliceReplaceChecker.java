@@ -22,7 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
-public class TimeSliceReplaceChecker implements PredicateReplaceChecker {
+public class TimeSliceReplaceChecker implements IRewriteEquivalent {
     public static final TimeSliceReplaceChecker INSTANCE = new TimeSliceReplaceChecker();
 
     private CallOperator mvTimeSlice;
@@ -38,20 +38,10 @@ public class TimeSliceReplaceChecker implements PredicateReplaceChecker {
         if (mvTimeSlice == null) {
             return false;
         }
-
-        try {
-            if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
-                ConstantOperator sliced = ScalarOperatorFunctions.timeSlice(
-                        (ConstantOperator) operator,
-                        ((ConstantOperator) mvTimeSlice.getChild(1)),
-                        ((ConstantOperator) mvTimeSlice.getChild(2)),
-                        ((ConstantOperator) mvTimeSlice.getChild(3)));
-                return sliced.equals(operator);
-            }
-        } catch (AnalysisException e) {
+        if (!operator.isConstantRef()) {
             return false;
         }
-        return false;
+        return canReplace(mvTimeSlice, (ConstantOperator) operator);
     }
 
     @Override
@@ -61,6 +51,9 @@ public class TimeSliceReplaceChecker implements PredicateReplaceChecker {
         }
         CallOperator func = (CallOperator) op1;
         if (!func.getFnName().equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
+            return false;
+        }
+        if (op2.getType().getPrimitiveType() != PrimitiveType.DATETIME) {
             return false;
         }
         if (!(func.getChild(0) instanceof ColumnRefOperator)) {

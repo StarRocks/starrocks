@@ -30,7 +30,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.PredicateReplaceChecker;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.TimeSliceReplaceChecker;
 
 import java.util.Map;
@@ -39,7 +39,7 @@ import java.util.Optional;
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
-    private Multimap<ScalarOperator, Pair<ColumnRefOperator, PredicateReplaceChecker>> predicateProbMap;
+    private Multimap<ScalarOperator, Pair<ColumnRefOperator, IRewriteEquivalent>> predicateProbMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private AggregateFunctionRewriter aggregateFunctionRewriter;
     boolean underAggFunctionRewriteContext;
@@ -99,7 +99,7 @@ public class EquationRewriter {
                 if (!predicateProbMap.containsKey(left)) {
                     return null;
                 }
-                Pair<ColumnRefOperator, PredicateReplaceChecker> pair = predicateProbMap.get(left).iterator().next();
+                Pair<ColumnRefOperator, IRewriteEquivalent> pair = predicateProbMap.get(left).iterator().next();
                 if (!pair.second.canReplace(right)) {
                     return null;
 

@@ -186,6 +186,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "WHERE `dt` >= '2023-04-10 17:00:00' and `dt` < '2023-04-10 18:00:00'\n" +
                 "group by ts")
                 .match("test_partition_expr_mv1");
+        starRocksAssert.dropTable("test_partition_expr_tbl1");
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
 

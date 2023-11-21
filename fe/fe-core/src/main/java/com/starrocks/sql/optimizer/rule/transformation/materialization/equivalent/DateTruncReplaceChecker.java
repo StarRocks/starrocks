@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
-public class DateTruncReplaceChecker implements PredicateReplaceChecker {
+public class DateTruncReplaceChecker implements IRewriteEquivalent {
     public static final DateTruncReplaceChecker INSTANCE = new DateTruncReplaceChecker();
 
     private CallOperator mvDateTrunc;
@@ -37,13 +37,10 @@ public class DateTruncReplaceChecker implements PredicateReplaceChecker {
         if (mvDateTrunc == null) {
             return false;
         }
-        if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
-            ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
-                    ((ConstantOperator) mvDateTrunc.getChild(0)),
-                    (ConstantOperator) operator);
-            return sliced.equals(operator);
+        if (!operator.isConstantRef()) {
+            return false;
         }
-        return false;
+        return canReplace(mvDateTrunc, (ConstantOperator) operator);
     }
 
     @Override
@@ -53,6 +50,9 @@ public class DateTruncReplaceChecker implements PredicateReplaceChecker {
         }
         CallOperator func = (CallOperator) op1;
         if (!func.getFnName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return false;
+        }
+        if (op2.getType().getPrimitiveType() != PrimitiveType.DATETIME) {
             return false;
         }
         if (!(func.getChild(1) instanceof ColumnRefOperator)) {
