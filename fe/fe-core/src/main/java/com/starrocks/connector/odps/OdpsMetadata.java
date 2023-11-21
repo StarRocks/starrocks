@@ -110,24 +110,24 @@ public class OdpsMetadata implements ConnectorMetadata {
     private void initMetaCache() {
         Executor executor = MoreExecutors.newDirectExecutorService();
         if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PROJECT_CACHE))) {
-            projectCache = newCacheBuilder(Long.parseLong(OdpsProperties.PROJECT_CACHE_EXPIRE_TIME),
-                    Long.parseLong(OdpsProperties.PROJECT_CACHE_SIZE))
+            projectCache = newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.PROJECT_CACHE_EXPIRE_TIME)),
+                    Long.parseLong(properties.get(OdpsProperties.PROJECT_CACHE_SIZE)))
                     .build(asyncReloading(CacheLoader.from(this::loadProjects), executor));
         } else {
             projectCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
                     .build(CacheLoader.from(this::loadProjects));
         }
         if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_TABLE_CACHE))) {
-            tableCache = newCacheBuilder(Long.parseLong(OdpsProperties.TABLE_CACHE_EXPIRE_TIME),
-                    Long.parseLong(OdpsProperties.TABLE_CACHE_SIZE))
+            tableCache = newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.TABLE_CACHE_EXPIRE_TIME)),
+                    Long.parseLong(properties.get(OdpsProperties.TABLE_CACHE_SIZE)))
                     .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
         } else {
             tableCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
                     .build(asyncReloading(CacheLoader.from(this::loadTable), executor));
         }
         if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PARTITION_CACHE))) {
-            partitionCache = newCacheBuilder(Long.parseLong(OdpsProperties.PARTITION_CACHE_EXPIRE_TIME),
-                    Long.parseLong(OdpsProperties.PARTITION_CACHE_SIZE))
+            partitionCache = newCacheBuilder(Long.parseLong(properties.get(OdpsProperties.PARTITION_CACHE_EXPIRE_TIME)),
+                    Long.parseLong(properties.get(OdpsProperties.PARTITION_CACHE_SIZE)))
                     .build(asyncReloading(CacheLoader.from(this::loadPartitions), executor));
         } else {
             partitionCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE)
