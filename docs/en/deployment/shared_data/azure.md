@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use Azure Blob Storage for shared-data
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'

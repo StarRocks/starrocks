@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deployment prerequisites
 
 This topic describes the hardware and software requirements that your servers must meet before deploying StarRocks. For recommended hardware specifications of your StarRocks cluster, see [Plan your StarRocks cluster](../deployment/plan_cluster.md).
@@ -36,7 +40,7 @@ We recommend that you use 10 Gigabit Ethernet networking to ensure stable data t
 
 ## Operating system
 
-StarRocks supports deployments on CentOS 7.9 or Ubuntu 22.04.
+StarRocks supports deployments on CentOS Linux 7.9 or Ubuntu Linux 22.04.
 
 ## Software
 

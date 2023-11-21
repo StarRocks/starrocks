@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # substr, substring
 
 ## 功能

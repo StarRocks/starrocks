@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SET CATALOG
 
 Switches to a specified catalog in the current session.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data from a local file system or a streaming data source using HTTP PUT
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'

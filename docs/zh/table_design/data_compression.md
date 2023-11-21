@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 数据压缩
 
 StarRocks 支持对表和索引数据进行压缩 (compression)。数据压缩不仅有助于节省存储空间，还可以提高 I/O 密集型任务的性能。请注意，压缩和解压缩数据需要额外的 CPU 资源。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署 Broker 节点
 
 本文介绍如何部署管理 Broker 节点。通过 Broker，StarRocks 可读取对应数据源（如 HDFS、S3）上的数据，利用自身的计算资源对数据进行预处理和导入。除此之外，Broker 也被应用于数据导出，备份恢复等功能。

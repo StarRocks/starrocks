@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # hll_hash
 
 ## 功能

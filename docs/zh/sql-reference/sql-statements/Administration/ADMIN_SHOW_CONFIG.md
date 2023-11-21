@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN SHOW CONFIG
 
 ## 功能

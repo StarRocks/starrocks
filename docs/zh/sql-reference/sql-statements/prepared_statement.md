@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 预准备语句
 
 自 3.2 版本起，StarRocks 提供预准备语句（prepared statement），用于多次执行结构相同、仅部分变量不同的 SQL 语句，能显著提升执行效率，并且还能防止 SQL 注入。

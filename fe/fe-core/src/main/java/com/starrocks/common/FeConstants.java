@@ -83,6 +83,9 @@ public class FeConstants {
     // the raw data of one tablet equals to 10GB approximately
     public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 
+    // Max counter num of TOP K function
+    public static final int MAX_COUNTER_NUM_OF_TOP_K = 100000;
+
     public static final String DOCUMENT_SHOW_ALTER =
             "https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/SHOW%20ALTER";
     public static final String DOCUMENT_SHOW_ALTER_MATERIALIZED_VIEW =

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW DYNAMIC PARTITION TABLES
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Use MinIO for shared-data
 
 import SharedDataIntro from '../../assets/commonMarkdown/sharedDataIntro.md'

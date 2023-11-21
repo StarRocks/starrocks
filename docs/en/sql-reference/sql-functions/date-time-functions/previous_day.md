@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # previous_day
 
 ## Description

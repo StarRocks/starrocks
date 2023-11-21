@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # adddate,days_add
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # str2date
 
 ## 功能

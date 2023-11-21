@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过 Audit Loader 管理 StarRocks 中的审计日志
 
 本文档介绍如何通过插件 Audit Loader 在 StarRocks 内部管理审计日志。
@@ -124,11 +128,11 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__
     frontend_ip      VARCHAR(32)            COMMENT "执行该语句的FE IP",
     stmt             STRING                 COMMENT "原始SQL语句",
     digest           VARCHAR(32)            COMMENT "SQL指纹"
-) engine=OLAP
-duplicate key(query_id, time, client_ip)
-partition by range(time) ()
-distributed by hash(query_id) BUCKETS 3 
-properties(
+)   ENGINE = OLAP
+DUPLICATE KEY (query_id, time, client_ip)
+PARTITION BY RANGE(time) ()
+DISTRIBUTED BY HASH(query_id) BUCKETS 3 
+PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
     "dynamic_partition.end" = "3",

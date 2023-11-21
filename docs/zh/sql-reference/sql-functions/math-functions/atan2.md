@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # atan2
 
 ## 功能

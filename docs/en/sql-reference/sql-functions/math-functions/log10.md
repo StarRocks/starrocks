@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # log10, dlog10
 
 ## Description

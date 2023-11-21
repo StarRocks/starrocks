@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # System variables
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](../sql-reference/sql-statements/Administration/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
@@ -294,6 +298,10 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * If this feature is disabled, only Local RF works.
 * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
+
+### ENABLE_WRITE_HIVE_EXTERNAL_TABLE (v3.2 and later)
+
+Whether to allow for sinking data to external tables of Hive. Default value: `false`.
 
 ### event_scheduler
 

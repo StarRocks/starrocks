@@ -1,4 +1,31 @@
+---
+displayed_sidebar: "English"
+---
+
 # StarRocks version 3.0
+
+## 3.0.8
+
+Release date: November 17, 2023
+
+## Improvements
+
+- The `COLUMNS` view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+## Bug Fixes
+
+Fixed the following issues:
+
+- When `show proc '/current_queries';` is being executed and meanwhile a query begins to be executed, BEs may crash. [#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- When data is continuously loaded into a Primary Key table with a sort key specified at a high frequency, compaction failures may occur. [#26486](https://github.com/StarRocks/starrocks/pull/26486)
+- If a filtering condition is specified in a Broker Load job, BEs may crash during the data loading in certain circumstances. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- An unknown error is reported when SHOW GRANTS is executed. [#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- BE may crash for specific data types if the target data type specified in the `cast()` function is the same as the original data type. [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)
+- Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- The query result is incorrect when Query Cache is enabled. [#32778](https://github.com/StarRocks/starrocks/pull/32778)
+- After a cluster is restarted, the data in a restored table may be inconsistent with the data in that table before being backed up. [#33567](https://github.com/StarRocks/starrocks/pull/33567)
+- If RESTORE is executed and meanwhile Compaction takes place, it may cause BEs to crash. [#32902](https://github.com/StarRocks/starrocks/pull/32902)
 
 ## 3.0.7
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # DELETE
 
 Deletes data rows from a table based on the specified conditions. The table can be a partitioned or non-partitioned table.

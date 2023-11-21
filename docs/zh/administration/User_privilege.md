@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 管理用户权限
 
 本文描述如何在 StarRocks 中管理用户、角色和权限。

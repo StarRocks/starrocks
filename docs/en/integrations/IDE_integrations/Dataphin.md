@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Dataphin
 
 Dataphin is a cloud-based output of the internal practices of Alibaba Group's OneData data governance methodology. It provides one-stop solution of data integration, construction, management and utilization throughout the entire lifecycle of big data, aming to helping enterprises significantly improve the level of data governance and build an enterprise-level data middle platform that is of high and reliable quality, convenience consumption, and safe and economical production. Dataphin provides a variety of computing platform support and scalable open capabilities to meet the platform technical architecture and specific requirements of enterprises in various industries.

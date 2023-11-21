@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Authenticate to Google Cloud Storage
 
 ## Authentication methods

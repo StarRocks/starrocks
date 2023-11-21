@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SQL
 
 This topic provides answers to some frequently asked questions about SQL.

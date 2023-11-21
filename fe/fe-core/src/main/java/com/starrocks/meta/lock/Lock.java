@@ -17,9 +17,9 @@ package com.starrocks.meta.lock;
 import java.util.Set;
 
 public abstract class Lock {
-    public abstract LockGrantType lock(Locker locker, LockType requestLockType);
+    public abstract LockGrantType lock(Locker locker, LockType lockType);
 
-    public abstract Set<Locker> release(Locker locker);
+    public abstract Set<Locker> release(Locker locker, LockType lockType) throws NotSupportLockException;
 
     public abstract boolean isOwner(Locker locker, LockType lockType);
 
@@ -27,5 +27,9 @@ public abstract class Lock {
 
     public abstract int waiterNum();
 
-    public abstract void removeWaiter(Locker locker);
+    public abstract Set<LockHolder> getOwners();
+
+    public abstract Set<LockHolder> cloneOwners();
+
+    public abstract void removeWaiter(Locker locker, LockType lockType);
 }

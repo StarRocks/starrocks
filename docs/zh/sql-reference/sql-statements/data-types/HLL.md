@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # HLL (HyperLogLog)
 
 ## 描述

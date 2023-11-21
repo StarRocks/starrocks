@@ -1,17 +1,21 @@
+---
+displayed_sidebar: "English"
+---
+
 # ALTER TABLE
 
 ## Description
 
 Modifies an existing table, including:
 
-- [Add/delete partitions and modify partition attribute](#modify-partition)
-- [Create/delete rollup index](#modify-rollup-index)
-- [Schema change](#schema-change)
-- [Modify bitmap index](#modify-bitmap-indexes)
 - [Rename table, partition, index](#rename)
-- [Atomic swap](#swap)
 - [Modify table comment](#alter-table-comment-from-v31)
-- [Manual compaction](#manual-compaction-from-31))
+- [Atomic swap](#swap)
+- [Add/delete partitions and modify partition attributes](#modify-partition)
+- [Schema change](#schema-change)
+- [Create/delete rollup index](#modify-rollup-index)
+- [Modify bitmap index](#modify-bitmap-indexes)
+- [Manual data version compaction](#manual-compaction-from-31)
 
 > **NOTE**
 >
@@ -26,20 +30,53 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
 
-- partition: modifies partition properties, drops a partition, or adds a partition.
-- rollup: creates or drops a rollup index.
-- schema change: adds, drops, or reorders columns, or modifies column type.
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- index: modifies index (only Bitmap index can be modified).
+- comment: modifies the table comment (supported from **v3.1 onwards**).
 - swap: atomic exchange of two tables.
-- comment: modifies the table comment (supported from v3.1 onwards).
-- compact: performs manual compaction to merge versions of loaded data (supported from v3.1 onwards).
+- partition: modifies partition properties, drops a partition, or adds a partition.
+- schema change: adds, drops, or reorders columns, or modifies column type.
+- rollup: creates or drops a rollup index.
+- index: modifies index (only Bitmap index can be modified).
+- compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
-> **NOTE**
->
-> - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-> - Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
-> - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
+:::note
+
+- Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
+- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
+- Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
+:::
+
+### Rename
+
+Rename supports modification of table name, rollup index, and partition name.
+
+#### Rename a table
+
+```sql
+ALTER TABLE <tbl_name> RENAME <new_tbl_name>
+```
+
+#### Rename a rollup index
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME ROLLUP <old_rollup_name> <new_rollup_name>
+```
+
+#### Rename a partition
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME PARTITION <old_partition_name> <new_partition_name>
+```
+
+### Alter table comment (from v3.1)
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
+```
 
 ### Modify partition
 
@@ -60,7 +97,7 @@ Note:
 
     ```plain
     VALUES LESS THAN [MAXVALUE|("value1", ...)]
-    VALUES [("value1", ...), ("value1", ...))
+    VALUES ("value1", ...), ("value1", ...)
     ```
 
 2. partition is the left-closed-right-open interval. If the user only specifies the right boundary, the system will automatically determine the left boundary.
@@ -141,84 +178,6 @@ ALTER TABLE [<db_name>.]<tbl_name>
 - For the table that has only one partition, the partition name is the same as the table name. If the table is divided into multiple partitions, you can use `(*)`to modify the properties of all partitions, which is more convenient.
 
 - Execute `SHOW PARTITIONS FROM <tbl_name>` to view the partition properties after modification.
-
-### Modify rollup index
-
-#### Create a rollup index
-
-Syntax:
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD ROLLUP rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)]
-```
-
-PROPERTIES: Support setting timeout time and the default timeout time is one day.
-
-Example:
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name> 
-ADD ROLLUP r1(col1,col2) from r0;
-```
-
-#### Create rollup indexes in batches
-
-Syntax:
-
-```SQL
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
-[FROM from_index_name]
-[PROPERTIES ("key"="value", ...)],...];
-```
-
-Example:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
-```
-
-Note:
-
-1. If from_index_name is not specified, then create from base index by default.
-2. The columns in the rollup table must be existing columns in from_index.
-3. In properties, user can specify the storage format. See CREATE TABLE for details.
-
-#### Drop a rollup index
-
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
-```
-
-Example:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
-```
-
-#### Batch drop rollup indexes
-
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name>
-DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
-```
-
-Example:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
-```
-
-Note: You cannot drop the base index.
 
 ### Schema change
 
@@ -348,7 +307,16 @@ You can add a generated column and specify its expression. [The generated column
 
 #### Modify table properties
 
-Currently, StarRocks supports modifying `bloom_filter_columns` property,`colocate_with` property, dynamic partitioning related properties, `enable_persistent_index` property, `replication_num` property and `default.replication_num` property, `storage_cooldown_ttl` property and `storage_cooldown_time` property.
+Currently, StarRocks supports modifying the following table properties:
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
 
 Syntax:
 
@@ -359,29 +327,83 @@ PROPERTIES ("key"="value")
 Note:
 You can also modify the properties by merging into the above schema change operation. See the following examples.
 
-### Rename
+### Modify rollup index
 
-Rename supports modification of table name, rollup index, and partition name.
+#### Create a rollup index
 
-#### Rename a table
+Syntax:
 
-```sql
-ALTER TABLE <tbl_name> RENAME <new_tbl_name>
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)]
 ```
 
-#### Rename a rollup index
+PROPERTIES: Support setting timeout time and the default timeout time is one day.
+
+Example:
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name> 
+ADD ROLLUP r1(col1,col2) from r0;
+```
+
+#### Create rollup indexes in batches
+
+Syntax:
+
+```SQL
+ALTER TABLE [<db_name>.]<tbl_name>
+ADD ROLLUP [rollup_name (column_name1, column_name2, ...)
+[FROM from_index_name]
+[PROPERTIES ("key"="value", ...)],...];
+```
+
+Example:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-RENAME ROLLUP <old_rollup_name> <new_rollup_name>
+ADD ROLLUP r1(col1,col2) from r0, r2(col3,col4) from r0;
 ```
 
-#### Rename a partition
+Note:
+
+1. If from_index_name is not specified, then create from base index by default.
+2. The columns in the rollup table must be existing columns in from_index.
+3. In properties, user can specify the storage format. See CREATE TABLE for details.
+
+#### Drop a rollup index
+
+Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-RENAME PARTITION <old_partition_name> <new_partition_name>
+DROP ROLLUP rollup_name [PROPERTIES ("key"="value", ...)];
 ```
+
+Example:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1;
+```
+
+#### Batch drop rollup indexes
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP ROLLUP [rollup_name [PROPERTIES ("key"="value", ...)],...];
+```
+
+Example:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROLLUP r1, r2;
+```
+
+Note: You cannot drop the base index.
 
 ### Modify bitmap indexes
 
@@ -420,14 +442,6 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
-```
-
-### Alter table comment (from v3.1)
-
-Syntax:
-
-```sql
-ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
 ### Manual compaction (from 3.1)

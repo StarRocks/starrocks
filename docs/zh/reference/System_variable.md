@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 系统变量
 
 StarRocks 提供多个系统变量（system variables），方便您根据业务情况进行调整。本文介绍 StarRocks 支持的变量。您可以在 MySQL 客户端通过命令 [SHOW VARIABLES](../sql-reference/sql-statements/Administration/SHOW_VARIABLES.md) 查看当前变量。也可以通过 [SET](../sql-reference/sql-statements/Administration/SET.md) 命令动态设置或者修改变量。您可以设置变量在系统全局 (global) 范围内生效、仅在当前会话 (session) 中生效、或者仅在单个查询语句中生效。
@@ -283,6 +287,10 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 ### enbale_strict_type (3.1 及以后)
 
 是否对所有复合谓词以及 WHERE 子句中的表达式进行隐式转换。默认值：false。
+
+### ENABLE_WRITE_HIVE_EXTERNAL_TABLE（3.2 及以后）
+
+是否开启往 Hive 的 External Table 写数据的功能。默认值：`false`。
 
 ### event_scheduler
 

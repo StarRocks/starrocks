@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Synchronous materialized view
 
 This topic describes how to create, use, and manage a **synchronous materialized view (Rollup)**.

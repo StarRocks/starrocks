@@ -178,29 +178,15 @@ public class Database extends MetaObject implements Writable {
     public void readLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.readLock().lock();
+        this.rwLock.sharedLock();
         logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
-    }
-
-    // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean readLockAndCheckExist() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.readLock().lock();
-        logSlowLockEventIfNeeded(startMs, "readLock", threadDump);
-        if (exist) {
-            return true;
-        } else {
-            this.rwLock.readLock().unlock();
-            return false;
-        }
     }
 
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+            if (!this.rwLock.trySharedLock(timeout, unit)) {
                 logTryLockFailureEvent("readLock", threadDump);
                 return false;
             }
@@ -208,67 +194,30 @@ public class Database extends MetaObject implements Writable {
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
-            return false;
-        }
-    }
-
-    // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean tryReadLockAndCheckExist(long timeout, TimeUnit unit) {
-        try {
-            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("readLock", threadDump);
-                return false;
-            }
-            logSlowLockEventIfNeeded(startMs, "tryReadLock", threadDump);
-            if (exist) {
-                return true;
-            } else {
-                this.rwLock.readLock().unlock();
-                return false;
-            }
-        } catch (InterruptedException e) {
-            LOG.warn("failed to try read lock at db[" + id + "]", e);
-            Thread.currentThread().interrupt();
             return false;
         }
     }
 
     public void readUnlock() {
-        this.rwLock.readLock().unlock();
+        this.rwLock.sharedUnlock();
     }
 
     public boolean isReadLockHeldByCurrentThread() {
-        return this.rwLock.getReadHoldCount() > 0;
+        return this.rwLock.isReadLockHeldByCurrentThread();
     }
 
     public void writeLock() {
         long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
         String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.writeLock().lock();
+        this.rwLock.exclusiveLock();
         logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
-    }
-
-    // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean writeLockAndCheckExist() {
-        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-        String threadDump = getOwnerInfo(rwLock.getOwner());
-        this.rwLock.writeLock().lock();
-        logSlowLockEventIfNeeded(startMs, "writeLock", threadDump);
-        if (exist) {
-            return true;
-        } else {
-            this.rwLock.writeLock().unlock();
-            return false;
-        }
     }
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
         try {
             long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
             String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+            if (!this.rwLock.tryExclusiveLock(timeout, unit)) {
                 logTryLockFailureEvent("writeLock", threadDump);
                 return false;
             }
@@ -280,35 +229,16 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    // this function make sure lock can only be obtained if the db has not been dropped
-    public boolean tryWriteLockAndCheckExist(long timeout, TimeUnit unit) {
-        try {
-            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
-            String threadDump = getOwnerInfo(rwLock.getOwner());
-            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                logTryLockFailureEvent("tryWriteLock", threadDump);
-                return false;
-            }
-            logSlowLockEventIfNeeded(startMs, "tryWriteLock", threadDump);
-            if (exist) {
-                return true;
-            } else {
-                this.rwLock.writeLock().unlock();
-                return false;
-            }
-        } catch (InterruptedException e) {
-            LOG.warn("failed to try write lock at db[" + id + "]", e);
-            Thread.currentThread().interrupt();
-            return false;
-        }
-    }
-
     public void writeUnlock() {
-        this.rwLock.writeLock().unlock();
+        this.rwLock.exclusiveUnlock();
     }
 
     public boolean isWriteLockHeldByCurrentThread() {
-        return this.rwLock.writeLock().isHeldByCurrentThread();
+        return this.rwLock.isWriteLockHeldByCurrentThread();
+    }
+
+    public QueryableReentrantReadWriteLock getLock() {
+        return this.rwLock;
     }
 
     public long getId() {
@@ -917,5 +847,9 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
+    }
+
+    public boolean getExist() {
+        return exist;
     }
 }

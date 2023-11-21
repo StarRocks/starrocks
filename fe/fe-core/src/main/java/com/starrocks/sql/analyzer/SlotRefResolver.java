@@ -58,7 +58,8 @@ public class SlotRefResolver {
         public Expr visitFieldReference(FieldReference fieldReference, Relation node) {
             Field field = node.getScope().getRelationFields()
                     .getFieldByIndex(fieldReference.getFieldIndex());
-            return new SlotRef(field.getRelationAlias(), field.getName());
+            SlotRef slotRef = new SlotRef(field.getRelationAlias(), field.getName());
+            return node.accept(SLOT_REF_RESOLVER, slotRef);
         }
     };
 

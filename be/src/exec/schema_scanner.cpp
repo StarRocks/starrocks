@@ -49,6 +49,9 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
+#include "exec/schema_scanner/sys_object_dependencies.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/FrontendService_types.h"
 namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;
@@ -164,6 +167,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::ROLE);
     case TSchemaTableType::STARROCKS_GRANT_TO_USERS:
         return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::USER);
+    case TSchemaTableType::STARROCKS_OBJECT_DEPENDENCIES:
+        return std::make_unique<SysObjectDependencies>();
     case TSchemaTableType::SCH_ROUTINE_LOAD_JOBS:
         return std::make_unique<SchemaRoutineLoadJobsScanner>();
     case TSchemaTableType::SCH_STREAM_LOADS:
@@ -230,6 +235,27 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     }
 
     return Status::OK();
+}
+
+TAuthInfo SchemaScanner::build_auth_info() {
+    TAuthInfo auth_info;
+    if (nullptr != _param->catalog) {
+        auth_info.__set_catalog_name(*(_param->catalog));
+    }
+    if (nullptr != _param->db) {
+        auth_info.__set_pattern(*(_param->db));
+    }
+    if (nullptr != _param->current_user_ident) {
+        auth_info.__set_current_user_ident(*(_param->current_user_ident));
+    } else {
+        if (nullptr != _param->user) {
+            auth_info.__set_user(*(_param->user));
+        }
+        if (nullptr != _param->user_ip) {
+            auth_info.__set_user_ip(*(_param->user_ip));
+        }
+    }
+    return auth_info;
 }
 
 } // namespace starrocks

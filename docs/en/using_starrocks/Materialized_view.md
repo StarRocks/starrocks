@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Asynchronous materialized views
 
 This topic describes how to understand, create, use, and manage an asynchronous materialized view. Asynchronous materialized views are supported from StarRocks v2.4 onwards.

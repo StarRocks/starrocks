@@ -173,7 +173,7 @@ public class AgentBatchTask implements Runnable {
             boolean ok = false;
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && computeNode == null) {
+                if (RunMode.isSharedDataMode() && computeNode == null) {
                     computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
                 }
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Privilege FAQ
 
 ## Why is the error message "no permission" still reported even after the required role has been assigned to a user?

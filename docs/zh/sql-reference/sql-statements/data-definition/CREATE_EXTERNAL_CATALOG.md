@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE EXTERNAL CATALOG
 
 ## 功能

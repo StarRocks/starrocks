@@ -342,6 +342,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String ENABLE_WRITE_HIVE_EXTERNAL_TABLE = "enable_write_hive_external_table";
+
     public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
 
     public static final String DEFAULT_TABLE_COMPRESSION = "default_table_compression";
@@ -1076,6 +1078,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_WRITE_HIVE_EXTERNAL_TABLE)
+    private boolean enableWriteHiveExternalTable = false;
+
     @VariableMgr.VarAttr(name = ENABLE_HIVE_METADATA_CACHE_WITH_INSERT)
     private boolean enableHiveMetadataCacheWithInsert = false;
 
@@ -1431,6 +1436,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
+    }
+
+    public boolean enableWriteHiveExternalTable() {
+        return enableWriteHiveExternalTable;
     }
 
     public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {

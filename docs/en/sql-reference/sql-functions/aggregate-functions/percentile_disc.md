@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # percentile_disc
 
 ## Description

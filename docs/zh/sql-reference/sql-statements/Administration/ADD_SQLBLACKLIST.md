@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADD SQLBLACKLIST
 
 ## 功能

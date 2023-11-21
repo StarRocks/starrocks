@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # HTTP 接口
 
 为了方便维护 StarRocks 集群，StarRocks 提供了不同类型的操作和查询接口。本文介绍 HTTP 接口和使用方法。

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # sm3
 
 ## 功能

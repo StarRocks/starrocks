@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # CREATE FILE
 
 You can execute the CREATE FILE statement to create a file. After a file is created, the file is uploaded and persisted in StarRocks. In a database, only an admin user can create and delete files, and all users who have permission to access the database can use the files that belong to the database.

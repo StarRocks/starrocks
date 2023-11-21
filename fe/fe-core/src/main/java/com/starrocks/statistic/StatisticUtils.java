@@ -28,6 +28,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -62,6 +63,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -134,10 +136,16 @@ public class StatisticUtils {
             return;
         }
         // collectPartitionIds contains partition that is first loaded.
-        List<Long> collectPartitionIds = Lists.newArrayList();
-        for (long partitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
-            if (table.getPhysicalPartition(partitionId).isFirstLoad()) {
-                collectPartitionIds.add(partitionId);
+        Set<Long> collectPartitionIds = Sets.newHashSet();
+        for (long physicalPartitionId : tableCommitInfo.getIdToPartitionCommitInfo().keySet()) {
+            // partition commit info id is physical partition id.
+            // statistic collect granularity is logic partition.
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+            if (physicalPartition != null) {
+                Partition partition = table.getPartition(physicalPartition.getParentId());
+                if (partition != null && partition.isFirstLoad()) {
+                    collectPartitionIds.add(partition.getId());
+                }
             }
         }
         if (collectPartitionIds.isEmpty()) {
@@ -161,7 +169,7 @@ public class StatisticUtils {
 
                         statisticExecutor.collectStatistics(statsConnectCtx,
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                                        collectPartitionIds, null, analyzeType,
+                                        new ArrayList<>(collectPartitionIds), null, analyzeType,
                                         StatsConstants.ScheduleType.ONCE,
                                         analyzeStatus.getProperties()), analyzeStatus, false);
                     });

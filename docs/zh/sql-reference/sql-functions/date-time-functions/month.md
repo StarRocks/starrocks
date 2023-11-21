@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # month
 
 ## 功能

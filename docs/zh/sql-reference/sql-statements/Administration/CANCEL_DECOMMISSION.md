@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CANCEL DECOMMISSION
 
 ## 功能

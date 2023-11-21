@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # bitmap_union_int
 
 ## Description

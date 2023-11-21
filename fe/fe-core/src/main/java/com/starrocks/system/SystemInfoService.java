@@ -57,6 +57,8 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -355,7 +357,8 @@ public class SystemInfoService implements GsonPostProcessable {
         List<Long> dbs = globalStateMgr.getDbIds();
 
         dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 db.getTables().stream()
                         .filter(table -> table.isOlapTableOrMaterializedView())
@@ -383,7 +386,7 @@ public class SystemInfoService implements GsonPostProcessable {
                             });
                         });
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         });
     }
@@ -620,7 +623,6 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
 
-
     public int getAliveComputeNodeNumber() {
         return getComputeNodeIds(true).size();
     }
@@ -741,7 +743,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (CollectionUtils.isNotEmpty(backendIds)) {
             return backendIds.get(0);
         }
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
+        if (RunMode.isSharedNothingMode()) {
             throw new UserException("No backend alive.");
         }
         List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
@@ -796,7 +798,7 @@ public class SystemInfoService implements GsonPostProcessable {
      * choose nodes by round-robin
      *
      * @param nodeNum  number of node wanted
-     * @param isCreate    last node id for creation
+     * @param isCreate last node id for creation
      * @param srcNodes list of the candidate nodes
      * @return empty list if not enough node, otherwise return a list of node's id
      */
@@ -1134,7 +1136,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void checkClusterCapacity() throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return;
         }
 

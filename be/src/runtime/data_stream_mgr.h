@@ -84,6 +84,7 @@ class PTransmitChunkParams;
 class DataStreamMgr {
 public:
     DataStreamMgr();
+    ~DataStreamMgr();
 
     // Create a receiver for a specific fragment_instance_id/node_id destination;
     // If is_merging is true, the receiver maintains a separate queue of incoming row

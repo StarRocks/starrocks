@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 同步物化视图
 
 本文介绍如何在 StarRocks 中创建、使用以及管理**同步物化视图（Rollup）**。

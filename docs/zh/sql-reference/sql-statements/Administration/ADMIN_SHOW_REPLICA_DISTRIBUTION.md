@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # ADMIN SHOW REPLICA DISTRIBUTION
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # VAR_SAMP,VARIANCE_SAMP
 
 ## Description

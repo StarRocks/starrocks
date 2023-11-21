@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SHOW CREATE VIEW
 
 Returns the CREATE statement that was used to create a given view. The CREATE VIEW statement helps you understand how the view is defined and provides a reference for you to modify or reconstruct the view. Note that the SHOW CREATE VIEW statement requires you to have the `SELECT` privilege on the view and the table based on which the view is created.

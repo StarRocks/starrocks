@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Monitor and manage big queries
 
 This topic describes how to monitor and manage big queries in your StarRocks cluster.

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 系统限制
 
 本文介绍使用 StarRocks 系统时需要注意的事项。

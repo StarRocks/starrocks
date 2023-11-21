@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Check environment configurations
 
 This topic lists all environment and system configuration items that you must check and set before deploying StarRocks. Setting these configuration items properly allows your StarRocks cluster to work with high availability and performance.

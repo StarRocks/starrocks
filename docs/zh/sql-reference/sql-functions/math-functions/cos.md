@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # cos
 
 ## 功能

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Upgrade StarRocks
 
 This topic describes how to upgrade your StarRocks cluster.

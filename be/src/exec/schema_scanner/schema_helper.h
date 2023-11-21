@@ -43,6 +43,9 @@ public:
     static Status list_pipe_files(const std::string& ip, int32_t port, const TListPipeFilesParams& req,
                                   TListPipeFilesResult* res);
 
+    static Status list_object_dependencies(const std::string& ip, int32_t port, const TObjectDependencyReq& req,
+                                           TObjectDependencyRes* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response, const int timeout_ms);
 

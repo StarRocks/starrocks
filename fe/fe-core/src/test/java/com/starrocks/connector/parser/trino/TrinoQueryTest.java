@@ -1148,4 +1148,25 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "[1,2]", "[10: expr,11: expr]", "returnTypes: [TINYINT, ARRAY<TINYINT>]",
                 "returnTypes: [TINYINT]");
     }
+
+    @Test
+    public void testRandom() throws Exception {
+        String sql = "select rand();";
+        assertPlanContains(sql, "<slot 2> : rand()");
+
+        sql = "select rand(100);";
+        assertPlanContains(sql, "<slot 2> : floor(random() * 100.0)");
+
+        sql = "select rand(10, 100);";
+        assertPlanContains(sql, "floor(random() * 90.0 + 10.0)");
+
+        sql = "select random();";
+        assertPlanContains(sql, "<slot 2> : random()");
+
+        sql = "select random(100);";
+        assertPlanContains(sql, "<slot 2> : floor(random() * 100.0)");
+
+        sql = "select rand(10, 100);";
+        assertPlanContains(sql, "<slot 2> : floor(random() * 90.0 + 10.0)");
+    }
 }

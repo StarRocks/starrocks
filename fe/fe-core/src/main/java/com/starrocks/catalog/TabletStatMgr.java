@@ -43,6 +43,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.TabletStatRequest;
 import com.starrocks.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.proto.TabletStatResponse;
@@ -99,7 +101,8 @@ public class TabletStatMgr extends FrontendDaemon {
             if (db == null) {
                 continue;
             }
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 for (Table table : db.getTables()) {
                     if (!table.isNativeTableOrMaterializedView()) {
@@ -123,7 +126,7 @@ public class TabletStatMgr extends FrontendDaemon {
                             table.getName(), db.getFullName());
                 }
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
@@ -194,7 +197,8 @@ public class TabletStatMgr extends FrontendDaemon {
             }
 
             List<OlapTable> tables = Lists.newArrayList();
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table table : db.getTables()) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
@@ -202,7 +206,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             for (OlapTable table : tables) {
@@ -216,7 +220,8 @@ public class TabletStatMgr extends FrontendDaemon {
         // prepare tablet infos
         Map<Long, List<TabletInfo>> beToTabletInfos = Maps.newHashMap();
         Map<Long, Long> partitionToVersion = Maps.newHashMap();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getId();
@@ -241,7 +246,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (beToTabletInfos.isEmpty()) {
@@ -287,7 +292,7 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         // update tablet stats
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getId();
@@ -319,7 +324,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 }
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 }

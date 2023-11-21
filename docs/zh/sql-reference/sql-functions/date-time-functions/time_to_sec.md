@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # time_to_sec
 
 ## 功能

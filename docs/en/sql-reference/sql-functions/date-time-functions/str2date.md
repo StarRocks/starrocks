@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # str2date
 
 ## Description

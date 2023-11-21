@@ -100,6 +100,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
+            context.checkTimeout();
+
             // 1. check whether to need compensate or not
             // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
             boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);

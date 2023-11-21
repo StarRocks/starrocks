@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # array_to_bitmap
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # curtime,current_time
 
 ## 功能

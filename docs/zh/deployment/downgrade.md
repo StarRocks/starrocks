@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 降级 StarRocks
 
 本文介绍如何降级您的 StarRocks 集群。

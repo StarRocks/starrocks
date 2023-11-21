@@ -14,14 +14,12 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.alter.AlterJobV2Test;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
-import org.jetbrains.annotations.TestOnly;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;

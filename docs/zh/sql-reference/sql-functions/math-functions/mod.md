@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # mod
 
 ## 功能

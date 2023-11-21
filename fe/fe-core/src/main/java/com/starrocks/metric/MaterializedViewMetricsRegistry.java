@@ -21,6 +21,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
@@ -69,7 +71,8 @@ public class MaterializedViewMetricsRegistry {
             if (null == db) {
                 continue;
             }
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (MaterializedView mv : db.getMaterializedViews()) {
                     MaterializedViewMetricsEntity mvEntity =
@@ -101,7 +104,7 @@ public class MaterializedViewMetricsRegistry {
                     visitor.visitHistogram(e.getKey(), e.getValue());
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
     }

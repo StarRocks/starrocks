@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 
 # VAR_SAMP, VARIANCE_SAMP
 

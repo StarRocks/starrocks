@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load data in bulk using Spark Load
 
 This load uses external Apache Spark™ resources to pre-process imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
@@ -338,7 +342,7 @@ PROPERTIES
 
 ~~~sql
 CREATE EXTERNAL RESOURCE hive0
-properties
+PROPERTIES
 ( 
     "type" = "hive",
     "hive.metastore.uris" = "thrift://0.0.0.0:8080"
@@ -356,7 +360,7 @@ CREATE EXTERNAL TABLE hive_t1
     uuid varchar(100)
 )
 ENGINE=hive
-properties
+PROPERTIES
 ( 
     "resource" = "hive0",
     "database" = "tmp",

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Performance Optimization
 
 ## Table Type Selection

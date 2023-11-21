@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 其他集成
 
 本文介绍 StarRocks 支持集成的其他系统和工具。

@@ -13,8 +13,12 @@
 // limitations under the License.
 package com.starrocks.meta.lock;
 
-public class NotSupportLockException extends RuntimeException {
+public class NotSupportLockException extends IllegalLockStateException {
     public NotSupportLockException() {
         super("Lock operations under the new framework are currently not supported.");
+    }
+
+    public NotSupportLockException(String message) {
+        super(message);
     }
 }

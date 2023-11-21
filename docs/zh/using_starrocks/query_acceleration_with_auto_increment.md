@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 AUTO INCREMENT 列构建全局字典以加速精确去重计算和 Join
 
 ## 应用场景
@@ -45,7 +49,7 @@
 
 订单数据需要来源于一张外部表，其形式可以是 [External Catalog 外部表](../data_source/catalog/hive_catalog.md)、[文件外部表](../data_source/file_external_table.md)、或者 [FILES](../sql-reference/sql-functions/table-functions/files.md) 表函数（可以理解为一个外部表）。
 
-本解决方案以  Hive Catalog 外部表 `source_table` 为例，其中 `order_uuid` 列表示订单编号并且为 STRING 类型。
+本解决方案以 Hive Catalog 外部表 `source_table` 为例，其中 `order_uuid` 列表示订单编号并且为 STRING 类型。
 
 > **说明**
 >
@@ -78,7 +82,7 @@
 
 通过订单数据表 Join 字典表，将订单数据和字典表的映射关系通过一个 INSERT INTO 语句同时导入至目标表。
 
-![External_Catalog+INSERT_INTO](../assets/External_Catalog+INSERT_INTO.png)
+![ExternalCatalog](../assets/ExternalCatalog.png)
 
 **准备工作**：创建 [Hive catalog](../data_source/catalog/hive_catalog.md) 允许 StarRocks 访问 Hive 表 `source_table`。
 
@@ -230,7 +234,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 需要先导入订单数据至目标表，再把字典表的映射关系更新至目标表的 INTEGER 列（更新操作要求目标表必须为主键模型表）。
 
-![loading+UPDATE](../assets/loading+UPDATE.png)
+![loading](../assets/loading.png)
 
 **阶段一：创建全局字典表，并且导入 CSV 文件中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
 

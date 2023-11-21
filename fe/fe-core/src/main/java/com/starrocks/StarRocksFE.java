@@ -41,7 +41,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.JdkUtils;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
@@ -107,11 +106,6 @@ public class StarRocksFE {
 
             // init config
             new Config().init(starRocksDir + "/conf/fe.conf");
-
-            // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
-            if (!JdkUtils.checkJavaVersion()) {
-                throw new IllegalArgumentException("Java version doesn't match");
-            }
 
             Log4jConfig.initLogging();
 

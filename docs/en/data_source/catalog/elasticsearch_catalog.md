@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Elasticsearch catalog
 
 StarRocks supports Elasticsearch catalogs from v3.1 onwards.

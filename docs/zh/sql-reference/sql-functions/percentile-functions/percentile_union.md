@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # percentile_union
 
 ## 功能
@@ -29,15 +33,16 @@ CREATE TABLE sales_records(
     store_id int, 
     sale_date date, 
     sale_amt bigint
-) distributed BY hash(record_id) 
-properties("replication_num" = "3");
+)
+DISTRIBUTED BY hash(record_id) 
+PROPERTIES ("replication_num" = "3");
 ```
 
 对`sale_amt`建立 PERCENTILE 类型物化视图表。
 
 ```sql
-create materialized view mv as
-select store_id, percentile_union(percentile_hash(sale_amt)) from sales_records group by store_id;
+CREATE MATERIALIZED VIEW mv AS
+SELECT store_id, percentile_union(percentile_hash(sale_amt)) FROM sales_records GROUP BY store_id;
 ```
 
 创建包含 PERCENTILE 类型的聚合表。

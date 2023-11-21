@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # md5sum_numeric
 
 Calculates the 128-bit checksum of multiple strings. The checksum is represented by a decimal string of digits.

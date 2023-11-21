@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Deploy and manage Broker node
 
 This topic describes how to deploy Broker nodes. With Broker nodes, StarRocks can read data from sources such as HDFS and S3, and pre-process, load, and backup the data with its own computing resources.

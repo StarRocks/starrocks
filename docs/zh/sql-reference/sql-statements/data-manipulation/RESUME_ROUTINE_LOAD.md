@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # RESUME ROUTINE LOAD
 
 ## 功能

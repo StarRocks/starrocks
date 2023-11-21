@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # generate_series
 
 ## Description

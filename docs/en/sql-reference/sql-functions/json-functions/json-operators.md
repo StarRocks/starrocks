@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # JSON operators
 
 StarRocks supports the following JSON comparison operators: `<`, `<=`, `>`, `>=`, `=`, and `!=`. You can use these operators to query JSON data. However, StarRocks does not allow you to use `IN` to query JSON data.

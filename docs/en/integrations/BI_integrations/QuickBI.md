@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # QuickBI
 
 This topic describes how to connect QuickBI to StarRocks to perform visualized analysis of StarRocks data on QuickBI.

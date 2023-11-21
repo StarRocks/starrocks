@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Stream Load
 
 ## 1. Does Stream Load support identifying column names held in the first few rows of a CSV-formatted file, or skipping the first few rows during data reading?

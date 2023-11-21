@@ -266,6 +266,10 @@ void DataStreamRecvr::cancel_stream() {
 }
 
 void DataStreamRecvr::close() {
+    if (_closed) {
+        return;
+    }
+
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
@@ -275,11 +279,11 @@ void DataStreamRecvr::close() {
     _mgr = nullptr;
     _chunks_merger.reset();
     _cascade_merger.reset();
-    _close = true;
+    _closed = true;
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
-    if (!_close) {
+    if (!_closed) {
         close();
     }
     DCHECK(_mgr == nullptr) << "Must call close()";

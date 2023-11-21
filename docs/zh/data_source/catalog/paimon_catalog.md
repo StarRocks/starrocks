@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Paimon catalog
 
 StarRocks 从 3.1 版本开始支持 Paimon Catalog。

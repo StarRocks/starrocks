@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # exp, dexp
 
 ## 功能

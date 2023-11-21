@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # version
 
 ## 功能

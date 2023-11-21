@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Data modeling with materialized views
 
 This topic describes how to perform data modeling with the help of StarRocks' asynchronous materialized views. By doing so, you can greatly simplify the ETL pipeline of your data warehouses, and significantly improve data quality and query performance.

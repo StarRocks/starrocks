@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # SUSPEND or RESUME PIPE
 
 ## Description
@@ -10,7 +14,7 @@ Suspends or resumes a pipe:
 ## Syntax
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] [ <pipe_name> ] { SUSPEND | RESUME [ IF SUSPENDED ] }
+ALTER PIPE [ IF EXISTS ] <pipe_name> { SUSPEND | RESUME [ IF SUSPENDED ] }
 ```
 
 ## Parameters

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # log10, dlog10
 
 ## 功能

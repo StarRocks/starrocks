@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.meta.lock;
 
+import java.util.HashSet;
 import java.util.Set;
 
 public class LightWeightLock extends Lock {
@@ -23,32 +24,25 @@ public class LightWeightLock extends Lock {
 
     @Override
     public LockGrantType lock(Locker locker, LockType requestLockType) {
-        if (this.lockHolder == null) {
-            this.lockHolder = new LockHolder(locker, requestLockType);
-            return LockGrantType.NEW;
-        } else {
-            LockType lockType = lockHolder.getLockType();
-            boolean upgrade = lockType.upgradeTo(requestLockType);
-            if (upgrade) {
-                return LockGrantType.PROMOTION;
-            } else {
-                return LockGrantType.EXISTING;
-            }
-        }
+        assert lockHolder == null;
+        this.lockHolder = new LockHolder(locker, requestLockType);
+        return LockGrantType.NEW;
     }
 
     @Override
-    public Set<Locker> release(Locker locker) {
-        if (locker == lockHolder.getLocker()) {
+    public Set<Locker> release(Locker locker, LockType lockType) throws NotSupportLockException {
+        if (lockHolder.equals(new LockHolder(locker, lockType))) {
             this.lockHolder = null;
+            return null;
+        } else {
+            throw new NotSupportLockException("Attempt to unlock lock, not locked by current locker");
         }
-
-        return null;
     }
 
     @Override
     public boolean isOwner(Locker locker, LockType lockType) {
-        return lockHolder.getLocker() == locker && lockHolder.getLockType() == lockType;
+        LockHolder requestLockHolder = new LockHolder(locker, lockType);
+        return requestLockHolder.equals(lockHolder);
     }
 
     @Override
@@ -62,15 +56,40 @@ public class LightWeightLock extends Lock {
     }
 
     @Override
-    public void removeWaiter(Locker locker) {
+    public Set<LockHolder> getOwners() {
+        Set<LockHolder> ret = new HashSet<>();
+        if (lockHolder != null) {
+            ret.add(lockHolder);
+        }
+        return ret;
+    }
+
+    @Override
+    public Set<LockHolder> cloneOwners() {
+        Set<LockHolder> ret = new HashSet<>();
+        if (lockHolder != null) {
+            ret.add(lockHolder.clone());
+        }
+        return ret;
+    }
+
+    @Override
+    public void removeWaiter(Locker locker, LockType lockType) {
 
     }
 
-    public Locker getOwner() {
-        return lockHolder.getLocker();
-    }
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(" LockAddr:").append(System.identityHashCode(this));
+        sb.append(" Owner:");
+        if (ownerNum() == 0) {
+            sb.append(" (none)");
+        } else {
+            sb.append(lockHolder);
+        }
 
-    public LockHolder getLockHolder() {
-        return lockHolder;
+        sb.append(" Waiters: (none)");
+        return sb.toString();
     }
 }

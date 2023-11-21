@@ -27,7 +27,7 @@ public:
     ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
             : SourceOperator(factory, id, "exchange_source", plan_node_id, false, driver_sequence) {}
 
-    ~ExchangeSourceOperator() override = default;
+    virtual ~ExchangeSourceOperator() = default;
 
     Status prepare(RuntimeState* state) override;
 
@@ -53,12 +53,14 @@ public:
               _num_sender(num_sender),
               _row_desc(row_desc) {}
 
-    ~ExchangeSourceOperatorFactory() override = default;
+    virtual ~ExchangeSourceOperatorFactory();
 
     const TExchangeNode& texchange_node() { return _texchange_node; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ++_stream_recvr_cnt;
+        // FIXME: it is unsafe to pass the raw `this` pointer to construct a shared_ptr object.
+        // The shared_ptr object may live longer than the object `this` pointed to.
         return std::make_shared<ExchangeSourceOperator>(this, _id, _plan_node_id, driver_sequence);
     }
 

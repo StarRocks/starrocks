@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Generated columns
 
 Since v3.1, StarRocks supports generated columns. Generated columns can be used to accelerate queries with complex expressions. This feature supports precomputing and storing the results of expressions and [query rewrites](#query-rewrites), which significantly accelerates queries with the same complex expressions.

@@ -35,7 +35,7 @@ public class MultiUserLock extends Lock {
         LockGrantType lockGrantType = tryLock(lockHolderRequest);
         if (lockGrantType == LockGrantType.NEW) {
             addOwner(lockHolderRequest);
-        } else if (lockGrantType == LockGrantType.WAIT_NEW || lockGrantType == LockGrantType.WAIT_PROMOTION) {
+        } else if (lockGrantType == LockGrantType.WAIT) {
             addWaiterToEnd(lockHolderRequest);
         }
 
@@ -47,38 +47,31 @@ public class MultiUserLock extends Lock {
             return LockGrantType.NEW;
         }
 
-        boolean ownerExists = false;
         boolean hasConflicts = false;
 
         LockHolder lockOwner = null;
         Iterator<LockHolder> ownerIterator = null;
+        if (otherOwners != null) {
+            ownerIterator = otherOwners.iterator();
+        }
+
         if (firstOwner != null) {
             lockOwner = firstOwner;
         } else {
-            if (otherOwners != null) {
-                ownerIterator = otherOwners.iterator();
-                if (ownerIterator.hasNext()) {
-                    lockOwner = ownerIterator.next();
-                }
+            if (ownerIterator != null && ownerIterator.hasNext()) {
+                lockOwner = ownerIterator.next();
             }
         }
 
-        LockHolder lockToUpgrade = null;
+        LockHolder sameLockHolder = null;
         while (lockOwner != null) {
-            if (lockHolderRequest == lockOwner) {
-                boolean isUpgrade = lockOwner.getLockType().upgradeTo(lockHolderRequest.getLockType());
-                if (isUpgrade) {
-                    lockToUpgrade = lockOwner;
-                } else {
-                    return LockGrantType.EXISTING;
-                }
+            if (lockHolderRequest.equals(lockOwner)) {
+                sameLockHolder = lockOwner;
             } else {
-                boolean isConflict = lockOwner.getLockType().isConflict(lockHolderRequest.getLockType());
+                boolean isConflict = lockOwner.isConflict(lockHolderRequest);
                 if (isConflict) {
                     hasConflicts = true;
                 }
-
-                ownerExists = true;
             }
 
             if (ownerIterator != null && ownerIterator.hasNext()) {
@@ -88,40 +81,62 @@ public class MultiUserLock extends Lock {
             }
         }
 
-        if (lockToUpgrade != null) {
-            if (!hasConflicts) {
-                lockToUpgrade.setLockType(lockHolderRequest.getLockType());
-                return LockGrantType.PROMOTION;
-            } else {
-                return LockGrantType.WAIT_PROMOTION;
-            }
+        if (hasConflicts) {
+            return LockGrantType.WAIT;
         } else {
-            if (!hasConflicts && (!ownerExists || waiterNum() == 0)) {
-                return LockGrantType.NEW;
+            if (sameLockHolder != null) {
+                sameLockHolder.increaseRefCount();
+                return LockGrantType.EXISTING;
             } else {
-                return LockGrantType.WAIT_NEW;
+                if (waiterNum() == 0) {
+                    return LockGrantType.NEW;
+                } else {
+                    return LockGrantType.WAIT;
+                }
             }
         }
     }
 
     @Override
-    public Set<Locker> release(Locker locker) {
+    public Set<Locker> release(Locker locker, LockType lockType) throws NotSupportLockException {
         boolean hasOwner = false;
-        if (firstOwner != null && firstOwner.getLocker() == locker) {
-            firstOwner = null;
+        boolean reentrantLock = false;
+        LockHolder lockHolder = new LockHolder(locker, lockType);
+
+        if (firstOwner != null && firstOwner.equals(lockHolder)) {
             hasOwner = true;
+            firstOwner.decreaseRefCount();
+            if (firstOwner.getRefCount() > 0) {
+                reentrantLock = true;
+            }
+
+            if (firstOwner.getRefCount() == 0) {
+                firstOwner = null;
+            }
         } else if (otherOwners != null) {
             Iterator<LockHolder> iter = otherOwners.iterator();
             while (iter.hasNext()) {
                 LockHolder o = iter.next();
-                if (o.getLocker() == locker) {
-                    iter.remove();
+                if (o.equals(lockHolder)) {
                     hasOwner = true;
+                    o.decreaseRefCount();
+
+                    if (o.getRefCount() > 0) {
+                        reentrantLock = true;
+                    }
+
+                    if (o.getRefCount() == 0) {
+                        iter.remove();
+                    }
                 }
             }
         }
 
         if (!hasOwner) {
+            throw new NotSupportLockException("Attempt to unlock lock, not locked by current locker");
+        }
+
+        if (reentrantLock) {
             return null;
         }
 
@@ -134,15 +149,17 @@ public class MultiUserLock extends Lock {
         boolean isFirstWaiter = false;
         LockHolder lockWaiter = null;
         Iterator<LockHolder> lockWaiterIterator = null;
+
+        if (otherWaiters != null) {
+            lockWaiterIterator = otherWaiters.iterator();
+        }
+
         if (firstWaiter != null) {
             lockWaiter = firstWaiter;
             isFirstWaiter = true;
         } else {
-            if (otherWaiters != null) {
-                lockWaiterIterator = otherWaiters.iterator();
-                if (lockWaiterIterator.hasNext()) {
-                    lockWaiter = lockWaiterIterator.next();
-                }
+            if (lockWaiterIterator != null && lockWaiterIterator.hasNext()) {
+                lockWaiter = lockWaiterIterator.next();
             }
         }
 
@@ -150,8 +167,7 @@ public class MultiUserLock extends Lock {
             LockGrantType lockGrantType = tryLock(lockWaiter);
 
             if (lockGrantType == LockGrantType.NEW
-                    || lockGrantType == LockGrantType.EXISTING
-                    || lockGrantType == LockGrantType.PROMOTION) {
+                    || lockGrantType == LockGrantType.EXISTING) {
                 if (isFirstWaiter) {
                     firstWaiter = null;
                 } else {
@@ -163,8 +179,7 @@ public class MultiUserLock extends Lock {
                     addOwner(lockWaiter);
                 }
             } else {
-                assert lockGrantType == LockGrantType.WAIT_NEW ||
-                        lockGrantType == LockGrantType.WAIT_PROMOTION;
+                assert lockGrantType == LockGrantType.WAIT;
                 /* Stop on first waiter that cannot be an owner. */
                 break;
             }
@@ -181,13 +196,15 @@ public class MultiUserLock extends Lock {
 
     @Override
     public boolean isOwner(Locker locker, LockType lockType) {
-        if (firstOwner != null && firstOwner.getLocker() == locker) {
+        LockHolder lockHolder = new LockHolder(locker, lockType);
+
+        if (firstOwner != null && firstOwner.equals(lockHolder)) {
             return firstOwner.getLockType() == lockType;
         }
 
         if (otherOwners != null) {
-            for (LockHolder lockHolder : otherOwners) {
-                if (lockHolder.getLocker() == locker && lockHolder.getLockType() == lockType) {
+            for (LockHolder owner : otherOwners) {
+                if (owner.equals(lockHolder)) {
                     return true;
                 }
             }
@@ -235,14 +252,46 @@ public class MultiUserLock extends Lock {
     }
 
     @Override
-    public void removeWaiter(Locker locker) {
-        if (firstWaiter != null && firstWaiter.getLocker() == locker) {
+    public Set<LockHolder> getOwners() {
+        Set<LockHolder> owners = new HashSet<>();
+        if (firstOwner != null) {
+            owners.add(firstOwner);
+        }
+
+        if (otherOwners != null) {
+            owners.addAll(otherOwners);
+        }
+
+        return owners;
+    }
+
+    @Override
+    public Set<LockHolder> cloneOwners() {
+        Set<LockHolder> owners = new HashSet<>();
+        if (firstOwner != null) {
+            owners.add(firstOwner.clone());
+        }
+
+        if (otherOwners != null) {
+            for (LockHolder lockHolder : otherOwners) {
+                owners.add(lockHolder.clone());
+            }
+        }
+
+        return owners;
+    }
+
+    @Override
+    public void removeWaiter(Locker locker, LockType lockType) {
+        LockHolder lockHolder = new LockHolder(locker, lockType);
+
+        if (firstWaiter != null && firstWaiter.equals(lockHolder)) {
             firstWaiter = null;
         } else if (otherWaiters != null) {
             Iterator<LockHolder> waiterIter = otherWaiters.iterator();
             while (waiterIter.hasNext()) {
                 LockHolder waiter = waiterIter.next();
-                if (waiter.getLocker() == locker) {
+                if (waiter.equals(lockHolder)) {
                     waiterIter.remove();
                     return;
                 }
@@ -261,5 +310,42 @@ public class MultiUserLock extends Lock {
         } else {
             otherWaiters.add(lockHolder);
         }
+    }
+
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(" LockAddr:").append(System.identityHashCode(this));
+        sb.append(" Owners: ");
+        if (ownerNum() == 0) {
+            sb.append("(none)");
+        } else {
+            if (firstOwner != null) {
+                sb.append(firstOwner);
+            }
+
+            if (otherOwners != null) {
+                for (LockHolder lockHolder : otherOwners) {
+                    sb.append(lockHolder);
+                }
+            }
+        }
+
+        sb.append(" Waiters: ");
+        if (waiterNum() == 0) {
+            sb.append("(none)");
+        } else {
+            if (firstWaiter != null) {
+                sb.append(firstWaiter);
+            }
+
+            if (otherWaiters != null) {
+                for (LockHolder lockHolder : otherWaiters) {
+                    sb.append(lockHolder);
+                }
+            }
+        }
+        return sb.toString();
     }
 }

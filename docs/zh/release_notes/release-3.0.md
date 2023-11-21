@@ -1,4 +1,32 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # StarRocks version 3.0
+
+## 3.0.8
+
+发布日期：2023 年 11 月 17 日
+
+### 功能优化
+
+- `INFORMATION_SCHEMA.COLUMNS` 表支持显示 ARRAY、MAP、STRUCT 类型的字段。[#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+### 问题修复
+
+修复了如下问题：
+
+- 执行 `show proc '/current_queries';` 时，如果某个查询刚开始执行，可能会引起 BE Crash。[#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- 带 Sort Key 的主键模型表持续高频导入时，会小概率出现 Compaction 失败。[#26486](https://github.com/StarRocks/starrocks/pull/26486)
+- 修改 LDAP 认证用户的密码后，使用新密码登录时报错。
+- 如果提交的 Broker Load 作业包含过滤条件，在数据导入过程中，某些情况下会出现 BE crash。[#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- SHOW GRANTS 时报 `unknown error`。[#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- 当使用函数 `cast()` 时数据类型转换前后类型一致，某些类型下会导致 BE crash。[#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- BINARY 或 VARBINARY 类型在 `information_schema.columns` 视图里面的 `DATA_TYPE` 和 `COLUMN_TYPE` 显示为 `unknown`。[#32678](https://github.com/StarRocks/starrocks/pull/32678)
+- 长时间向持久化索引打开的主键模型表高频导入，可能会引起 BE crash。[#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- Query Cache 开启后查询结果有错。[#32778](https://github.com/StarRocks/starrocks/pull/32778)
+- 重启后 RESTORE 的表中的数据和 BACKUP 前的表中的数据在某些情况下会不一致。[#33567](https://github.com/StarRocks/starrocks/pull/33567)
+- 执行 RESTORE 时如果 Compaction 正好同时在进行，可能引起 BE crash。[#32902](https://github.com/StarRocks/starrocks/pull/32902)
 
 ## 3.0.7
 

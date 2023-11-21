@@ -25,23 +25,10 @@ public enum LockGrantType {
      * The locker did not previously own a lock on the node, and must wait for
      * a new lock because a conflicting lock is held by another locker.
      */
-    WAIT_NEW,
+    WAIT,
 
     /**
-     * The locker already owns the requested lock, and no new lock or upgrade
-     * is needed.
+     * The locker already owns the requested lock, just increment the reference count
      */
     EXISTING,
-
-    /**
-     * The locker previously owned a read lock on the node, and a write lock
-     * has been granted by upgrading the lock from read to write.
-     */
-    PROMOTION,
-
-    /**
-     * The locker previously owned a read lock on the node, and must wait for a
-     * lock upgrade because a conflicting lock is held by another locker.
-     */
-    WAIT_PROMOTION,
 }

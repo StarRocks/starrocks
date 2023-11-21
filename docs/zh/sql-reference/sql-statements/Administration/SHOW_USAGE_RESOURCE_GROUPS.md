@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # SHOW USAGE RESOURCE GROUPS
 
 ## 功能

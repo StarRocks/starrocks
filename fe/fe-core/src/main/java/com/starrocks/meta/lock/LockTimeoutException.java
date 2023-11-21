@@ -14,5 +14,8 @@
 
 package com.starrocks.meta.lock;
 
-public class LockTimeoutException extends RuntimeException {
+public class LockTimeoutException extends IllegalLockStateException {
+    public LockTimeoutException() {
+        super("");
+    }
 }

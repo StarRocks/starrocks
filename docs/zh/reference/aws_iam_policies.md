@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # AWS IAM 策略
 
 IAM 策略用于声明特定 AWS 资源的一组访问权限。创建 IAM 策略后，您需要将创建好的策略添加到某个 IAM 用户或角色，从而使该 IAM 用户或角色拥有该策略中所声明的访问特定 AWS 资源的权限。

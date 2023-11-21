@@ -23,6 +23,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
@@ -191,14 +193,15 @@ public final class MaterializedViewMetricsEntity {
                     return 0L;
                 }
 
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     MaterializedView mv = (MaterializedView) table;
                     return mv.getRowCount();
                 } catch (Exception e) {
                     return 0L;
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
@@ -217,14 +220,15 @@ public final class MaterializedViewMetricsEntity {
                     return 0L;
                 }
 
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     MaterializedView mv = (MaterializedView) table;
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
@@ -242,14 +246,15 @@ public final class MaterializedViewMetricsEntity {
                 if (!table.isMaterializedView()) {
                     return 0;
                 }
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     MaterializedView mv = (MaterializedView) table;
                     return mv.isActive() ? 0 : 1;
                 } catch (Exception e) {
                     return 0;
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };
@@ -269,7 +274,8 @@ public final class MaterializedViewMetricsEntity {
                 }
                 MaterializedView mv = (MaterializedView) table;
 
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     if (!mv.getPartitionInfo().isPartitioned()) {
                         return 0;
@@ -278,7 +284,7 @@ public final class MaterializedViewMetricsEntity {
                 } catch (Exception e) {
                     return 0;
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         };

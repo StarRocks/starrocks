@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 临时分区
 
 本文介绍如何使用临时分区功能。

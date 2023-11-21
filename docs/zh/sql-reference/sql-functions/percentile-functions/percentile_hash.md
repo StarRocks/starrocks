@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # percentile_hash
 
 ## 功能

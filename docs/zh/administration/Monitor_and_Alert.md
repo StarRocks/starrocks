@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 监控报警
 
 本文介绍如何为 StarRocks 设置监控报警。

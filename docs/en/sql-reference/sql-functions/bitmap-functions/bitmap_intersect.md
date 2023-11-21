@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # bitmap_intersect
 
 ## Description

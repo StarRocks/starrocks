@@ -48,6 +48,8 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -1018,8 +1020,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     private abstract static class LockedDatabase implements AutoCloseable {
         private final Database db;
+        protected Locker locker;
 
         LockedDatabase(@NotNull Database db) {
+            this.locker = new Locker();
             lock(db);
             this.db = db;
         }
@@ -1046,12 +1050,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Override
         void lock(Database db) {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
         }
 
         @Override
         void unlock(Database db) {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1062,12 +1066,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
         @Override
         void lock(Database db) {
-            db.writeLock();
+            locker.lockDatabase(db, LockType.WRITE);
         }
 
         @Override
         void unlock(Database db) {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

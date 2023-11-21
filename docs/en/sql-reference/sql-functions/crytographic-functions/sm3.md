@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # sm3
 
 ## Description

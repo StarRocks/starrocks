@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # max_by
 
 ## Description

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Features
 
 StarRocks offers a rich set of features to deliver a blazing-fast, real-time analytics experience on data at scale.
@@ -22,13 +26,29 @@ The vectorized execution engine also makes full use of SIMD instructions. This e
 
 In addition to operator vectorization, StarRocks has implemented other optimizations for the query engine. For example, StarRocks uses the Operation on Encoded Data technology to directly execute operators on encoded strings, without the need for decoding. This noticeably reduces SQL complexity and increases the query speed by more than 2 times.
 
+## Separation of storage and compute
+
+The [storage-compute separation architecture](./Architecture.md) was introduced from 3.0. In this architecture, computing and storage are decoupled to achieve resource isolation, elastic scaling of compute nodes, and high-performance queries. Storage-compute separation equips StarRocks with better flexibility, higher performance and data availability, and lower cost.
+
+![shared-data](../assets/share_data_arch.png)
+
+In storage-compute separation mode, computing and storage are decoupled and can be scaled independently, which elimates the cost that long exists in the storage-compute coupled mode where storage has to be scaled anytime users want to add computing nodes. In addition, computing can dynamically scale whithin seconds, improving resource utilizatio, especially when there are noticeable traffic peaks and valleys.
+
+The storage layer leverages the nearly unlimited capacity and high reliability of object storage to achieve massive data storage and data persistence. StarRocks can work with various object storage systems such as AWS S3, Google Cloud Storage, Azure Blob Storage, HDFS, and other S3-compatible storage like MinIO.
+
+Users can choose to deploy StarRocks in public clouds, private clouds, or on-premises data centers. StarRocks supports Kubernetes-based deployments and provides an Operator for automated deployment of storage-compute decoupled clusters.
+
+StarRocks in storage-compute separation mode provides the same functionalities as the storage-compute coupled mode. The data write and hot data query performance are also the same. Users can perform data updates, data lake analytics, and materialized view acceleration as they do in storage-compute coupled mode.
+
+For information about how to deploy a StarRocks cluster with decoupled storage and compute, see [Deploy shared-data cluster](../deployment/shared_data/s3.md).
+
 ## Cost-based optimizer
 
 ![CBO](../assets/1.1-5-cbo.png)
 
 Performance of multi-table join queries is difficult to optimize. Execution engines alone cannot deliver superior performance because the complexity of execution plans may vary by several orders of magnitude in multi-table join query scenarios. The more the associated tables, the more the execution plans, which makes it NP-hard to choose an optimal plan. Only a query optimizer excellent enough can choose a relatively optimal query plan for efficient multi-table analytics.
 
-StarRocks designs a brand-new CBO from scratch. This CBO adopts the cascades-like framework and is deeply customized for the vectorized execution engine with a number of optimizations and innovations. These optimizations include the reuse of common table expressions (CTEs), rewriting of subqueries, Lateral Join, Join Reorder, strategy selection for distributed Join execution, and low-cardinality optimization. The CBO supports a total of 99 TPC-DS SQL statements.
+StarRocks designs a brand-new [CBO](../using_starrocks/Cost_based_optimizer.md) from scratch. This CBO adopts the cascades-like framework and is deeply customized for the vectorized execution engine with a number of optimizations and innovations. These optimizations include the reuse of common table expressions (CTEs), rewriting of subqueries, Lateral Join, Join Reorder, strategy selection for distributed Join execution, and low-cardinality optimization. The CBO supports a total of 99 TPC-DS SQL statements.
 
 The CBO enables StarRocks to deliver better multi-table join query performance than competitors, especially in complex multi-table join queries.
 
@@ -44,7 +64,7 @@ StarRocks' storage engine uses the Delete-and-insert pattern, which allows for e
 
 ## Intelligent materialized view
 
-StarRocks uses intelligent materialized views to accelerate queries and data warehouse layering. Different from materialized views of other similar products that requires manual data synchronization with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. If StarRocks identifies a suitable materialized view (MV) to improve query performance, it will automatically rewrite the query to utilize the MV. This intelligent process significantly enhances query efficiency without requiring manual intervention.
+StarRocks uses intelligent [materialized views](../using_starrocks/Materialized_view.md) to accelerate queries and data warehouse layering. Different from materialized views of other similar products that requires manual data synchronization with the base table, StarRocks' materialized views automatically update data according to the data changes in the base table without requiring additional maintenance operations. In addition, the selection of materialized views is also automatic. If StarRocks identifies a suitable materialized view (MV) to improve query performance, it will automatically rewrite the query to utilize the MV. This intelligent process significantly enhances query efficiency without requiring manual intervention.
 
  StarRocks' MV can replace the traditional ETL data modeling process: Instead of transforming data in the upstream applications, you now have the option to transform data with MV within StarRocks, simplifying the data processing pipeline.
 
@@ -56,6 +76,6 @@ For example, in the figure, raw data on data lake can be used to create a normal
 
 ![DLA](../assets/1.1-8-dla.png)
 
-In addition to efficient analytics of local data, StarRocks can work as the compute engine to analyze data stored in data lakes such as Apache Hive, Apache Iceberg, Apache Hudi, and Delta Lake. One of the key features of StarRocks is its external catalog, which acts as a linkage to an externally maintained metastore. This functionality provides users with the capability to query external data sources seamlessly, eliminating the need for data migration. As such, users can analyze data from different systems such as HDFS and Amazon S3, in various file formats such as Parquet, ORC, and CSV, etc.
+In addition to efficient analytics of local data, StarRocks can work as the compute engine to analyze data stored in [data lakes](../data_source/catalog/catalog_overview.md) such as Apache Hive, Apache Iceberg, Apache Hudi, and Delta Lake. One of the key features of StarRocks is its external catalog, which acts as a linkage to an externally maintained metastore. This functionality provides users with the capability to query external data sources seamlessly, eliminating the need for data migration. As such, users can analyze data from different systems such as HDFS and Amazon S3, in various file formats such as Parquet, ORC, and CSV, etc.
 
 The preceding figure shows a data lake analytics scenario where StarRocks is responsible for data computing and analysis, and the data lake is responsible for data storage, organization, and maintenance. Data lakes allow users to store data in open storage formats and use flexible schemas to produce reports on "single source of truth" for various BI, AI, ad-hoc, and reporting use cases. StarRocks fully leverages the advantages of its vectorization engine and CBO, significantly improving the performance of data lake analytics.

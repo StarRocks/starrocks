@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Keywords
 
 This topic describes non-reserved keywords and reserved keywords. It provides a list of reserved keywords in StarRocks.

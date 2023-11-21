@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 通过 StarRocks Manager 自动部署 StarRocks 集群
 
 本文介绍如何使用 StarRocks Manager 自动部署 StarRocks 集群。

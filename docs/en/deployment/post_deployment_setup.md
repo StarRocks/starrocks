@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Post-deployment setup
 
 This topic describes tasks that you should perform after deploying StarRocks.

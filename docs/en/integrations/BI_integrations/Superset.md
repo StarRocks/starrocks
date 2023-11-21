@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Apache Superset
 
 Apache Superset supports querying and visualizing both internal data and external data in StarRocks.

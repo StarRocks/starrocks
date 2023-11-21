@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Troubleshooting asynchronous materialized views
 
 This topic describes how to examine your asynchronous materialized views and solve the problems you have encountered while working with them.

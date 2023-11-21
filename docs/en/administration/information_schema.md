@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Information Schema
 
 The StarRocks `information_schema` is a database within each StarRocks instance. `information_schema` contains several read-only, system-defined tables which store extensive metadata information of all objects that the StarRocks instance maintains.

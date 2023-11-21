@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # regexp_replace
 
 ## 功能

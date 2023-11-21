@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用物化视图进行数据建模
 
 本文描述了如何通过 StarRocks 的异步物化视图来进行数据建模，从而极大地简化数据仓库的 ETL Pipeline，并显著提高数据质量和查询性能。

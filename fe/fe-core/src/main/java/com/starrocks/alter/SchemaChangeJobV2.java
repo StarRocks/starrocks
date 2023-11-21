@@ -75,6 +75,8 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -230,7 +232,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
         this.sortKeyIdxes = sortKeyIdxes;
     }
-    
+
     public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
     }
@@ -280,7 +282,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(totalReplicaNum);
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -390,7 +393,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (!FeConstants.runningUnitTest) {
@@ -427,7 +430,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         // create all replicas success.
         // add all shadow indexes to globalStateMgr
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -436,7 +439,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
             addShadowIndexToCatalog(tbl);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         this.watershedTxnId =
@@ -508,7 +511,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             throw new AlterCancelException("Databasee " + dbId + " does not exist");
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -534,9 +538,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     List<Column> diffGeneratedColumnSchema = Lists.newArrayList();
                     if (originIdxId == tbl.getBaseIndexId()) {
                         List<String> originSchema = tbl.getSchemaByIndexId(originIdxId).stream().map(col ->
-                                                        new String(col.getName())).collect(Collectors.toList());
+                                new String(col.getName())).collect(Collectors.toList());
                         List<String> newSchema = tbl.getSchemaByIndexId(shadowIdxId).stream().map(col ->
-                                                    new String(col.getName())).collect(Collectors.toList());
+                                new String(col.getName())).collect(Collectors.toList());
 
                         if (originSchema.size() != 0 && newSchema.size() != 0) {
                             for (String colNameInNewSchema : newSchema) {
@@ -584,7 +588,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                                 if (slotDesc == null) {
                                     throw new AlterCancelException("Expression for generated column can not find " +
-                                                                   "the ref column");
+                                            "the ref column");
                                 }
 
                                 SlotRef slotRef = new SlotRef(slotDesc);
@@ -597,24 +601,24 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             // sourceScope must be set null tableName for its Field in RelationFields
                             // because we hope slotRef can not be resolved in sourceScope but can be
                             // resolved in outputScope to force to replace the node using outputExprs.
-                            Scope sourceScope = new Scope(RelationId.anonymous(), 
-                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                                        new Field(col.getName(), col.getType(), null, null))
-                                                            .collect(Collectors.toList())));
+                            Scope sourceScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), null, null))
+                                            .collect(Collectors.toList())));
 
-                            Scope outputScope = new Scope(RelationId.anonymous(), 
-                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
-                                                        new Field(col.getName(), col.getType(), tableName, null))
-                                                            .collect(Collectors.toList())));
+                            Scope outputScope = new Scope(RelationId.anonymous(),
+                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                    new Field(col.getName(), col.getType(), tableName, null))
+                                            .collect(Collectors.toList())));
 
                             RewriteAliasVisitor visitor =
-                                                new RewriteAliasVisitor(sourceScope, outputScope,
-                                                    outputExprs, ConnectContext.get());
+                                    new RewriteAliasVisitor(sourceScope, outputScope,
+                                            outputExprs, ConnectContext.get());
 
                             ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
-                                    new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
-                                        col.getType(), tableName, null)).collect(Collectors.toList()))),
-                                            ConnectContext.get());
+                                            new RelationFields(tbl.getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                                    col.getType(), tableName, null)).collect(Collectors.toList()))),
+                                    ConnectContext.get());
 
                             Expr generatedColumnExpr = expr.accept(visitor, null);
 
@@ -663,7 +667,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 }
             } // end for partitions
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         AgentTaskQueue.addBatchTask(schemaChangeBatchTask);
@@ -695,14 +699,15 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             throw new AlterCancelException("Database " + dbId + " does not exist");
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (!schemaChangeBatchTask.isFinished()) {
@@ -723,7 +728,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         Future<Boolean> future;
         long start;
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -749,10 +754,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
-                                                    partitionId, shadowIdxId).get(shadowTablet.getId());
+                                partitionId, shadowIdxId).get(shadowTablet.getId());
                         // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
                         GlobalStateMgr.getCurrentInvertedIndex().
-                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
+                                markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
@@ -786,7 +791,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             start = System.nanoTime();
             future = editLog.logAlterJobNoWait(this);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         EditLog.waitInfinity(start, future);
@@ -987,7 +992,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 OlapTable tbl = (OlapTable) db.getTable(tableId);
                 if (tbl != null) {
@@ -1010,7 +1016,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     tbl.setState(OlapTableState.NORMAL);
                 }
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
 
@@ -1035,7 +1041,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return;
         }
 
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -1064,7 +1071,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             // set table state
             tbl.setState(OlapTableState.SCHEMA_CHANGE);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // to make sure that this job will run runPendingJob() again to create the shadow index replicas
@@ -1084,7 +1091,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return;
         }
 
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -1093,7 +1101,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             addShadowIndexToCatalog(tbl);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // should still be in WAITING_TXN state, so that the alter tasks will be resend again
@@ -1109,7 +1117,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private void replayFinished(SchemaChangeJobV2 replayedJob) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 OlapTable tbl = (OlapTable) db.getTable(tableId);
                 if (tbl != null) {
@@ -1117,7 +1126,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     tbl.onReload();
                 }
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
         jobState = JobState.FINISHED;

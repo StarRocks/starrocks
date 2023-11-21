@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # curdate,current_date
 
 ## 功能

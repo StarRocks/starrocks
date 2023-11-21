@@ -186,8 +186,51 @@ void NLJoinProbeOperator::_reset_build_chunk_index() {
     _move_build_chunk_index(0);
 }
 
-void NLJoinProbeOperator::_next_build_chunk_index() {
+void NLJoinProbeOperator::_next_build_chunk_index_for_other_join() {
     _move_build_chunk_index(_curr_build_chunk_index + 1);
+}
+
+// probe one chunk from right
+void NLJoinProbeOperator::_next_probe_row_index_for_inner_join() {
+    // next probe row
+    _probe_row_current++;
+    // probe chunk iter over
+    if (_probe_row_current >= _probe_chunk->num_rows()) {
+        // next build chunk
+        _curr_build_chunk_index++;
+        if (_curr_build_chunk_index >= _num_build_chunks()) {
+            // build chunks iter over
+            _curr_build_chunk_index = 0;
+            _probe_row_current = 0;
+            _probe_chunk = nullptr;
+        } else {
+            // next build chunk
+            _probe_row_current = 0;
+            _curr_build_chunk = _cross_join_context->get_build_chunk(_curr_build_chunk_index);
+            _build_row_current = 0;
+        }
+    }
+}
+
+// probe one chunk from left
+void NLJoinProbeOperator::_next_build_row_index_for_inner_join() {
+    // next build row
+    _build_row_current++;
+    // all rows of current build chunk iter over
+    if (_build_row_current >= _curr_build_chunk->num_rows()) {
+        // next build chunk
+        _curr_build_chunk_index++;
+        _build_row_current = 0;
+        // all build chunks iter over
+        if (_curr_build_chunk_index >= _num_build_chunks()) {
+            _probe_chunk = nullptr;
+        } else {
+            // get next build chunk
+            _curr_build_chunk = _cross_join_context->get_build_chunk(_curr_build_chunk_index);
+        }
+    }
+    // reset probe row index
+    _probe_row_current = 0;
 }
 
 void NLJoinProbeOperator::_move_build_chunk_index(int index) {
@@ -367,11 +410,65 @@ Status NLJoinProbeOperator::_probe_for_other_join(const ChunkPtr& chunk) {
     return Status::OK();
 }
 
+ChunkPtr NLJoinProbeOperator::_permute_chunk_for_inner_join(size_t chunk_size) {
+    ChunkPtr result_chunk = _init_output_chunk(chunk_size);
+
+    do {
+        size_t left_chunk_size = _probe_chunk->num_rows();
+        size_t right_chunk_size = _curr_build_chunk->num_rows();
+        size_t max_chunk_size = std::max(left_chunk_size, right_chunk_size);
+        if (result_chunk->num_rows() != 0 && result_chunk->num_rows() + max_chunk_size > chunk_size) {
+            // Prevent the size of a chunk from exceeding chunk size
+            break;
+        }
+
+        if (left_chunk_size > right_chunk_size) {
+            _permute_chunk_base_left(&result_chunk);
+            _next_build_row_index_for_inner_join();
+        } else {
+            _permute_chunk_base_right(&result_chunk);
+            _next_probe_row_index_for_inner_join();
+        }
+    } while (result_chunk->num_rows() < chunk_size && _probe_chunk != nullptr && _curr_build_chunk != nullptr);
+
+    return result_chunk;
+}
+
+void NLJoinProbeOperator::_permute_chunk_base_left(ChunkPtr* chunk) {
+    for (size_t i = 0; i < _probe_column_count; i++) {
+        SlotId slot_id = _col_types[i]->id();
+        ColumnPtr& dest_col = (*chunk)->get_column_by_slot_id(slot_id);
+        const ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot_id);
+        dest_col->append(*src_col);
+    }
+    for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
+        SlotId slot_id = _col_types[i]->id();
+        ColumnPtr& dest_col = (*chunk)->get_column_by_slot_id(slot_id);
+        const ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot_id);
+        dest_col->append_value_multiple_times(*src_col, _build_row_current, _probe_chunk->num_rows());
+    }
+}
+
+void NLJoinProbeOperator::_permute_chunk_base_right(ChunkPtr* chunk) {
+    for (size_t i = 0; i < _probe_column_count; i++) {
+        SlotId slot_id = _col_types[i]->id();
+        ColumnPtr& dest_col = (*chunk)->get_column_by_slot_id(slot_id);
+        const ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot_id);
+        dest_col->append_value_multiple_times(*src_col, _probe_row_current, _curr_build_chunk->num_rows());
+    }
+    for (size_t i = _probe_column_count; i < _col_types.size(); i++) {
+        SlotId slot_id = _col_types[i]->id();
+        ColumnPtr& dest_col = (*chunk)->get_column_by_slot_id(slot_id);
+        const ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot_id);
+        dest_col->append(*src_col);
+    }
+}
+
 // Permute enough rows from build side and probe side
 // The chunk either consists two conditions:
 // 1. Multiple probe rows and multiple build single-chunk
 // 2. One probe rows and one build chunk
-ChunkPtr NLJoinProbeOperator::_permute_chunk(size_t chunk_size) {
+ChunkPtr NLJoinProbeOperator::_permute_chunk_for_other_join(size_t chunk_size) {
     // TODO: optimize the loop order for small build chunk
     ChunkPtr chunk = _init_output_chunk(chunk_size);
     bool probe_started = false;
@@ -397,7 +494,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(size_t chunk_size) {
         // Otherwise accumulate more build chunks into a larger chunk
         while (!_probe_row_finished && _curr_build_chunk_index < _num_build_chunks()) {
             _permute_probe_row(chunk);
-            _next_build_chunk_index();
+            _next_build_chunk_index_for_other_join();
             probe_row_start();
             if (chunk->num_rows() >= chunk_size) {
                 return chunk;
@@ -533,7 +630,7 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_other_join(size_t chunk_
         return chunk;
     }
     while (!_is_curr_probe_chunk_finished()) {
-        ChunkPtr chunk = _permute_chunk(chunk_size);
+        ChunkPtr chunk = _permute_chunk_for_other_join(chunk_size);
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_other_join(chunk));
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));
@@ -562,7 +659,7 @@ StatusOr<ChunkPtr> NLJoinProbeOperator::_pull_chunk_for_inner_join(size_t chunk_
     }
 
     while (!_is_curr_probe_chunk_finished()) {
-        ChunkPtr chunk = _permute_chunk(chunk_size);
+        ChunkPtr chunk = _permute_chunk_for_inner_join(chunk_size);
         DCHECK(chunk);
         RETURN_IF_ERROR(_probe_for_inner_join(chunk));
         RETURN_IF_ERROR(eval_conjuncts(_conjunct_ctxs, chunk.get(), nullptr));

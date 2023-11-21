@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 配置 Microsoft Azure Storage 认证信息
 
 StarRocks 从 3.0 版本起支持在以下场景中集成 Microsoft Azure Storage（Azure Blob Storage 或 Azure Data Lake Storage）：

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Apache Ranger 管理权限
 
 [Apache Ranger](https://ranger.apache.org/) 提供了一个集中式的安全管理框架，用户可以通过可视化的 Web 页面来定制各种访问策略，决定哪些角色能访问哪些数据，对 Hadoop 生态的各个组件和服务进行细粒度的数据访问控制，确保数据的安全性和合规性。
@@ -17,13 +21,13 @@ Apache Ranger 提供以下核心模块：
 StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 - 在 Ranger 中创建 StarRocks Service 实现权限控制。用户访问 StarRocks 内表、外表或其他对象时，会根据 StarRocks Service 中配置的访问策略来进行访问控制。
-- 对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外部数据源时，会直接根据数据源对应的 Service 来进行访问控制。
+- 对于 External Catalog，可以复用 Ranger 上的外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外部数据源时，会直接根据数据源对应的 Service 来进行访问控制。
 
 通过集成 Apache Ranger，您可以实现以下访问控制模式：
 
 - 全部使用 Ranger 进行权限管理，在 StarRocks Service 内统一管理内表、外表及所有对象。
-- 全部使用 Ranger 进行权限管理。对于内表及内部对象，在 StarRocks Service 内管理；对于 External Catalog，无需额外创建，直接复用对应外部数据源对应的 Service。
-- External Catalog 使用 Ranger 进行权限管理，复用外部数据源对应的 Service；内部对象及内部表在 StarRocks 内部进行授权。
+- 全部使用 Ranger 进行权限管理。对于内表及内部对象，在 StarRocks Service 内管理；对于 External Catalog，无需额外创建，直接复用对应外部数据源对应的 Ranger Service。
+- External Catalog 使用 Ranger 进行权限管理，复用外部数据源对应的 Ranger Service；内部对象及内部表在 StarRocks 内部进行授权。
 
 **权限管理流程：**
 
@@ -173,14 +177,12 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
       )
     ```
 
-   或者可以对已有的 External Catalog 添加该属性。
+   也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
 
     ```SQL
       ALTER CATALOG hive_catalog_1
       SET ("ranger.plugin.hive.service.name" = "hive_catalog_1");
     ```
-
-  以上操作将已有的 Catalog 转换为通过 Ranger 鉴权。
 
 ## 后续步骤
 

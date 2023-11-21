@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # TPC-H Benchmarking
 
 TPC-H is a decision support benchmark developed by the Transaction Processing Performance Council (TPC). It consists of a suite of business oriented ad-hoc queries and concurrent data modifications.

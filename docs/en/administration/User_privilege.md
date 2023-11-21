@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Manage user privileges
 
 This topic describes how to manage users, roles, and privileges in StarRocks.

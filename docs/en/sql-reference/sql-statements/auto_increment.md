@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # AUTO_INCREMENT
 
 Since version 3.0, StarRocks supports the `AUTO_INCREMENT` column attribute, which can simplify data management. This topic introduces the application scenarios, usage and features of the `AUTO_INCREMENT` column attribute.

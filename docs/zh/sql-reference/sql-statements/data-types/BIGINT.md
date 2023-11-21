@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # BIGINT
 
 ## 描述

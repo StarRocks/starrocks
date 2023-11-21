@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # INSTALL PLUGIN
 
 ## 功能

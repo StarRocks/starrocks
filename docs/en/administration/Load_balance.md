@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Load Balancing
 
 When deploying multiple FE nodes, users can deploy a load balancing layer on top of the  FEs to achieve high availability.

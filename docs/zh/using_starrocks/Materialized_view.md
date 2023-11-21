@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 异步物化视图
 
 本文介绍如何理解、创建、使用和管理 StarRocks 中的异步物化视图。StarRocks 自 2.4 版本起支持异步物化视图。

@@ -411,6 +411,9 @@ public class Pipe implements GsonPostProcessable {
     private void changeState(State state, boolean persist) {
         try {
             lock.writeLock().lock();
+            if (this.state.equals(state)) {
+                return;
+            }
             this.state = state;
             if (persist) {
                 PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
@@ -540,10 +543,16 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public void retry(AlterPipeClauseRetry retry) {
+        // Update file state to allow scheduling
         if (retry.isRetryAll()) {
             getPipeSource().retryErrorFiles();
         } else {
             getPipeSource().retryFailedFile(retry.getFile());
+        }
+
+        // Change the pipe state if it's stopped
+        if (getState().canResume()) {
+            changeState(State.RUNNING, true);
         }
     }
 
@@ -749,7 +758,11 @@ public class Pipe implements GsonPostProcessable {
         SUSPEND,
         RUNNING,
         FINISHED,
-        ERROR,
+        ERROR;
+
+        public boolean canResume() {
+            return this.equals(SUSPEND) || this.equals(ERROR);
+        }
     }
 
     enum Type {

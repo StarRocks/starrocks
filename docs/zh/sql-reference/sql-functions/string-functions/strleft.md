@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # strleft
 
 ## 功能

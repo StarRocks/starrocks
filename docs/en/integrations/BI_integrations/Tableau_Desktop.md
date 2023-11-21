@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # Tableau Desktop
 
 Tableau Desktop supports querying and visualizing both internal data and external data in StarRocks.

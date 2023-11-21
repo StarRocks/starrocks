@@ -88,6 +88,14 @@ public abstract class RunMode {
 
     public abstract short getDefaultReplicationNum();
 
+    public static boolean isSharedDataMode() {
+        return getCurrentRunMode() == RunMode.SHARED_DATA;
+    }
+
+    public static boolean isSharedNothingMode() {
+        return getCurrentRunMode() == RunMode.SHARED_NOTHING;
+    }
+
     @Override
     public String toString() {
         return getName();
