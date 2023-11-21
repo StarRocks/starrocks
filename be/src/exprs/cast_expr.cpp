@@ -27,9 +27,11 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/statusor.h"
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "runtime/datetime_value.h"
@@ -1127,6 +1129,28 @@ public:
         }
         return result_column;
     };
+
+    bool is_compilable() const override { return IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        auto* l = datums[0].value;
+
+        if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
+            return Status::NotSupported("JIT casting does not support JSON");
+        } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
+            return Status::NotSupported("JIT casting does not support decimal");
+        } else if constexpr (lt_is_decimal<FromType>) {
+            return Status::NotSupported("JIT casting does not support decimal");
+        } else if constexpr (lt_is_decimal<ToType>) {
+            return Status::NotSupported("JIT casting does not support decimal");
+        } else {
+            LLVMDatum datum(b);
+            ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
+            return datum;
+        }
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();

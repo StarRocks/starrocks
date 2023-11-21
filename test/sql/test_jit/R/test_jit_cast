@@ -1,0 +1,1152 @@
+-- name: test_jit_cast
+DROP TABLE IF EXISTS `jit_cast`;
+-- result:
+-- !result
+CREATE TABLE jit_cast (
+	k1 BIGINT, 
+	k2 BIGINT, 
+	v1 BIGINT REPLACE, 
+	v2 TINYINT REPLACE, 
+	v3 SMALLINT REPLACE, 
+	v4 INT REPLACE,
+	v5 BIGINT REPLACE,
+	v6 LARGEINT REPLACE,
+	v7 DECIMAL REPLACE,
+	v8 DOUBLE REPLACE,
+	v9 FLOAT REPLACE,
+	v10 BOOLEAN REPLACE
+) 
+ENGINE = olap 
+AGGREGATE KEY(k1, k2) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10 
+PROPERTIES ( 
+	"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO jit_cast (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) VALUES
+(0, 9223372036854775807, -9223372036854775808, -128, 32767, -2147483648, 2147483647, 0, 0, -32768.1234, 32767.547, TRUE),
+(100, -9223372036854775808, 9223372036854775807, -100, 200, -200, 0, 10000, -10000, 5000, -5000, FALSE),
+(0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, TRUE),
+(0, 123, 0, 0,  0, NULL, 0, 0, 0, 0, 0, NULL),
+(-1000, 1000, 500, -100, 250, -250, 125, -125, 100000, -100000, 50000, FALSE),
+(100, -200, 300, -125, 500, -600, 700, -800, 900, -1000, 1100, TRUE),
+(-56789, 56789, 12345, -12, 67890, -67890, 0, 11111, -11111, 9999, -9999, FALSE),
+(373987, 167858970, 12346987023, 255, -0, 76189, NULL, 11111, -11111, 9999, -9999, FALSE),
+(1, -1, 2, -2, 3, -3, 4,  -4, 5,  -5, 6, TRUE),
+(32767, -32768, 2147483647,  -21, 9223372036854775807, -1234412, 100, -100, 200, -200, 0, FALSE),
+(124, -9372, 66729,  -21, 9223372036854775807, -629, 6321, NULL, 125, -200, 0, FALSE),
+(9999999, -9999999, 8888888, -88, 7777777, -7777777, 6666666, -6666666, 5555555, -5555555, 4444444, TRUE),
+(0,  1, -131, 12, 1234, 134,  -12, 17345, 63456,  341,  14, FALSE),
+(2147483647, -2147483648, 32767, -129,  100, -100, 200, -200, 0, 1, -1, TRUE),
+(-1,  1, -2, 2, -3, 3, -4, 4, -5, 5, -6, FALSE),
+(-74357,  14321, -2, 2, -3, 3, -4, 4, -5, 5.1234, NULL, FALSE),
+(9223372036854775807, -9223372036854775808, 2147483647, -128, 32767, -32768, 100, -100, 200, -200, 0, TRUE),
+(1000, -1000, 500, -99,  250, -250, 125, -125, 100000, -100000, 50000, FALSE),
+(200,  -400, 600, 82, 1000, -1200, 1400, -1600, 1800, -2000, 2200, TRUE),
+(-123456, 123456, 78901, -79, 234567, -234567, 0, 54321, -54321, 67890, -67890, FALSE),
+(7, -14, 21, -28, 35, -42, 49, -56, 63, -70,  77, TRUE),
+(9876543, -9876543, -13579246,  124, 2468642, -2468642, 86420964, -86420964, 11111, -11111, 99999, FALSE),
+(1234,  -645,  9223372036854775807, 512, 1, 2, 3, 0, -1, -2,  -3, TRUE),
+(144,  -112344,  123441234, -12, -1, -1, -1, -1, -1,  -1, -1, NULL),
+(754,  -14,  9223372036854775807, 1234, 0, 0, 0, 0, 0,  0, 0, FALSE);
+-- result:
+-- !result
+set enable_jit = true;
+-- result:
+-- !result
+SELECT k1 + k2 + v2 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+-9223372036854775808
+-112212
+-60034
+-9269
+-225
+-129
+-118
+-100
+-99
+-88
+-79
+-35
+-22
+-12
+-2
+0
+2
+13
+123
+124
+9223372036854775679
+-- !result
+SELECT k1 + v2 + 12 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+-123523
+-74343
+-56789
+-1088
+-116
+-13
+-9
+11
+12
+12
+12
+13
+24
+115
+144
+294
+913
+32758
+9876679
+9999923
+9223372036854775691
+-- !result
+SELECT k1 + 8 + k2 + v2 + v3 + 62436 + 12.124 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-9223372036854713151.876
+-9223372036854680713.876
+-49756.876
+2419.124
+62455.124
+62456.124
+62456.124
+62457.124
+62579.124
+62606.124
+62607.124
+62731.124
+63338.124
+63703.124
+95094.124
+-- !result
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-6.0
+-1.0
+1.0
+7.0
+43.0
+876.0
+2083.0
+32637.423475000003
+50400.0
+50401.0
+82394.0
+2147483518.0
+-- !result
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v8 + v9 + v10 + 6127.1234 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-43472.8766
+-43471.8766
+6103.1234
+6107.1234
+6126.1234
+6128.1234
+6129.1234
+6410.1234
+16126.1234
+25065.1234
+38764.546875
+2147489445.1234
+-- !result
+SELECT v1 + v3 + v5 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+-9223372036854775805
+-9223372036854775609
+-9223372034707259394
+-9
+-9
+0
+0
+9
+105
+875
+875
+1091
+1500
+3000
+33067
+123441232
+2147516514
+9223372036854775807
+-- !result
+SELECT v1 + v2 + v3 + v4 + v5 + v6 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-9223372036854743170
+-25
+-21
+0
+0
+0
+0
+282
+400
+401
+18582
+123441218
+2147483518
+9223372036854785707
+-- !result
+SELECT k1 + v2 + v4 + v6 + v7 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+-2147483776
+-79001828
+-1201566
+-358102
+-124691
+-74353
+-718
+-525
+-200
+-56
+-3
+0
+3
+129
+80947
+98525
+100526
+1111023
+9223372036854743011
+-- !result
+SELECT v2 + v3 + v6 + v7 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-15
+-2
+-2
+0
+0
+2
+14
+100
+475
+1282
+32639
+32739
+82047
+100025
+100026
+-- !result
+SELECT v1 + v4 + v5 + v6 + 68232 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+-9223372036854707572
+-15979656
+-33113
+23798
+67432
+67832
+68204
+68231
+68232
+68233
+68233
+68482
+68482
+85568
+100899
+1179343
+123509463
+2146317467
+2147519111
+9223372036854844039
+9223372036854844039
+9223372036854853839
+-- !result
+SELECT k1 - k2 + v1 as result FROM jit_cast ORDER BY result;
+-- result:
+-9223372036854775041
+-9223372036854773930
+-168011
+-101233
+-88680
+-1500
+-132
+-123
+-4
+0
+1
+4
+42
+99
+600
+1200
+2500
+76225
+6173840
+28888886
+123553722
+2147483646
+2147549182
+4295000062
+12179502040
+-- !result
+SELECT k1 + v2 - 12.123 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+-123547.123
+-74367.123
+-56813.123
+-1112.123
+-140.123
+-37.123
+-33.123
+-13.123
+-12.123
+-12.123
+-12.123
+-11.123
+-0.123
+90.877
+119.877
+269.877
+888.877
+32733.877
+9876654.877
+9999898.877
+-- !result
+SELECT k1 + v3 + v4 - 12 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+-2147450893
+-74369
+-1012
+-13
+-12
+-12
+-12
+-12
+-11
+88
+130
+742
+988
+1225
+1356
+450164
+2147483635
+9223372036854775794
+-- !result
+SELECT k1 - k2 + v1 - v2 + v3 + v4 + v5 - v6 + v7 + v8 - v9 + v10 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-51150.0
+-47151.0
+-32639.670274999997
+-9801.0
+-8.0
+1.0
+9.0
+85.0
+926.0
+1519.0
+47650.0
+2147483974.0
+-- !result
+SELECT k1 + k2 - v1 + v2 - v3 - 978342 + v4 + v5 - v6 + v8 + v9 - v10 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-2148527654.0
+-1029192.0
+-1029191.0
+-1011240.576525
+-996300.0
+-988741.0
+-978368.0
+-978364.0
+-978344.0
+-978343.0
+-978341.0
+-978061.0
+-- !result
+SELECT v1 - v3 + v5 + v6 - v9 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+-9.223372036854776e+18
+-9.223372034707358e+18
+-49750.0
+-49750.0
+-2800.0
+-1400.0
+-98.0
+-7.0
+0.0
+0.0
+7.0
+15954.0
+32668.0
+123441234.0
+2147450880.0
+9.223372036854776e+18
+9.22337203685479e+18
+-- !result
+SELECT v1 + v2 - v3 + v4 + v5 - v6 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-18576
+-2
+-2
+0
+2
+21
+150
+151
+575
+1482
+123441222
+2147418184
+9223372036854742912
+9223372036854765307
+-- !result
+SELECT k1 + k2 - v7 + v9 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+-9.223372036854771e+18
+-1111111.0
+-112200.0
+-63441.0
+-50000.0
+-50000.0
+-13569.0
+-9373.0
+-201.0
+-201.0
+-2.0
+-1.0
+0.0
+1.0
+7.0
+100.0
+123.0
+200.0
+587.0
+740.0
+1112.0
+88888.0
+168234069.0
+9.223372036854809e+18
+-- !result
+SELECT k1 + k2 + 1235 - v7 + v9 - 742 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+-9.223372036854771e+18
+-9.223372036854743e+18
+-1110618.0
+-111707.0
+-62948.0
+-49507.0
+-49507.0
+-13076.0
+-8880.0
+292.0
+292.0
+491.0
+492.0
+493.0
+494.0
+500.0
+593.0
+616.0
+693.0
+1080.0
+1233.0
+1605.0
+89381.0
+168234562.0
+-- !result
+SELECT k1 * k2 * v1 as result FROM jit_cast ORDER BY result;
+-- result:
+-9223372036854775808
+-6038333746623314734
+-3563062920787956498
+-3444906684190411320
+-2305772639395807232
+-1996975006919424
+-1202560433934336
+-39812507981745
+-77547639312
+-500000000
+-500000000
+-48000000
+-6000000
+-2058
+-2
+0
+0
+0
+0
+0
+2
+10556
+795930
+2129733194
+4611756385024081920
+-- !result
+SELECT k1 * k2 * v1 * 62.124 as result FROM jit_cast ORDER BY result;
+-- result:
+-572992764417566092296.192
+-375125445675226804535.016
+-221351720891031009481.752
+-214011382848645112843.680
+-143243819449825128480.768
+-124060075329862296.576
+-74707864397736689.664
+-2473312245857926.380
+-4817569544618.688
+-31062000000.000
+-31062000000.000
+-2981952000.000
+-372744000.000
+-127851.192
+-124.248
+0.000
+0.000
+0.000
+0.000
+0.000
+124.248
+655780.944
+49446355.320
+132307544944.056
+286500753663236065198.080
+-- !result
+SELECT k1 * k2 - v1 * v2 * v3 + v4 + v5 * v6 + v7 * v8 - v9 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-9.214365112482219e+18
+-9988690875.0
+-9988565875.0
+-2147516415.546875
+-1497472342.0
+-55123400.0
+-50015200.0
+-45.0
+-39.0
+0.0
+13209.0
+17268300.0
+23370324.0
+-- !result
+SELECT k1 * k2 - 7334 - v1 * v2 * v3 + v4 * 732 + v5 * v6 * 821 + v7 - 132 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-9214365112514339378
+-1571958037802
+-1889204066
+-1497479722
+-1064885020
+-441475766
+-168789014
+-2270489
+-1543591
+-1418591
+-183866
+-22782
+-18424
+-7466
+-- !result
+SELECT k1 * k2 - 12.124 - v1 * v2 - v3 + v4 * 74 + v5 * v6 * 472 * v8 - v9 - 7790237 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-158921645735.67087
+-33508329289.124
+-7827775.124
+-7800349.124
+-7790249.124
+-7752717.124
+82868780.876
+1457326478.876
+264312181250.876
+737491190500.876
+737491191000.876
+2114551988550.876
+-- !result
+SELECT v1 - v3 * v5 * v7 - v9 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+-9.223372036854809e+18
+-3125049500.0
+-3125049500.0
+-2520001600.0
+-315000800.0
+-108101.0
+-64.0
+0.0
+0.0
+64.0
+32768.0
+123441236.0
+939656303.0
+1492143647.0
+9.223372036854776e+18
+9.223372036854776e+18
+9.22337203685478e+18
+-- !result
+SELECT v1 * v2 - v3 * v4 * v5 - v6 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-4611756385024081920
+-167507001116
+-1481294806
+-9900
+-44
+-44
+0
+36
+71498
+1965355
+7762625
+7763125
+209963300
+1680050800
+-- !result
+SELECT v1 + v2 * 568.585656 - v3 * v4 * v5 - v6 + 622 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-13835128421878929884.963968
+-473.171312
+622.000000
+1717.171312
+1717.171312
+56808.601632
+1974241.027872
+7756888.434400
+7757457.020056
+123435034.972128
+209930648.793000
+1680049446.023792
+109518317190.036032
+9223372036854709570.434400
+-- !result
+SELECT k1 * v4 - v5 + v6 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+-77777775555555
+-24381821706534
+-214748365100
+-40447978204
+-2147483647
+-250250
+-243000
+-223063
+-61500
+-10000
+-399
+-144
+-11
+0
+0
+5
+2465
+17357
+32568
+249750
+3855416321
+28958757873
+-- !result
+SELECT v1 + v2 + v3 * 124 - 854 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-9223372036854751963
+-9223372036850713682
+-1226
+-1226
+-854
+-854
+-482
+3479
+30546
+30547
+61321
+123828
+152043
+123440244
+2151545773
+-- !result
+SELECT v1 - 123.123 - v2 + v3 * 2 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-133.123
+-133.123
+-123.123
+-123.123
+-113.123
+-4.123
+975.877
+976.877
+1301.877
+2201.877
+2394.877
+123441120.877
+2147549185.877
+-- !result
+SELECT v1 * v2 + v3 + 0 + v4 - v6 * 0 + v10 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-274877906816
+-2147450880
+-50000
+-49500
+-37599
+-594
+-204
+-4
+-4
+-3
+1
+100
+49001
+-- !result
+SELECT (v1 + v2) * v3 - 1124 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-123442346
+-147970
+-21324
+-1369
+-1124
+-1124
+-1124
+-1124
+-1124
+86376
+98876
+99126
+680876
+70366592465949
+9223372036850580508
+-- !result
+SELECT (v1 * v4) - (v3 + 0) - (v5 * 0) as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+-70368744177663
+-123441233
+-3276800
+-721000
+-180500
+-125250
+-125250
+-32767
+-18788
+-917
+-9
+-3
+-3
+-3
+0
+0
+0
+-- !result
+SELECT (v2 + v4) + (v6 - 0.142) * v3 + 213 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-2147488215.914
+-3314035.914
+-1601047.000
+-400583.000
+-31422.500
+-31421.500
+-1821.970
+195.574
+201.142
+206.426
+206.426
+213.000
+1999884.600
+21403913.772
+-- !result
+SELECT v2 + v3 * v4 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-70366596694144
+-1073709184
+-1199918
+-300125
+-62600
+-62599
+-40100
+-1498
+-11
+-11
+-7
+-7
+0
+165368
+-- !result
+SELECT (v8 * v9 + v1) * (k1 - v2) as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+-1.9807040619342712e+28
+-1.180591620854849e+21
+-2.4691559012226518e+20
+-1.1107693737208564e+16
+-5494999450500.0
+-519129200.0
+-247432500.0
+-187915.0
+-55716.0
+-84.0
+0.0
+0.0
+96.0
+9675705.0
+19256832660.0
+4499999550000.0
+5675863604712.0
+70411693817836.0
+568641286373023.0
+1.8446744073659553e+21
+-- !result
+SELECT v4 + v10 - v1 * v8 + v3 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+-3.0223259306776876e+23
+-4.611686018427388e+22
+-123457523166788.0
+-32766.0
+0.0
+1.0
+10.0
+10.2468
+11.0
+1464.0
+46039.0
+299901.0
+1199801.0
+50000000.0
+50000000.0
+429496729400.0
+1.8446744073709552e+19
+-- !result
+SELECT (v2 - v5 * v1) * (v7 + v5 - v3) as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-6252175000
+-6252075125
+-1847819600
+-231137500
+-123441222
+-97047600
+-81389
+-60
+0
+0
+36
+36
+1020000
+6972235160870676
+19806738397111180466218598400
+-- !result
+SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 + 142 as result FROM jit_cast ORDER BY result;
+-- result:
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+None
+-70368744177521
+-275951615830
+-2129733061
+-1287164232
+-7712058
+-39758
+127
+131
+142
+779
+163938
+2161942
+98888017
+99887517
+-- !result
+DROP TABLE IF EXISTS `jit_cast`;
+-- result:
+-- !result
