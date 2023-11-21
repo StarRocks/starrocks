@@ -74,12 +74,12 @@ SELECT select_expr[, select_expr ...]
   > - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
   > - From v3.1 onwards, each synchronous materialized view can support more than one aggregate function for each column of the base table, for example, query statements such as `select b, sum(a), min(a) from table group by b`.
   > - From v3.1 onwards, synchronous materialized views support complex expressions for SELECT and aggregate functions, for example, query statements such as `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` or `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table`. The following restrictions are imposed on the complex expression used for synchronous materialized views:
-  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table, you may set a different alias name for a different complex expression.
+  >   - Each complex expression must have an alias and different aliases must be assigned to different complex expressions among all the synchronous materialized views of a base table. For example, query statements `select b, sum(a + 1) as sum_a from table group by b` and `select b, sum(a) as sum_a from table group by b` cannot be used to create synchronous materialized views for a same base table。 You can set different aliases for a complex expression.
   >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
 
 - WHERE (optional)
 
-  From v3.2 onwards, synchronous materialized view can support `where_expr` which can filter rows used for the materialized view.
+  From v3.2 onwards, synchronous materialized views support the WHERE clause which can filter rows used for the materialized view.
 
 - GROUP BY (optional)
 
@@ -499,78 +499,77 @@ The materialized view's schema is as follows.
 
 It can be observed that the `key` field of the k3, k4, and k5 columns is `true`, which indicates that they are the sort keys. The key field of the k6, and k7 columns is `false`, which indicates that they are not the sort keys.
 
-Example 6: Create a synchronous materialized view that contains where expression and complex expresssions.
+Example 6: Create a synchronous materialized view that contains the WHERE clause and complex expresssions.
 
 ```SQL
-
--- Base Table : user_event
+-- Create the base table: user_event
 CREATE TABLE user_event (
-    ds date   NOT NULL,
-    id  varchar(256)    NOT NULL,
-    user_id int DEFAULT NULL,
-    user_id1    varchar(256)    DEFAULT NULL,
-    user_id2    varchar(256)    DEFAULT NULL,
-    column_01   int DEFAULT NULL,
-    column_02   int DEFAULT NULL,
-    column_03   int DEFAULT NULL,
-    column_04   int DEFAULT NULL,
-    column_05   int DEFAULT NULL,
-    column_06   DECIMAL(12,2)   DEFAULT NULL,
-    column_07   DECIMAL(12,3)   DEFAULT NULL,
-    column_08   JSON   DEFAULT NULL,
-    column_09   DATETIME    DEFAULT NULL,
-    column_10   DATETIME    DEFAULT NULL,
-    column_11   DATE    DEFAULT NULL,
-    column_12   varchar(256)    DEFAULT NULL,
-    column_13   varchar(256)    DEFAULT NULL,
-    column_14   varchar(256)    DEFAULT NULL,
-    column_15   varchar(256)    DEFAULT NULL,
-    column_16   varchar(256)    DEFAULT NULL,
-    column_17   varchar(256)    DEFAULT NULL,
-    column_18   varchar(256)    DEFAULT NULL,
-    column_19   varchar(256)    DEFAULT NULL,
-    column_20   varchar(256)    DEFAULT NULL,
-    column_21   varchar(256)    DEFAULT NULL,
-    column_22   varchar(256)    DEFAULT NULL,
-    column_23   varchar(256)    DEFAULT NULL,
-    column_24   varchar(256)    DEFAULT NULL,
-    column_25   varchar(256)    DEFAULT NULL,
-    column_26   varchar(256)    DEFAULT NULL,
-    column_27   varchar(256)    DEFAULT NULL,
-    column_28   varchar(256)    DEFAULT NULL,
-    column_29   varchar(256)    DEFAULT NULL,
-    column_30   varchar(256)    DEFAULT NULL,
-    column_31   varchar(256)    DEFAULT NULL,
-    column_32   varchar(256)    DEFAULT NULL,
-    column_33   varchar(256)    DEFAULT NULL,
-    column_34   varchar(256)    DEFAULT NULL,
-    column_35   varchar(256)    DEFAULT NULL,
-    column_36   varchar(256)    DEFAULT NULL,
-    column_37   varchar(256)    DEFAULT NULL
-)
-partition by date_trunc("day", ds)
-distributed by hash(id);
+      ds date   NOT NULL,
+      id  varchar(256)    NOT NULL,
+      user_id int DEFAULT NULL,
+      user_id1    varchar(256)    DEFAULT NULL,
+      user_id2    varchar(256)    DEFAULT NULL,
+      column_01   int DEFAULT NULL,
+      column_02   int DEFAULT NULL,
+      column_03   int DEFAULT NULL,
+      column_04   int DEFAULT NULL,
+      column_05   int DEFAULT NULL,
+      column_06   DECIMAL(12,2)   DEFAULT NULL,
+      column_07   DECIMAL(12,3)   DEFAULT NULL,
+      column_08   JSON   DEFAULT NULL,
+      column_09   DATETIME    DEFAULT NULL,
+      column_10   DATETIME    DEFAULT NULL,
+      column_11   DATE    DEFAULT NULL,
+      column_12   varchar(256)    DEFAULT NULL,
+      column_13   varchar(256)    DEFAULT NULL,
+      column_14   varchar(256)    DEFAULT NULL,
+      column_15   varchar(256)    DEFAULT NULL,
+      column_16   varchar(256)    DEFAULT NULL,
+      column_17   varchar(256)    DEFAULT NULL,
+      column_18   varchar(256)    DEFAULT NULL,
+      column_19   varchar(256)    DEFAULT NULL,
+      column_20   varchar(256)    DEFAULT NULL,
+      column_21   varchar(256)    DEFAULT NULL,
+      column_22   varchar(256)    DEFAULT NULL,
+      column_23   varchar(256)    DEFAULT NULL,
+      column_24   varchar(256)    DEFAULT NULL,
+      column_25   varchar(256)    DEFAULT NULL,
+      column_26   varchar(256)    DEFAULT NULL,
+      column_27   varchar(256)    DEFAULT NULL,
+      column_28   varchar(256)    DEFAULT NULL,
+      column_29   varchar(256)    DEFAULT NULL,
+      column_30   varchar(256)    DEFAULT NULL,
+      column_31   varchar(256)    DEFAULT NULL,
+      column_32   varchar(256)    DEFAULT NULL,
+      column_33   varchar(256)    DEFAULT NULL,
+      column_34   varchar(256)    DEFAULT NULL,
+      column_35   varchar(256)    DEFAULT NULL,
+      column_36   varchar(256)    DEFAULT NULL,
+      column_37   varchar(256)    DEFAULT NULL
+  )
+  PARTITION BY date_trunc("day", ds)
+  DISTRIBUTED BY hash(id);
 
--- MV with where expression and complex expressions
-create materialized view test_mv1
-as 
-select
-ds
-,column_19 
-,column_36
-,sum(column_01) as column_01_sum
-,bitmap_union(to_bitmap( user_id)) as user_id_dist_cnt
-,bitmap_union(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1
-,bitmap_union(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2
-,bitmap_union(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3
-,bitmap_union(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4
-,bitmap_union(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
- from user_event
- where ds >= '2023-11-02'
- group by
- ds
- ,column_19
- ,column_36;
+  -- Create the materialized view with the WHERE clause and complex expresssions.
+  CREATE MATERIALIZED VIEW test_mv1
+  AS 
+  SELECT
+  ds,
+  column_19,
+  column_36,
+  sum(column_01) as column_01_sum,
+  bitmap_union(to_bitmap( user_id)) as user_id_dist_cnt,
+  bitmap_union(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,
+  bitmap_union(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,
+  bitmap_union(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,
+  bitmap_union(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,
+  bitmap_union(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
+  FROM user_event
+  WHERE ds >= '2023-11-02'
+  GROUP BY
+  ds,
+  column_19,
+  column_36;
  ```
 
 ### Examples of asynchronous materialized views
@@ -802,7 +801,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 4: Create an asynchronous materialized view which its base table's partition is string type.
+Example 4: Create a partitioned materialized view and use `str2date` to transform the STRING type partition key of the base table into the date type as for the materialized view.
 
 ``` SQL
 
@@ -828,7 +827,7 @@ CREATE TABLE `part_dates` (
 ) partition by (d_datekey);
 
 
--- CREATE MATERIALIXED VIEW  with `str2date`
+-- Create the materialied view  with `str2date`
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv` 
 PARTITION BY str2date(`d_datekey`,'%Y%m%d')
 DISTRIBUTED BY HASH(`d_date`, `d_month`, `d_month`) 
