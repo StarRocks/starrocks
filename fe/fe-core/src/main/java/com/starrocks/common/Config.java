@@ -2047,12 +2047,6 @@ public class Config extends ConfigBase {
     public static long es_state_sync_interval_second = 10;
 
     /**
-     * If set to true, StarRocks will check if the compiled and running versions of Java are compatible
-     */
-    @ConfField
-    public static boolean check_java_version = true;
-
-    /**
      * connection and socket timeout for broker client
      */
     @ConfField
