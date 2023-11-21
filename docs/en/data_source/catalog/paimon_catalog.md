@@ -8,7 +8,7 @@ StarRocks supports Paimon catalogs from v3.1 onwards.
 
 A Paimon catalog is a kind of external catalog that enables you to query data from Apache Paimon without ingestion.
 
-Also, you can directly transform and load data from Paimon by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Paimon catalogs.
+Also, you can directly transform and load data from Paimon by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Paimon catalogs.
 
 To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster needs to integrate with two important components:
 

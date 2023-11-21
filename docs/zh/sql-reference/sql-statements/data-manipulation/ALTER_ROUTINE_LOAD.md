@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-该语法用于修改已经创建的例行导入作业，且只能修改处于 **PAUSED** 状态的作业。通过 [PAUSE](../data-manipulation/PAUSE_ROUTINE_LOAD.md) 命令可以暂停导入的任务，进行 `ALTER ROUTINE LOAD` 操作。
+该语法用于修改已经创建的例行导入作业，且只能修改处于 **PAUSED** 状态的作业。通过 [PAUSE](./PAUSE_ROUTINE_LOAD.md) 命令可以暂停导入的任务，进行 `ALTER ROUTINE LOAD` 操作。
 
 ## 语法
 

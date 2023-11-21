@@ -8,7 +8,7 @@ StarRocks 从 3.1 版本开始支持 Paimon Catalog。
 
 Paimon Catalog 是一种 External Catalog。通过 Paimon Catalog，您不需要执行数据导入就可以直接查询 Apache Paimon 里的数据。
 
-此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。
+此外，您还可以基于 Paimon Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
 
 为保证正常访问 Paimon 内的数据，StarRocks 集群必须集成以下两个关键组件：
 

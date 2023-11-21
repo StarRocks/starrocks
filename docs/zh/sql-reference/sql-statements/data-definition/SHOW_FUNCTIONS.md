@@ -56,5 +56,5 @@ mysql> show builtin functions in testDb like 'year%';
 
 ## 相关 SQL
 
-* [DROP FUNCTION](./drop-function.md)
+* [DROP FUNCTION](./DROP_FUNCTION.md)
 * [Java UDF](../../sql-functions/JAVA_UDF.md)
