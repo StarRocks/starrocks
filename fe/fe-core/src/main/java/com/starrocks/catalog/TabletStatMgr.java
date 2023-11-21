@@ -50,6 +50,7 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -61,9 +62,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
+import javax.annotation.Nullable;
+import javax.xml.crypto.Data;
 
 /*
  * TabletStatMgr is for collecting tablet(replica) statistics from backends.
@@ -110,7 +115,8 @@ public class TabletStatMgr extends FrontendDaemon {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                             long version = physicalPartition.getVisibleVersion();
-                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+                                    IndexExtState.VISIBLE)) {
                                 long indexRowCount = 0L;
                                 for (Tablet tablet : index.getTablets()) {
                                     indexRowCount += tablet.getRowCount(version);
@@ -132,6 +138,9 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLocalTabletStat() {
+        if (RunMode.isSharedDataMode()) {
+            return;
+        }
         ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
@@ -186,6 +195,9 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLakeTabletStat() {
+        if (RunMode.isSharedNothingMode()) {
+            return;
+        }
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -193,28 +205,67 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
 
-            List<OlapTable> tables = Lists.newArrayList();
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        tables.add((OlapTable) table);
-                    }
+            List<Table> tables = db.getTables();
+            for (Table table : tables) {
+                if (table.isCloudNativeTableOrMaterializedView()) {
+                    updateLakeTableTabletStat(db, (OlapTable) table);
                 }
-            } finally {
-                db.readUnlock();
-            }
-
-            for (OlapTable table : tables) {
-                updateLakeTableTabletStat(db, table);
             }
         }
+    }
+
+    private Collection<PhysicalPartition> getPartitionsUnderDatabaseLock(Database db, OlapTable table) {
+        db.readLock();
+        try {
+            return table.getPhysicalPartitions();
+        } finally {
+            db.readUnlock();
+        }
+    }
+
+    private List<MaterializedIndex> getIndexesUnderDatabaseLock(Database db, PhysicalPartition partition) {
+        db.readLock();
+        try {
+            return partition.getMaterializedIndices(IndexExtState.VISIBLE);
+        } finally {
+            db.readUnlock();
+        }
+    }
+
+    @Nullable
+    private Map<Long, List<TabletInfo>> prepareTabletInfo(Database db, OlapTable table) {
+        Map<Long, List<TabletInfo>> beToTabletInfos = Maps.newHashMap();
+        Collection<PhysicalPartition> partitions = getPartitionsUnderDatabaseLock(db, table);
+        for (PhysicalPartition partition : partitions) {
+            long partitionId = partition.getId();
+            long version = partition.getVisibleVersion();
+            // partition init version is 1
+            if (version <= partitionToUpdatedVersion.getOrDefault(partitionId, 1L)) {
+                continue;
+            }
+
+            List<MaterializedIndex> indexList = getIndexesUnderDatabaseLock(db, partition);
+
+            for (MaterializedIndex index : indexList) {
+                for (Tablet tablet : index.getTablets()) {
+                    Long beId = Utils.chooseBackend((LakeTablet) tablet);
+                    if (beId == null) {
+                        return null;
+                    }
+                    TabletInfo tabletInfo = new TabletInfo();
+                    tabletInfo.tabletId = tablet.getId();
+                    tabletInfo.version = version;
+                    beToTabletInfos.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tabletInfo);
+                }
+            }
+        }
+        return beToTabletInfos;
     }
 
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     private void updateLakeTableTabletStat(Database db, OlapTable table) {
         // prepare tablet infos
-        Map<Long, List<TabletInfo>> beToTabletInfos = Maps.newHashMap();
+        Map<Long, List<TabletInfo>> beToTabletInfos = prepareTabletInfo(db, table);
         Map<Long, Long> partitionToVersion = Maps.newHashMap();
         db.readLock();
         try {
