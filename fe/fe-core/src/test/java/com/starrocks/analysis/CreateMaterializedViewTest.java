@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -63,7 +64,10 @@ import mockit.Mocked;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
@@ -72,6 +76,7 @@ import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collection;
@@ -99,6 +104,9 @@ public class CreateMaterializedViewTest {
     private static Database testDb;
     private static GlobalStateMgr currentState;
 
+    private static long startSuiteTime = 0;
+    private long startCaseTime = 0;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
@@ -110,6 +118,7 @@ public class CreateMaterializedViewTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+        startSuiteTime = Instant.now().getEpochSecond();
 
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
@@ -303,7 +312,23 @@ public class CreateMaterializedViewTest {
         testDb = currentState.getDb("test");
     }
 
-    private void dropMv(String mvName) throws Exception {
+    @AfterClass
+    public static void afterClass() throws Exception {
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
+    }
+
+    @Before
+    public void before() {
+        startCaseTime = Instant.now().getEpochSecond();
+    }
+
+    @After
+    public void after() throws Exception {
+        // cleanup mv after each case
+        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
+    }
+
+    private static void dropMv(String mvName) throws Exception {
         String sql = "drop materialized view " + mvName;
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
