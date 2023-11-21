@@ -53,6 +53,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,6 +65,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -101,6 +103,10 @@ public class View extends Table {
     @SerializedName(value = "m")
     private long sqlMode = 0L;
 
+
+    // Record the alter view time
+    public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
+
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
@@ -127,8 +133,7 @@ public class View extends Table {
     public QueryStatement getQueryStatement() {
         Preconditions.checkNotNull(inlineViewDef);
 
-        if (analyzedCache.get() == null || analyzedCache.get().getFingerprint().isEmpty() ||
-                ConnectContext.get().cannotReuseViewDef()) {
+        if (analyzedCache.get() == null || ConnectContext.get().cannotReuseViewDef()) {
             QueryStatement stmt = parseAndAnalyzeDef();
             if (ConnectContext.get().cannotReuseViewDef()) {
                 return stmt;
@@ -139,7 +144,7 @@ public class View extends Table {
 
         String latestFingerprint = createViewFingerprint();
         ViewCache oldCache = analyzedCache.get();
-        if (!latestFingerprint.equals(oldCache.getFingerprint())) {
+        if (latestFingerprint.isEmpty() || !StringUtils.equals(latestFingerprint, oldCache.getFingerprint())) {
             QueryStatement stmt = parseAndAnalyzeDef();
             analyzedCache.compareAndSet(oldCache, new ViewCache(latestFingerprint, stmt));
         }
@@ -228,9 +233,18 @@ public class View extends Table {
         StringJoiner joiner = new StringJoiner(", ", "[", "]");
         Set<TableIdentifier> tblIds = getTableIdentifiers();
         for (TableIdentifier tableId : tblIds) {
-            Optional<OlapTable> table = resolveOlapTable(tableId);
+            Optional<Table> table = resolveTable(tableId);
             if (table.isPresent()) {
-                joiner.add(table.get().getId() + "-" + table.get().lastSchemaUpdateTime.get());
+                if (table.get().isView()) {
+                    joiner.add(table.get().getId() + "-" + ((View) table.get()).lastSchemaUpdateTime.get());
+                } else if (table.get().isNativeTableOrMaterializedView()) {
+                    joiner.add(table.get().getId() + "-" + ((OlapTable) table.get()).lastSchemaUpdateTime.get());
+                } else {
+                    // external table set a cache ttl of 180s
+                    long now = System.currentTimeMillis();
+                    now = now - now % (1000 * 60 * 3) + (1000 * 60 * 3);
+                    joiner.add(tableId + "-" + now);
+                }
             } else {
                 return "";
             }
@@ -238,7 +252,7 @@ public class View extends Table {
         return joiner.toString();
     }
 
-    public Optional<OlapTable> resolveOlapTable(TableIdentifier identifier) {
+    public Optional<Table> resolveTable(TableIdentifier identifier) {
         TableName tableName = identifier.getTableName();
         if (identifier.isSyncMv()) {
             return Optional.empty();
@@ -267,16 +281,15 @@ public class View extends Table {
             return Optional.empty();
         }
 
-        if (!table.isNativeTableOrMaterializedView()) {
-            return Optional.empty();
-        }
-        OlapTable olapTable = (OlapTable) table;
-        if (olapTable.getState() == OlapTable.OlapTableState.RESTORE ||
-                olapTable.getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD) {
-            return Optional.empty();
+        if (table.isNativeTableOrMaterializedView()) {
+            OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getState() == OlapTable.OlapTableState.RESTORE ||
+                    olapTable.getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD) {
+                return Optional.empty();
+            }
         }
 
-        return Optional.of(olapTable);
+        return Optional.of(table);
     }
 
 
