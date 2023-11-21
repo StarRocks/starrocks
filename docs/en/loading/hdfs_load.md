@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 StarRocks provides the following options for loading data from HDFS:
 
-- Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
+- Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
 - Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
 - Continuous asynchronous loading using [Pipe](../sql-reference/sql-statements/data-manipulation/CREATE_PIPE.md)
 
