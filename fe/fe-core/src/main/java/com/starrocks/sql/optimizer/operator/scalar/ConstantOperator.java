@@ -469,20 +469,25 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return castTo(type);
         }
 
-        BigDecimal decimal = new BigDecimal(value.toString());
-        ScalarType scalarType = (ScalarType) type;
         try {
-            DecimalLiteral.checkLiteralOverflowInDecimalStyle(decimal, scalarType);
-        } catch (AnalysisException ignored) {
-            return Optional.of(ConstantOperator.createNull(type));
-        }
-        int realScale = DecimalLiteral.getRealScale(decimal);
-        int scale = scalarType.getScalarScale();
-        if (scale <= realScale) {
-            decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
-        }
+            BigDecimal decimal = new BigDecimal(value.toString());
+            ScalarType scalarType = (ScalarType) type;
+            if (!DecimalLiteral.checkLiteralOverflowInDecimalStyle(decimal, scalarType)) {
+                return Optional.of(ConstantOperator.createNull(type));
+            }
+            int realScale = DecimalLiteral.getRealScale(decimal);
+            int scale = scalarType.getScalarScale();
+            if (scale <= realScale) {
+                decimal = decimal.setScale(scale, RoundingMode.HALF_UP);
+            }
 
-        return Optional.of(ConstantOperator.createDecimal(decimal, type));
+            if (scalarType.getScalarScale() == 0 && scalarType.getScalarPrecision() == 0) {
+                return Optional.empty();
+            }
+            return Optional.of(ConstantOperator.createDecimal(decimal, type));
+        } catch (Exception ignore) {
+            return Optional.empty();
+        }
     }
 
     public Optional<ConstantOperator> castTo(Type desc) {
