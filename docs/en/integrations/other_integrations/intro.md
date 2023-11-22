@@ -24,7 +24,7 @@ This topic introduces the other tools and systems with which StarRocks can integ
 
 [Apache Kafka](../../loading/RoutineLoad.md)
 
-[AutoMQ Kafka](../../automq-routine-load.md)
+[AutoMQ Kafka](../../loading/automq-routine-load.md)
 
 ## Cluster management
 
