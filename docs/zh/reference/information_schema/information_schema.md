@@ -57,7 +57,7 @@ StarRocks Information Schema 中包含以下视图：
 | [global_variables](./global_variables.md)                       | `global_variables` 提供有关全局变量的信息。                  |
 | [key_column_usage](./key_column_usage.md)                       | `key_column_usage` 用于识别受某些唯一、主键或外键约束限制的所有列。 |
 | [load_tracking_logs](./load_tracking_logs.md)                   | 提供导入作业相关的错误信息。                                 |
-| [loads](./loads.md)                                             | 提供导入作业的结果信息。当前仅支持查看 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [Insert](../../sql-reference/sql-statements/data-manipulation/insert.md) 导入作业的结果信息。 |
+| [loads](./loads.md)                                             | 提供导入作业的结果信息。当前仅支持查看 [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入作业的结果信息。 |
 | [materialized_views](./materialized_views.md)                   | `materialized_views` 提供有关所有异步物化视图的信息。        |
 | [partitions](./partitions.md)                                   | `partitions` 提供有关表分区的信息。                          |
 | [pipe_files](./pipe_files.md)                                   | `pipe_files` 提供指定 Pipe 下数据文件的导入状态。            |
