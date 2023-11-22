@@ -68,10 +68,14 @@ Parameters:
 
 * **EXTERNAL:** This keyword indicates that the table to be created is an external table.
 * **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
-* **port:**  This parameter specifies the RPC port of the leader FE node or the bRPC port of the BE node in the destination StarRocks cluster.
+* **port:**  This parameter specifies the RPC port of the FE node of the destination StarRocks cluster.
 
-  * For the RPC port of the leader FE node, see `rpc_port` in the FE configuration file **fe/fe.conf**. The default RPC port is `9020`.
-  * For the bRPC port of the BE node, see `brpc_port` in the BE configuration file **be/be.conf**. The default bRPC port is `8060`.
+  :::note
+
+  To ensure that the external cluster to which the StarRocks external tables belong can access the destination StarRocks cluster, you must configure your network and firewall to allow access to the following ports:
+
+  * The RPC port of the FE node. See `rpc_port` in the FE configuration file **fe/fe.conf**. The default RPC port is `9020`.
+  * The bRPC port of the BE node. See `brpc_port` in the BE configuration file **be/be.conf**. The default bRPC port is `8060`.
 
 * **user:** This parameter specifies the username used to access the destination StarRocks cluster.
 * **password:** This parameter specifies the password used to access the destination StarRocks cluster.
