@@ -27,6 +27,7 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -71,11 +72,22 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
 
+<<<<<<< HEAD
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
             Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     new TableName(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName()));
         } catch (AccessDeniedException e) {
+=======
+        Table table;
+        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        try {
+            table = MetaUtils.getTable(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(),
+                    analyzeStatus.getTableName());
+            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
+        } catch (AccessDeniedException | SemanticException e) {
+>>>>>>> 2b229b4781 ([BugFix] Fix show analyze NPE when table has deleted (#35504))
             return null;
         }
 
