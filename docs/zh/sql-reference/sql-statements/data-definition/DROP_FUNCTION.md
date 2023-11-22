@@ -32,5 +32,5 @@ DROP FUNCTION my_add(INT, INT)
 
 ## 相关 SQL
 
-- [SHOW FUNCTIONS](./show-functions.md)
+- [SHOW FUNCTIONS](./SHOW_FUNCTIONS.md)
 - [Java UDF](../../sql-functions/JAVA_UDF.md)

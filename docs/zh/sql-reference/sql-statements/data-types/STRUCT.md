@@ -80,7 +80,7 @@ select named_struct('a', 1, 'b', 2, 'c', 3, 'd', 4) as numbers; -- 返回 {"a":1
 
 ## 导入 STRUCT 类型数据
 
-可以使用两种方式导入 STRUCT 数据到 StarRocks：[INSERT INTO](../data-manipulation/insert.md) 和 [ORC/Parquet 文件导入](../data-manipulation/BROKER_LOAD.md)。
+可以使用两种方式导入 STRUCT 数据到 StarRocks：[INSERT INTO](../data-manipulation/INSERT.md) 和 [ORC/Parquet 文件导入](../data-manipulation/BROKER_LOAD.md)。
 
 导入过程中 StarRocks 会对重复的 Key 值进行删除。
 
