@@ -827,7 +827,7 @@ CREATE TABLE `part_dates` (
 ) partition by (d_datekey);
 
 
--- Create the materialied view  with `str2date`
+-- Create the materialied view  with `str2date`.
 CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv` 
 PARTITION BY str2date(`d_datekey`,'%Y%m%d')
 DISTRIBUTED BY HASH(`d_date`, `d_month`, `d_month`) 
