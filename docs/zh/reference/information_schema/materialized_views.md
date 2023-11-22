@@ -27,7 +27,7 @@ displayed_sidebar: "Chinese"
 | LAST_REFRESH_START_PARTITION         | 最近一次刷新任务的开始分区。                     |
 | LAST_REFRESH_END_PARTITION           | 最近一次刷新任务的结束分区。                     |
 | LAST_REFRESH_BASE_REFRESH_PARTITIONS | 最近一次刷新任务的基表分区。                     |
-| LAST_REFRESH_MV_REFRESH_PARTITIONS   | 最近一次刷新任务的刷新的分区。                   |
+| LAST_REFRESH_MV_REFRESH_PARTITIONS   | 最近一次刷新任务刷新的分区。                   |
 | LAST_REFRESH_ERROR_CODE              | 最近一次刷新任务的错误码。                       |
 | LAST_REFRESH_ERROR_MESSAGE           | 最近一次刷新任务的错误信息。                     |
 | TABLE_ROWS                           | 物化视图的数据行数，后台统计的近似值。           |
