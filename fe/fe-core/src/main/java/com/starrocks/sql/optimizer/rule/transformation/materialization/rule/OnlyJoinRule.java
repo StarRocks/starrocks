@@ -15,6 +15,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -33,5 +35,13 @@ public class OnlyJoinRule extends BaseMaterializedViewRewriteRule {
 
     public static OnlyJoinRule getInstance() {
         return INSTANCE;
+    }
+
+    private static int counter = 0;
+
+    @Override
+    public boolean check(OptExpression optExpr, OptimizerContext context) {
+        System.err.println("OnlyJoinRule check " + counter++);
+        return super.check(optExpr, context);
     }
 }
