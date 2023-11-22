@@ -74,7 +74,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-2.4
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.4')
