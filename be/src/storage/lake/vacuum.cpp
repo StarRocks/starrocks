@@ -23,6 +23,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "gutil/strings/util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -34,7 +35,6 @@
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
-#include "gutil/strings/util.h"
 
 namespace starrocks::lake {
 
@@ -86,7 +86,7 @@ int64_t calculate_retry_delay(int64_t attempted_retries) {
     return min_delay * (1 << attempted_retries);
 }
 
-Status delete_files_with_retry(FileSystem*fs, const std::vector<std::string>& paths) {
+Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& paths) {
     for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
         auto st = fs->delete_files(paths);
         if (!st.ok() && should_retry(st, attempted_retries)) {
