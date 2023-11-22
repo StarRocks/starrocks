@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "block_cache/cache_handle.h"
 #include "block_cache/cache_options.h"
 #include "block_cache/io_buffer.h"
 #include "common/status.h"
