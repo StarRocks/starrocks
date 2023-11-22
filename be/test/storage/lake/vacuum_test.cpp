@@ -1301,4 +1301,32 @@ TEST(LakeVacuumTest2, test_delete_files_retry3) {
     EXPECT_EQ(0, attempts);
 }
 
+TEST(LakeVacuumTest2, test_delete_files_retry4) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+
+    int attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        if (attempts++ < 2) {
+            auto st = (Status*)arg;
+            EXPECT_TRUE(st->ok()) << *st;
+            st->update(Status::ResourceBusy(""));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto future = delete_files_callable({"test_vacuum_delete_files_retry.txt"});
+    ASSERT_TRUE(future.valid());
+    ASSERT_TRUE(future.get().ok());
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files_retry.txt"));
+    EXPECT_GT(attempts, 1);
+}
+
 } // namespace starrocks::lake

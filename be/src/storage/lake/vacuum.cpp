@@ -77,6 +77,9 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     if (attempted_retries >= config::lake_vacuum_retry_max_attempts) {
         return false;
     }
+    if (st.is_resource_busy()) {
+        return true;
+    }
     Slice message = st.message();
     return MatchPattern(StringPiece(message.data, message.size), config::lake_vacuum_retry_pattern);
 }
