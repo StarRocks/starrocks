@@ -49,6 +49,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -245,6 +246,11 @@ public class SystemHandler extends AlterHandler {
 
         if (decommissionBackends.isEmpty()) {
             LOG.info("No backends will be decommissioned.");
+            return decommissionBackends;
+        }
+
+        // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
+        if (RunMode.isSharedDataMode()) {
             return decommissionBackends;
         }
 

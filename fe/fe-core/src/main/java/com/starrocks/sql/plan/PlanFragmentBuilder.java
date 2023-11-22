@@ -325,7 +325,7 @@ public class PlanFragmentBuilder {
 
     private static boolean enableComputeNode(ExecPlan execPlan) {
         boolean preferComputeNode = execPlan.getConnectContext().getSessionVariable().isPreferComputeNode();
-        if (preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (preferComputeNode || RunMode.isSharedDataMode()) {
             return true;
         }
         return false;
@@ -1428,7 +1428,7 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
-                scanNode.assignBackends();
+                scanNode.assignNodes();
             } catch (UserException e) {
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }

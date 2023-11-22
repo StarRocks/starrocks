@@ -45,17 +45,14 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionStatus;
 import io.netty.handler.codec.http.HttpMethod;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 public class TransactionLoadAction extends RestBaseAction {
@@ -208,7 +205,7 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    nodeID = getBackendOrComputeId();
+                    nodeID = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
                     // txnNodeMap is LRU cache, it atomic remove unused entry
                     txnNodeMap.put(label, nodeID);
                 } else if (channelIdStr == null) {
@@ -299,20 +296,5 @@ public class TransactionLoadAction extends RestBaseAction {
         redirectTo(request, response, redirectAddr);
     }
 
-    private static Long getBackendOrComputeId() throws UserException {
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (CollectionUtils.isNotEmpty(backendIds)) {
-            return backendIds.get(0);
-        }
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
-            throw new UserException("No backend alive.");
-        }
-        List<Long> computeNodes = GlobalStateMgr.getCurrentSystemInfo().seqChooseComputeNodes(1, true,
-                false);
-        if (CollectionUtils.isNotEmpty(computeNodes)) {
-            return computeNodes.get(0);
-        }
-        throw new UserException("No backend or compute node alive.");
-    }
 }
 
