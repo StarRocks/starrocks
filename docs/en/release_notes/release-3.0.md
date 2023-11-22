@@ -122,7 +122,11 @@ Release date: June 1, 2023
 ### Improvements
 
 - Shared-data clusters support using StarRocks external tables to synchronize data with another StarRocks cluster.
+<<<<<<< HEAD
 - Added `load_tracking_logs` to [Information Schema](../administration/information_schema.md#loadtrackinglogs) to record recent loading errors.
+=======
+- Added `load_tracking_logs` to [Information Schema](../reference/information_schema/load_tracking_logs.md) to record recent loading errors.
+>>>>>>> b10e61db39 ([Doc] Renovate Information Schema (#35412))
 - Ignores special characters in CREATE TABLE statements. [#23885](https://github.com/StarRocks/starrocks/pull/23885)
 
 ### Bug Fixes
