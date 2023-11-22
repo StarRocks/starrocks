@@ -44,6 +44,8 @@ message PublishVersionResponse {
 message AbortTxnRequest {
     repeated int64 tablet_ids = 1;
     repeated int64 txn_ids = 2;    
+    // Whether need to clean up the txn logs
+    optional bool skip_cleanup = 3;
 }
 
 message AbortTxnResponse {

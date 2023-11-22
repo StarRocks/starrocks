@@ -362,6 +362,10 @@ public class TransactionState implements Writable {
                 transactionStatus == TransactionStatus.COMMITTED;
     }
 
+    public Set<TabletCommitInfo> getTabletCommitInfos() {
+        return tabletCommitInfos;
+    }
+
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
         this.tabletCommitInfos = Sets.newHashSet();
         this.tabletCommitInfos.addAll(infos);
