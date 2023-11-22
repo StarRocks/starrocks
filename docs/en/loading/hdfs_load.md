@@ -459,11 +459,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-<<<<<<< HEAD
-For information about the fields in the return results, see [Information Schema > loads](../reference/information_schema/loads.md).
-=======
 Create a table by hand (we recommend that the table have the same schema as the Parquet file you want to load from HDFS):
->>>>>>> d8545ee5aa48e43e7f8d360c8b638ddda170a943
 
 ```SQL
 CREATE TABLE user_behavior_replica
