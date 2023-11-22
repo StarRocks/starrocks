@@ -14,7 +14,7 @@ The following fields are provided in `task_runs`:
 | TASK_NAME     | Name of the task.                                            |
 | CREATE_TIME   | Time when the task was created.                               |
 | FINISH_TIME   | Time when the task finished.                                 |
-| STATE         | State of the task, including PENDING, RUNNING, FAILED, and SUCCESS. |
+| STATE         | State of the task. Valid values: `PENDING`, `RUNNING`, `FAILED`, and `SUCCESS`. |
 | DATABASE      | Database where the task belongs.                             |
 | DEFINITION    | SQL definition of the task.                                  |
 | EXPIRE_TIME   | Time when the task expires.                                  |
