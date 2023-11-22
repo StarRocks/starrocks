@@ -107,6 +107,8 @@ Parameters:
   * The RPC port of the FE node. See `rpc_port` in the FE configuration file **fe/fe.conf**. The default RPC port is `9020`.
   * The bRPC port of the BE node. See `brpc_port` in the BE configuration file **be/be.conf**. The default bRPC port is `8060`.
 
+  :::
+
 * **user:** This parameter specifies the username used to access the destination StarRocks cluster.
 * **password:** This parameter specifies the password used to access the destination StarRocks cluster.
 * **database:** This parameter specifies the database to which the destination table belongs.

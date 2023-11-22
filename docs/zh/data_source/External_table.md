@@ -112,6 +112,8 @@ insert into external_t select * from other_table;
   * FE 的 RPC 访问端口，可参考配置文件 **fe/fe.conf** 中的 `rpc_port` 配置取值，默认为 `9020`。
   * BE 的 bRPC 访问端口，可参考配置文件 **be/be.conf** 中的 `brpc_port` 配置取值，默认为 `8060`。
 
+  :::
+
 * **user**：该属性描述目标表所属 StarRocks 集群的访问用户名。
 * **password**：该属性描述目标表所属 StarRocks 集群的访问密码。
 * **database**：该属性描述目标表所属数据库名称。
