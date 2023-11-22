@@ -44,7 +44,7 @@ jobs:
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          github_token: ${{ secrets.PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: documentation
 
   markdownlint:
@@ -105,7 +105,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
-      GITHUB_TOKEN: ${{ secrets.PAT }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Set Body
         run: |
