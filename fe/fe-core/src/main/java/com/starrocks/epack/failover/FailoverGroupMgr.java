@@ -10,10 +10,19 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
@@ -29,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Map;
 
 public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessable {
@@ -83,33 +93,145 @@ public class FailoverGroupMgr extends FrontendDaemon implements GsonPostProcessa
         GlobalStateMgr.getServingState().getEditLog().logCreateFailoverGroup(failoverGroup);
     }
 
-    public FailoverGroup getFailoverGroup(long id) throws MetaNotFoundException {
-        FailoverGroup failoverGroup = idToFailoverGroup.get(id);
+    public void dropFailoverGroup(DropFailoverGroupStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.remove(stmt.getFailoverGroupName());
         if (failoverGroup == null) {
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Failover group " + id + " not found");
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
         }
-        return failoverGroup;
+
+        boolean result = idToFailoverGroup.remove(failoverGroup.getId(), failoverGroup);
+        Preconditions.checkState(result);
+
+        // TODO: Cancel running jobs in failover group
+
+        GlobalStateMgr.getServingState().getEditLog().logDropFailoverGroup(failoverGroup.getId());
+        LOG.info("Failover group {} is dropped, cancel all running replication jobs", stmt.getFailoverGroupName());
     }
 
-    public FailoverGroup getFailoverGroup(String name) throws MetaNotFoundException {
-        FailoverGroup failoverGroup = nameToFailoverGroup.get(name);
+    public void alterFailoverGroupSet(AlterFailoverGroupSetStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
         if (failoverGroup == null) {
-            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
-                    "Failover group " + name + " not found");
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
         }
-        return failoverGroup;
+
+        failoverGroup.alterFailoverGroupSet(stmt);
+    }
+
+    public void alterFailoverGroupAdd(AlterFailoverGroupAddStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
+        if (failoverGroup == null) {
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
+        }
+
+        failoverGroup.alterFailoverGroupAdd(stmt);
+    }
+
+    public void alterFailoverGroupRemove(AlterFailoverGroupRemoveStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
+        if (failoverGroup == null) {
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
+        }
+
+        failoverGroup.alterFailoverGroupRemove(stmt);
+    }
+
+    public void alterFailoverGroupRefresh(AlterFailoverGroupRefreshStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
+        if (failoverGroup == null) {
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
+        }
+
+        failoverGroup.refresh();
+    }
+
+    public void alterFailoverGroupPrimary(AlterFailoverGroupPrimaryStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
+        if (failoverGroup == null) {
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
+        }
+
+        failoverGroup.promoteToPrimary();
+    }
+
+    public void alterFailoverGroupSuspend(AlterFailoverGroupSuspendStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
+        if (failoverGroup == null) {
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
+        }
+
+        failoverGroup.suspend();
+    }
+
+    public void alterFailoverGroupResume(AlterFailoverGroupResumeStmt stmt) throws DdlException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(stmt.getFailoverGroupName());
+        if (failoverGroup == null) {
+            if (stmt.getIfExists()) {
+                return;
+            }
+            LOG.warn("Failover group {} not found", stmt.getFailoverGroupName());
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_FAILOVER_GROUP, stmt.getFailoverGroupName());
+        }
+
+        failoverGroup.resume();
+    }
+
+    public FailoverGroup getFailoverGroup(long id) {
+        return idToFailoverGroup.get(id);
+    }
+
+    public FailoverGroup getFailoverGroup(String name) {
+        return nameToFailoverGroup.get(name);
+    }
+
+    public Collection<FailoverGroup> getFailoverGroups() {
+        return idToFailoverGroup.values();
     }
 
     public TFailoverGroupHandshakeResponse handleHandshakeRequest(TFailoverGroupHandshakeRequest request)
-            throws MetaNotFoundException {
-        FailoverGroup failoverGroup = getFailoverGroup(request.getFailover_group_name());
+            throws UserException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(request.getFailover_group_name());
+        if (failoverGroup == null) {
+            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
+                    "Failover group " + request.getFailover_group_name() + " not found");
+        }
         return failoverGroup.handleHandshakeRequest(request);
     }
 
     public TFailoverGroupRequestMetaResponse handleRequestMetaRequest(TFailoverGroupRequestMetaRequest request)
-            throws MetaNotFoundException, IOException {
-        FailoverGroup failoverGroup = getFailoverGroup(request.getFailover_group_name());
+            throws UserException, IOException {
+        FailoverGroup failoverGroup = nameToFailoverGroup.get(request.getFailover_group_name());
+        if (failoverGroup == null) {
+            throw new MetaNotFoundException(InternalErrorCode.META_NOT_FOUND_ERR,
+                    "Failover group " + request.getFailover_group_name() + " not found");
+        }
         return failoverGroup.handleRequestMetaRequest(request);
     }
 

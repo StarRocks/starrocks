@@ -31,6 +31,7 @@ public enum CaseSensibility {
     VARIABLES(true),
     RESOURCE(true),
     WAREHOUSE(true),
+    FAILOVER_GROUP(true),
     CONFIG(true),
     STORAGEVOLUME(true);
 

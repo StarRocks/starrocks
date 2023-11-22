@@ -47,6 +47,13 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -58,6 +65,8 @@ import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
@@ -69,6 +78,7 @@ import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowNodesStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
@@ -986,6 +996,46 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropFailoverGroupStatement(DropFailoverGroupStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowFailoverGroupsStatement(ShowFailoverGroupsStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitDescribeFailoverGroupStatement(DescribeFailoverGroupStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -2,8 +2,18 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -24,13 +34,13 @@ public class FailoverGroupAnalyzerTest {
     public void testAnalyzeCreatePrimaryFailoverGroup() {
         CreatePrimaryFailoverGroupStmt stmt = (CreatePrimaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP test_group " +
-                    "CATALOGS = test_catalog " +
-                    "DATABASES = test_db, test_catalog.test_db " +
-                    "TABLES = test_table, test_db.test_table, test_catalog.test_db.test_table " +
-                    "MEMBERS = " +
+                        "CATALOGS = test_catalog " +
+                        "DATABASES = test_db, test_catalog.test_db " +
+                        "TABLES = test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "MEMBERS = " +
                         "'test_member1:SELF'," +
                         "'test_member2:192.168.0.1:9090'" +
-                    "SCHEDULE = '1h'");
+                        "SCHEDULE = '1h'");
 
         Assert.assertEquals("test_group", stmt.getFailoverGroupName());
 
@@ -67,9 +77,9 @@ public class FailoverGroupAnalyzerTest {
 
         analyzeFail(
                 "CREATE FAILOVER GROUP test_group " +
-                    "MEMBERS = " +
+                        "MEMBERS = " +
                         "'test_member1:SELF', ''" +
-                    "SCHEDULE = '1h'",
+                        "SCHEDULE = '1h'",
                 "Member is empty");
     }
 
@@ -77,14 +87,274 @@ public class FailoverGroupAnalyzerTest {
     public void testAnalyzeCreateSecondaryFailoverGroup() {
         CreateSecondaryFailoverGroupStmt stmt = (CreateSecondaryFailoverGroupStmt) analyzeSuccess(
                 "CREATE FAILOVER GROUP test_group " +
-                    "AS REPLICA OF '192.168.0.1:9090'");
+                        "AS REPLICA OF '192.168.0.1:9090'");
 
         Assert.assertEquals("test_group", stmt.getFailoverGroupName());
         Assert.assertEquals("192.168.0.1:9090", stmt.getPrimaryMember());
 
         analyzeFail(
                 "CREATE FAILOVER GROUP test_group " +
-                    "AS REPLICA OF ''",
+                        "AS REPLICA OF ''",
                 "Primary member is empty");
+    }
+
+    @Test
+    public void testAnalyzeDropFailoverGroup() {
+        DropFailoverGroupStmt stmt1 = (DropFailoverGroupStmt) analyzeSuccess(
+                "DROP FAILOVER GROUP test_group1");
+        Assert.assertEquals(false, stmt1.getIfExists());
+        Assert.assertEquals("test_group1", stmt1.getFailoverGroupName());
+
+        DropFailoverGroupStmt stmt2 = (DropFailoverGroupStmt) analyzeSuccess(
+                "DROP FAILOVER GROUP IF EXISTS test_group2");
+        Assert.assertEquals(true, stmt2.getIfExists());
+        Assert.assertEquals("test_group2", stmt2.getFailoverGroupName());
+
+        analyzeFail(
+                "DROP FAILOVER GROUP ''",
+                "Failover group name is empty");
+    }
+
+    @Test
+    public void testAnalyzeShowFailoverGroup() {
+        analyzeSuccess("SHOW FAILOVER GROUPS");
+
+        ShowFailoverGroupsStmt stmt1 = (ShowFailoverGroupsStmt) analyzeSuccess(
+                "SHOW FAILOVER GROUPS LIKE 'test_group1'");
+        Assert.assertEquals("test_group1", stmt1.getPattern());
+
+        analyzeFail(
+                "SHOW FAILOVER GROUPS LIKE ''",
+                "Failover group pattern is empty");
+    }
+
+    @Test
+    public void testAnalyzeDescribeFailoverGroup() {
+        DescribeFailoverGroupStmt stmt1 = (DescribeFailoverGroupStmt) analyzeSuccess(
+                "DESCRIBE FAILOVER GROUP test_group1");
+        Assert.assertEquals("test_group1", stmt1.getFailoverGroupName());
+
+        analyzeFail(
+                "DESCRIBE FAILOVER GROUP ''",
+                "Failover group name is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupSet() {
+        AlterFailoverGroupSetStmt stmt = (AlterFailoverGroupSetStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group SET " +
+                        "CATALOGS = test_catalog " +
+                        "DATABASES = test_db, test_catalog.test_db " +
+                        "TABLES = test_table, test_db.test_table, test_catalog.test_db.test_table " +
+                        "MEMBERS = " +
+                        "'test_member1:SELF'," +
+                        "'test_member2:192.168.0.1:9090'" +
+                        "SCHEDULE = '1h'");
+
+        Assert.assertEquals("test_group", stmt.getFailoverGroupName());
+
+        Assert.assertNotNull(stmt.getCatalogNames());
+        Assert.assertEquals(1, stmt.getCatalogNames().size());
+        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+
+        Assert.assertNotNull(stmt.getDatabaseNames());
+        Assert.assertEquals(2, stmt.getDatabaseNames().size());
+        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getTableNames());
+        Assert.assertEquals(3, stmt.getTableNames().size());
+        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getMembers());
+        Assert.assertEquals(2, stmt.getMembers().size());
+        Assert.assertEquals("test_member1:SELF", stmt.getMembers().get(0));
+        Assert.assertEquals("test_member2:192.168.0.1:9090", stmt.getMembers().get(1));
+
+        Assert.assertNotNull(stmt.getSchedule());
+        Assert.assertEquals("1h", stmt.getSchedule());
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP test_group SET " +
+                        "MEMBERS = " +
+                        "'test_member1:SELF', ''",
+                "Member is empty");
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP test_group SET " +
+                        "SCHEDULE = ''",
+                "Schedule is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupAdd() {
+        AlterFailoverGroupAddStmt stmt = (AlterFailoverGroupAddStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group ADD " +
+                        "test_catalog TO CATALOGS " +
+                        "test_db, test_catalog.test_db TO DATABASES " +
+                        "test_table, test_db.test_table, test_catalog.test_db.test_table TO TABLES " +
+                        "'test_member1:SELF'," +
+                        "'test_member2:192.168.0.1:9090' " +
+                        "TO MEMBERS ");
+
+        Assert.assertEquals("test_group", stmt.getFailoverGroupName());
+
+        Assert.assertNotNull(stmt.getCatalogNames());
+        Assert.assertEquals(1, stmt.getCatalogNames().size());
+        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+
+        Assert.assertNotNull(stmt.getDatabaseNames());
+        Assert.assertEquals(2, stmt.getDatabaseNames().size());
+        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getTableNames());
+        Assert.assertEquals(3, stmt.getTableNames().size());
+        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getMembers());
+        Assert.assertEquals(2, stmt.getMembers().size());
+        Assert.assertEquals("test_member1:SELF", stmt.getMembers().get(0));
+        Assert.assertEquals("test_member2:192.168.0.1:9090", stmt.getMembers().get(1));
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP test_group ADD " +
+                        "'test_member1:SELF', '' TO MEMBERS",
+                "Member is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupRemove() {
+        AlterFailoverGroupRemoveStmt stmt = (AlterFailoverGroupRemoveStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group REMOVE " +
+                        "test_catalog FROM CATALOGS " +
+                        "test_db, test_catalog.test_db FROM DATABASES " +
+                        "test_table, test_db.test_table, test_catalog.test_db.test_table FROM TABLES " +
+                        "'test_member1:SELF'," +
+                        "'test_member2:192.168.0.1:9090' " +
+                        "FROM MEMBERS ");
+
+        Assert.assertEquals("test_group", stmt.getFailoverGroupName());
+
+        Assert.assertNotNull(stmt.getCatalogNames());
+        Assert.assertEquals(1, stmt.getCatalogNames().size());
+        Assert.assertEquals("test_catalog", stmt.getCatalogNames().get(0));
+
+        Assert.assertNotNull(stmt.getDatabaseNames());
+        Assert.assertEquals(2, stmt.getDatabaseNames().size());
+        Assert.assertEquals("default_catalog", stmt.getDatabaseNames().get(0).getCatalog());
+        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(0).getDatabase());
+        Assert.assertEquals("test_catalog", stmt.getDatabaseNames().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getDatabaseNames().get(1).getDatabase());
+
+        Assert.assertNotNull(stmt.getTableNames());
+        Assert.assertEquals(3, stmt.getTableNames().size());
+        Assert.assertEquals("default_catalog", stmt.getTableNames().get(0).getCatalog());
+        Assert.assertEquals("test", stmt.getTableNames().get(0).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(0).getTbl());
+        Assert.assertEquals("default_catalog", stmt.getTableNames().get(1).getCatalog());
+        Assert.assertEquals("test_db", stmt.getTableNames().get(1).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(1).getTbl());
+        Assert.assertEquals("test_catalog", stmt.getTableNames().get(2).getCatalog());
+        Assert.assertEquals("test_db", stmt.getTableNames().get(2).getDb());
+        Assert.assertEquals("test_table", stmt.getTableNames().get(2).getTbl());
+
+        Assert.assertNotNull(stmt.getMembers());
+        Assert.assertEquals(2, stmt.getMembers().size());
+        Assert.assertEquals("test_member1:SELF", stmt.getMembers().get(0));
+        Assert.assertEquals("test_member2:192.168.0.1:9090", stmt.getMembers().get(1));
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP test_group REMOVE " +
+                        "'test_member1:SELF', '' FROM MEMBERS",
+                "Member is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupRefresh() {
+        AlterFailoverGroupRefreshStmt stmt1 = (AlterFailoverGroupRefreshStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group1 REFRESH");
+        Assert.assertEquals(false, stmt1.getIfExists());
+        Assert.assertEquals("test_group1", stmt1.getFailoverGroupName());
+
+        AlterFailoverGroupRefreshStmt stmt2 = (AlterFailoverGroupRefreshStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP IF EXISTS test_group2 REFRESH");
+        Assert.assertEquals(true, stmt2.getIfExists());
+        Assert.assertEquals("test_group2", stmt2.getFailoverGroupName());
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP '' REFRESH",
+                "Failover group name is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupPrimary() {
+        AlterFailoverGroupPrimaryStmt stmt1 = (AlterFailoverGroupPrimaryStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group1 PRIMARY");
+        Assert.assertEquals(false, stmt1.getIfExists());
+        Assert.assertEquals("test_group1", stmt1.getFailoverGroupName());
+
+        AlterFailoverGroupPrimaryStmt stmt2 = (AlterFailoverGroupPrimaryStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP IF EXISTS test_group2 PRIMARY");
+        Assert.assertEquals(true, stmt2.getIfExists());
+        Assert.assertEquals("test_group2", stmt2.getFailoverGroupName());
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP '' PRIMARY",
+                "Failover group name is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupSuspend() {
+        AlterFailoverGroupSuspendStmt stmt1 = (AlterFailoverGroupSuspendStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group1 SUSPEND");
+        Assert.assertEquals(false, stmt1.getIfExists());
+        Assert.assertEquals("test_group1", stmt1.getFailoverGroupName());
+
+        AlterFailoverGroupSuspendStmt stmt2 = (AlterFailoverGroupSuspendStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP IF EXISTS test_group2 SUSPEND");
+        Assert.assertEquals(true, stmt2.getIfExists());
+        Assert.assertEquals("test_group2", stmt2.getFailoverGroupName());
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP '' SUSPEND",
+                "Failover group name is empty");
+    }
+
+    @Test
+    public void testAnalyzeAlterFailoverGroupResume() {
+        AlterFailoverGroupResumeStmt stmt1 = (AlterFailoverGroupResumeStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP test_group1 RESUME");
+        Assert.assertEquals(false, stmt1.getIfExists());
+        Assert.assertEquals("test_group1", stmt1.getFailoverGroupName());
+
+        AlterFailoverGroupResumeStmt stmt2 = (AlterFailoverGroupResumeStmt) analyzeSuccess(
+                "ALTER FAILOVER GROUP IF EXISTS test_group2 RESUME");
+        Assert.assertEquals(true, stmt2.getIfExists());
+        Assert.assertEquals("test_group2", stmt2.getFailoverGroupName());
+
+        analyzeFail(
+                "ALTER FAILOVER GROUP '' RESUME",
+                "Failover group name is empty");
     }
 }

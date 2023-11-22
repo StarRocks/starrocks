@@ -14,7 +14,7 @@ import java.io.IOException;
 
 public class UpdateFailoverGroupLog implements Writable {
     @SerializedName(value = "failoverGroup")
-    private FailoverGroup failoverGroup;
+    private final FailoverGroup failoverGroup;
 
     public UpdateFailoverGroupLog(FailoverGroup failoverGroup) {
         this.failoverGroup = failoverGroup;

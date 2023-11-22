@@ -114,10 +114,12 @@ import com.starrocks.epack.privilege.LDAPRoleMapping;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.RoleMapping;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
+import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowNodesStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
@@ -450,6 +452,10 @@ public class ShowExecutor {
             handleShowPipes();
         } else if (stmt instanceof DescPipeStmt) {
             handleDescPipe();
+        } else if (stmt instanceof ShowFailoverGroupsStmt) {
+            handleShowFailoverGroups();
+        } else if (stmt instanceof DescribeFailoverGroupStmt) {
+            handleDescribeFailoverGroup();
         } else if (stmt instanceof ShowFailPointStatement) {
             handleShowFailPoint();
         } else {
@@ -3009,6 +3015,16 @@ public class ShowExecutor {
         DescPipeStmt.handleDesc(row, pipe);
         rows.add(row);
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private void handleShowFailoverGroups() throws AnalysisException {
+        ShowFailoverGroupsStmt showStmt = (ShowFailoverGroupsStmt) stmt;
+        resultSet = new ShowResultSet(showStmt.getMetaData(), showStmt.getRows());
+    }
+
+    private void handleDescribeFailoverGroup() throws AnalysisException {
+        DescribeFailoverGroupStmt descStmt = (DescribeFailoverGroupStmt) stmt;
+        resultSet = new ShowResultSet(descStmt.getMetaData(), descStmt.getRows());
     }
 
     private void handleShowFailPoint() throws AnalysisException {

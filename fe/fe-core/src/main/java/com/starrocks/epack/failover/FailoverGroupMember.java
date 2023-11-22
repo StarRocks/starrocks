@@ -7,6 +7,8 @@ import com.starrocks.epack.thrift.TFailoverGroupMember;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashSet;
 import java.util.List;
@@ -14,6 +16,8 @@ import java.util.Objects;
 import java.util.Set;
 
 public class FailoverGroupMember {
+    private static final Logger LOG = LogManager.getLogger(FailoverGroupMember.class);
+
     @SerializedName(value = "name")
     private volatile String name;
 
@@ -134,6 +138,7 @@ public class FailoverGroupMember {
         }
 
         if (!addresses.contains(leaderAddress)) {
+            LOG.error("Cannot find leader: {} in frontends: {}", leaderAddress, addresses);
             return null;
         }
 

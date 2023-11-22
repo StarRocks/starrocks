@@ -2,6 +2,13 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
@@ -10,6 +17,8 @@ import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
@@ -18,6 +27,7 @@ import com.starrocks.epack.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.qe.ConnectContext;
@@ -140,7 +150,68 @@ public class AnalyzerVisitorEPack extends AnalyzerVisitor {
         return null;
     }
 
+    @Override
     public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropFailoverGroupStatement(DropFailoverGroupStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowFailoverGroupsStatement(ShowFailoverGroupsStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDescribeFailoverGroupStatement(DescribeFailoverGroupStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement, ConnectContext context) {
+        FailoverGroupAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, ConnectContext context) {
         FailoverGroupAnalyzer.analyze(statement, context);
         return null;
     }

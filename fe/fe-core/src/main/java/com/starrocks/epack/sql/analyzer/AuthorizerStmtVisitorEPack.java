@@ -7,6 +7,13 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.privilege.AuthorizerEPack;
 import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.PrivilegeTypeEPack;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -18,6 +25,8 @@ import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
@@ -29,6 +38,7 @@ import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
 import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
@@ -486,6 +496,66 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
         return null;
     }
 
+    @Override
+    public Void visitDropFailoverGroupStatement(DropFailoverGroupStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitShowFailoverGroupsStatement(ShowFailoverGroupsStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitDescribeFailoverGroupStatement(DescribeFailoverGroupStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
+    @Override
+    public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, ConnectContext context) {
+        // TODO
+        return null;
+    }
+
     // --------------------------------- Query Statement -------------------------------------
 
     @Override
@@ -514,7 +584,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
                 }
             }
         }
-
+        
         return null;
     }
 

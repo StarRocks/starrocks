@@ -29,7 +29,13 @@ public class SecondaryHelper {
         if (splitStrings.length != 2) {
             ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, primaryMemberString);
         }
-        NetworkAddress leaderAddress = new NetworkAddress(splitStrings[0], Integer.parseInt(splitStrings[1]));
+        int port = 0;
+        try {
+            port = Integer.parseInt(splitStrings[1]);
+        } catch (Exception e) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, primaryMemberString);
+        }
+        NetworkAddress leaderAddress = new NetworkAddress(splitStrings[0], port);
         Set<NetworkAddress> addresses = new HashSet<>();
         addresses.add(leaderAddress);
         FailoverGroupMember member = new FailoverGroupMember();

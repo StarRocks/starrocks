@@ -13,7 +13,7 @@ import java.io.IOException;
 
 public class DropFailoverGroupLog implements Writable {
     @SerializedName(value = "failoverGroupId")
-    private long failoverGroupId;
+    private final long failoverGroupId;
 
     public DropFailoverGroupLog(long failoverGroupId) {
         this.failoverGroupId = failoverGroupId;

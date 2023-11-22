@@ -17,6 +17,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -26,6 +33,7 @@ import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
@@ -234,6 +242,77 @@ public class DDLStmtExecutorEPack extends DDLStmtExecutor {
                                                                         ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getFailoverGroupMgr().createFailoverGroup(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropFailoverGroupStatement(DropFailoverGroupStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().dropFailoverGroup(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupSet(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupAdd(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupRemove(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupRefresh(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupPrimary(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupSuspend(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt stmt,
+                ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getFailoverGroupMgr().alterFailoverGroupResume(stmt)
             );
             return null;
         }

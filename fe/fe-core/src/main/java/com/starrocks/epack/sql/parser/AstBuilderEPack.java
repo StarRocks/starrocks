@@ -8,6 +8,13 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupRemoveStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
+import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;
 import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
@@ -20,6 +27,8 @@ import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.CreateWarehouseStmt;
 import com.starrocks.epack.sql.ast.DatabaseName;
+import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
+import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
 import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
@@ -33,6 +42,7 @@ import com.starrocks.epack.sql.ast.SetWarehouseStmt;
 import com.starrocks.epack.sql.ast.ShowClustersStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowNodesStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
@@ -601,8 +611,8 @@ public class AstBuilderEPack extends AstBuilder {
         List<String> members = parseMembersDescStatement(context.membersDesc());
         String schedule = ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
         Map<String, String> properties = getProperties(context.properties());
-        String comment = context.comment() == null ? null :
-                ((StringLiteral) visit(context.comment().string())).getStringValue();
+        String comment = context.comment() == null ? null
+                : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
         return new CreatePrimaryFailoverGroupStmt(ifNotExist, failoverGroupName, catalogNames,
                 databaseNames, tableNames, members, schedule, properties, comment, createPos(context));
@@ -617,6 +627,116 @@ public class AstBuilderEPack extends AstBuilder {
 
         return new CreateSecondaryFailoverGroupStmt(ifNotExist, failoverGroupName,
                 primaryMember, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropFailoverGroupStatement(StarRocksParser.DropFailoverGroupStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+
+        return new DropFailoverGroupStmt(ifNotExist, failoverGroupName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowFailoverGroupsStatement(StarRocksParser.ShowFailoverGroupsStatementContext context) {
+        String pattern = null;
+        if (context.string() != null) {
+            pattern = ((StringLiteral) visit(context.string())).getStringValue();
+        }
+
+        return new ShowFailoverGroupsStmt(pattern, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDescribeFailoverGroupStatement(
+            StarRocksParser.DescribeFailoverGroupStatementContext context) {
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+
+        return new DescribeFailoverGroupStmt(failoverGroupName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupSetStatement(
+            StarRocksParser.AlterFailoverGroupSetStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+        List<String> catalogNames = parseCatalogsDescStatement(context.catalogsDesc());
+        List<DatabaseName> databaseNames = parseDatabasesDescStatement(context.databasesDesc());
+        List<TableName> tableNames = parseTablesDescStatement(context.tablesDesc());
+        List<String> members = parseMembersDescStatement(context.membersDesc());
+        String schedule = context.scheduleDesc() == null ? null
+                : ((StringLiteral) visit(context.scheduleDesc().string())).getStringValue();
+        Map<String, String> properties = getProperties(context.properties());
+        String comment = context.comment() == null ? null
+                : ((StringLiteral) visit(context.comment().string())).getStringValue();
+
+        return new AlterFailoverGroupSetStmt(ifNotExist, failoverGroupName, catalogNames,
+                databaseNames, tableNames, members, schedule, properties, comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupAddStatement(
+            StarRocksParser.AlterFailoverGroupAddStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+        List<String> catalogNames = parseCatalogsAddDescStatement(context.catalogsAddDesc());
+        List<DatabaseName> databaseNames = parseDatabasesAddDescStatement(context.databasesAddDesc());
+        List<TableName> tableNames = parseTablesAddDescStatement(context.tablesAddDesc());
+        List<String> members = parseMembersAddDescStatement(context.membersAddDesc());
+        Map<String, String> properties = getProperties(context.properties());
+
+        return new AlterFailoverGroupAddStmt(ifNotExist, failoverGroupName, catalogNames,
+                databaseNames, tableNames, members, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupRemoveStatement(
+            StarRocksParser.AlterFailoverGroupRemoveStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+        List<String> catalogNames = parseCatalogsRemoveDescStatement(context.catalogsRemoveDesc());
+        List<DatabaseName> databaseNames = parseDatabasesRemoveDescStatement(context.databasesRemoveDesc());
+        List<TableName> tableNames = parseTablesRemoveDescStatement(context.tablesRemoveDesc());
+        List<String> members = parseMembersRemoveDescStatement(context.membersRemoveDesc());
+
+        return new AlterFailoverGroupRemoveStmt(ifNotExist, failoverGroupName, catalogNames,
+                databaseNames, tableNames, members, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupRefreshStatement(
+            StarRocksParser.AlterFailoverGroupRefreshStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+
+        return new AlterFailoverGroupRefreshStmt(ifNotExist, failoverGroupName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupPrimaryStatement(
+            StarRocksParser.AlterFailoverGroupPrimaryStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+
+        return new AlterFailoverGroupPrimaryStmt(ifNotExist, failoverGroupName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupSuspendStatement(
+            StarRocksParser.AlterFailoverGroupSuspendStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+
+        return new AlterFailoverGroupSuspendStmt(ifNotExist, failoverGroupName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterFailoverGroupResumeStatement(
+            StarRocksParser.AlterFailoverGroupResumeStatementContext context) {
+        boolean ifNotExist = context.IF() != null;
+        String failoverGroupName = ((Identifier) visit(context.identifierOrString())).getValue();
+
+        return new AlterFailoverGroupResumeStmt(ifNotExist, failoverGroupName, createPos(context));
     }
 
     private List<String> parseCatalogsDescStatement(StarRocksParser.CatalogsDescContext catalogsDesc) {
@@ -663,13 +783,128 @@ public class AstBuilderEPack extends AstBuilder {
 
     private List<String> parseMembersDescStatement(StarRocksParser.MembersDescContext membersDesc) {
         if (membersDesc == null) {
-            throw new ParsingException(PARSER_ERROR_MSG.noViableStatement("MEMBERS"));
+            return null;
         }
 
         List<String> members = new ArrayList<>();
         List<StarRocksParser.StringContext> memberList = membersDesc.string();
         for (StarRocksParser.StringContext memberContext : memberList) {
             String member = ((StringLiteral) visit(memberContext)).getStringValue();
+            members.add(member);
+        }
+        return members;
+    }
+
+    private List<String> parseCatalogsAddDescStatement(StarRocksParser.CatalogsAddDescContext catalogsAddDesc) {
+        if (catalogsAddDesc == null) {
+            return null;
+        }
+
+        List<String> catalogNames = new ArrayList<>();
+        List<StarRocksParser.IdentifierContext> catalogList = catalogsAddDesc.identifier();
+        for (StarRocksParser.IdentifierContext catalog : catalogList) {
+            String catalogName = ((Identifier) visit(catalog)).getValue();
+            catalogNames.add(catalogName);
+        }
+        return catalogNames;
+    }
+
+    private List<DatabaseName> parseDatabasesAddDescStatement(
+            StarRocksParser.DatabasesAddDescContext databasesAddDesc) {
+        if (databasesAddDesc == null) {
+            return null;
+        }
+
+        List<DatabaseName> databaseNames = new ArrayList<>();
+        List<StarRocksParser.QualifiedNameContext> databaseList = databasesAddDesc.qualifiedName();
+        for (StarRocksParser.QualifiedNameContext database : databaseList) {
+            DatabaseName databaseName = qualifiedNameToDatabaseName(getQualifiedName(database));
+            databaseNames.add(databaseName);
+        }
+        return databaseNames;
+    }
+
+    private List<TableName> parseTablesAddDescStatement(StarRocksParser.TablesAddDescContext tablesAddDesc) {
+        if (tablesAddDesc == null) {
+            return null;
+        }
+
+        List<TableName> tableNames = new ArrayList<>();
+        List<StarRocksParser.QualifiedNameContext> tableList = tablesAddDesc.qualifiedName();
+        for (StarRocksParser.QualifiedNameContext table : tableList) {
+            TableName tableName = qualifiedNameToTableName(getQualifiedName(table));
+            tableNames.add(tableName);
+        }
+        return tableNames;
+    }
+
+    private List<String> parseMembersAddDescStatement(StarRocksParser.MembersAddDescContext membersAddDesc) {
+        if (membersAddDesc == null) {
+            return null;
+        }
+
+        List<String> members = new ArrayList<>();
+        List<StarRocksParser.StringContext> memberList = membersAddDesc.string();
+        for (StarRocksParser.StringContext memberContext : memberList) {
+            String member = ((StringLiteral) visit(memberContext)).getStringValue();
+            members.add(member);
+        }
+        return members;
+    }
+
+    private List<String> parseCatalogsRemoveDescStatement(
+            StarRocksParser.CatalogsRemoveDescContext catalogsRemoveDesc) {
+        if (catalogsRemoveDesc == null) {
+            return null;
+        }
+
+        List<String> catalogNames = new ArrayList<>();
+        List<StarRocksParser.IdentifierContext> catalogList = catalogsRemoveDesc.identifier();
+        for (StarRocksParser.IdentifierContext catalog : catalogList) {
+            String catalogName = ((Identifier) visit(catalog)).getValue();
+            catalogNames.add(catalogName);
+        }
+        return catalogNames;
+    }
+
+    private List<DatabaseName> parseDatabasesRemoveDescStatement(
+            StarRocksParser.DatabasesRemoveDescContext databasesRemoveDesc) {
+        if (databasesRemoveDesc == null) {
+            return null;
+        }
+
+        List<DatabaseName> databaseNames = new ArrayList<>();
+        List<StarRocksParser.QualifiedNameContext> databaseList = databasesRemoveDesc.qualifiedName();
+        for (StarRocksParser.QualifiedNameContext database : databaseList) {
+            DatabaseName databaseName = qualifiedNameToDatabaseName(getQualifiedName(database));
+            databaseNames.add(databaseName);
+        }
+        return databaseNames;
+    }
+
+    private List<TableName> parseTablesRemoveDescStatement(StarRocksParser.TablesRemoveDescContext tablesRemoveDesc) {
+        if (tablesRemoveDesc == null) {
+            return null;
+        }
+
+        List<TableName> tableNames = new ArrayList<>();
+        List<StarRocksParser.QualifiedNameContext> tableList = tablesRemoveDesc.qualifiedName();
+        for (StarRocksParser.QualifiedNameContext table : tableList) {
+            TableName tableName = qualifiedNameToTableName(getQualifiedName(table));
+            tableNames.add(tableName);
+        }
+        return tableNames;
+    }
+
+    private List<String> parseMembersRemoveDescStatement(StarRocksParser.MembersRemoveDescContext membersRemoveDesc) {
+        if (membersRemoveDesc == null) {
+            return null;
+        }
+
+        List<String> members = new ArrayList<>();
+        List<StarRocksParser.IdentifierOrStringContext> memberList = membersRemoveDesc.identifierOrString();
+        for (StarRocksParser.IdentifierOrStringContext memberContext : memberList) {
+            String member = ((Identifier) visit(memberContext)).getValue();
             members.add(member);
         }
         return members;

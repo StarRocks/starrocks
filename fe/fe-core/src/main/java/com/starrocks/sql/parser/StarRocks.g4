@@ -314,6 +314,16 @@ statement
     // Failover Group Statement
     | createPrimaryFailoverGroupStatement
     | createSecondaryFailoverGroupStatement
+    | dropFailoverGroupStatement
+    | showFailoverGroupsStatement
+    | describeFailoverGroupStatement
+    | alterFailoverGroupSetStatement
+    | alterFailoverGroupAddStatement
+    | alterFailoverGroupRemoveStatement
+    | alterFailoverGroupRefreshStatement
+    | alterFailoverGroupPrimaryStatement
+    | alterFailoverGroupSuspendStatement
+    | alterFailoverGroupResumeStatement
 
     // FailPoint Statement
     | updateFailPointStatusStatement
@@ -854,6 +864,94 @@ membersDesc
 createSecondaryFailoverGroupStatement
     : CREATE FAILOVER GROUP (IF NOT EXISTS)? failoverGroupName=identifierOrString
           AS REPLICA OF string
+    ;
+
+dropFailoverGroupStatement
+    : DROP FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString
+    ;
+
+showFailoverGroupsStatement
+    : SHOW FAILOVER GROUPS (LIKE pattern=string)?
+    ;
+
+describeFailoverGroupStatement
+    : (DESC | DESCRIBE) FAILOVER GROUP failoverGroupName=identifierOrString
+    ;
+
+alterFailoverGroupSetStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString SET
+          catalogsDesc?
+          databasesDesc?
+          tablesDesc?
+          membersDesc?
+          scheduleDesc?
+          comment?
+          properties?
+    ;
+
+alterFailoverGroupAddStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString ADD
+          catalogsAddDesc?
+          databasesAddDesc?
+          tablesAddDesc?
+          membersAddDesc?
+          properties?
+    ;
+
+catalogsAddDesc
+    : identifier (',' identifier)* TO CATALOGS
+    ;
+
+databasesAddDesc
+    : qualifiedName (',' qualifiedName)* TO DATABASES
+    ;
+
+tablesAddDesc
+    : qualifiedName (',' qualifiedName)* TO TABLES
+    ;
+
+membersAddDesc
+    : string (',' string)* TO MEMBERS
+    ;
+
+alterFailoverGroupRemoveStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString REMOVE
+          catalogsRemoveDesc?
+          databasesRemoveDesc?
+          tablesRemoveDesc?
+          membersRemoveDesc?
+    ;
+
+catalogsRemoveDesc
+    : identifier (',' identifier)* FROM CATALOGS
+    ;
+
+databasesRemoveDesc
+    : qualifiedName (',' qualifiedName)* FROM DATABASES
+    ;
+
+tablesRemoveDesc
+    : qualifiedName (',' qualifiedName)* FROM TABLES
+    ;
+
+membersRemoveDesc
+    : identifierOrString (',' identifierOrString)* FROM MEMBERS
+    ;
+
+alterFailoverGroupRefreshStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString REFRESH
+    ;
+
+alterFailoverGroupPrimaryStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString PRIMARY
+    ;
+
+alterFailoverGroupSuspendStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString SUSPEND
+    ;
+
+alterFailoverGroupResumeStatement
+    : ALTER FAILOVER GROUP (IF EXISTS)? failoverGroupName=identifierOrString RESUME
     ;
 
 // ------------------------------------------- FailPoint Statement -----------------------------------------------------

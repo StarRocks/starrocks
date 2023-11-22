@@ -17,6 +17,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +49,13 @@ public class PrimaryHelper {
                 }
                 primary = localMember;
             } else if (splitStrings.length == 3) {
-                NetworkAddress leaderAddress = new NetworkAddress(splitStrings[1], Integer.parseInt(splitStrings[2]));
+                int port = 0;
+                try {
+                    port = Integer.parseInt(splitStrings[2]);
+                } catch (Exception e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+                }
+                NetworkAddress leaderAddress = new NetworkAddress(splitStrings[1], port);
                 Set<NetworkAddress> addresses = new HashSet<>();
                 addresses.add(leaderAddress);
                 FailoverGroupMember member = new FailoverGroupMember();
@@ -75,6 +82,36 @@ public class PrimaryHelper {
             ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, "No primary member");
         }
         return primary;
+    }
+
+    public static Map<String, FailoverGroupMember> initMembers(List<String> memberStrings) throws DdlException {
+        Map<String, FailoverGroupMember> members = new HashMap<>(memberStrings.size());
+        for (String membeString : memberStrings) {
+            String[] splitStrings = membeString.split(":");
+            if (splitStrings.length == 3) {
+                int port = 0;
+                try {
+                    port = Integer.parseInt(splitStrings[2]);
+                } catch (Exception e) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+                }
+                NetworkAddress leaderAddress = new NetworkAddress(splitStrings[1], port);
+                Set<NetworkAddress> addresses = new HashSet<>();
+                addresses.add(leaderAddress);
+                FailoverGroupMember member = new FailoverGroupMember();
+                member.setName(splitStrings[0]);
+                member.setAddresses(addresses);
+                member.setLeader(leaderAddress);
+                member.setRole(FailoverGroupRole.NONE);
+                FailoverGroupMember previous = members.putIfAbsent(member.getName(), member);
+                if (previous != null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+                }
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_PARAMETER, membeString);
+            }
+        }
+        return members;
     }
 
     public static void pushImageTo(String httpHost, int httpPort, long imageVersion, String imageSubDir)
