@@ -128,13 +128,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throws DdlException {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
-            if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -193,14 +187,22 @@ public class SystemInfoService implements GsonPostProcessable {
      */
     public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
-            // check is already exist
-            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
-                throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
-            }
+            checkSameNodeExist(pair.first, pair.second);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             addBackend(pair.first, pair.second);
+        }
+    }
+
+    private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+        // check is already exist
+        if (getBackendWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
+        }
+
+        if (getComputeNodeWithHeartbeatPort(host, heartPort) != null) {
+            throw new DdlException("Compute node already exists with same host " + host + " and port " + heartPort);
         }
     }
 

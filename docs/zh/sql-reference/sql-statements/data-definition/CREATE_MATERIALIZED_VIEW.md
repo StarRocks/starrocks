@@ -74,7 +74,7 @@ SELECT select_expr[, select_expr ...]
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图。
   >   - 每个复杂表达式只能引用一列。不支持形如 `a + b as col1` 形式的查询语句。
-  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图重写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
+  >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
 
 - GROUP BY（选填）
 
@@ -231,8 +231,9 @@ AS
 该参数支持如下值：
 
 - `date_column`：用于分区的列的名称。形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
-- date_trunc 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
-- time_slice or date_slice 函数：从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
+- `date_trunc` 函数：形如 `PARTITION BY date_trunc("MONTH", dt)`，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
+- `str2date` 函数：用于将基表的 STRING 类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
+- `time_slice` 或 `date_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 或 date_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 或 date_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
 如不指定该参数，则默认物化视图为无分区。
 
@@ -244,6 +245,7 @@ AS
 
 异步物化视图的属性。您可以使用 [ALTER MATERIALIZED VIEW](./ALTER_MATERIALIZED_VIEW.md) 修改已有异步物化视图的属性。
 
+- `session.`: 如果您想要更改与物化视图相关的 Session 变量属性，必须在属性前添加 `session.` 前缀，例如，`session.query_timeout`。对于非 Session 属性，例如，`mv_rewrite_staleness_second`，则无需指定前缀。
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。有效值：`HDD` 和 `SSD`。
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
@@ -698,6 +700,58 @@ SELECT
 INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
+```
+
+示例四：创建分区物化视图，并将基表 STRING 类型分区键转化为日期类型作为异步物化视图分区键。
+
+```sql
+-- 创建分区键为 STRING 类型的基表。
+CREATE TABLE `part_dates` (
+  `d_date` varchar(20) DEFAULT NULL,
+  `d_dayofweek` varchar(10) DEFAULT NULL,
+  `d_month` varchar(11) DEFAULT NULL,
+  `d_year` int(11) DEFAULT NULL,
+  `d_yearmonthnum` int(11) DEFAULT NULL,
+  `d_yearmonth` varchar(9) DEFAULT NULL,
+  `d_daynuminweek` int(11) DEFAULT NULL,
+  `d_daynuminmonth` int(11) DEFAULT NULL,
+  `d_daynuminyear` int(11) DEFAULT NULL,
+  `d_monthnuminyear` int(11) DEFAULT NULL,
+  `d_weeknuminyear` int(11) DEFAULT NULL,
+  `d_sellingseason` varchar(14) DEFAULT NULL,
+  `d_lastdayinweekfl` int(11) DEFAULT NULL,
+  `d_lastdayinmonthfl` int(11) DEFAULT NULL,
+  `d_holidayfl` int(11) DEFAULT NULL,
+  `d_weekdayfl` int(11) DEFAULT NULL,
+  `d_datekey` varchar(11) DEFAULT NULL
+) partition by (d_datekey);
+
+
+-- 使用 `str2date` 函数创建分区物化视图。
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv` 
+PARTITION BY str2date(`d_datekey`,'%Y%m%d')
+DISTRIBUTED BY HASH(`d_date`, `d_month`, `d_month`) 
+REFRESH MANUAL 
+AS
+SELECT
+  `d_date` ,
+  `d_dayofweek`,
+  `d_month` ,
+  `d_yearmonthnum` ,
+  `d_yearmonth` ,
+  `d_daynuminweek`,
+  `d_daynuminmonth`,
+  `d_daynuminyear` ,
+  `d_monthnuminyear` ,
+  `d_weeknuminyear` ,
+  `d_sellingseason`,
+  `d_lastdayinweekfl`,
+  `d_lastdayinmonthfl`,
+  `d_holidayfl` ,
+  `d_weekdayfl`,
+  `d_datekey`
+FROM
+`hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
 
 ## 更多操作
