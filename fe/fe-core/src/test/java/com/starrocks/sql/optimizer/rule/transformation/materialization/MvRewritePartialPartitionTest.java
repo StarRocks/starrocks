@@ -620,4 +620,420 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(getFragmentPlan(query), mvName);
         dropMv("test", mvName);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testHivePartitionQueryRewrite2() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        String mvName = "hive_query_rewrite";
+
+        {
+            // default
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                            "REFRESH MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  " +
+                            "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+            MaterializedView ttlMv = getMv("test", mvName);
+            GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+            Assert.assertEquals(1, ttlMv.getPartitions().size());
+
+            String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "where l_shipdate >= '1998-01-04'";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+            dropMv("test", mvName);
+        }
+
+        {
+            // Disable
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                            "REFRESH MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "'query_rewrite_consistency' = 'disable' " +
+                            ")\n" +
+                            "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  " +
+                            "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+            MaterializedView ttlMv = getMv("test", mvName);
+            GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+            Assert.assertEquals(1, ttlMv.getPartitions().size());
+
+            String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "where l_shipdate >= '1998-01-04'";
+            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+            dropMv("test", mvName);
+        }
+
+        {
+            // Checked
+            createMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "DISTRIBUTED BY HASH(`l_shipdate`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"query_rewrite_consistency\" = \"checked\"\n" +
+                            ")\n" +
+                            "AS SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                            "GROUP BY l_shipdate");
+
+            String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "where l_shipdate >= '1998-01-04'";
+            PlanTestBase.assertNotContains(getFragmentPlan(query), mvName);
+            // refresh mv
+            refreshMaterializedView("test", mvName);
+            query =
+                    "SELECT `l_shipdate`, sum(`l_orderkey`)  FROM `hive0`.`partitioned_db`.`lineitem_par` GROUP BY l_shipdate";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+            dropMv("test", mvName);
+
+        }
+        {
+            // Loose
+            createAndRefreshMv("test", mvName,
+                    "CREATE MATERIALIZED VIEW `hive_query_rewrite`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"query_rewrite_consistency\" = \"loose\"\n" +
+                            ")\n" +
+                            "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  " +
+                            "FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+            String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "where l_shipdate >= '1998-01-04'";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+            // refresh mv
+            refreshMaterializedView("test", mvName);
+            query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                    "where l_shipdate >= '1998-01-04'";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+            dropMv("test", mvName);
+        }
+    }
+
+    @Test
+    public void testPartialPartitionRewriteWithDateTruncExpr1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " k1 datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(`k1`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES LESS THAN ('2020-01-01'),\n" +
+                "  PARTITION `p2` VALUES LESS THAN ('2020-02-01'),\n" +
+                "  PARTITION `p3` VALUES LESS THAN ('2020-03-01')\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
+
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " PARTITION BY ds \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where date_trunc('minute', `k1`) = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        cluster.runSql("test", "insert into base_tbl1 partition('p3') values (\"2020-02-02\",1,1)");
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00'" +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00' and " +
+                    "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
+
+    @Test
+    public void testPartialPartitionRewriteWithDateTruncExpr2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " k1 datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(`k1`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES [('2020-01-01') , ('2020-02-01')),\n" +
+                "  PARTITION `p2` VALUES [('2020-02-01') , ('2020-03-01')),\n" +
+                "  PARTITION `p3` VALUES [('2020-03-01') , ('2020-04-01'))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
+
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " PARTITION BY ds \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where date_trunc('minute', `k1`) = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        cluster.runSql("test", "insert into base_tbl1 partition('p3') values (\"2020-02-02\",1,1)");
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00' and " +
+                    "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
+
+    @Test
+    public void testPartialPartitionRewriteWithTimeSliceExpr1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " k1 datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(`k1`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES LESS THAN ('2020-01-01'),\n" +
+                "  PARTITION `p2` VALUES LESS THAN ('2020-02-01'),\n" +
+                "  PARTITION `p3` VALUES LESS THAN ('2020-03-01')\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
+
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " PARTITION BY date_trunc('day', ds) \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where time_slice(k1, interval 1 hour) = '2020-02-11 00:00:00' " +
+                    "group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        cluster.runSql("test", "insert into base_tbl1 partition('p3') values (\"2020-02-02\",1,1)");
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " where time_slice(k1, interval 1 hour) >= '2020-02-11 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " where time_slice(k1, interval 1 hour) >= '2020-02-11 00:00:00' " +
+                    " and time_slice(k1, interval 1 hour) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
+
+    @Test
+    public void testPartialPartitionRewriteWiteTimeSliceExpr2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " k1 datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(`k1`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES [('2020-01-01') , ('2020-02-01')),\n" +
+                "  PARTITION `p2` VALUES [('2020-02-01') , ('2020-03-01')),\n" +
+                "  PARTITION `p3` VALUES [('2020-03-01') , ('2020-04-01'))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
+
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " PARTITION BY date_trunc('day', ds) \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where time_slice(k1, interval 1 hour) = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        cluster.runSql("test", "insert into base_tbl1 partition('p3') values (\"2020-02-02\",1,1)");
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE time_slice(k1, interval 1 hour) >= '2020-01-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE time_slice(k1, interval 1 hour) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select time_slice(k1, interval 1 hour) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE time_slice(k1, interval 1 hour) >= '2020-01-01 00:00:00' and " +
+                    "   time_slice(k1, interval 1 hour) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
+>>>>>>> c8b1cb631f ([BugFix] Fix date_trunc rewrite by using equlation prediate rewriter (#35426))
 }

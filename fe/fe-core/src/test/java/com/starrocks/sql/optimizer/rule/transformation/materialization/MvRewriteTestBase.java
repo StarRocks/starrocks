@@ -99,10 +99,9 @@ public class MvRewriteTestBase {
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
                     if (tbl != null) {
-                        for (Partition partition : tbl.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
+                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+                            Partition partition = tbl.getPartition(partitionId);
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
                         }
                     }
                 }

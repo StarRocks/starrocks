@@ -29,6 +29,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.TimeSliceReplaceChecker;
+>>>>>>> c8b1cb631f ([BugFix] Fix date_trunc rewrite by using equlation prediate rewriter (#35426))
 
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +42,10 @@ import java.util.Optional;
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
+<<<<<<< HEAD
+=======
+    private Multimap<ScalarOperator, Pair<ColumnRefOperator, IRewriteEquivalent>> predicateProbMap;
+>>>>>>> c8b1cb631f ([BugFix] Fix date_trunc rewrite by using equlation prediate rewriter (#35426))
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private AggregateFunctionRewriter aggregateFunctionRewriter;
     boolean underAggFunctionRewriteContext;
@@ -79,7 +89,40 @@ public class EquationRewriter {
                 if (tmp.isPresent()) {
                     return tmp.get();
                 }
+<<<<<<< HEAD
+=======
+
+                ScalarOperator replaced = rewriteByEquivalent(predicate);
+                if (replaced != null) {
+                    return replaced;
+                }
+
+>>>>>>> c8b1cb631f ([BugFix] Fix date_trunc rewrite by using equlation prediate rewriter (#35426))
                 return super.visitBinaryPredicate(predicate, context);
+            }
+
+            private ScalarOperator rewriteByEquivalent(BinaryPredicateOperator predicate) {
+                ScalarOperator left = predicate.getChild(0);
+                ScalarOperator right = predicate.getChild(1);
+                if (!predicateProbMap.containsKey(left)) {
+                    return null;
+                }
+                Pair<ColumnRefOperator, IRewriteEquivalent> pair = predicateProbMap.get(left).iterator().next();
+                if (!pair.second.isEquivalent(right)) {
+                    return null;
+
+                }
+
+                ColumnRefOperator replaced = pair.first;
+                if (columnMapping != null) {
+                    replaced = columnMapping.get(pair.first);
+                    if (replaced == null) {
+                        return null;
+                    }
+                }
+                ScalarOperator clonePredicate = predicate.clone();
+                clonePredicate.setChild(0, replaced.clone());
+                return clonePredicate;
             }
 
             @Override
@@ -188,11 +231,24 @@ public class EquationRewriter {
 
         if (expr instanceof CallOperator) {
             CallOperator aggFunc = (CallOperator) expr;
+<<<<<<< HEAD
             if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
+=======
+            if (aggFunc.getFnName().equals(FunctionSet.TIME_SLICE)) {
+                // mv:    SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table
+                // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
+                // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
+                ScalarOperator first = expr.getChild(0);
+                predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(aggFunc)));
+            } else if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
+>>>>>>> c8b1cb631f ([BugFix] Fix date_trunc rewrite by using equlation prediate rewriter (#35426))
                 CallOperator newAggFunc = normalizeCallOperator(aggFunc);
                 if (newAggFunc != null && newAggFunc != aggFunc) {
                     equationMap.put(newAggFunc,  Pair.create(col, null));
                 }
+            } else if (aggFunc.getFnName().equals(FunctionSet.DATE_TRUNC)) {
+                ScalarOperator first = expr.getChild(1);
+                predicateProbMap.put(first, Pair.create(col, new DateTruncReplaceChecker(aggFunc)));
             }
         }
     }
@@ -249,7 +305,9 @@ public class EquationRewriter {
         private Function findArithmeticFunction(CallOperator call, String fnName) {
             return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
         }
-
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> c8b1cb631f ([BugFix] Fix date_trunc rewrite by using equlation prediate rewriter (#35426))
 }
