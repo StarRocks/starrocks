@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 > **注意**
 >
 > - 仅拥有 SYSTEM 级 CREATE STORAGE VOLUME 权限的用户可以执行该操作。
-> - 如果您需要基于 HDFS 创建存储卷，建议您不要修改 **HADOOP_CONF** 和 **core-site.xml/hdfs-site.xml**，否则可能导致系统发生未知行为。
+> - 如果您需要基于 HDFS 创建存储卷，建议您不要随意修改 **HADOOP_CONF** 和 **core-site.xml/hdfs-site.xml**。如果以上文件中的参数与创建 Storage Volume 的参数存在差异，可能导致系统发生未知行为。
 
 ## 语法
 
