@@ -85,7 +85,7 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
 }
 
 int64_t calculate_retry_delay(int64_t attempted_retries) {
-    int64_t min_delay = config::lake_vacuum_retry_min_delay;
+    int64_t min_delay = config::lake_vacuum_retry_min_delay_ms;
     return min_delay * (1 << attempted_retries);
 }
 
@@ -97,7 +97,6 @@ Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& p
             LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
             std::this_thread::sleep_for(std::chrono::milliseconds(delay));
         } else {
-            LOG_IF(WARNING, !st.ok()) << "Fail to delete: " << st;
             return st;
         }
     }
