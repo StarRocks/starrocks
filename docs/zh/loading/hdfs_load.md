@@ -459,11 +459,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-<<<<<<< HEAD
-有关返回字段的说明，参见 [`information_schema.loads`](../reference/information_schema/loads.md)。
-=======
 通过如下语句手动创建表（建议表结构与您在 HDFS 存储的待导入数据结构一致）：
->>>>>>> d8545ee5aa48e43e7f8d360c8b638ddda170a943
 
 ```SQL
 CREATE TABLE user_behavior_replica
