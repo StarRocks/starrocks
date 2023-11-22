@@ -49,6 +49,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AddComputeNodeClause;
 import com.starrocks.sql.ast.AddFollowerClause;
@@ -248,6 +249,11 @@ public class SystemHandler extends AlterHandler {
             return decommissionBackends;
         }
 
+        // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            return decommissionBackends;
+        }
+
         if (infoService.getClusterAvailableCapacityB() - releaseCapacity < needCapacity) {
             decommissionBackends.clear();
             throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
@@ -275,8 +281,9 @@ public class SystemHandler extends AlterHandler {
                                     decommissionBackends.clear();
                                     throw new DdlException(
                                             "It will cause insufficient BE number if these BEs are decommissioned " +
-                                            "because the table " + db.getFullName() + "." + olapTable.getName() + " requires " +
-                                            maxReplicationNum + " replicas.");
+                                                    "because the table " + db.getFullName() + "." + olapTable.getName() +
+                                                    " requires " + maxReplicationNum + " replicas.");
+
                                 }
                             }
                         }
