@@ -839,8 +839,12 @@ PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
+<<<<<<< HEAD
     "dynamic_partition.prefix" = "p",
     "dynamic_partition.buckets" = "10"
+=======
+    "dynamic_partition.prefix" = "p"
+>>>>>>> e883ad513d ([doc]Update CREATE_TABLE.md (#35562))
 );
 ```
 
