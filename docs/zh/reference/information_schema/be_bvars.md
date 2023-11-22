@@ -10,6 +10,6 @@ displayed_sidebar: "Chinese"
 
 | **字段** | **描述**                          |
 | -------- | --------------------------------- |
-| BE_ID    | bvar 所在的 BE 的ID。             |
+| BE_ID    | bvar 所在的 BE 的 ID。             |
 | NAME     | bvar 名称。                       |
 | DESC     | bvar 描述，其中包括统计信息的值。 |
