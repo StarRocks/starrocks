@@ -153,6 +153,7 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
+    public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_ROW_NUM_LAGS;
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
@@ -167,6 +168,7 @@ public final class MetricRepo {
         }
 
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
+        GAUGE_ROUTINE_LOAD_ROW_NUM_LAGS = new ArrayList<>();
 
         // 1. gauge
         // load jobs
@@ -867,6 +869,36 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
+    public static void updateRoutineLoadRowNumLagMetrics() {
+        List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr()
+                .getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.RUNNING));
+
+        List<RoutineLoadJob> targetJobs = jobs.stream()
+                .filter(job -> (!job.getRowNumConsumeLags().isEmpty()))
+                .collect(Collectors.toList());
+
+        if (targetJobs.size() <= 0) {
+            return;
+        }
+
+        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
+        for (int i = 0; i < targetJobs.size(); i++) {
+            RoutineLoadJob job = targetJobs.get(i);
+            Map<String, Long> partitionToLagRowNum = job.getRowNumConsumeLags();
+            for (Map.Entry<String, Long> entry : partitionToLagRowNum.entrySet()) {
+                GaugeMetricImpl<Long> metric =
+                        new GaugeMetricImpl<>("routine_load_row_num_lag_of_partition", MetricUnit.NOUNIT,
+                                "routine load kafka lag for row number");
+                metric.addLabel(new MetricLabel("job_name", job.getName()));
+                metric.addLabel(new MetricLabel("partition", entry.getKey()));
+                metric.setValue(entry.getValue());
+                routineLoadLags.add(metric);
+            }
+        }
+
+        GAUGE_ROUTINE_LOAD_ROW_NUM_LAGS = routineLoadLags;
+    }
+
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
         if (!isInit) {
             return "";
@@ -909,6 +941,7 @@ public final class MetricRepo {
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
         }
+        collectRoutineLoadRowNumLagMetrics(visitor);
 
         // node info
         visitor.getNodeInfo();
@@ -973,6 +1006,12 @@ public final class MetricRepo {
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
         for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
+            visitor.visit(metric);
+        }
+    }
+
+    private static void collectRoutineLoadRowNumLagMetrics(MetricVisitor visitor) {
+        for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_ROW_NUM_LAGS) {
             visitor.visit(metric);
         }
     }

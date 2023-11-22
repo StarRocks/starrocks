@@ -27,6 +27,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -107,15 +108,22 @@ public class KafkaTaskInfoTest {
         // call readyExecute to cache latestPartOffset
         kafkaTaskInfo.readyToExecute();
 
+        Map<String, Long> consumeLagsRowNum = new HashMap<>();
         KafkaProgress kafkaProgress = new KafkaProgress();
         kafkaProgress.addPartitionOffset(new Pair<>(0, 98L));
         kafkaProgress.addPartitionOffset(new Pair<>(1, 98L));
-        Assert.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+        Assert.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress, consumeLagsRowNum));
+        Assert.assertEquals(1, consumeLagsRowNum.get("0").longValue());
+        Assert.assertEquals(1, consumeLagsRowNum.get("1").longValue());
 
         kafkaProgress.modifyOffset(Lists.newArrayList(new Pair<>(0, 99L)));
-        Assert.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+        Assert.assertFalse(kafkaTaskInfo.isProgressKeepUp(kafkaProgress, consumeLagsRowNum));
+        Assert.assertEquals(0, consumeLagsRowNum.get("0").longValue());
+        Assert.assertEquals(1, consumeLagsRowNum.get("1").longValue());
 
         kafkaProgress.modifyOffset(Lists.newArrayList(new Pair<>(1, 99L)));
-        Assert.assertTrue(kafkaTaskInfo.isProgressKeepUp(kafkaProgress));
+        Assert.assertTrue(kafkaTaskInfo.isProgressKeepUp(kafkaProgress, consumeLagsRowNum));
+        Assert.assertEquals(0, consumeLagsRowNum.get("0").longValue());
+        Assert.assertEquals(0, consumeLagsRowNum.get("1").longValue());
     }
 }

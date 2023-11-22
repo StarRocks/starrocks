@@ -146,6 +146,7 @@ public class MetricCalculator extends TimerTask {
         if (Config.enable_routine_load_lag_metrics)  {
             MetricRepo.updateRoutineLoadProcessMetrics();
         }
+        MetricRepo.updateRoutineLoadRowNumLagMetrics();
 
         MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
     }
