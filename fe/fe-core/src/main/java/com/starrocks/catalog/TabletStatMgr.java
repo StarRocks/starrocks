@@ -253,6 +253,7 @@ public class TabletStatMgr extends FrontendDaemon {
         long visibleVersionTime = snapshot.visibleVersionTime;
         snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
         if (snapshot.tablets.isEmpty()) {
+            LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
             return null;
         }
         return new CollectTabletStatJob(snapshot);
@@ -285,6 +286,10 @@ public class TabletStatMgr extends FrontendDaemon {
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
+        }
+
+        private String debugName() {
+            return String.format("%s.%s.%d version %d", dbName, tableName, partitionId, visibleVersion);
         }
     }
 
