@@ -122,13 +122,9 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
-<<<<<<< HEAD
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
-=======
-import com.starrocks.consistency.LockChecker;
-import com.starrocks.credential.CredentialUtil;
->>>>>>> c5b1342ee4 ([Enhancement] Add dead lock checker daemon in FE node (#35271))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -627,23 +623,13 @@ public class GlobalStateMgr {
                 Config.desired_max_waiting_jobs * 10, !isCheckpointCatalog);
 
         this.loadJobScheduler = new LoadJobScheduler();
-<<<<<<< HEAD
         this.loadManager = new LoadManager(loadJobScheduler);
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
         this.loadEtlChecker = new LoadEtlChecker(loadManager);
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
-=======
-        this.loadMgr = new LoadMgr(loadJobScheduler);
-        this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
-        this.loadEtlChecker = new LoadEtlChecker(loadMgr);
-        this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
-        this.lockChecker = new LockChecker();
-        this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
-        this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
-        this.mvMVJobExecutor = new MVJobExecutor();
->>>>>>> c5b1342ee4 ([Enhancement] Add dead lock checker daemon in FE node (#35271))
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -1270,13 +1256,8 @@ public class GlobalStateMgr {
             compactionManager.start();
         }
         configRefreshDaemon.start();
-<<<<<<< HEAD
-=======
-
-        slotManager.start();
 
         lockChecker.start();
->>>>>>> c5b1342ee4 ([Enhancement] Add dead lock checker daemon in FE node (#35271))
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
