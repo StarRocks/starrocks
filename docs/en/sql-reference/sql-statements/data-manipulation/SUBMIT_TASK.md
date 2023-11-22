@@ -8,7 +8,11 @@ displayed_sidebar: "English"
 
 Submits an ETL statement as an asynchronous task. This feature has been supported since StarRocks v2.5.
 
+<<<<<<< HEAD
 StarRocks v3.0 supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](../data-manipulation/insert.md).
+=======
+Currently, StarRocks supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md).
+>>>>>>> b042c1a88d ( [Doc] capitalize command file names in 3.1  (#35575))
 
 You can drop an asynchronous task using [DROP TASK](./DROP_TASK.md).
 
@@ -23,7 +27,7 @@ SUBMIT TASK [task_name] AS <etl_statement>
 | **Parameter** | **Description**                                              |
 | ------------- | ------------------------------------------------------------ |
 | task_name     | The task name.                                               |
-| etl_statement | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](../data-manipulation/insert.md). |
+| etl_statement | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) and [INSERT](./INSERT.md). |
 
 ## Usage notes
 

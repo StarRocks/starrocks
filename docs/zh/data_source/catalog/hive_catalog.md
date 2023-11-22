@@ -4,7 +4,11 @@ displayed_sidebar: "Chinese"
 
 # Hive catalog
 
+<<<<<<< HEAD
 Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。
+=======
+Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执行数据导入就可以直接查询 Apache Hive™ 里的数据。此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。
+>>>>>>> b042c1a88d ( [Doc] capitalize command file names in 3.1  (#35575))
 
 此外，您还可以基于 Hive Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 2.3 版本开始支持 Hive Catalog。
 
