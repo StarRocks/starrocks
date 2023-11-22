@@ -269,5 +269,5 @@ function: wait_alter_table_finish("ROLLUP", 8)
 
 select * from tab1;
 
-drop table tab1
-drop database test_fast_schema_evolution_and_mv
+drop table tab1;
+drop database test_fast_schema_evolution_and_mv;

@@ -625,8 +625,9 @@ select * from tab1;
 500	k2_500	500	500	500	v4_500	v5_500
 600	k2_600	600	600	600	v4_600	v5_600
 -- !result
-drop table tab1
-drop database test_fast_schema_evolution_and_mv
+drop table tab1;
 -- result:
-E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'drop', the most similar input is {<EOF>, ';'}.")
+-- !result
+drop database test_fast_schema_evolution_and_mv;
+-- result:
 -- !result
