@@ -15,21 +15,13 @@
 
 package com.starrocks.connector.jdbc;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,13 +29,9 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -54,9 +42,12 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCSchemaResolver schemaResolver;
     private JDBCMetaResolver metaResolver;
 
-    private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, List<String>> catalogCache = JDBCCacheBuilder.buildAsync();
-    private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, Table> tableCache = JDBCCacheBuilder.buildAsync();
-    private final @NonNull JDBCAsyncCache<ImmutableMap<String, Object>, List<PartitionInfo>> partitionCache = JDBCCacheBuilder.buildAsync();
+    private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, List<String>> catalogCache
+            = JDBCCacheBuilder.buildAsync();
+    private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, Table> tableCache
+            = JDBCCacheBuilder.buildAsync();
+    private final @NonNull JDBCAsyncCache<ImmutableMap<String, Object>, List<PartitionInfo>> partitionCache
+            = JDBCCacheBuilder.buildAsync();
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;

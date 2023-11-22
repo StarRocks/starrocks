@@ -16,9 +16,9 @@
 package com.starrocks.connector.jdbc;
 
 import com.github.benmanes.caffeine.cache.AsyncCache;
+import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.checkerframework.checker.nullness.qual.NonNull;
-import com.starrocks.common.Config;
 
 import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
@@ -33,7 +33,7 @@ public class JDBCAsyncCache<K, V> {
 
     public @NonNull V get(@NonNull K key, @NonNull Function<K, V> function) {
         try {
-            if (Config.jdbc_meta_cache_enable){
+            if (Config.jdbc_meta_cache_enable) {
                 return asyncCache.get(key, function).get();
             } else {
                 return function.apply(key);

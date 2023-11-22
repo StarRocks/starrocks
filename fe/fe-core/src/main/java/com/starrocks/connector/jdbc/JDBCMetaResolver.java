@@ -132,6 +132,7 @@ public class JDBCMetaResolver implements ConnectorMetadata {
             throw new StarRocksConnectorException(e.getMessage());
         }
     }
+
     List<PartitionInfo> refreshCacheForGetPartitions(ImmutableMap<String, Object> metaInfo) {
         Table table = (Table) metaInfo.get("table");
         List<String> partitionNames = (List<String>) metaInfo.get("partitionNames");
