@@ -869,4 +869,16 @@ public class CreateTableTest {
                                 ");"
                 ));
     }
+
+    @Test
+    public void testReservedColumnName() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
+                " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Column name [__op] is a system reserved name." +
+                " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
+                () -> starRocksAssert.withTable(sql1));
+    }
 }
