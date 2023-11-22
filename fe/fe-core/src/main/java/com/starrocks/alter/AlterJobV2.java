@@ -302,7 +302,6 @@ public abstract class AlterJobV2 implements Writable {
         timeoutMs = in.readLong();
     }
 
-<<<<<<< HEAD
     /**
      * Schema change will build a new MaterializedIndexMeta, we need rebuild it(add extra original meta)
      * into it from original index meta. Otherwise, some necessary metas will be lost after fe restart.
@@ -322,7 +321,6 @@ public abstract class AlterJobV2 implements Writable {
             }
         }
     }
-=======
+
     public abstract Optional<Long> getTransactionId();
->>>>>>> ec453a2f18 ([BugFix] Make DatabaseTransactionMgr.getMinActiveTxnId() thread safe (#18414))
 }

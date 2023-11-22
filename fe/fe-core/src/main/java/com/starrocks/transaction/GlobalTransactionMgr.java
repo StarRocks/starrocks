@@ -610,11 +610,7 @@ public class GlobalTransactionMgr implements Writable {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
             minId = Math.min(minId, dbTransactionMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
         }
-<<<<<<< HEAD
-        return result == Long.MAX_VALUE ? null : result;
-=======
         return minId;
->>>>>>> ec453a2f18 ([BugFix] Make DatabaseTransactionMgr.getMinActiveTxnId() thread safe (#18414))
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
