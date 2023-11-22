@@ -60,7 +60,7 @@ Generate a simple JSON format test data
 ```json
 {
   "id": 1,
-  "name": "测试用户",
+  "name": "testuser",
   "timestamp": "2023-11-10T12:00:00",
   "status": "active"
 }
@@ -71,7 +71,7 @@ Generate a simple JSON format test data
 Use Kafka’s command-line tools or programming methods to write test data into example_topic. Here is an example using command-line tools:
 
 ```shell
-echo '{"id": 1, "name": "测试用户", "timestamp": "2023-11-10T12:00:00", "status": "active"}' | sh kafka-console-producer.sh --broker-list 10.0.96.4:9092 --topic example_topic
+echo '{"id": 1, "name": "testuser", "timestamp": "2023-11-10T12:00:00", "status": "active"}' | sh kafka-console-producer.sh --broker-list 10.0.96.4:9092 --topic example_topic
 ```
 
 > Note: Replace `topic` and `bootstrap-server` with your Kafka server address.
@@ -115,7 +115,7 @@ Specify the data format as JSON in the "format" = "json" of the PROPERTIES claus
 #### Data Extraction and Transformation
 
 To specify the mapping and transformation relationship between the source data and the target table, configure the COLUMNS and jsonpaths parameters. The column names in COLUMNS correspond to the column names of the target table, and their order corresponds to the column order in the source data. The jsonpaths parameter is used to extract the required field data from JSON data, similar to newly generated CSV data. Then the COLUMNS parameter temporarily names the fields in jsonpaths in order. For more explanations on data transformation, please see [Data Transformation during Import](https://docs.starrocks.io/zh/docs/3.0/loading/Etl_in_loading/).
-> Note:If each JSON object per line has key names and quantities (order is not required) that correspond to the columns of the target table, there is no need to configure COLUMNS.
+> Note: If each JSON object per line has key names and quantities (order is not required) that correspond to the columns of the target table, there is no need to configure COLUMNS.
 
 ## Verifying Data Import
 
@@ -132,8 +132,8 @@ StarRocks > select * from users;
 +------+--------------+---------------------+--------+
 | id   | name         | timestamp           | status |
 +------+--------------+---------------------+--------+
-|    1 | 测试用户     | 2023-11-10T12:00:00 | active |
-|    2 | 测试用户     | 2023-11-10T12:00:00 | active |
+|    1 | testuser     | 2023-11-10T12:00:00 | active |
+|    2 | testuser     | 2023-11-10T12:00:00 | active |
 +------+--------------+---------------------+--------+
 2 rows in set (0.01 sec)
 ```
