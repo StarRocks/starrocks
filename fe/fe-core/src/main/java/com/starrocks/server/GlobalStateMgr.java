@@ -1345,13 +1345,8 @@ public class GlobalStateMgr {
             compactionMgr.start();
         }
         configRefreshDaemon.start();
-<<<<<<< HEAD
-=======
-
-        slotManager.start();
 
         lockChecker.start();
->>>>>>> c5b1342ee4 ([Enhancement] Add dead lock checker daemon in FE node (#35271))
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
