@@ -220,7 +220,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | thrift_server_max_worker_threads     | 4096              | Thrift 服务器支持的最大工作线程数。                          |
 | thrift_client_timeout_ms             | 5000              | Thrift 客户端链接的空闲超时时间，即链接超过该时间无新请求后则将链接断开。单位：ms。|
 | thrift_server_queue_size             | 4096              | Thrift 服务器 pending 队列长度。如果当前处理线程数量超过了配置项 `thrift_server_max_worker_threads` 的值，则将超出的线程加入 pending 队列。|
-| brpc_idle_wait_max_time              | 10000             | BRPC 的空闲等待时间。单位：ms。                              |
+| brpc_idle_wait_max_time              | 10000             | bRPC 的空闲等待时间。单位：ms。                              |
 | query_port                           | 9030              | FE 节点上 MySQL 服务器的端口。                               |
 | mysql_service_nio_enabled            | TRUE              | 是否开启 MySQL 服务器的异步 I/O 选项。                       |
 | mysql_service_io_threads_num         | 4                 | MySQL 服务器中用于处理 I/O 事件的最大线程数。                |
@@ -401,8 +401,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |配置项|默认值|描述|
 |---|---|---|
 |be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求。|
-|brpc_port|8060|BRPC 的端口，可以查看 BRPC 的一些网络统计信息。|
-|brpc_num_threads|-1|BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
+|brpc_port|8060|bRPC 的端口，可以查看 bBRPC 的一些网络统计信息。|
+|brpc_num_threads|-1|bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
 |priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。|
 |heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳。|
 |heartbeat_service_thread_count|1|心跳线程数。|
@@ -457,7 +457,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
 |routine_load_thread_pool_size|10|Routine Load 的线程池数目。|
-|brpc_max_body_size|2147483648|BRPC 最大的包容量，单位为 Byte。|
+|brpc_max_body_size|2147483648|bRPC 最大的包容量，单位为 Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
 |mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。|
