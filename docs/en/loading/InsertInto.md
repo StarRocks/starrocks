@@ -397,7 +397,7 @@ AS INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
-You can check the status of an asynchronous INSERT task by querying the metadata table `task_runs` in Information Schema.
+You can check the status of an asynchronous INSERT task by querying the metadata view `task_runs` in Information Schema.
 
 The following example checks the status of the INSERT task `async`.
 
@@ -480,7 +480,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
+For information about the fields in the return results, see [Information Schema > loads](../reference/information_schema/loads.md).
 
 ### Check via curl command
 
