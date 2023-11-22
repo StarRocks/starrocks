@@ -28,35 +28,7 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
-<<<<<<< HEAD
-=======
-      - name: backport branch-3.2
-        if: contains(github.event.pull_request.labels.*.name, '3.2')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-3.2
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '3.2')
-        with:
-          labels: '3.2'
-
-      - name: backport branch-3.1
-        if: contains(github.event.pull_request.labels.*.name, '3.1')
-        uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            @Mergifyio backport branch-3.1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions-ecosystem/action-remove-labels@v1
-        if: contains(github.event.pull_request.labels.*.name, '3.1')
-        with:
-          labels: '3.1'
-
->>>>>>> 039cb16527 ([Tool] Add behavior check (#35552))
       - name: backport branch-3.0
         if: contains(github.event.pull_request.labels.*.name, '3.0')
         uses: thollander/actions-comment-pull-request@v1
@@ -89,7 +61,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-2.4
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.4')
@@ -102,7 +74,7 @@ jobs:
         with:
           message: |
             @Mergifyio backport branch-2.3
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.3')
