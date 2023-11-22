@@ -15,6 +15,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
@@ -22,10 +23,12 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.EsTestCase;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Before;
@@ -85,6 +88,11 @@ public class EsScanNodeTest extends EsTestCase {
         selectedIndex.add(esShardPartitions);
         scanNode.computeShardLocations(selectedIndex);
 
-    }
 
+        List<EsShardRouting> singleShardRouting = Lists.newArrayList();
+        TNetworkAddress addr = new TNetworkAddress("127.0.0.1", 1234);
+        singleShardRouting.add(new EsShardRouting("doe", 5, true, addr, "111"));
+        esShardPartitions.addShardRouting(5, singleShardRouting);
+        scanNode.computeShardLocations(selectedIndex);
+    }
 }
