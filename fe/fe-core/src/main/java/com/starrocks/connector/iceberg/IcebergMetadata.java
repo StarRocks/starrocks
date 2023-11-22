@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.AppendFiles;
@@ -191,8 +192,10 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public void dropTable(DropTableStmt stmt) {
+        Table icebergTable = getTable(stmt.getDbName(), stmt.getTableName());
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
+        StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
     }
 
     @Override

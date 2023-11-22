@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -204,6 +205,25 @@ public class AnalyzeMgr implements Writable {
     public void dropExternalBasicStatsData(String tableUUID) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
+    }
+
+    public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {
+        List<AnalyzeJob> expireList = Lists.newArrayList();
+        try {
+            for (AnalyzeJob analyzeJob : analyzeJobMap.values()) {
+                if (analyzeJob.getCatalogName().equals(catalogName) &&
+                        analyzeJob.getDbName().equals(dbName) &&
+                        analyzeJob.getTableName().equals(tblName)) {
+                    expireList.add(analyzeJob);
+                }
+            }
+        } catch (MetaNotFoundException e) {
+            LOG.warn("drop analyze job failed", e);
+        }
+        expireList.forEach(job -> analyzeJobMap.remove(job.getId()));
+        for (AnalyzeJob job : expireList) {
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveAnalyzeJob(job);
+        }
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
