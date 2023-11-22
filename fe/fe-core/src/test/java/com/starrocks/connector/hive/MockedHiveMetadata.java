@@ -96,7 +96,14 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
         readLock();
         try {
-            return MOCK_TABLE_MAP.get(dbName).get(tblName).table;
+            if (!MOCK_TABLE_MAP.containsKey(dbName)) {
+                return null;
+            }
+            Map<String, HiveTableInfo> dbMap = MOCK_TABLE_MAP.get(dbName);
+            if (!dbMap.containsKey(tblName)) {
+                return null;
+            }
+            return dbMap.get(tblName).table;
         } finally {
             readUnlock();
         }
