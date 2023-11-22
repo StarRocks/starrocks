@@ -762,6 +762,14 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private FunctionCallExpr visitDistinctFunctionCall(FunctionCall node, ParseTreeContext context) {
         String fnName = node.getName().toString();
+
+        // count(distinct (a, b, c)) -> count(distinct concat(a, b, c))
+        if (node.isDistinct() && !node.getArguments().isEmpty() && node.getArguments().get(0) instanceof Row) {
+            Row row = (Row) node.getArguments().get(0);
+            FunctionCallExpr concat = new FunctionCallExpr("concat", visit(row.getItems(), context, Expr.class));
+            return new FunctionCallExpr(fnName, new FunctionParams(ImmutableList.of(concat)));
+        }
+
         return new FunctionCallExpr(fnName, (!node.getArguments().isEmpty()) ?
                         new FunctionParams(node.isDistinct(), visit(node.getArguments(), context, Expr.class)) :
                         FunctionParams.createStarParam());

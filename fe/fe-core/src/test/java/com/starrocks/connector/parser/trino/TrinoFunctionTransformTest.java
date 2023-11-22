@@ -49,6 +49,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select count_if(v1) from t0;";
         assertPlanContains(sql, "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
+
+        sql = "select count(distinct ('a', 'b', 'c'))";
+        assertPlanContains(sql, "count('abc')");
+
+        sql = "select count(distinct row('a', 'b', 'c'));";
+        assertPlanContains(sql, "count('abc')");
+
+        sql = "select count(distinct (v1, v2, 'a')) from t0;";
+        assertPlanContains(sql, "count(concat(CAST(1: v1 AS VARCHAR), CAST(2: v2 AS VARCHAR), 'a'))");
     }
 
     @Test
