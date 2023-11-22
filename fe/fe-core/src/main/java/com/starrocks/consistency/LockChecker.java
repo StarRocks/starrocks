@@ -18,9 +18,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -33,7 +33,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public class LockChecker extends FrontendDaemon {
+public class LockChecker extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(LockChecker.class);
 
