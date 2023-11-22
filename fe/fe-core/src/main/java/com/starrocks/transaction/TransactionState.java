@@ -50,6 +50,8 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -390,6 +392,10 @@ public class TransactionState implements Writable {
     public boolean isRunning() {
         return transactionStatus == TransactionStatus.PREPARE || transactionStatus == TransactionStatus.PREPARED ||
                 transactionStatus == TransactionStatus.COMMITTED;
+    }
+
+    public Set<TabletCommitInfo> getTabletCommitInfos() {
+        return tabletCommitInfos;
     }
 
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
@@ -1011,11 +1017,12 @@ public class TransactionState implements Writable {
                 // consider txn finished if db is dropped
                 return true;
             }
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 prepareFinishChecker(db);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         if (finishState == null) {

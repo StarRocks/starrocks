@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/insert.md).
+StarRocks supports using one of the following methods to load huge amounts of data from cloud storage: [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
 In v3.0 and earlier, StarRocks only supports Broker Load, which runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information, see the "[View a load job](#view-a-load-job)" section of this topic.
 
@@ -863,7 +863,7 @@ The following result is returned:
 REJECTED_RECORD_PATH: 172.26.95.92:/home/disk1/sr/be/storage/rejected_record/test_db/label_brokerload_unqualifiedtest_0728/6/404a20b1e4db4d27_8aa9af1e8d6d8bdc
 ```
 
-For information about the fields in the return results, see [Information Schema > loads](../administration/information_schema.md#loads).
+For information about the fields in the return results, see [Information Schema > loads](../reference/information_schema/loads.md).
 
 ## Cancel a load job
 

@@ -45,6 +45,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -95,7 +97,8 @@ public class TableRowCountAction extends RestBaseAction {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,
                         "Database [" + dbName + "] " + "does not exists");
             }
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 Table table = db.getTable(tableName);
                 if (table == null) {
@@ -112,7 +115,7 @@ public class TableRowCountAction extends RestBaseAction {
                 resultMap.put("status", 200);
                 resultMap.put("size", olapTable.proximateRowCount());
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         } catch (StarRocksHttpException e) {
             // status code  should conforms to HTTP semantic

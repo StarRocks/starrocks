@@ -69,6 +69,8 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.DataPartition;
@@ -242,7 +244,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.partitions = stmt.getPartitions();
         this.columnNames = stmt.getColumnNames();
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             this.dbId = db.getId();
             this.exportTable = db.getTable(stmt.getTblName().getTbl());
@@ -253,7 +256,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
             this.tableName = stmt.getTblName();
             genExecFragment(stmt);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         this.sql = stmt.toSql();

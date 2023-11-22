@@ -326,6 +326,10 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         }
     }
 
+    if (!request->has_skip_cleanup() || request->skip_cleanup()) {
+        return;
+    }
+
     auto thread_pool = abort_txn_thread_pool(_env);
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {

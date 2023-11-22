@@ -22,6 +22,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.http.HttpConnectContext;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -73,8 +75,9 @@ public class StatementPlanner {
         boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
+        Locker locker = new Locker();
         try {
-            lock(dbs);
+            lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -89,7 +92,7 @@ public class StatementPlanner {
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-                unLock(dbs);
+                unLock(locker, dbs);
                 needWholePhaseLock = false;
                 return planQuery(stmt, resultSinkType, session, true);
             }
@@ -105,7 +108,7 @@ public class StatementPlanner {
             }
         } finally {
             if (needWholePhaseLock) {
-                unLock(dbs);
+                unLock(locker, dbs);
             }
         }
 
@@ -235,48 +238,50 @@ public class StatementPlanner {
 
     private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
         Set<OlapTable> olapTables = Sets.newHashSet();
+        Locker locker = new Locker();
         try {
             // Need lock to avoid olap table metas ConcurrentModificationException
-            lock(dbs);
+            lock(locker, dbs);
             AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
             return olapTables;
         } finally {
-            unLock(dbs);
+            unLock(locker, dbs);
         }
     }
 
     public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+        Locker locker = new Locker();
         try {
-            lock(dbs);
+            lock(locker, dbs);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
             AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
             return queryStmt.getQueryRelation().getColumnOutputNames();
         } finally {
-            unLock(dbs);
+            unLock(locker, dbs);
         }
     }
 
     // Lock all database before analyze
-    private static void lock(Map<String, Database> dbs) {
+    private static void lock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
         dbList.sort(Comparator.comparingLong(Database::getId));
         for (Database db : dbList) {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
         }
     }
 
     // unLock all database after analyze
-    private static void unLock(Map<String, Database> dbs) {
+    private static void unLock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         for (Database db : dbs.values()) {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
