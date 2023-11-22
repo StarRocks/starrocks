@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 An Iceberg catalog is a kind of external catalog that enables you to query data from Apache Iceberg without ingestion.
 
-Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
+Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
