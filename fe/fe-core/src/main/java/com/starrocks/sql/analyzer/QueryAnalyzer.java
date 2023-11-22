@@ -300,7 +300,6 @@ public class QueryAnalyzer {
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-
                     r = viewRelation;
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
@@ -688,11 +687,11 @@ public class QueryAnalyzer {
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
             Scope queryOutputScope;
-            try {
+            if (node.getView().isAnalyzed()) {
+                queryOutputScope = node.getQueryStatement().getQueryRelation().getScope();
+            } else {
+                // TODO support hiveView cache
                 queryOutputScope = process(node.getQueryStatement(), scope);
-            } catch (SemanticException e) {
-                throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
-                        "function(s) or definer/invoker of view lack rights to use them");
             }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
