@@ -54,6 +54,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -711,7 +713,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
         // set the config to a local variable to avoid config params changed.
         int partitionBatchNum = Config.tablet_checker_partition_batch_num;
         int partitionChecked = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         long lockStart = System.nanoTime();
         try {
             TABLE:
@@ -738,8 +741,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     if (partitionChecked % partitionBatchNum == 0) {
                         lockTotalTime += System.nanoTime() - lockStart;
                         // release lock, so that lock can be acquired by other threads.
-                        db.readUnlock();
-                        db.readLock();
+                        locker.unLockDatabase(db, LockType.READ);
+                        locker.lockDatabase(db, LockType.READ);
                         lockStart = System.nanoTime();
                         if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return lockTotalTime;
@@ -790,8 +793,10 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                                 tablet.getId(), st);
                                         TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                                 TabletSchedCtx.Type.REPAIR,
-                                                db.getId(), tableId, partition.getId(), index.getId(),
-                                                tablet.getId(),
+                                                // physical partition id is same as partition id
+                                                // since colocate table should have only one physical partition
+                                                db.getId(), tableId, partition.getId(), partition.getId(),
+                                                index.getId(), tablet.getId(),
                                                 System.currentTimeMillis());
                                         // the tablet status will be checked and set again when being scheduled
                                         tabletCtx.setTabletStatus(st);
@@ -857,7 +862,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
             }
         } finally {
             lockTotalTime += System.nanoTime() - lockStart;
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         return lockTotalTime - waitTotalTimeMs * 1000000;

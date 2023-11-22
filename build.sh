@@ -31,7 +31,7 @@
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
 ##############################################################
-
+startTime=$(date +%s)
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
 MACHINE_TYPE=$(uname -m)
@@ -468,6 +468,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
     if [ "${ibuildtype}" == "release" ] ; then
@@ -523,8 +524,11 @@ fi
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
 
+endTime=$(date +%s)
+totalTime=$((endTime - startTime))
+
 echo "***************************************"
-echo "Successfully build StarRocks ${MSG}"
+echo "Successfully build StarRocks ${MSG} ; StartTime:$(date -d @$startTime '+%Y-%m-%d %H:%M:%S'), EndTime:$(date -d @$endTime '+%Y-%m-%d %H:%M:%S'), TotalTime:${totalTime}s"
 echo "***************************************"
 
 if [[ ! -z ${STARROCKS_POST_BUILD_HOOK} ]]; then

@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 为 ETL 语句创建异步任务。此功能自 StarRocks 2.5 起支持。
 
-StarRocks v3.0 支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../data-manipulation/insert.md) 创建异步任务。
+StarRocks v3.0 支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。
 
 您可以使用 [DROP TASK](./DROP_TASK.md) 删除异步任务。
 
@@ -23,7 +23,7 @@ SUBMIT TASK [task_name] AS <etl_statement>
 | **参数**      | **说明**                                                     |
 | ------------- | ------------------------------------------------------------ |
 | task_name     | 任务名称。                                                   |
-| etl_statement | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../data-manipulation/insert.md) 创建异步任务。 |
+| etl_statement | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../data-definition/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](./INSERT.md) 创建异步任务。 |
 
 ## 使用说明
 
