@@ -102,7 +102,7 @@ Parameters:
 
   :::note
 
-  To ensure that the external cluster to which the StarRocks external tables belong can access the destination StarRocks cluster, you must configure your network and firewall to allow access to the following ports:
+  To ensure that the source cluster to which the StarRocks external tables belong can access the destination StarRocks cluster, you must configure your network and firewall to allow access to the following ports:
 
   * The RPC port of the FE node. See `rpc_port` in the FE configuration file **fe/fe.conf**. The default RPC port is `9020`.
   * The bRPC port of the BE node. See `brpc_port` in the BE configuration file **be/be.conf**. The default bRPC port is `8060`.
