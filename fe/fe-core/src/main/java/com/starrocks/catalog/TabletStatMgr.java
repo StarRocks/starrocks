@@ -340,6 +340,8 @@ public class TabletStatMgr extends FrontendDaemon {
                     LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                     Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                     responseList.add(responseFuture);
+                    LOG.debug("Sent tablet stat collection task to node {} for partition {} of version {}. tablet count={}",
+                                node.getHost(), debugName(), version, entry.getValue().size());
                 } catch (Throwable e) {
                     LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(), debugName(),
                             e.getMessage());
