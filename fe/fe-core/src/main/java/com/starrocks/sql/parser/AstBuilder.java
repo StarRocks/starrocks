@@ -2350,7 +2350,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.system != null) {
             cluster = ((Identifier) visit(context.system)).getValue();
         }
-        return new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
+        LoadStmt stmt = new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
+        stmt.setOptHints(visitVarHints(context.setVarHint()));
+        return stmt;
     }
 
     private LabelName getLabelName(StarRocksParser.LabelNameContext context) {
