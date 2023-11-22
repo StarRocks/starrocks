@@ -24,6 +24,8 @@ displayed_sidebar: "Chinese"
 
 [Apache Kafka](../../loading/RoutineLoad.md)
 
+[AutoMQ Kafka](../../loading/automq-routine-load.md)
+
 ## 集群管理
 
 [Kubernetes](https://github.com/StarRocks/starrocks-kubernetes-operator)
