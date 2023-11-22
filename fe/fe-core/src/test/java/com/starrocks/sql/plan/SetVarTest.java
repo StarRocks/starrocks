@@ -14,9 +14,13 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.StatementBase;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -36,6 +40,15 @@ public class SetVarTest extends PlanTestBase {
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 SessionVariable variables = execPlan.getConnectContext().getSessionVariable();
                 Assert.assertEquals(10, variables.getQueryTimeoutS());
+            }
+        };
+
+        new MockUp<DDLStmtExecutor>() {
+            @Mock
+            public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
+                SessionVariable variables = context.getSessionVariable();
+                Assert.assertFalse(variables.getEnableAdaptiveSinkDop());
+                return null;
             }
         };
 
@@ -60,7 +73,15 @@ public class SetVarTest extends PlanTestBase {
             Assert.assertEquals(queryTimeout, variable.getQueryTimeoutS());
         }
 
+        // load
+        {
+            boolean enableAdaptiveSinkDop = variable.getEnableAdaptiveSinkDop();
+            String sql = "LOAD /*+set_var(enable_adaptive_sink_dop=false)*/ "
+                          + "LABEL label0 (DATA INFILE('/path1/file') INTO TABLE tbl)";
+            starRocksAssert.getCtx().executeSql(sql);
+            Assert.assertEquals(enableAdaptiveSinkDop, variable.getEnableAdaptiveSinkDop());
+        }
+
         starRocksAssert.dropTable("tbl");
     }
-
 }
