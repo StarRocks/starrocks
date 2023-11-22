@@ -14,7 +14,7 @@ The following fields are provided in `materialized_views`:
 | TABLE_SCHEMA                         | Database in which the materialized view resides.             |
 | TABLE_NAME                           | Name of the materialized view.                               |
 | REFRESH_TYPE                         | Refresh type of the materialized view, including `ROLLUP`, `ASYNC`, and `MANUAL`. |
-| IS_ACTIVE                            | Indicates whether the materialized view is active. Inactive materialized views can not be refreshed or queried. |
+| IS_ACTIVE                            | Indicates whether the materialized view is active. Inactive materialized views cannot be refreshed or queried. |
 | INACTIVE_REASON                      | The reason that the materialized view is inactive.           |
 | PARTITION_TYPE                       | Type of partitioning strategy for the materialized view.     |
 | TASK_ID                              | ID of the task responsible for refreshing the materialized view. |
