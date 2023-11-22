@@ -98,7 +98,10 @@ PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id)
         : _mutex(), _query_id(query_id), _ref_count(1) {}
 
 PassThroughChunkBuffer::~PassThroughChunkBuffer() {
-    DCHECK(_ref_count == 0);
+    if (UNLIKELY(_ref_count != 0)) {
+        LOG(WARNING) << "PassThroughChunkBuffer reference leak detected! query_id=" << print_id(_query_id)
+                     << ", _ref_count=" << _ref_count;
+    }
     for (auto& it : _key_to_channel) {
         delete it.second;
     }
