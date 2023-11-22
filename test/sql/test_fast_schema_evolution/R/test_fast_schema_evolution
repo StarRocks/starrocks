@@ -720,6 +720,7 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 [UC]show alter table rollup where State = "FINISHED";
 -- result:
 15253	tab1	2023-11-24 20:19:27	2023-11-24 20:19:37	tab1	r1	15254	5150	FINISHED		None	86400
@@ -739,6 +740,27 @@ None
 -- result:
 -- !result
 [UC]show alter table rollup where CreateTime < "1970-01-01 00:00:00";
+=======
+show alter table rollup where State = "FINISHED";
+-- result:
+12054	tab1	2023-11-22 15:54:39	2023-11-22 15:54:58	tab1	r1	12055	2036	FINISHED		None	86400
+12132	tab1	2023-11-22 15:55:00	2023-11-22 15:55:18	r1	r2	12133	2080	FINISHED		None	86400
+-- !result
+show alter table rollup where CreateTime >= "1970-01-01 00:00:00";
+-- result:
+12054	tab1	2023-11-22 15:54:39	2023-11-22 15:54:58	tab1	r1	12055	2036	FINISHED		None	86400
+12132	tab1	2023-11-22 15:55:00	2023-11-22 15:55:18	r1	r2	12133	2080	FINISHED		None	86400
+-- !result
+show alter table rollup where CreateTime > "1970-01-01 00:00:00";
+-- result:
+12054	tab1	2023-11-22 15:54:39	2023-11-22 15:54:58	tab1	r1	12055	2036	FINISHED		None	86400
+12132	tab1	2023-11-22 15:55:00	2023-11-22 15:55:18	r1	r2	12133	2080	FINISHED		None	86400
+-- !result
+show alter table rollup where CreateTime <= "1970-01-01 00:00:00";
+-- result:
+-- !result
+show alter table rollup where CreateTime < "1970-01-01 00:00:00";
+>>>>>>> 5c6db65e7c (add test)
 -- result:
 -- !result
 desc r2;
