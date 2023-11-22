@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion.
 
-Also, you can directly transform and load data from Hive by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on Hive catalogs. StarRocks supports Hive catalogs from v2.4 onwards.
+Also, you can directly transform and load data from Hive by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Hive catalogs. StarRocks supports Hive catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -39,7 +39,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
@@ -250,7 +250,7 @@ The following table describes the parameters you need to configure in `StorageCr
 
 A set of parameters about how StarRocks updates the cached metadata of Hive. This parameter set is optional.
 
-StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
+StarRocks implements the [automatic asynchronous update policy](#appendix-understand-automatic-asynchronous-update) by default.
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
