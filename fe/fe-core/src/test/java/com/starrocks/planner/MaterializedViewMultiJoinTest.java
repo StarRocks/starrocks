@@ -14,10 +14,15 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.plan.PlanTestBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Timeout;
 
 public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
 
@@ -347,6 +352,89 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             PlanTestBase.assertNotContains(plan, "rollup: test_mv2");
         }
         starRocksAssert.dropMaterializedView("test_mv2");
+    }
+
+    @Test
+    public void testRuleExhausted_SingleTable() throws Exception {
+        String mvName = "test_exhaused";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM " +
+                "tbl_1 AS p1 ");
+        String query = "select sum(p1.p1_col4) from tbl_1 p1";
+        starRocksAssert.query(query).explainContains(mvName);
+
+        // Exhaust the rule
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public boolean ruleExhausted(RuleType ruleType) {
+                return true;
+            }
+        };
+        starRocksAssert.query(query).explainWithout(mvName);
+    }
+
+    @Test
+    public void testRuleExhausted_MultiTable() throws Exception {
+        String mvName = "test_exhaused";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS SELECT " +
+                "sum(p1.p1_col4) AS p1_col4\n" +
+                "FROM tbl_1 AS p1 " +
+                "JOIN tbl_2 AS p2");
+        String query = "select sum(p1.p1_col4) from tbl_1 p1 JOIN tbl_2 AS p2";
+        starRocksAssert.query(query).explainContains(mvName);
+
+        // Exhaust the rule
+        new MockUp<OptimizerContext>() {
+            @Mock
+            public boolean ruleExhausted(RuleType ruleType) {
+                return true;
+            }
+        };
+        starRocksAssert.query(query).explainWithout(mvName);
+    }
+
+    @Test
+    @Timeout(value = 10)
+    public void testManyJoins() throws Exception {
+        String mvName = "mv_manyjoin";
+        String createMv = "CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ")\n" +
+                "AS ";
+        StringBuilder query = new StringBuilder("SELECT count(*) cnt " +
+                "FROM " +
+                "tbl_1 AS p1 " +
+                "INNER JOIN test_mv1 AS p5 ON p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt \n" +
+                "LEFT OUTER JOIN tbl_2 AS p2 " +
+                "   ON p2.p2_col1='1' AND p1.p1_col2=p2.p2_col2 " +
+                "   AND p2.start_dt <= p1.dt AND p2.end_dt > p1.dt " +
+                "LEFT OUTER JOIN tbl_3 AS p3 ON p1.p1_col2=p3.p3_col2 AND p3.dt=p1.dt ");
+        for (int i = 6; i < 20; i++) {
+            String alias = "p" + i;
+            query.append(String.format("LEFT OUTER JOIN tbl_3 AS %s ON p1.p1_col2=%s.p3_col2 AND %s.dt=p1.dt\n",
+                    alias, alias, alias));
+        }
+        starRocksAssert.withMaterializedView(createMv + query);
+
+        starRocksAssert.query("select * from tbl_1 AS p1 " +
+                        "INNER JOIN test_mv1 AS p5 ON p1.p1_col2=p5.p1_col2 and p1.dt=p5.dt \n")
+                .explainWithout(mvName);
+
+        // FIXME: it's very slow
+        // starRocksAssert.query(query.toString()).explainContains(mvName);
     }
 
 }
