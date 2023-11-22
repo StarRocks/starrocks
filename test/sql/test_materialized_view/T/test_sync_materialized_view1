@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view
+-- name: test_sync_materialized_view1
 
 admin set frontend config('alter_scheduler_interval_millisecond' = '100');
 
@@ -21,21 +21,21 @@ function: wait_materialized_view_finish()
 insert into user_tags values('2023-04-13', 1, 'a', 1), ('2023-04-13', 1, 'b', 2), ('2023-04-13', 1, 'c', 3), ('2023-04-13', 1, 'd', 4), ('2023-04-13', 1, 'e', 5), ('2023-04-13', 2, 'e', 5), ('2023-04-13', 3, 'e', 6);
 
 -- bitmap
-select * from user_tags_mv1 [_SYNC_MV_] order by user_id;
-select user_id, count(distinct tag_id) from user_tags group by user_id order by user_id;
-select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id order by user_id;
-select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id order by user_id;
+select count(1) from user_tags_mv1 [_SYNC_MV_];
+select user_id, count(distinct tag_id) from user_tags group by user_id  order by 1,2;
+select user_id, bitmap_union_count(to_bitmap(tag_id)) from user_tags group by user_id  order by 1,2;
+select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id  order by 1,2;
 -- hll
-select * from user_tags_hll_mv1 [_SYNC_MV_] order by user_id;
-select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id order by user_id;
-select user_id, ndv(tag_id) x from user_tags group by user_id order by user_id;
-select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id order by user_id;
-select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id order by user_id;
-select * from user_tags_percential_mv1 [_SYNC_MV_] order by user_id;
+select count(1) from user_tags_hll_mv1 [_SYNC_MV_];
+select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id  order by 1,2;
+select user_id, ndv(tag_id) x from user_tags group by user_id  order by 1,2;
+select user_id, hll_union_agg(hll_hash(tag_id)) x from user_tags group by user_id  order by 1,2;
+select user_id, hll_cardinality(hll_union(hll_hash(tag_id))) x from user_tags group by user_id  order by 1,2;
+select count(1) from user_tags_percential_mv1 [_SYNC_MV_];
 -- percentile
-select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id order by user_id;
-select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id order by user_id;
-select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id order by user_id;
+select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id  order by 1,2;
+select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id  order by 1,2;
+select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id  order by 1,2;
 
 drop materialized view user_tags_mv1;
 drop materialized view user_tags_hll_mv1;
