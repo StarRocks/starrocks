@@ -1093,7 +1093,12 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
-        executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        try {
+            executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        } finally {
+            ConnectContext.remove();
+        }
+
     }
 
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
