@@ -65,8 +65,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
     @Override
     public void execute() {
-        if (groupExpression.hasRuleExplored(rule) ||
-                groupExpression.isUnused()) {
+        if (groupExpression.hasRuleExplored(rule) || groupExpression.isUnused()) {
             return;
         }
         SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
@@ -85,6 +84,10 @@ public class ApplyRuleTask extends OptimizerTask {
             List<OptExpression> targetExpressions;
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
+                break;
             }
 
             newExpressions.addAll(targetExpressions);

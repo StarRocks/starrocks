@@ -271,6 +271,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
+    public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -976,6 +977,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = NEW_PLANNER_OPTIMIZER_TIMEOUT)
     private long optimizerExecuteTimeout = 3000;
+
+    @VariableMgr.VarAttr(name = OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT)
+    private long optimizerMaterializedViewTimeLimitMillis = 1000;
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
@@ -2039,6 +2043,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setOptimizerExecuteTimeout(long optimizerExecuteTimeout) {
         this.optimizerExecuteTimeout = optimizerExecuteTimeout;
+    }
+
+    public long getOptimizerMaterializedViewTimeLimitMillis() {
+        return optimizerMaterializedViewTimeLimitMillis;
     }
 
     public boolean getEnableGroupbyUseOutputAlias() {
