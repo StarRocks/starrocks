@@ -140,7 +140,6 @@ public class UDFJsonGet {
 
 用户自定义类必须实现如下方法：
 
-
 > **说明**
 >
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
@@ -516,7 +515,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md)。
+更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md)。
 
 ## 删除 UDF
 
@@ -526,7 +525,7 @@ SHOW FUNCTIONS;
 DROP FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/drop-function.md)。
+更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md)。
 
 ## 类型映射关系
 

@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-取消指定的 [Broker Load](../data-manipulation/BROKER_LOAD.md)、[Spark Load](../data-manipulation/SPARK_LOAD.md) 或 [INSERT](../data-manipulation/insert.md) 导入作业，状态为 PREPARED、CANCELLED 或 FINISHED 的导入作业不能取消。
+取消指定的 [Broker Load](../data-manipulation/BROKER_LOAD.md)、[Spark Load](../data-manipulation/SPARK_LOAD.md) 或 [INSERT](../data-manipulation/INSERT.md) 导入作业，状态为 PREPARED、CANCELLED 或 FINISHED 的导入作业不能取消。
 
 CANCEL LOAD 是一个异步操作，执行后可使用 [SHOW LOAD](../data-manipulation/SHOW_LOAD.md) 语句查看是否取消成功。当状态 (`State`) 为 `CANCELLED` 且导入作业失败原因 (`ErrorMsg`) 中的失败类型 (`type`) 为 `USER_CANCEL` 时，代表成功取消了导入作业。
 

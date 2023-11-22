@@ -12,8 +12,8 @@ Inserts data into a specific table or overwrites a specific table with data. For
 
 ```Bash
 INSERT {INTO | OVERWRITE} table_name
-[ PARTITION (<partition1_name>[, <partition2_name>, ...) ]
-[ TEMPORARY_PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...) ]
+[ PARTITION (<partition1_name>[, <partition2_name>, ...]) ]
+[ TEMPORARY_PARTITION (<temporary_partition1_name>[, <temporary_partition2_name>, ...]) ]
 [ WITH LABEL label]
 [ (column_name [, ...]) ]
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }

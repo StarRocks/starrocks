@@ -508,7 +508,7 @@ Run the following command to query UDFs:
 SHOW FUNCTIONS;
 ```
 
-For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
+For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md).
 
 ## Drop UDF
 
@@ -518,7 +518,7 @@ Run the following command to drop a UDF:
 DROP FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-For more information, see [DROP FUNCTION](../sql-statements/data-definition/drop-function.md).
+For more information, see [DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md).
 
 ## Mapping between SQL data types and Java data types
 
