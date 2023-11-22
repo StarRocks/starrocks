@@ -209,16 +209,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
     }
 
-<<<<<<< HEAD
-        db.readLock();
-        try {
-            // Preconditions: has acquired the database's reader or writer lock.
-            tabletGroup = Utils.groupTabletID(table);
-        } catch (NoAliveBackendException e) {
-            LOG.warn(e);
-        } finally {
-            db.readUnlock();
-=======
     private void abortTxnSkipCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
         List<ComputeNode> nodes = getAllAliveNodes();
@@ -229,7 +219,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             request.tabletIds = null; // unused when skipCleanup is true
 
             sendAbortTxnRequestIgnoreResponse(request, node);
->>>>>>> ad8c48fd5c ([Enhancement] Reduce HEAD OBJECT requests during abort transactions (#35183))
         }
     }
 
