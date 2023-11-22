@@ -2049,6 +2049,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return optimizerMaterializedViewTimeLimitMillis;
     }
 
+    public void setOptimizerMaterializedViewTimeLimitMillis(long millis) {
+        this.optimizerMaterializedViewTimeLimitMillis = millis;
+    }
+
     public boolean getEnableGroupbyUseOutputAlias() {
         return enableGroupbyUseOutputAlias;
     }
