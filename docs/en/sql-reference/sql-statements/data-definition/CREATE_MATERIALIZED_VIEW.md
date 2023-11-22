@@ -235,8 +235,9 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 Valid values:
 
 - `column_name`: The name of the column used for partitioning. The expression `PARTITION BY dt` means to partition the materialized view according to the `dt` column.
-- date_trunc function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
-- time_slice or date_slice functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
+- `date_trunc` function: The function used to truncate the time unit. `PARTITION BY date_trunc("MONTH", dt)` means that the `dt` column is truncated to month as the unit for partitioning. The `date_trunc` function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
+- `str2date` function: The function used to partition string type parititions of base table into materialized view's partition. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a string date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
+- `time_slice` or `date_slice` functions: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice and date_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
 If this parameter is not specified, no partitioning strategy is adopted by default.
 
@@ -248,6 +249,7 @@ The sort key of the asynchronous materialized view. If you do not specify the so
 
 Properties of the asynchronous materialized view. You can modify the properties of an existing materialized view using [ALTER MATERIALIZED VIEW](./ALTER_MATERIALIZED_VIEW.md).
 
+- `session.`: If you want to alter a session variable-related property of the materialized view, you must add a `session.` prefix to the property, for example, `session.query_timeout`. You do not need to specify the prefix for non-session properties, for example, `mv_rewrite_staleness_second`.
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. Valid values: `HDD` and `SSD`.
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
@@ -710,4 +712,57 @@ SELECT
 INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY
 INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
+```
+
+Example 4: Create a partitioned materialized view and use `str2date` to transform the STRING type partition key of the base table into the date type as for the materialized view.
+
+``` SQL
+
+-- Hive Table with string partition column.
+CREATE TABLE `part_dates` (
+  `d_date` varchar(20) DEFAULT NULL,
+  `d_dayofweek` varchar(10) DEFAULT NULL,
+  `d_month` varchar(11) DEFAULT NULL,
+  `d_year` int(11) DEFAULT NULL,
+  `d_yearmonthnum` int(11) DEFAULT NULL,
+  `d_yearmonth` varchar(9) DEFAULT NULL,
+  `d_daynuminweek` int(11) DEFAULT NULL,
+  `d_daynuminmonth` int(11) DEFAULT NULL,
+  `d_daynuminyear` int(11) DEFAULT NULL,
+  `d_monthnuminyear` int(11) DEFAULT NULL,
+  `d_weeknuminyear` int(11) DEFAULT NULL,
+  `d_sellingseason` varchar(14) DEFAULT NULL,
+  `d_lastdayinweekfl` int(11) DEFAULT NULL,
+  `d_lastdayinmonthfl` int(11) DEFAULT NULL,
+  `d_holidayfl` int(11) DEFAULT NULL,
+  `d_weekdayfl` int(11) DEFAULT NULL,
+  `d_datekey` varchar(11) DEFAULT NULL
+) partition by (d_datekey);
+
+
+-- Create the materialied view  with `str2date`.
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv` 
+PARTITION BY str2date(`d_datekey`,'%Y%m%d')
+DISTRIBUTED BY HASH(`d_date`, `d_month`, `d_month`) 
+REFRESH MANUAL 
+AS
+SELECT
+`d_date` ,
+  `d_dayofweek`,
+  `d_month` ,
+  `d_yearmonthnum` ,
+  `d_yearmonth` ,
+  `d_daynuminweek`,
+  `d_daynuminmonth`,
+  `d_daynuminyear` ,
+  `d_monthnuminyear` ,
+  `d_weeknuminyear` ,
+  `d_sellingseason`,
+  `d_lastdayinweekfl`,
+  `d_lastdayinmonthfl`,
+  `d_holidayfl` ,
+  `d_weekdayfl`,
+   `d_datekey`
+FROM
+ `hive_catalog`.`ssb_1g_orc`.`part_dates` ;
 ```
