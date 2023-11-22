@@ -21,7 +21,7 @@ Note the following points:
 
 - In actual business scenarios, both qualified and unqualified rows may contain `NULL` values. If the destination columns do not allow `NULL` values, StarRocks reports errors and filters out the rows that contain `NULL` values.
 
-- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) does not support setting the `max_filter_ratio` property.
+- The maximum percentage of unqualified rows that can be filtered out for a [Stream Load](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), or [Spark Load](../../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) job is controlled by an optional job property `max_filter_ratio`. [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) does not support setting the `max_filter_ratio` property.
 
 For example, you want to load four rows that hold `\N` (`\N` denotes a `NULL` value), `abc`, `2000`, and `1` values respectively in a column from a CSV-formatted data file into a StarRocks table, and the data type of the destination StarRocks table column is TINYINT [-128, 127].
 
@@ -145,4 +145,4 @@ SET enable_insert_strict = {true | false};
 INSERT INTO <table_name> ...
 ```
 
-For detailed syntax and parameters about INSERT, see [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md).
+For detailed syntax and parameters about INSERT, see [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md).

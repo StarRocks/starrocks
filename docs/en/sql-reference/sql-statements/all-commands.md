@@ -119,7 +119,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 
 ### Routine load
 
-- [ALTER ROUTINE LOAD](./data-manipulation/alter-routine-load.md)
+- [ALTER ROUTINE LOAD](./data-manipulation/ALTER_ROUTINE_LOAD.md)
 - [CREATE ROUTINE LOAD](./data-manipulation/CREATE_ROUTINE_LOAD.md)
 - [PAUSE ROUTINE LOAD](./data-manipulation/PAUSE_ROUTINE_LOAD.md)
 - [RESUME ROUTINE LOAD](./data-manipulation/RESUME_ROUTINE_LOAD.md)
@@ -132,7 +132,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
-- [INSERT](./data-manipulation/insert.md)
+- [INSERT](./data-manipulation/INSERT.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
