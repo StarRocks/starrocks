@@ -32,7 +32,7 @@ PROPERTIES (
 
 ## Prepare AutoMQ Kafka and test data
 
-To prepare your AutoMQ Kafka environment and test data, follow the AutoMQ [Quick Start](https://docs.automq.com/zh/docs/automq-s3kafka/VKpxwOPvciZmjGkHk5hcTz43nde) guide to deploy your AutoMQ Kafka cluster. Ensure that StarRocks can directly connect to your AutoMQ Kafka server.
+To prepare your AutoMQ Kafka environment and test data, follow the AutoMQ [Quick Start](https://docs.automq.com/docs/automq-s3kafka/VKpxwOPvciZmjGkHk5hcTz43nde) guide to deploy your AutoMQ Kafka cluster. Ensure that StarRocks can directly connect to your AutoMQ Kafka server.
 
 To quickly create a topic named `example_topic` in AutoMQ Kafka and write a test JSON data into it, follow these steps:
 
