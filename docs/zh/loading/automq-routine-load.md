@@ -55,7 +55,7 @@ PROPERTIES (
 ```json
 {
   "id": 1,
-  "name": "测试用户",
+  "name": "testuser",
   "timestamp": "2023-11-10T12:00:00",
   "status": "active"
 }
@@ -66,7 +66,7 @@ PROPERTIES (
 使用Kafka的命令行工具或者编程方式将测试数据写入到example_topic。以下是使用命令行工具的一个示例：
 
 ```bash
-echo '{"id": 1, "name": "测试用户", "timestamp": "2023-11-10T12:00:00", "status": "active"}' | sh kafka-console-producer.sh --broker-list 10.0.96.4:9092 --topic example_topic
+echo '{"id": 1, "name": "testuser", "timestamp": "2023-11-10T12:00:00", "status": "active"}' | sh kafka-console-producer.sh --broker-list 10.0.96.4:9092 --topic example_topic
 ```
 
 > 注意：将 topic 和 bootstarp-server 替换为你的Kafka服务器地址。
@@ -130,8 +130,8 @@ StarRocks > select * from users;
 +------+--------------+---------------------+--------+
 | id   | name         | timestamp           | status |
 +------+--------------+---------------------+--------+
-|    1 | 测试用户     | 2023-11-10T12:00:00 | active |
-|    2 | 测试用户     | 2023-11-10T12:00:00 | active |
+|    1 | testuser     | 2023-11-10T12:00:00 | active |
+|    2 | testuser     | 2023-11-10T12:00:00 | active |
 +------+--------------+---------------------+--------+
 2 rows in set (0.01 sec)
 ```
