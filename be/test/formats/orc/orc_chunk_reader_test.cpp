@@ -2155,4 +2155,90 @@ TEST_F(OrcChunkReaderTest, TestTypeMismatched) {
     EXPECT_EQ("['1', {-2147483648:'0.999999999'}]", result->debug_row(0));
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(OrcChunkReaderTest, TestTypeMismatchedString2Double) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/string-2-double.orc";
+
+    SlotDesc c0{"c", TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)};
+    SlotDesc slot_descs[] = {c0, {""}};
+
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+    reader.set_use_orc_column_names(true);
+    reader.set_case_sensitive(true);
+    auto input_stream = orc::readLocalFile(input_orc_file);
+    Status st = reader.init(std::move(input_stream));
+    DCHECK(st.ok()) << st.get_error_msg();
+
+    st = reader.read_next();
+    DCHECK(st.ok()) << st.get_error_msg();
+    ChunkPtr ckptr = reader.create_chunk();
+    DCHECK(ckptr != nullptr);
+    st = reader.fill_chunk(&ckptr);
+    DCHECK(st.ok()) << st.get_error_msg();
+    ChunkPtr result = reader.cast_chunk(&ckptr);
+    DCHECK(result != nullptr);
+
+    EXPECT_EQ(result->num_rows(), 2);
+    EXPECT_EQ(result->num_columns(), 1);
+
+    EXPECT_EQ("[10.01]", result->debug_row(0));
+    EXPECT_EQ("[20.01]", result->debug_row(1));
+
+    ColumnPtr column = result->get_column_by_index(0);
+    EXPECT_TRUE(column->is_nullable());
+    EXPECT_FALSE(column->has_null());
+}
+
+TEST_F(OrcChunkReaderTest, get_file_schema) {
+    const std::vector<std::pair<std::string, std::vector<std::pair<std::string, TypeDescriptor>>>> test_cases = {
+            {"./be/test/exec/test_data/orc_scanner/scalar_types.orc",
+             {{"col_bool", TypeDescriptor::from_logical_type(TYPE_BOOLEAN)},
+              {"col_tinyint", TypeDescriptor::from_logical_type(TYPE_TINYINT)},
+              {"col_smallint", TypeDescriptor::from_logical_type(TYPE_SMALLINT)},
+              {"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_bigint", TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+              {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
+              {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+              {"col_string", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_char", TypeDescriptor::create_char_type(10)},
+              {"col_varchar", TypeDescriptor::create_varchar_type(1048576)},
+              {"col_binary", TypeDescriptor::create_varbinary_type(1048576)},
+              {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
+              {"col_timestamp", TypeDescriptor::from_logical_type(TYPE_DATETIME)},
+              {"col_date", TypeDescriptor::from_logical_type(TYPE_DATE)}}},
+            {"./be/test/exec/test_data/orc_scanner/compound.orc",
+             {{"col_int", TypeDescriptor::from_logical_type(TYPE_INT)},
+              {"col_list_int", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_list_list_int", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
+                                            TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_map_string_int", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                                     TypeDescriptor::from_logical_type(TYPE_INT))},
+              {"col_map_string_map_string_int",
+               TypeDescriptor::create_map_type(
+                       TypeDescriptor::create_varchar_type(1048576),
+                       TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
+                                                       TypeDescriptor::from_logical_type(TYPE_INT)))},
+              {"col_struct_string_int",
+               TypeDescriptor::create_struct_type(
+                       {"field_string", "field_int"},
+                       {TypeDescriptor::create_varchar_type(1048576), TypeDescriptor::from_logical_type(TYPE_INT)})},
+              {"col_struct_struct_string_int_string",
+               TypeDescriptor::create_struct_type(
+                       {"filed_struct", "field_string2"},
+                       {TypeDescriptor::create_struct_type({"field_string1", "field_int"},
+                                                           {TypeDescriptor::create_varchar_type(1048576),
+                                                            TypeDescriptor::from_logical_type(TYPE_INT)}),
+                        TypeDescriptor::create_varchar_type(1048576)})}}}};
+
+    for (const auto& test_case : test_cases) {
+        check_schema(test_case.first, test_case.second);
+    }
+}
+
+>>>>>>> eab2504550 ([BugFix] Wrap nullable after column being casted in orc reader (#35588))
 } // namespace starrocks
