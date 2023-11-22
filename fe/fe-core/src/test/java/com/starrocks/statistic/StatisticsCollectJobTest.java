@@ -51,6 +51,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -639,10 +640,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 return metaMap;
             }
         };
-        // the default row count is Config.statistic_auto_collect_small_table_rows, do not need to collect statistics
-        // until table update time + time interval(12h by default) > now
+        // the default row count is Config.statistic_auto_collect_small_table_rows -1 , need to collect statistics now
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
-        Assert.assertEquals(0, statsJobs.size());
+        Assert.assertEquals(1, statsJobs.size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
         new MockUp<AnalyzeMgr>() {
@@ -737,10 +737,16 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 return metaMap;
             }
         };
-        // the default row count is Config.statistic_auto_collect_small_table_rows, do not need to collect statistics
-        // until table update time + time interval(12h by default) > now
+
+        new MockUp<IcebergPartitionUtils>() {
+            @Mock
+            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis) {
+                return new HashSet<>();
+            }
+        };
+        // the default row count is Config.statistic_auto_collect_small_table_rows - 1, need to collect statistics now
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
-        Assert.assertEquals(0, statsJobs.size());
+        Assert.assertEquals(1, statsJobs.size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
         new MockUp<AnalyzeMgr>() {
