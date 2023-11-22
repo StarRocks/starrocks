@@ -105,7 +105,7 @@ insert into external_t select * from other_table;
 * **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址。
 * **port**：该属性描述目标表所属 StarRocks 集群 FE 的 RPC 访问端口。
 
-  :::说明
+  :::note
 
   为确保外表所属集群能够正常访问目标表所属 StarRocks 集群，您需要确保网络策略和防火墙设置允许以下端口的访问：
 
