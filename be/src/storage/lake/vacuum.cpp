@@ -34,6 +34,7 @@
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
+#include "gutil/strings/util.h"
 
 namespace starrocks::lake {
 
@@ -72,6 +73,33 @@ std::future<Status> completed_future(Status value) {
     return p.get_future();
 }
 
+bool should_retry(const Status& st, int64_t attempted_retries) {
+    if (attempted_retries >= config::lake_vacuum_retry_max_attempts) {
+        return false;
+    }
+    Slice message = st.message();
+    return MatchPattern(StringPiece(message.data, message.size), config::lake_vacuum_retry_pattern);
+}
+
+int64_t calculate_retry_delay(int64_t attempted_retries) {
+    int64_t min_delay = config::lake_vacuum_retry_min_delay;
+    return min_delay * (1 << attempted_retries);
+}
+
+Status delete_files_with_retry(FileSystem*fs, const std::vector<std::string>& paths) {
+    for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
+        auto st = fs->delete_files(paths);
+        if (!st.ok() && should_retry(st, attempted_retries)) {
+            int64_t delay = calculate_retry_delay(attempted_retries);
+            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+        } else {
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete: " << st;
+            return st;
+        }
+    }
+}
+
 // Batch delete files with specified FileSystem object |fs|
 Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     if (UNLIKELY(paths.empty())) {
@@ -90,8 +118,7 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     }
 
     auto t0 = butil::gettimeofday_us();
-    auto st = fs->delete_files(paths);
-    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
+    auto st = delete_files_with_retry(fs, paths);
     if (st.ok()) {
         auto t1 = butil::gettimeofday_us();
         g_del_file_latency << (t1 - t0);

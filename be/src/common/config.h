@@ -913,6 +913,9 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
+CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
+CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
+CONF_mInt64(lake_vacuum_retry_min_delay, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
