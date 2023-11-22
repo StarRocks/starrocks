@@ -293,6 +293,7 @@ set(EXEC_FILES
         ./storage/get_use_pk_index_test.cpp
         ./storage/meta_reader_test.cpp
         ./runtime/buffer_control_block_test.cpp
+        ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
