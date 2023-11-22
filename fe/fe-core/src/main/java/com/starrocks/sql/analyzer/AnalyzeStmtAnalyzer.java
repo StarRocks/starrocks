@@ -105,8 +105,8 @@ public class AnalyzeStmtAnalyzer {
                     }
                     realColumnNames.add(col.getName());
                 }
+                statement.setColumnNames(realColumnNames);
             }
-            statement.setColumnNames(realColumnNames);
 
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
