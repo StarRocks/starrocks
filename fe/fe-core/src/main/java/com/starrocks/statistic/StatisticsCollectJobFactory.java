@@ -240,7 +240,8 @@ public class StatisticsCollectJobFactory {
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
                     filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
 
-            long tableRowCount = Config.statistic_auto_collect_small_table_rows;
+            // use small table row count as default table row count
+            long tableRowCount = Config.statistic_auto_collect_small_table_rows - 1;
             if (!validColumnStatistics.isEmpty()) {
                 tableRowCount = validColumnStatistics.get(0).getRowCount();
             }
