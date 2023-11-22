@@ -15,6 +15,6 @@ displayed_sidebar: "Chinese"
 | PIPE_NAME     | Pipe 的名称。                                                |
 | TABLE_NAME    | StarRocks 目标表的名称。格式：`<database_name>.<table_name>`。 |
 | STATE         | Pipe 的状态，包括 `RUNNING`、`FINISHED`、`SUSPENDED`、`ERROR`。 |
-| LOAD_STATUS   | Pipe 下待导入数据文件的整体状态，包括如下字段：`loadedFiles`：已导入的数据文件总个数。`loadedBytes`：已导入的数据总量，单位为字节。`loadingFiles`：正在导入的数据文件总个数。 |
+| LOAD_STATUS   | Pipe 下待导入数据文件的整体状态，包括如下字段：<br />`loadedFiles`：已导入的数据文件总个数。<br />`loadedBytes`：已导入的数据总量，单位为字节。<br />`loadingFiles`：正在导入的数据文件总个数。 |
 | LAST_ERROR    | Pipe 执行过程中最近一次错误的详细信息。默认值为 `NULL`。     |
 | CREATED_TIME  | Pipe 的创建时间。格式：`yyyy-MM-dd HH:mm:ss`。例如，`2023-07-24 14:58:58`。 |
