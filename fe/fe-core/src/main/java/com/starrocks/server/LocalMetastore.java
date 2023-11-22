@@ -134,6 +134,7 @@ import com.starrocks.epack.persist.CreateTableInfoEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.epack.sql.ast.WithRowAccessPolicy;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
@@ -3465,14 +3466,16 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // warehouse
             if (materializedView.isCloudNativeMaterializedView()) {
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-                    String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-                    if (warehouse == null) {
-                        throw new AnalysisException(PropertyAnalyzer.PROPERTIES_WAREHOUSE
-                                + " " + warehouseName + " does not exist.");
+                try {
+                    if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                        String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseName);
+                        materializedView.setWarehouseId(warehouse.getId());
+
+                        LOG.debug("set warehouse {} in materializedView", warehouseName);
                     }
-                    materializedView.setWarehouseId(warehouse.getId());
+                } catch (WarehouseUnavailableException e) {
+                    throw new DdlException(e.getMessage());
                 }
             }
 
@@ -3557,7 +3560,11 @@ public class LocalMetastore implements ConnectorMetadata {
                 Map<String, String> taskProperties = task.getProperties();
                 taskProperties.putAll(optHints);
                 if (materializedView.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
-                    taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, String.valueOf(materializedView.getWarehouseId()));
+                    taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                            String.valueOf(materializedView.getWarehouseId()));
+
+                    LOG.debug("set warehouse {} in createTaskForMaterializedView",
+                            materializedView.getWarehouseId());
                 }
             }
 

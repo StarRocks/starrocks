@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
@@ -116,6 +117,9 @@ public class TaskBuilder {
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
+        // alter mv set warehouse
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                String.valueOf(materializedView.getWarehouseId()));
 
         task.setProperties(taskProperties);
         task.setDefinition(

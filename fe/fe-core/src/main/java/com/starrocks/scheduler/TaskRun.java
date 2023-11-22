@@ -31,6 +31,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -143,6 +144,10 @@ public class TaskRun implements Comparable<TaskRun> {
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
             newProperties = materializedView.getProperties();
+
+            // handle warehouse change
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID,
+                    String.valueOf(materializedView.getWarehouseId()));
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
@@ -166,17 +171,17 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
 
-        // if there is "warehouse" field in properties, set it into runCtx
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
-            runCtx.setCurrentWarehouseId(Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE)));
-        }
-
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
 
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
+
         runCtx.resetSessionVariable();
-        if (properties != null) {
+        if (MapUtils.isNotEmpty(properties)) {
+            // handle warehouse alone, because warehouseId is saved in properties rather than warehouseName
+            runCtx.setCurrentWarehouseId(
+                    Long.valueOf(properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID)));
+
             for (String key : properties.keySet()) {
                 try {
                     runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
@@ -186,6 +191,9 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
+
+        LOG.debug("warehouse of runCtx in executeTaskRun is {}", runCtx.getCurrentWarehouseName());
+
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);

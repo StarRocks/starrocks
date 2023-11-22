@@ -267,6 +267,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // change default connect context for mv.
                 changeDefaultConnectContextIfNeeded(mvContext.getCtx());
 
+                LOG.debug("warehouse in doMvRefresh is {}", context.getCtx().getCurrentWarehouseName());
+
                 // generate insert statement by using incremental base partition info
                 insertStmt = generateInsertStmt(mvToRefreshedPartitions, refTablePartitionNames, materializedView);
 

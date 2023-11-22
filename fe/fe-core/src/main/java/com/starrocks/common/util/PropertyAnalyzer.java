@@ -179,6 +179,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_WAREHOUSE = "warehouse";
 
+    public static final String PROPERTIES_WAREHOUSE_ID = "warehouse_id";
+
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";

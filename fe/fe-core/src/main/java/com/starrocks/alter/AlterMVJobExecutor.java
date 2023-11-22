@@ -30,6 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.alter.AlterJobExecutorEPack;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -53,6 +54,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
 
@@ -142,6 +144,18 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
             oldQueryRewriteConsistencyMode = TableProperty.analyzeQueryRewriteMode(propertyValue);
             properties.remove(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY);
         }
+
+        // warehouse
+        try {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseName);
+                materializedView.setWarehouseId(warehouse.getId());
+            }
+        } catch (WarehouseUnavailableException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
 
         if (!properties.isEmpty()) {
             if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {

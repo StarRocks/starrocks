@@ -96,6 +96,17 @@ public class WarehouseManager implements Writable {
         return warehouse;
     }
 
+    public Warehouse getAvailbleWarehouse(String warehouseName) throws WarehouseUnavailableException {
+        Warehouse warehouse = getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new WarehouseUnavailableException("warehouse " + warehouseName + " not exist");
+        }
+        if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
+            throw new WarehouseUnavailableException("warehouse " + warehouseName + " has been suspended");
+        }
+        return warehouse;
+    }
+
     public AtomicInteger getNextComputeNodeIndexFromWarehouse(long warehouseId) {
         return getWarehouse(warehouseId).getAnyAvailableCluster().getNextComputeNodeHostId();
     }
