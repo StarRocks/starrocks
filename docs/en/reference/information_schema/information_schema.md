@@ -57,7 +57,7 @@ The StarRocks Information Schema contains the following metadata views:
 | [global_variables](./global_variables.md)                       | `global_variables` provides information about global variables. |
 | [key_column_usage](./key_column_usage.md)                       | `key_column_usage` identifies all columns that are restricted by some unique, primary key, or foreign key constraint. |
 | [load_tracking_logs](./load_tracking_logs.md)                   | `load_tracking_logs` provides error information (if any) of load jobs. |
-| [loads](./loads.md)                                             | `loads` provides the results of load jobs. Currently, you can only view the results of [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [Insert](../../sql-reference/sql-statements/data-manipulation/insert.md) jobs from this view. |
+| [loads](./loads.md)                                             | `loads` provides the results of load jobs. Currently, you can only view the results of [Broker Load](../../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) and [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) jobs from this view. |
 | [materialized_views](./materialized_views.md)                   | `materialized_views` provides information about all asynchronous materialized views. |
 | [partitions](./partitions.md)                                   | `partitions` provides information about table partitions.    |
 | [pipe_files](./pipe_files.md)                                   | `pipe_files` provides the status of the data files to be loaded via a specified pipe. |
