@@ -128,6 +128,10 @@ public class AnalyzeStmtTest {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
 
         Assert.assertTrue(analyzeStmt.isExternal());
+
+        sql = "analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[c_name, c_phone]", analyzeStmt.getColumnNames().toString());
     }
 
     @Test

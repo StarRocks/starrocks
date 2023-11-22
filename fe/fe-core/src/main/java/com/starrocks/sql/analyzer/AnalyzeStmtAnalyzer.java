@@ -91,8 +91,9 @@ public class AnalyzeStmtAnalyzer {
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-
             List<String> columnNames = statement.getColumnNames();
+            // The actual column name, avoiding case sensitivity issues
+            List<String> realColumnNames = Lists.newArrayList();
             if (columnNames != null) {
                 for (String colName : columnNames) {
                     Column col = analyzeTable.getColumn(colName);
@@ -102,8 +103,10 @@ public class AnalyzeStmtAnalyzer {
                     if (!mentionedColumns.add(colName)) {
                         throw new SemanticException("Column '%s' specified twice", colName);
                     }
+                    realColumnNames.add(col.getName());
                 }
             }
+            statement.setColumnNames(realColumnNames);
 
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
