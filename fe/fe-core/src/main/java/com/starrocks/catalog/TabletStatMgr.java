@@ -246,9 +246,8 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     @Nullable
-    private CollectTabletStatJob createCollectTabletStatJobs(@NotNull Database db,
-                                                             @NotNull OlapTable table,
-                                                             @NotNull PhysicalPartition partition) {
+    private CollectTabletStatJob createCollectTabletStatJob(@NotNull Database db, @NotNull OlapTable table,
+                                                            @NotNull PhysicalPartition partition) {
         PartitionSnapshot snapshot = craetePartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
         snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
@@ -262,7 +261,7 @@ public class TabletStatMgr extends FrontendDaemon {
     private void updateLakeTableTabletStat(@NotNull Database db, @NotNull OlapTable table) {
         Collection<PhysicalPartition> partitions = getPartitions(db, table);
         for (PhysicalPartition partition : partitions) {
-            CollectTabletStatJob job = createCollectTabletStatJobs(db, table, partition);
+            CollectTabletStatJob job = createCollectTabletStatJob(db, table, partition);
             if (job == null) {
                 continue;
             }
