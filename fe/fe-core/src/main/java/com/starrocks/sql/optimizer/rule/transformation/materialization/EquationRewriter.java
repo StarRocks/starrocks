@@ -21,8 +21,6 @@ import com.google.common.collect.Multimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -31,7 +29,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.TimeSliceReplaceChecker;
 
 import java.util.Map;
 import java.util.Optional;
@@ -39,7 +39,7 @@ import java.util.Optional;
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
-    private Multimap<ScalarOperator, Pair<ColumnRefOperator, PredicateReplaceChecker>> predicateProbMap;
+    private Multimap<ScalarOperator, Pair<ColumnRefOperator, IRewriteEquivalent>> predicateProbMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private AggregateFunctionRewriter aggregateFunctionRewriter;
     boolean underAggFunctionRewriteContext;
@@ -85,22 +85,36 @@ public class EquationRewriter {
                     return tmp.get();
                 }
 
-                ScalarOperator left = predicate.getChild(0);
-                ScalarOperator right = predicate.getChild(1);
-
-                if (predicateProbMap.containsKey(left)) {
-                    Pair<ColumnRefOperator, PredicateReplaceChecker> pair = predicateProbMap.get(left).iterator().next();
-                    if (pair.second.canReplace(right)) {
-                        ColumnRefOperator replaced = columnMapping.get(pair.first);
-                        if (replaced != null) {
-                            ScalarOperator clonePredicate = predicate.clone();
-                            clonePredicate.setChild(0, replaced.clone());
-                            return clonePredicate;
-                        }
-                    }
+                ScalarOperator replaced = rewriteByEquivalent(predicate);
+                if (replaced != null) {
+                    return replaced;
                 }
 
                 return super.visitBinaryPredicate(predicate, context);
+            }
+
+            private ScalarOperator rewriteByEquivalent(BinaryPredicateOperator predicate) {
+                ScalarOperator left = predicate.getChild(0);
+                ScalarOperator right = predicate.getChild(1);
+                if (!predicateProbMap.containsKey(left)) {
+                    return null;
+                }
+                Pair<ColumnRefOperator, IRewriteEquivalent> pair = predicateProbMap.get(left).iterator().next();
+                if (!pair.second.isEquivalent(right)) {
+                    return null;
+
+                }
+
+                ColumnRefOperator replaced = pair.first;
+                if (columnMapping != null) {
+                    replaced = columnMapping.get(pair.first);
+                    if (replaced == null) {
+                        return null;
+                    }
+                }
+                ScalarOperator clonePredicate = predicate.clone();
+                clonePredicate.setChild(0, replaced.clone());
+                return clonePredicate;
             }
 
             @Override
@@ -215,12 +229,15 @@ public class EquationRewriter {
                 // query: SELECT time_slice(dt, INTERVAL 5 MINUTE) as t FROM table WHERE dt > '2023-06-01'
                 // if '2023-06-01'=time_slice('2023-06-01', INTERVAL 5 MINUTE), can replace predicate dt => t
                 ScalarOperator first = expr.getChild(0);
-                predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(((CallOperator) expr))));
+                predicateProbMap.put(first, Pair.create(col, new TimeSliceReplaceChecker(aggFunc)));
             } else if (aggFunc.getFnName().equals(FunctionSet.COUNT) && !aggFunc.isDistinct()) {
                 CallOperator newAggFunc = normalizeCallOperator(aggFunc);
                 if (newAggFunc != null && newAggFunc != aggFunc) {
                     equationMap.put(newAggFunc,  Pair.create(col, null));
                 }
+            } else if (aggFunc.getFnName().equals(FunctionSet.DATE_TRUNC)) {
+                ScalarOperator first = expr.getChild(1);
+                predicateProbMap.put(first, Pair.create(col, new DateTruncReplaceChecker(aggFunc)));
             }
         }
     }
@@ -277,36 +294,5 @@ public class EquationRewriter {
         private Function findArithmeticFunction(CallOperator call, String fnName) {
             return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
         }
-
     }
-
-    private interface PredicateReplaceChecker {
-        boolean canReplace(ScalarOperator operator);
-    }
-
-    private static class TimeSliceReplaceChecker implements PredicateReplaceChecker {
-        private final CallOperator mvTimeSlice;
-
-        public TimeSliceReplaceChecker(CallOperator mvTimeSlice) {
-            this.mvTimeSlice = mvTimeSlice;
-        }
-
-        @Override
-        public boolean canReplace(ScalarOperator operator) {
-            try {
-                if (operator.isConstantRef() && operator.getType().getPrimitiveType() == PrimitiveType.DATETIME) {
-                    ConstantOperator sliced = ScalarOperatorFunctions.timeSlice(
-                            (ConstantOperator) operator,
-                            ((ConstantOperator) mvTimeSlice.getChild(1)),
-                            ((ConstantOperator) mvTimeSlice.getChild(2)),
-                            ((ConstantOperator) mvTimeSlice.getChild(3)));
-                    return sliced.equals(operator);
-                }
-            } catch (AnalysisException e) {
-                return false;
-            }
-            return false;
-        }
-    }
-
 }

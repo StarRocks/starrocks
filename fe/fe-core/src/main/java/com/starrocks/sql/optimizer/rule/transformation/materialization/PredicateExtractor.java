@@ -20,11 +20,14 @@ import com.google.common.collect.TreeRangeSet;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.TimeSliceReplaceChecker;
 
 import java.util.List;
 import java.util.Optional;
@@ -62,19 +65,14 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
     @Override
     public RangePredicate visitBinaryPredicate(
             BinaryPredicateOperator predicate, PredicateExtractorContext context) {
+        RangePredicate rangePredicate = rewriteBinaryPredicate(predicate);
+        if (rangePredicate != null) {
+            return rangePredicate;
+        }
+
         ScalarOperator left = predicate.getChild(0);
         ScalarOperator right = predicate.getChild(1);
-        if (isSupportedRangeExpr(left) && right.isConstantRef()) {
-            ConstantOperator constant = (ConstantOperator) right;
-            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-            rangeSet.addAll(range(predicate.getBinaryType(), constant));
-            return new ColumnRangePredicate(left, rangeSet);
-        } else if (left.isConstantRef() && isSupportedRangeExpr(right)) {
-            ConstantOperator constant = (ConstantOperator) left;
-            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-            rangeSet.addAll(range(predicate.getBinaryType(), constant));
-            return new ColumnRangePredicate(right, rangeSet);
-        } else if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
+        if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
             if (predicate.getBinaryType().isEqual()) {
                 columnEqualityPredicates.add(predicate);
             } else {
@@ -89,6 +87,63 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
     private boolean isSupportedRangeExpr(ScalarOperator op) {
         List<ColumnRefOperator> columns = Utils.collect(op, ColumnRefOperator.class);
         return op.isVariable() && columns.size() == 1;
+    }
+
+    private RangePredicate rewriteBinaryPredicate(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        ScalarOperator op1 = null;
+        ConstantOperator op2 = null;
+        if (isSupportedRangeExpr(left) && right instanceof ConstantOperator) {
+            op1 = left;
+            op2 = (ConstantOperator) right;
+        } else if (isSupportedRangeExpr(right) && left instanceof ConstantOperator) {
+            op1 = right;
+            op2 = (ConstantOperator) left;
+        } else {
+            return null;
+        }
+
+        // rewrite to column ref by equivalent
+        if (!(op1 instanceof ColumnRefOperator)) {
+            RangePredicate rangePredicate = rewriteByEquivalent(predicate);
+            if (rangePredicate != null) {
+                return rangePredicate;
+            }
+        }
+
+        // by default
+        TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+        rangeSet.addAll(range(predicate.getBinaryType(), op2));
+        return new ColumnRangePredicate(op1, rangeSet);
+    }
+
+    private static RangePredicate rewriteByEquivalent(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        ScalarOperator op1 = null;
+        ConstantOperator op2 = null;
+        if (left instanceof CallOperator && right instanceof ConstantOperator) {
+            op1 = left;
+            op2 = (ConstantOperator) right;
+        } else if (right instanceof CallOperator && left instanceof ConstantOperator) {
+            op1 = right;
+            op2 = (ConstantOperator) left;
+        } else {
+            return null;
+        }
+
+        if (DateTruncReplaceChecker.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range(predicate.getBinaryType(), op2));
+            return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
+        } else if (TimeSliceReplaceChecker.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range(predicate.getBinaryType(), op2));
+            return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);
+        } else {
+            return null;
+        }
     }
 
     @Override
