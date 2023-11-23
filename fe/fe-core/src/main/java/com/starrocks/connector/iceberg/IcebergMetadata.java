@@ -193,6 +193,9 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void dropTable(DropTableStmt stmt) {
         Table icebergTable = getTable(stmt.getDbName(), stmt.getTableName());
+        if (icebergTable == null) {
+            return;
+        }
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
         tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
