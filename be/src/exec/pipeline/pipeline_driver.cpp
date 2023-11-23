@@ -532,6 +532,9 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+    if (this->query_ctx()->is_query_expired()) {
+        LOG(WARNING) << "begin to cancel operators for " << to_readable_string();
+    }
     for (auto& op : _operators) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
                       fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
@@ -665,10 +668,15 @@ void PipelineDriver::_update_driver_level_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
+    std::string block_reasons = "";
+    if (_state == PRECONDITION_BLOCK) {
+        block_reasons = const_cast<PipelineDriver*>(this)->get_preconditions_block_reasons();
+    }
     ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
        << " fragment_id="
        << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
-       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << block_reasons
+       << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
