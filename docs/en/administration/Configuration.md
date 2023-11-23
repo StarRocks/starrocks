@@ -213,6 +213,7 @@ This section provides an overview of the static parameters that you can configur
 
 #### Server
 
+<<<<<<< HEAD
 | Parameter                            | Default           | Description                                                                                                                                                                                                                                                                                                                                                                                               |
 |--------------------------------------|-------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | frontend_address                     | 0.0.0.0           | The IP address of the FE node.                                                                                                                                                                                                                                                                                                                                                                            |
@@ -235,6 +236,110 @@ This section provides an overview of the static parameters that you can configur
 | max_connection_scheduler_threads_num | 4096              | The maximum number of threads that are supported by the connection scheduler.                                                                                                                                                                                                                                                                                                                             |
 | qe_max_connection                    | 1024              | The maximum number of connections that can be established by all users to the FE node.                                                                                                                                                                                                                                                                                                                    |
 | check_java_version                   | TRUE              | Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.                                                                                                                                                                                                     |
+=======
+##### frontend_address
+
+- **Default:** 0.0.0.0
+- **Description:** The IP address of the FE node.
+
+##### priority_networks
+
+- **Default:** Empty string
+- **Description:** Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
+
+##### http_port
+
+- **Default:** 8030
+- **Description:** The port on which the HTTP server in the FE node listens.
+
+##### http_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the HTTP server in the FE node.
+
+##### cluster_name
+
+- **Default:** StarRocks Cluster
+- **Description:** The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page.
+
+##### rpc_port
+
+- **Default:** 9020
+- **Description:** The port on which the Thrift server in the FE node listens.
+
+##### thrift_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the Thrift server in the FE node.
+
+##### thrift_server_max_worker_threads
+
+- **Default:** 4096
+- **Description:** The maximum number of worker threads that are supported by the Thrift server in the FE node.
+
+##### thrift_client_timeout_ms
+
+- **Default:** 5000
+- **Description:** The length of time after which idle client connections time out. Unit: ms.
+
+##### thrift_server_queue_size
+
+- **Default:** 4096
+- **Description:** The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+
+##### brpc_idle_wait_max_time
+
+- **Default:** 10000
+- **Description:** The maximum length of time for which bRPC clients wait as in the idle state. Unit: ms.
+
+##### query_port
+
+- **Default:** 9030
+- **Description:** The port on which the MySQL server in the FE node listens.
+
+##### mysql_service_nio_enabled
+
+- **Default:** TRUE
+- **Description:** Specifies whether asynchronous I/O is enabled for the FE node.
+
+##### mysql_service_io_threads_num
+
+- **Default:** 4
+- **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.
+
+##### mysql_nio_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the MySQL server in the FE node.
+
+##### max_mysql_service_task_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
+
+##### mysql_server_version
+
+- **Default:** 5.1.0
+- **Description:** The MySQL server version returned to the client. Modifying this parameter will affect the version information in the following situations:
+  1. `select version();`
+  2. Handshake packet version
+  3. Value of the global variable `version` (`show variables like 'version';`)
+
+##### max_connection_scheduler_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that are supported by the connection scheduler.
+
+##### qe_max_connection
+
+- **Default:** 1024
+- **Description:** The maximum number of connections that can be established by all users to the FE node.
+
+##### check_java_version
+
+- **Default:** TRUE
+- **Description:** Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.
+>>>>>>> 457ca90ff9 ([Doc] add BE's brpc port to StarRocks external table (#35578))
 
 #### Metadata and cluster management
 
@@ -415,13 +520,13 @@ BE static parameters are as follows.
 
 - **Default**: 8060
 - **Unit**: N/A
-- **Description**: The BE BRPC port, which is used to view the network statistics of BRPCs.
+- **Description**: The BE bRPC port, which is used to view the network statistics of bRPCs.
 
 #### brpc_num_threads
 
 - **Default**: -1
 - **Unit**: N/A
-- **Description**: The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads.
+- **Description**: The number of bthreads of a bRPC. The value -1 indicates the same number with the CPU threads.
 
 #### priority_networks
 
@@ -746,7 +851,7 @@ BE static parameters are as follows.
 
 - **Default**: 2147483648
 - **Unit**: Byte
-- **Description**: The maximum body size of a BRPC.
+- **Description**: The maximum body size of a bRPC.
 
 #### tablet_map_shard_size
 

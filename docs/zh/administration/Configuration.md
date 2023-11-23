@@ -184,6 +184,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
 
+<<<<<<< HEAD
 #### Log
 
 | 配置项                  | 默认值                                  | 描述                                                         |
@@ -282,6 +283,458 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_sched_balancer_strategy | disk_and_tablet | Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。 |
 | tablet_sched_storage_cooldown_second | -1         | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br />参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
 | tablet_stat_update_interval_second| 300         | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
+=======
+本节对 FE 静态参数做了如下分类：
+
+- [Log](#log-fe-静态)
+- [Server](#server-fe-静态)
+- [元数据与集群管理](#元数据与集群管理fe-静态)
+- [Query engine](#query-enginefe-静态)
+- [导入和导出](#导入和导出fe-静态)
+- [存储](#存储fe-静态)
+- [其他动态参数](#其他动态参数)
+
+#### Log (FE 静态)
+
+##### log_roll_size_mb
+
+- 含义：日志文件的大小。
+- 单位：MB
+- 默认值：1024，表示每个日志文件的大小为 1 GB。
+
+##### sys_log_dir
+
+- 含义：系统日志文件的保存目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/log"`
+
+##### sys_log_level
+
+- 含义：系统日志的级别，从低到高依次为 `INFO`、`WARN`、`ERROR`、`FATAL`。
+- 默认值：INFO
+
+##### sys_log_verbose_modules
+
+- 含义：打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。
+- 默认值：空字符串
+
+##### sys_log_roll_interval
+
+- 含义：系统日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。<br />取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。
+- 默认值：DAY
+
+##### sys_log_delete_age
+
+- 含义：系统日志文件的保留时长。默认值 `7d` 表示系统日志文件可以保留 7 天，保留时长超过 7 天的系统日志文件会被删除。
+- 默认值：`7d`
+
+##### sys_log_roll_num
+
+- 含义：每个 `sys_log_roll_interval` 时间段内，允许保留的系统日志文件的最大数目。
+- 默认值：10
+
+##### audit_log_dir
+
+- 含义：审计日志文件的保存目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/log"`
+
+##### audit_log_roll_num
+
+- 含义：每个 `audit_log_roll_interval` 时间段内，允许保留的审计日志文件的最大数目。
+- 默认值：90
+
+##### audit_log_modules
+
+- 含义：打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
+- 默认值：slow_query, query
+
+##### audit_log_roll_interval
+
+- 含义：审计日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。<br />取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。
+- 默认值：DAY
+
+##### audit_log_delete_age
+
+- 含义：审计日志文件的保留时长。- 默认值 `30d` 表示审计日志文件可以保留 30 天，保留时长超过 30 天的审计日志文件会被删除。
+- 默认值：`30d`
+
+##### dump_log_dir
+
+- 含义：Dump 日志文件的保存目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/log"`
+
+##### dump_log_modules
+
+- 含义：打印 Dump 日志的模块。默认打印 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。
+- 默认值：query
+
+##### dump_log_roll_interval
+
+- 含义：Dump 日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。<br />取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。
+- 默认值：DAY
+
+##### dump_log_roll_num
+
+- 含义：每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。
+- 默认值：10
+
+##### dump_log_delete_age
+
+- 含义：Dump 日志文件的保留时长。- 默认值 `7d` 表示 Dump 日志文件可以保留 7 天，保留时长超过 7 天的 Dump 日志文件会被删除。
+- 默认值：`7d`
+
+#### Server (FE 静态)
+
+##### frontend_address
+
+- 含义：FE 节点的 IP 地址。
+- 默认值：0.0.0.0
+
+##### priority_networks
+
+- 含义：为那些有多个 IP 地址的服务器声明一个选择策略。 <br />请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。
+- 默认值：空字符串
+
+##### http_port
+
+- 含义：FE 节点上 HTTP 服务器的端口。
+- 默认值：8030
+
+##### http_backlog_num
+
+- 含义：HTTP 服务器支持的 Backlog 队列长度。
+- 默认值：1024
+
+##### cluster_name
+
+- 含义：FE 所在 StarRocks 集群的名称，显示为网页标题。
+- 默认值：StarRocks Cluster
+
+##### rpc_port
+
+- 含义：FE 节点上 Thrift 服务器的端口。
+- 默认值：9020
+
+##### thrift_backlog_num
+
+- 含义：Thrift 服务器支持的 Backlog 队列长度。
+- 默认值：1024
+
+##### thrift_server_max_worker_threads
+
+- 含义：Thrift 服务器支持的最大工作线程数。
+- 默认值：4096
+
+##### thrift_client_timeout_ms
+
+- 含义：Thrift 客户端链接的空闲超时时间，即链接超过该时间无新请求后则将链接断开。
+- 单位：毫秒。
+- 默认值：5000
+
+##### thrift_server_queue_size
+
+- 含义：Thrift 服务器 pending 队列长度。如果当前处理线程数量超过了配置项 `thrift_server_max_worker_threads` 的值，则将超出的线程加入 pending 队列。
+- 默认值：4096
+
+##### brpc_idle_wait_max_time
+
+- 含义：bRPC 的空闲等待时间。单位：毫秒。
+- 默认值：10000
+
+##### query_port
+
+- 含义：FE 节点上 MySQL 服务器的端口。
+- 默认值：9030
+
+##### mysql_service_nio_enabled  
+
+- 含义：是否开启 MySQL 服务器的异步 I/O 选项。
+- 默认值：TRUE
+
+##### mysql_service_io_threads_num
+
+- 含义：MySQL 服务器中用于处理 I/O 事件的最大线程数。
+- 默认值：4
+
+##### mysql_nio_backlog_num
+
+- 含义：MySQL 服务器支持的 Backlog 队列长度。
+- 默认值：1024
+
+##### max_mysql_service_task_threads_num
+
+- 含义：MySQL 服务器中用于处理任务的最大线程数。
+- 默认值：4096
+
+##### mysql_server_version
+
+- 含义：MySQL 服务器的版本。修改该参数配置会影响以下场景中返回的版本号：1. `select version();` 2. Handshake packet 版本 3. 全局变量 `version` 的取值 (`show variables like 'version';`)
+- 默认值：5.1.0
+
+##### max_connection_scheduler_threads_num
+
+- 含义：连接调度器支持的最大线程数。
+- 默认值：4096
+
+##### qe_max_connection
+
+- 含义：FE 支持的最大连接数，包括所有用户发起的连接。
+- 默认值：1024
+
+##### check_java_version
+
+- 含义：检查已编译的 Java 版本与运行的 Java 版本是否兼容。<br />如果不兼容，则上报 Java 版本不匹配的异常信息，并终止启动。
+- 默认值：TRUE
+
+#### 元数据与集群管理（FE 静态）
+
+##### meta_dir
+
+- 含义：元数据的保存目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/meta"`
+
+##### heartbeat_mgr_threads_num
+
+- 含义：Heartbeat Manager 中用于发送心跳任务的最大线程数。
+- 默认值：8
+
+##### heartbeat_mgr_blocking_queue_size
+
+- 含义：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
+- 默认值：1024
+
+##### metadata_failure_recovery
+
+- 含义：是否强制重置 FE 的元数据。请谨慎使用该配置项。
+- 默认值：FALSE
+
+##### edit_log_port
+
+- 含义：FE 所在 StarRocks 集群中各 Leader FE、Follower FE、Observer FE 之间通信用的端口。
+- 默认值：9010
+
+##### edit_log_type
+
+- 含义：编辑日志的类型。取值只能为 `BDB`。
+- 默认值：BDB
+
+##### bdbje_heartbeat_timeout_second
+
+- 含义：FE 所在 StarRocks 集群中 Leader FE 和 Follower FE 之间的 BDB JE 心跳超时时间。
+- 单位：秒。
+- 默认值：30
+
+##### bdbje_lock_timeout_second
+
+- 含义：BDB JE 操作的锁超时时间。
+- 单位：秒。
+- 默认值：1
+
+##### max_bdbje_clock_delta_ms
+
+- 含义：FE 所在 StarRocks 集群中 Leader FE 与非 Leader FE 之间能够容忍的最大时钟偏移。
+- 单位：毫秒。
+- 默认值：5000
+
+##### txn_rollback_limit
+
+- 含义：允许回滚的最大事务数。
+- 默认值：100
+
+##### bdbje_replica_ack_timeout_second  
+
+- 含义：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
+- 单位：秒
+- 默认值：10
+
+##### master_sync_policy
+
+- 含义：FE 所在 StarRocks 集群中，Leader FE 上的日志刷盘方式。该参数仅在当前 FE 为 Leader 时有效。取值范围： <ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li> `NO_SYNC`：事务提交时不同步写日志。</li><li> `WRITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。 </li></ul>如果您只部署了一个 Follower FE，建议将其设置为 `SYNC`。 如果您部署了 3 个及以上 Follower FE，建议将其与下面的 `replica_sync_policy` 均设置为 `WRITE_NO_SYNC`。
+- 默认值：SYNC
+
+##### replica_sync_policy
+
+- 含义：FE 所在 StarRocks 集群中，Follower FE 上的日志刷盘方式。取值范围： <ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li> `NO_SYNC`：事务提交时不同步写日志。</li><li> `WRITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。</li></ul>
+- 默认值：SYNC
+
+##### replica_ack_policy
+
+- 含义：判定日志是否有效的策略，默认是多数 Follower FE 返回确认消息，就认为生效。
+- 默认值：SIMPLE_MAJORITY
+
+##### cluster_id
+
+- 含义：FE 所在 StarRocks 集群的 ID。具有相同集群 ID 的 FE 或 BE 属于同一个 StarRocks 集群。取值范围：正整数。- 默认值 `-1` 表示在 Leader FE 首次启动时随机生成一个。
+- 默认值：-1
+
+#### Query engine（FE 静态）
+
+##### publish_version_interval_ms
+
+- 含义：两个版本发布操作之间的时间间隔。
+- 单位：毫秒
+- 默认值：10
+
+##### statistic_cache_columns
+
+- 含义：缓存统计信息表的最大行数。
+- 默认值：100000
+
+#### 导入和导出（FE 静态）
+
+##### load_checker_interval_second
+
+- 含义：导入作业的轮询间隔。
+- 单位：秒。
+- 默认值：5  
+
+##### transaction_clean_interval_second
+
+- 含义：已结束事务的清理间隔。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。
+- 单位：秒。
+- 默认值：30
+
+##### label_clean_interval_second
+
+- 含义：作业标签的清理间隔。建议清理间隔尽量短，从而确保历史作业的标签能够及时清理掉。
+- 单位：秒。
+- 默认值：14400
+
+##### spark_dpp_version
+
+- 含义：Spark DPP 特性的版本。
+- 默认值：1.0.0
+
+##### spark_resource_path
+
+- 含义：Spark 依赖包的根目录。
+- 默认值：空字符串
+
+##### spark_launcher_log_dir
+
+- 含义：Spark 日志的保存目录。
+- 默认值：`sys_log_dir + "/spark_launcher_log"`
+
+##### yarn_client_path
+
+- 含义：Yarn 客户端的根目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"`
+
+##### yarn_config_dir
+
+- 含义：Yarn 配置文件的保存目录。
+- 默认值：`StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"`
+
+##### export_checker_interval_second
+
+- 含义：导出作业调度器的调度间隔。
+- 默认值：5
+
+##### export_task_pool_size
+
+- 含义：导出任务线程池的大小。
+- 默认值：5
+
+##### broker_client_timeout_ms
+
+- 含义：Broker RPC 的默认超时时间。
+- 单位：毫秒
+- 默认值 10s
+
+#### 存储（FE 静态）
+
+##### tablet_sched_balancer_strategy
+
+- 含义：Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。
+- 默认值：`disk_and_tablet`
+
+##### tablet_sched_storage_cooldown_second
+
+- 含义：从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br />参数别名为 `storage_cooldown_second`。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。
+- 单位：秒。
+- 默认值：-1
+
+##### tablet_stat_update_interval_second
+
+- 含义：FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。
+- 单位：秒。
+- 默认值：300
+
+#### StarRocks 存算分离集群
+
+##### run_mode
+
+- 含义：StarRocks 集群的运行模式。有效值：`shared_data` 和 `shared_nothing` (默认)。`shared_data` 表示在存算分离模式下运行 StarRocks。`shared_nothing` 表示在存算一体模式下运行 StarRocks。<br />**注意**<br />StarRocks 集群不支持存算分离和存算一体模式混合部署。<br />请勿在集群部署完成后更改 `run_mode`，否则将导致集群无法再次启动。不支持从存算一体集群转换为存算分离集群，反之亦然。
+- 默认值：shared_nothing
+
+##### cloud_native_meta_port
+
+- 含义：云原生元数据服务监听端口。
+- 默认值：6090
+
+##### cloud_native_storage_type
+
+- 含义：您使用的存储类型。在存算分离模式下，StarRocks 支持将数据存储在 HDFS 、Azure Blob（自 v3.1.1 起支持）、以及兼容 S3 协议的对象存储中（例如 AWS S3、Google GCP、阿里云 OSS 以及 MinIO）。有效值：`S3`（默认）、`AZBLOB` 和 `HDFS`。如果您将此项指定为 `S3`，则必须添加以 `aws_s3` 为前缀的配置项。如果您将此项指定为 `AZBLOB`，则必须添加以 `azure_blob` 为前缀的配置项。如果将此项指定为 `HDFS`，则只需指定 `cloud_native_hdfs_url`。
+- 默认值：S3
+
+##### cloud_native_hdfs_url
+
+- 含义：HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。
+
+##### aws_s3_path
+
+- 含义：用于存储数据的 S3 存储空间路径，由 S3 存储桶的名称及其下的子路径（如有）组成，如 `testbucket/subpath`。
+
+##### aws_s3_region
+
+- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。  
+
+##### aws_s3_endpoint
+
+- 含义：访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。
+
+##### aws_s3_use_aws_sdk_default_behavior
+
+- 含义：是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。
+- 默认值：false
+
+##### aws_s3_use_instance_profile
+
+- 含义：是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws_s3_access_key` 和 `aws_s3_secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws_s3_iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要额外指定 `aws_s3_external_id`。</li></ul>
+- 默认值：false
+
+##### aws_s3_access_key
+
+- 含义：访问 S3 存储空间的 Access Key。
+
+##### aws_s3_secret_key
+
+- 含义：访问 S3 存储空间的 Secret Key。
+
+##### aws_s3_iam_role_arn
+
+- 含义：有访问 S3 存储空间权限 IAM Role 的 ARN。
+
+##### aws_s3_external_id
+
+- 含义：用于跨 AWS 账户访问 S3 存储空间的外部 ID。
+
+##### azure_blob_path
+
+- 含义：用于存储数据的 Azure Blob Storage 路径，由存 Storage Account 中的容器名称和容器下的子路径（如有）组成，如 `testcontainer/subpath`。
+
+##### azure_blob_endpoint
+
+- 含义：Azure Blob Storage 的链接地址，如 `https://test.blob.core.windows.net`。
+
+##### azure_blob_shared_key
+
+- 含义：访问 Azure Blob Storage 的 Shared Key。
+
+##### azure_blob_sas_token
+
+- 含义：访问 Azure Blob Storage 的共享访问签名（SAS）。
+- 默认值：N/A
+>>>>>>> 457ca90ff9 ([Doc] add BE's brpc port to StarRocks external table (#35578))
 
 #### 其他静态参数
 
@@ -398,6 +851,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
+<<<<<<< HEAD
 |配置项|默认值|描述|
 |---|---|---|
 |be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求。|
@@ -473,3 +927,372 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | jdbc_connection_idle_timeout_ms  | 600000 | JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。 |
 | query_cache_capacity  | 536870912 | 指定 Query Cache 的大小。单位：Byte。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。 |
 | enable_event_based_compaction_framework  | TRUE | 是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。 |
+=======
+#### hdfs_client_enable_hedged_read
+
+- 含义：指定是否开启 Hedged Read 功能。
+- 默认值：false
+- 引入版本：3.0
+
+#### hdfs_client_hedged_read_threadpool_size  
+
+- 含义：指定 HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threadpool.size` 参数。
+- 默认值：128
+- 引入版本：3.0
+
+#### hdfs_client_hedged_read_threshold_millis
+
+- 含义：指定发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threshold.millis` 参数。
+- 单位：毫秒
+- 默认值：2500
+- 引入版本：3.0
+
+#### be_port
+
+- 含义：BE 上 thrift server 的端口，用于接收来自 FE 的请求。
+- 默认值：9060
+
+#### brpc_port
+
+- 含义：bRPC 的端口，可以查看 bRPC 的一些网络统计信息。
+- 默认值：8060
+
+#### brpc_num_threads
+
+- 含义：bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
+- 默认值：-1
+
+#### priority_networks
+
+- 含义：以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
+- 默认值：空字符串
+
+#### starlet_port
+
+- 含义：StarRocks 存算分离集群用于 BE 心跳服务的端口。
+- 默认值：9070
+
+#### heartbeat_service_port
+
+- 含义：心跳服务端口（thrift），用户接收来自 FE 的心跳。
+- 默认值：9050
+
+#### heartbeat_service_thread_count
+
+- 含义：心跳线程数。
+- 默认值：1
+
+#### create_tablet_worker_count
+
+- 含义：创建 tablet 的线程数。
+- 默认值：3
+
+#### drop_tablet_worker_count
+
+- 含义：删除 tablet 的线程数。
+- 默认值：3
+
+#### push_worker_count_normal_priority
+
+- 含义：导入线程数，处理 NORMAL 优先级任务。
+- 默认值：3
+
+#### push_worker_count_high_priority
+
+- 含义：导入线程数，处理 HIGH 优先级任务。
+- 默认值：3
+
+#### transaction_publish_version_worker_count
+
+- 含义：生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。
+- 默认值：0
+
+#### clear_transaction_task_worker_count
+
+- 含义：清理事务的线程数。
+- 默认值：1
+
+#### clone_worker_count
+
+- 含义：克隆的线程数。
+- 默认值：3
+
+#### storage_medium_migrate_count
+
+- 含义：介质迁移的线程数，SATA 迁移到 SSD。
+- 默认值：1
+
+#### check_consistency_worker_count
+
+- 含义：计算 tablet 的校验和 (checksum)。
+- 默认值：1
+
+#### sys_log_dir
+
+- 含义：存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志。
+- 默认值：`${STARROCKS_HOME}/log`
+
+#### user_function_dir
+
+- 含义：UDF 程序存放的路径。
+- 默认值：`${STARROCKS_HOME}/lib/udf`
+
+#### small_file_dir
+
+- 含义：保存文件管理器下载的文件的目录。
+- 默认值：`${STARROCKS_HOME}/lib/small_file`
+
+#### sys_log_level
+
+- 含义：日志级别，INFO < WARNING < ERROR < FATAL。
+- 默认值：INFO
+
+#### sys_log_roll_mode
+
+- 含义：日志拆分的大小，每 1G 拆分一个日志。
+- 默认值：SIZE-MB-1024
+
+#### sys_log_roll_num
+
+- 含义：日志保留的数目。
+- 默认值：10
+
+#### sys_log_verbose_modules
+
+- 含义：日志打印的模块。有效值为 BE 的 namespace，包括 `starrocks`、`starrocks::debug`、`starrocks::fs`、`starrocks::io`、`starrocks::lake`、`starrocks::pipeline`、`starrocks::query_cache`、`starrocks::stream` 以及 `starrocks::workgroup`。
+- 默认值：空字符串
+
+#### sys_log_verbose_level
+
+- 含义：日志显示的级别，用于控制代码中 VLOG 开头的日志输出。
+- 默认值：10
+
+#### log_buffer_level
+
+- 含义：日志刷盘的策略，默认保持在内存中。
+- 默认值：空字符串
+
+#### num_threads_per_core
+
+- 含义：每个 CPU core 启动的线程数。
+- 默认值：3
+
+#### compress_rowbatches
+
+- 含义：BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。
+- 默认值：TRUE
+
+#### serialize_batch
+
+- 含义：BE 之间 RPC 通信是否序列化 RowBatch，用于查询层之间的数据传输。
+- 默认值：FALSE
+
+#### storage_root_path
+
+- 含义：存储数据的目录以及存储介质类型，多块盘配置使用分号 `;` 隔开。<br />如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。
+- 默认值：`${STARROCKS_HOME}/storage`
+
+#### max_length_for_bitmap_function
+
+- 含义：bitmap 函数输入值的最大长度。
+- 单位：字节。
+- 默认值：1000000
+
+#### max_length_for_to_base64
+
+- 含义：to_base64() 函数输入值的最大长度。
+- 单位：字节
+- 默认值：200000
+
+#### max_tablet_num_per_shard
+
+- 含义：每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多。
+- 默认值：1024
+
+#### file_descriptor_cache_capacity
+
+- 含义：文件句柄缓存的容量。
+- 默认值：16384
+  
+#### min_file_descriptor_number
+
+- 含义：BE 进程的文件句柄 limit 要求的下线。
+- 默认值：60000
+
+#### index_stream_cache_capacity
+
+- 含义：BloomFilter/Min/Max 等统计信息缓存的容量。
+- 默认值：10737418240
+
+#### base_compaction_num_threads_per_disk
+
+- 含义：每个磁盘 BaseCompaction 线程的数目。
+- 默认值：1
+
+#### base_cumulative_delta_ratio
+
+- 含义：BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。
+- 默认值：0.3
+
+#### compaction_trace_threshold
+
+- 含义：单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace。
+- 单位：秒
+- 默认值：60
+
+#### be_http_port
+
+- 含义：HTTP Server 端口。
+- 默认值：8040
+
+#### webserver_num_workers
+
+- 含义：HTTP Server 线程数。
+- 默认值：48
+
+#### load_data_reserve_hours
+
+- 含义：小批量导入生成的文件保留的时。
+- 默认值：4
+
+#### number_tablet_writer_threads
+
+- 含义：流式导入的线程数。
+- 默认值：16
+
+#### streaming_load_rpc_max_alive_time_sec
+
+- 含义：流式导入 RPC 的超时时间。
+- 默认值：1200
+
+#### fragment_pool_thread_num_min
+
+- 含义：最小查询线程数，默认启动 64 个线程。
+- 默认值：64
+
+#### fragment_pool_thread_num_max
+
+- 含义：最大查询线程数。
+- 默认值：4096
+
+#### fragment_pool_queue_size
+
+- 含义：单节点上能够处理的查询请求上限。
+- 默认值：2048
+
+#### enable_token_check
+
+- 含义：Token 开启检验。
+- 默认值：TRUE
+
+#### enable_prefetch
+
+- 含义：查询提前预取。
+- 默认值：TRUE
+
+#### load_process_max_memory_limit_bytes
+
+- 含义：单节点上所有的导入线程占据的内存上限，100GB。
+- 单位：字节
+- 默认值：107374182400
+
+#### load_process_max_memory_limit_percent
+
+- 含义：单节点上所有的导入线程占据的内存上限比例。
+- 默认值：30
+
+#### sync_tablet_meta
+
+- 含义：存储引擎是否开 sync 保留到磁盘上。
+- 默认值：FALSE
+
+#### routine_load_thread_pool_size
+
+- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数`max_routine_load_task_num_per_be` 控制。
+- 默认值：10
+
+#### brpc_max_body_size
+
+- 含义：bRPC 最大的包容量。
+- 单位：字节
+- 默认值：2147483648
+
+#### tablet_map_shard_size
+
+- 含义：Tablet 分组数。
+- 默认值：32
+
+#### enable_bitmap_union_disk_format_with_set
+
+- 含义：Bitmap 新存储格式，可以优化 bitmap_union 性能。
+- 默认值：FALSE
+
+#### mem_limit
+
+- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。
+- 默认值：90%
+
+#### flush_thread_num_per_store
+
+- 含义：每个 Store 用以 Flush MemTable 的线程数。
+- 默认值：2
+
+#### block_cache_enable
+
+- 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
+- 默认值：false
+
+#### block_cache_disk_path  
+
+- 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
+- 默认值：N/A
+
+#### block_cache_meta_path  
+
+- 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
+- 默认值：N/A
+
+#### block_cache_block_size
+
+- 含义：单个 block 大小，单位：字节。默认值为 `1048576`，即 1 MB。
+- 默认值：1048576
+
+#### block_cache_mem_size
+
+- 含义：内存缓存数据量的上限，单位：字节。默认值为 `2147483648`，即 2 GB。推荐将该参数值最低设置成 20 GB。如在开启 Data Cache 期间，存在大量从磁盘读取数据的情况，可考虑调大该参数。
+- 单位：字节
+- 默认值：2147483648
+
+#### block_cache_disk_size
+
+- 含义：单个磁盘缓存数据量的上限。举例：在 `block_cache_disk_path` 中配置了 2 个磁盘，并设置 `block_cache_disk_size` 参数值为 `21474836480`，即 20 GB，那么最多可缓存 40 GB 的磁盘数据。默认值为 `0`，即仅使用内存作为缓存介质，不使用磁盘。
+- 单位：字节
+- 默认值：0
+
+#### jdbc_connection_pool_size
+
+- 含义：JDBC 连接池大小。每个 BE 节点上访问 `jdbc_url` 相同的外表时会共用同一个连接池。
+- 默认值：8
+
+#### jdbc_minimum_idle_connections  
+
+- 含义：JDBC 连接池中最少的空闲连接数量。
+- 默认值：1
+
+#### jdbc_connection_idle_timeout_ms  
+
+- 含义：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
+- 单位：毫秒
+- 默认值：600000
+
+#### query_cache_capacity  
+
+- 含义：指定 Query Cache 的大小。单位：字节。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
+- 单位：字节
+- 默认值：536870912
+
+#### enable_event_based_compaction_framework  
+
+- 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
+- 默认值：TRUE
+>>>>>>> 457ca90ff9 ([Doc] add BE's brpc port to StarRocks external table (#35578))

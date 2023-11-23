@@ -87,7 +87,7 @@ mysql> SHOW PROC '/backends';
 | HeartbeatPort         | Heartbeat service port of the BE node.                       |
 | BePort                | Thrift Server port of the BE node.                           |
 | HttpPort              | HTTP Server port of the BE node.                             |
-| BrpcPort              | BRPC port of the BE node.                                    |
+| BrpcPort              | bRPC port of the BE node.                                    |
 | LastStartTime         | The last time when the BE node was started.                  |
 | LastHeartbeat         | The last time when the BE node received a heartbeat.         |
 | Alive                 | If the BE node is alive.                                     |

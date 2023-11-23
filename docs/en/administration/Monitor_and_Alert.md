@@ -12,8 +12,13 @@ The available metrics are:
 
 |Indicator|Unit|Type|Meaning|
 |---|:---:|:---:|---|
+<<<<<<< HEAD
 |be_broker_count|pcs|average|Number of brokers |
 |be_brpc_endpoint_count|pcs|average|Number of StubCache in BRPC|
+=======
+|be_broker_count|count|average|Number of brokers |
+|be_brpc_endpoint_count|count|average|Number of StubCache in bRPC|
+>>>>>>> 457ca90ff9 ([Doc] add BE's brpc port to StarRocks external table (#35578))
 |be_bytes_read_per_second|bytes/s|average| Read speed of BE |
 |be_bytes_written_per_second|bytes/s|average|Write speed of BE |
 |be_base_compaction_bytes_per_second|bytes/s|average|Base compaction speed of BE|
