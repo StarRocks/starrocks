@@ -2399,4 +2399,25 @@ public class AggregateTest extends PlanTestBase {
             Assert.assertTrue(actualMessage.contains(expectedMessage));
         }
     }
+
+    @Test
+    public void testTableAliasCountDistinctHaving() throws Exception {
+        String sql = "select " +
+                "   count(distinct xx.v2) as j1, " +
+                "   xx.v2 as v2 " +
+                "from test.t0 as xx " +
+                "group by xx.v2 " +
+                "having count(distinct xx.v2) > 0";
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  having: 4: count > 0");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1");
+    }
 }
