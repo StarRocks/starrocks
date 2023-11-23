@@ -501,6 +501,13 @@ public abstract class ConnectorPartitionTraits {
             LOG.debug("Get updated partition name of paimon table result: {}", result);
             return result;
         }
+
+        @Override
+        public List<PartitionInfo> getPartitions(List<String> partitionNames) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(paimonTable.getCatalogName(), table, partitionNames);
+        }
     }
 
     static class OdpsPartitionTraits extends DefaultTraits {

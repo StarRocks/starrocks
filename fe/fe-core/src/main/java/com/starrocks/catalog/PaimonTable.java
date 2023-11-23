@@ -38,7 +38,6 @@ public class PaimonTable extends Table {
     private final AbstractFileStoreTable paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
-    private long latestSnapshotId;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable, long createTime) {
@@ -139,13 +138,5 @@ public class PaimonTable extends Table {
     @Override
     public int hashCode() {
         return Objects.hash(catalogName, databaseName, tableName, createTime);
-    }
-
-    public long getLatestSnapshotId() {
-        return latestSnapshotId;
-    }
-
-    public void setLatestSnapshotId(long latestSnapshotId) {
-        this.latestSnapshotId = latestSnapshotId;
     }
 }
