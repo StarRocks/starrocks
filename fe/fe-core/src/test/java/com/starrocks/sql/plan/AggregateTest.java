@@ -1745,4 +1745,107 @@ public class AggregateTest extends PlanTestBase {
                         "  |  group by: 1: t1a, 2: t1b",
                 "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testApproxTopK() throws Exception {
+        {
+            String sql = "select approx_top_k(L_LINENUMBER) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 10000) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 100, 10000) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 10000, 10000) from lineitem";
+            getFragmentPlan(sql);
+            sql = "select approx_top_k(L_LINENUMBER, 1, 1) from lineitem";
+            getFragmentPlan(sql);
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, '111') from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, '111') from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 100001) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The maximum number of the second parameter is 100000";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 0) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, 100001) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The maximum number of the third parameter is 100000";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 1, -1) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The third parameter of APPROX_TOP_K must be a constant positive integer";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+        {
+            Exception exception = Assertions.assertThrows(SemanticException.class, () -> {
+                String sql = "select approx_top_k(L_LINENUMBER, 100, 99) from lineitem";
+                getFragmentPlan(sql);
+            });
+            String expectedMessage = "The second parameter must be smaller than or equal to the third parameter";
+            String actualMessage = exception.getMessage();
+            Assert.assertTrue(actualMessage.contains(expectedMessage));
+        }
+    }
+
+    @Test
+    public void testTableAliasCountDistinctHaving() throws Exception {
+        String sql = "select " +
+                "   count(distinct xx.v2) as j1, " +
+                "   xx.v2 as v2 " +
+                "from test.t0 as xx " +
+                "group by xx.v2 " +
+                "having count(distinct xx.v2) > 0";
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  having: 4: count > 0");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1");
+    }
+>>>>>>> 99cbfbb838 ([BugFix] Fix function error hashcode (#35225))
 }

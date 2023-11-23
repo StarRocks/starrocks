@@ -191,6 +191,7 @@ public class FunctionCallExpr extends Expr {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public boolean equals(Object obj) {
         if (!super.equals(obj)) {
@@ -203,6 +204,9 @@ public class FunctionCallExpr extends Expr {
                 && nondeterministicId.equals(o.nondeterministicId);
     }
 
+=======
+    // TODO: process order by
+>>>>>>> 99cbfbb838 ([BugFix] Fix function error hashcode (#35225))
     @Override
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
@@ -436,8 +440,21 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public int hashCode() {
-        // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
-        return Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
+        // @Note: fnParams is different with children Expr. use children plz.
+        return Objects.hash(super.hashCode(), type, opcode, fnName, nondeterministicId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!super.equals(obj)) {
+            return false;
+        }
+        FunctionCallExpr o = (FunctionCallExpr) obj;
+        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
+                && fnParams.isDistinct() == o.fnParams.isDistinct()
+                && fnParams.isStar() == o.fnParams.isStar()
+                && nondeterministicId.equals(o.nondeterministicId)
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
     /**
