@@ -133,6 +133,11 @@ under the License.
                     <id>oracleReleases</id>
                     <url>https://download.oracle.com/maven</url>
                 </repository>
+
+                <repository>
+                    <id>snapshot repo</id>
+                    <url>https://repository.apache.org/content/repositories/snapshots</url>
+                </repository>
             </repositories>
 
             <pluginRepositories>
