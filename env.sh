@@ -85,14 +85,12 @@ fi
 
 # check java version
 export JAVA=${JAVA_HOME}/bin/java
-JAVA_VER=$(${JAVA} -version 2>&1 | grep -oP 'version "\K[^"]+')
-
-# split version
-IFS='.' read -ra ADDR <<< "$JAVA_VER"
-major_version=${ADDR[0]}
-
-# compare version
-if [[ $major_version -lt 11 ]]; then
+# Some examples of different variant of jdk output for `java -version`
+# - Oracle JDK: java version "1.8.0_202"
+# - OpenJDK: openjdk version "1.8.0_362"
+# - OpenJDK: openjdk version "11.0.20.1" 2023-08-24
+JAVA_VER=$(${JAVA} -version 2>&1 | awk -F'"' '{print $2}' | awk -F. '{if ($1 == 1) {print $2;} else {print $1;}}')
+if [[ $JAVA_VER -lt 11 ]]; then
     echo "Error: require JAVA with JDK version at least 11, but got $JAVA_VER"
     exit 1
 fi
