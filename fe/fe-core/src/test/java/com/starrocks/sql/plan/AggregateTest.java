@@ -2526,6 +2526,7 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testOrderByWithAgg() throws Exception {
         String sql = "select round(count(t1e) * 100.0 / min(t1f), 4) as potential_customer_rate, " +
                 "min(t1f) as t1f, min(t1f) as t1f from test_all_type_not_null " +
@@ -2538,5 +2539,25 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: count(5: t1e), min(6: t1f)\n" +
                 "  |  group by: 1: t1a, 2: t1b",
                 "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
+=======
+    public void testTableAliasCountDistinctHaving() throws Exception {
+        String sql = "select " +
+                "   count(distinct xx.v2) as j1, " +
+                "   xx.v2 as v2 " +
+                "from test.t0 as xx " +
+                "group by xx.v2 " +
+                "having count(distinct xx.v2) > 0";
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(true);
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableGroupbyUseOutputAlias(false);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  having: 4: count > 0");
+        assertContains(plan, "0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1");
+>>>>>>> 99cbfbb838 ([BugFix] Fix function error hashcode (#35225))
     }
 }
