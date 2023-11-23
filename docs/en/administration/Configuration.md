@@ -568,6 +568,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 86400
 - **Description**: The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds.
 
+#### fast_schema_evolution
+
+- **Default**: TRUE
+- **Description**: Whether to enable the fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` (default) and `FALSE`. Enabling this feature can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+  > **NOTE**
+  > - StarRocks shared-data clusters do not support this parameter.
+  > - If you need to configure the fast schema evolution for a specific table, such as disabling the fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+- **Introduced in**: v3.2.0
+
 ##### recover_with_empty_tablet
 
 - **Unit**: -
