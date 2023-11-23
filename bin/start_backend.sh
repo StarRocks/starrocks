@@ -185,6 +185,21 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
 fi
 
 START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
+
+# Add be cgroup hard limit.
+if [ -f ${STARROCKS_HOME}/conf/cgroup.conf ]; then
+    source ${STARROCKS_HOME}/conf/cgroup.conf
+    if [[ ${IF_USE_CPU_CGROUP} -eq 0 ]]; then
+        CGROUP_CPU_DIR=/sys/fs/cgroup/cpu/${CPU_CGROUP_NAME}/
+        if [ ! -d ${CGROUP_CPU_DIR} ]; then
+            mkdir -p ${CGROUP_CPU_DIR}
+        fi
+        backend_pid=`ps -ef | grep starrocks_be | grep -v grep | awk {'print $2'}`
+        echo ${CPU_CFS_QUOTA_US} > ${CGROUP_CPU_DIR}/cpu.cfs_quota_us
+        echo ${backend_pid} >> ${CGROUP_CPU_DIR}/cgroup.procs
+    fi
+fi
+
 LOG_FILE=$LOG_DIR/be.out
 if [ ${RUN_CN} -eq 1 ]; then
     START_BE_CMD="${START_BE_CMD} --cn"
