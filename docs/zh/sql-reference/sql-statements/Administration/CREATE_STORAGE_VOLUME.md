@@ -322,10 +322,10 @@ PROPERTIES
     | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                      |
     | hadoop.security.kerberos.ticket.cache.path            | 用于指定 kinit 生成的 Ticket Cache 文件的路径。                   |
     | dfs.nameservices                                      | 自定义 HDFS 集群的名称。                                        |
-    | dfs.ha.namenodes.<ha_cluster_name\>                   | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的 HDFS 服务的名称。 |
-    | dfs.namenode.rpc-address.<ha_cluster_name\>.<NameNode\> | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
+    | dfs.ha.namenodes.`<ha_cluster_name\>`                   | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的 HDFS 服务的名称。 |
+    | dfs.namenode.rpc-address.`<ha_cluster_name\>`.`<NameNode\>` | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
     | dfs.client.failover.proxy.provider                    | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
-    | fs.viewfs.mounttable.<ViewFS_cluster\>.link./<viewfs_path\> | 需要挂载的 ViewFS 集群路径，多个路径以逗号 (,) 分隔。其中 `<ViewFS_cluster>` 为 `LOCATIONS` 中自定义的 ViewFS 集群名。 |
+    | fs.viewfs.mounttable.`<ViewFS_cluster\>`.link./`<viewfs_path\>` | 需要挂载的 ViewFS 集群路径，多个路径以逗号 (,) 分隔。其中 `<ViewFS_cluster>` 为 `LOCATIONS` 中自定义的 ViewFS 集群名。 |
 
 <!--
 
