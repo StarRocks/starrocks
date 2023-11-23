@@ -618,7 +618,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
 
     std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
 
-    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    HdfsScanner* scanner = _pool.add(new HiveJniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
 }
 

@@ -45,6 +45,7 @@ import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -94,7 +95,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         // create delete predicate
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
         DeletePredicatePB deletePredicate = createDeletePredicate(conditions);
 
         // send delete data request to BE

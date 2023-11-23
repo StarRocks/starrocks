@@ -26,7 +26,7 @@ DROP TASK '<task_name>'
 
 ## Usage notes
 
-You can check the information of asynchronous tasks by querying the metadata tables `tasks` and `task_runs` in Information Schema.
+You can check the information of asynchronous tasks by querying the metadata views `tasks` and `task_runs` in Information Schema.
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;

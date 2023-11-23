@@ -86,7 +86,7 @@ Release date: January 19, 2023
 The following bugs are fixed:
 
 - Stream Load may fail when timeout is not set. [#16241](https://github.com/StarRocks/starrocks/pull/16241)
-- BRPC Send crashes when memory usage is high. [#16046](https://github.com/StarRocks/starrocks/issues/16046)
+- bRPC Send crashes when memory usage is high. [#16046](https://github.com/StarRocks/starrocks/issues/16046)
 - StarRocks fails to load data in external tables from a StarRocks instance of an early version.  [#16130](https://github.com/StarRocks/starrocks/pull/16130)
 - Materialized view Refresh failure may cause memory leak. [#16041](https://github.com/StarRocks/starrocks/pull/16041)
 - Schema Change hangs at the Publish stage. [#14148](https://github.com/StarRocks/starrocks/issues/14148)
