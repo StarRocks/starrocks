@@ -27,7 +27,7 @@ SUBMIT TASK [task_name] AS <etl_statement>
 
 ## 使用说明
 
-该语句会创建一个 Task，表示一个 ETL 语句执行任务的存储模板。您可以通过查询 Information Schema 中的元数据表 `tasks` 来查看 Task 信息：
+该语句会创建一个 Task，表示一个 ETL 语句执行任务的存储模板。您可以通过查询 Information Schema 中的元数据视图 `tasks` 来查看 Task 信息：
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;
@@ -41,7 +41,7 @@ SELECT * FROM information_schema.tasks WHERE task_name = '<task_name>';
 - `FAILED`：任务执行失败。
 - `SUCCESS`：任务执行成功。
 
-您可以通过查询 Information Schema 中的元数据表 `task_runs` 来查看 TaskRun 状态：
+您可以通过查询 Information Schema 中的元数据视图 `task_runs` 来查看 TaskRun 状态：
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.task_runs;

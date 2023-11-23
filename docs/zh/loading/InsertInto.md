@@ -379,7 +379,7 @@ AS INSERT OVERWRITE insert_wiki_edit
 SELECT * FROM source_wiki_edit;
 ```
 
-您可以通过查询 Information Schema 中的元数据表 `task_runs` 来查看异步 INSERT 任务的状态。
+您可以通过查询 Information Schema 中的元数据视图 `task_runs` 来查看异步 INSERT 任务的状态。
 
 以下示例查看异步 INSERT 任务 `async` 的状态。
 
@@ -467,7 +467,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-有关返回字段的说明，参见 [Information Schema > loads](../administration/information_schema.md#loads)。
+有关返回字段的说明，参见 [`information_schema.loads`](../reference/information_schema/loads.md)。
 
 ## 相关配置项
 
