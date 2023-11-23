@@ -970,7 +970,11 @@
                 "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
                 "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
                 "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
+<<<<<<< HEAD
                 { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
+=======
+                "reference/information_schema/materialized_views",
+>>>>>>> c098765685 ([Doc] Update sidebars.json (#35610))
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
