@@ -223,7 +223,7 @@ public class DeleteMgr implements Writable {
         if (noPartitionSpecified) {
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo.isRangePartition()) {
-                partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
+                partitionNames = extractPartitionNamesByCondition(olapTable, conditions);
                 if (partitionNames.isEmpty()) {
                     LOG.info("The delete statement [{}] prunes all partitions",
                             stmt.getOrigStmt().originStmt);
@@ -281,6 +281,7 @@ public class DeleteMgr implements Writable {
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
+        deleteJob.setDeleteConditions(conditions);
         idToDeleteJob.put(deleteJob.getTransactionId(), deleteJob);
 
         // add transaction callback
@@ -292,11 +293,16 @@ public class DeleteMgr implements Writable {
     @VisibleForTesting
     public List<String> extractPartitionNamesByCondition(DeleteStmt stmt, OlapTable olapTable)
             throws DdlException, AnalysisException {
+        return extractPartitionNamesByCondition(olapTable, stmt.getDeleteConditions());
+    }
+
+    public List<String> extractPartitionNamesByCondition(OlapTable olapTable, List<Predicate> conditions)
+            throws DdlException, AnalysisException {
         List<String> partitionNames = Lists.newArrayList();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, olapTable,
-                rangePartitionInfo.getPartitionColumns());
+        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(olapTable,
+                rangePartitionInfo.getPartitionColumns(), conditions);
         Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
         if (columnFilters.isEmpty()) {
             partitionNames.addAll(olapTable.getPartitionNames());
@@ -317,11 +323,11 @@ public class DeleteMgr implements Writable {
         return partitionNames;
     }
 
-    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table,
-                                                                   List<Column> partitionColumns)
+    private Map<String, PartitionColumnFilter> extractColumnFilter(Table table, List<Column> partitionColumns,
+                                                                   List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Predicate> deleteConditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
+        List<Predicate> deleteConditions = conditions;
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {
             nameToColumn.put(column.getName(), column);
