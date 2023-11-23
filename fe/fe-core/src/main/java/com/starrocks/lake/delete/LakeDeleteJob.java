@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.delete;
 
 import com.google.common.base.Preconditions;
@@ -45,7 +44,6 @@ import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -95,7 +93,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         // create delete predicate
-        List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
+        List<Predicate> conditions = getDeleteConditions();
         DeletePredicatePB deletePredicate = createDeletePredicate(conditions);
 
         // send delete data request to BE
