@@ -189,6 +189,11 @@ public class Trino2SRFunctionCallTransformer {
 
         // length -> char_length
         registerFunctionTransformer("length", 1, "char_length", ImmutableList.of(Expr.class));
+
+        // replace(string, search) -> replace(string, search, '')
+        registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                        new StringLiteral(""))));
     }
 
     private static void registerRegexpFunctionTransformer() {
