@@ -911,6 +911,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int task_runs_concurrency = 4;
+
+    /**
+     * max num of thread to handle task runs in task runs executor thread-pool.
+     */
+    @ConfField
+    public static int max_task_runs_threads_num = 512;
+
     /**
      * Default timeout of export jobs.
      */
