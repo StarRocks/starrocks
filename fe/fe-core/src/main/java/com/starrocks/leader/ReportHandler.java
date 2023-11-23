@@ -73,6 +73,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
@@ -377,6 +378,9 @@ public class ReportHandler extends Daemon {
     }
 
     private static void tabletReport(long backendId, Map<Long, TTablet> backendTablets, long backendReportVersion) {
+        if (RunMode.isSharedDataMode()) {
+            return;
+        }
         long start = System.currentTimeMillis();
         LOG.info("backend[{}] reports {} tablet(s). report version: {}",
                 backendId, backendTablets.size(), backendReportVersion);
