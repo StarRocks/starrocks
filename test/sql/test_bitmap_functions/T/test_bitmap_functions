@@ -121,3 +121,10 @@ insert into t1 select 2, bitmap_agg(generate_series) from table(generate_series(
 insert into t1 select 2, bitmap_agg(generate_series) from table(generate_series(900, 910));
 select c1, hex(bitmap_to_binary(c2)) from t1 order by c1;
 select c1, bitmap_to_string(bitmap_from_binary(bitmap_to_binary(c2))) from t1 order by c1;
+
+-- Invalid format
+select bitmap_from_binary(to_binary("1234"));
+select bitmap_from_binary(to_binary(""));
+
+-- Input is null
+select bitmap_from_binary(null);
