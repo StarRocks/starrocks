@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -69,6 +70,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
     protected String label;
     protected DeleteState state;
     protected MultiDeleteInfo deleteInfo;
+    List<Predicate> deleteConditions;
 
     public DeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo) {
         this.id = id;
@@ -101,6 +103,14 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
 
     public MultiDeleteInfo getDeleteInfo() {
         return deleteInfo;
+    }
+
+    public List<Predicate> getDeleteConditions() {
+        return deleteConditions;
+    }
+
+    public void setDeleteConditions(List<Predicate> deleteConditions) {
+        this.deleteConditions = deleteConditions;
     }
 
     @Override

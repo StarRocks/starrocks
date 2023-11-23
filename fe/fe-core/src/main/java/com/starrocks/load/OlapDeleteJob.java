@@ -61,7 +61,6 @@ import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -114,7 +113,7 @@ public class OlapDeleteJob extends DeleteJob {
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
+        List<Predicate> conditions = getDeleteConditions();
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
