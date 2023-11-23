@@ -224,7 +224,7 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 ### Operator 耗时
 
 - 对于 OlapScan 和 ConnectorScan Operator，其耗时相当于 `OperatorTotalTime + ScanTime`。因为 Scan Operator 在异步 I/O 线程池中进行 I/O 操作，所以 ScanTime 为异步 I/O 时间。
-- Exchange Operator 的耗时相当于 `OperatorTotalTime + NetworkTime`。因为 Exchange Operator 在 BRPC 线程池中收发数据包，NetworkTime 即为网络传输消耗的时间。
+- Exchange Operator 的耗时相当于 `OperatorTotalTime + NetworkTime`。因为 Exchange Operator 在 bRPC 线程池中收发数据包，NetworkTime 即为网络传输消耗的时间。
 - 对于其他 Operator，其耗时为 `OperatorTotalTime`。
 
 ### Metric 合并以及 MIN/MAX 值
@@ -428,8 +428,8 @@ Operator 花费的时间比例越大，其对应卡片的颜色就越深。您�
 
 Exchange Operator 的耗时由两部分组成：CPU 时间和网络时间。网络时间依赖于系统时钟。网络时间计算方式如下：
 
-1. 发送端在调用BRPC接口发送包之前记录 `send_timestamp`。
-2. 接收端从 BRPC 接口收到包后记录 `receive_timestamp`（不包括接收后处理时间）。
+1. 发送端在调用 bRPC 接口发送包之前记录 `send_timestamp`。
+2. 接收端从 bRPC 接口收到包后记录 `receive_timestamp`（不包括接收后处理时间）。
 3. 处理完成后，接收端发送 Response 并计算网络延迟。数据包传输时延等于 `receive_timestamp` - `send_timestamp`。
 
 如果不同机器的系统时钟不一致，Exchange Operator 的耗时就会出现异常。

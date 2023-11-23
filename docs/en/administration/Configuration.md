@@ -902,7 +902,7 @@ This section provides an overview of the static parameters that you can configur
 ##### brpc_idle_wait_max_time
 
 - **Default:** 10000
-- **Description:** The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms.
+- **Description:** The maximum length of time for which bRPC clients wait as in the idle state. Unit: ms.
 
 ##### query_port
 
@@ -1671,13 +1671,13 @@ BE static parameters are as follows.
 
 - **Default**: 8060
 - **Unit**: N/A
-- **Description**: The BE BRPC port, which is used to view the network statistics of BRPCs.
+- **Description**: The BE bRPC port, which is used to view the network statistics of bRPCs.
 
 #### brpc_num_threads
 
 - **Default**: -1
 - **Unit**: N/A
-- **Description**: The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads.
+- **Description**: The number of bthreads of a bRPC. The value -1 indicates the same number with the CPU threads.
 
 #### priority_networks
 
@@ -2008,7 +2008,7 @@ BE static parameters are as follows.
 
 - **Default**: 2147483648
 - **Unit**: Byte
-- **Description**: The maximum body size of a BRPC.
+- **Description**: The maximum body size of a bRPC.
 
 #### tablet_map_shard_size
 

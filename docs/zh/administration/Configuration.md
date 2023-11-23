@@ -823,7 +823,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### brpc_idle_wait_max_time
 
-- 含义：BRPC 的空闲等待时间。单位：毫秒。
+- 含义：bRPC 的空闲等待时间。单位：毫秒。
 - 默认值：10000
 
 ##### query_port
@@ -1647,12 +1647,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### brpc_port
 
-- 含义：BRPC 的端口，可以查看 BRPC 的一些网络统计信息。
+- 含义：bRPC 的端口，可以查看 bRPC 的一些网络统计信息。
 - 默认值：8060
 
 #### brpc_num_threads
 
-- 含义：BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
+- 含义：bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
 - 默认值：-1
 
 #### priority_networks
@@ -1906,7 +1906,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### brpc_max_body_size
 
-- 含义：BRPC 最大的包容量。
+- 含义：bRPC 最大的包容量。
 - 单位：字节
 - 默认值：2147483648
 

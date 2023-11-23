@@ -86,7 +86,7 @@ displayed_sidebar: "Chinese"
 修复了如下问题：
 
 - 未设置 Timeout 导致 Stream Load 失败。[#16241](https://github.com/StarRocks/starrocks/pull/16241)
-- BRPC Send 在内存使用多的时候会崩溃。[#16046](https://github.com/StarRocks/starrocks/issues/16046)
+- bRPC Send 在内存使用多的时候会崩溃。[#16046](https://github.com/StarRocks/starrocks/issues/16046)
 - 无法通过低版本 StarRocks 外表的方式导入数据。[#16130](https://github.com/StarRocks/starrocks/pull/16130)
 - 物化视图刷新失败会导致内存泄漏。[#16041](https://github.com/StarRocks/starrocks/pull/16041)
 - Schema Change 在 Publish 阶段卡住。[#14148](https://github.com/StarRocks/starrocks/issues/14148)
