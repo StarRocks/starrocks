@@ -8,7 +8,7 @@ StarRocks supports JDBC catalogs from v3.0 onwards.
 
 A JDBC catalog is a kind of external catalog that enables you to query data from data sources accessed through JDBC without ingestion.
 
-Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) based on JDBC catalogs.
+Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on JDBC catalogs.
 
 JDBC catalogs currently support MySQL and PostgreSQL.
 

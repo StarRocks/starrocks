@@ -43,6 +43,7 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -185,6 +186,11 @@ public class AnalyzeStmtTest {
                         "2020-01-01 01:01:00, 2020-01-01 01:01:00, " +
                         "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+
+        AnalyzeStatus extenalAnalyzeStatus = new ExternalAnalyzeStatus(-1, "hive0", "partitioned_db",
+                "tx", "tx:xxxx", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+        Assert.assertNull(ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus));
 
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);

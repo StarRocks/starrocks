@@ -142,6 +142,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -479,6 +480,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
@@ -581,7 +583,7 @@ public class GlobalStateMgr {
         // use default warehouse
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         // TODO: need to refactor after be split into cn + dn
-        if (warehouse != null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (warehouse != null && RunMode.isSharedDataMode()) {
             com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
@@ -740,6 +742,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadMgr);
         this.loadEtlChecker = new LoadEtlChecker(loadMgr);
         this.loadLoadingChecker = new LoadLoadingChecker(loadMgr);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
         this.mvMVJobExecutor = new MVJobExecutor();
@@ -1440,6 +1443,8 @@ public class GlobalStateMgr {
         configRefreshDaemon.start();
 
         slotManager.start();
+
+        lockChecker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
