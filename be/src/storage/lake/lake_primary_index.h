@@ -28,6 +28,7 @@ namespace lake {
 
 class Tablet;
 class MetaFileBuilder;
+struct LoadStats;
 
 class LakePrimaryIndex : public PrimaryIndex {
 public:
@@ -47,7 +48,7 @@ public:
     int64_t data_version() const { return _data_version; }
     void update_data_version(int64_t version) { _data_version = version; }
 
-    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
+    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, std::shared_ptr<LoadStats> stats = nullptr);
 
 private:
     Status _do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,

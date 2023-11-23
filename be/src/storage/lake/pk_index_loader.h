@@ -37,6 +37,19 @@ class MetaFileBuilder;
 class Tablet;
 class LakePrimaryIndex;
 
+struct LoadStats {
+    std::mutex mutex;
+    uint64_t io_cost = 0;
+    uint64_t insert_cost = 0;
+    uint64_t lock_cost = 0;
+
+    const std::string to_string() const {
+        return "io cost(ms): " + std::to_string(io_cost / 1000000) +
+               " insert cost(ms): " + std::to_string(insert_cost / 1000000) +
+               " lock cost(ms): " + std::to_string(lock_cost / 1000000);
+    }
+};
+
 class PkIndexLoader {
 public:
     PkIndexLoader() = default;
@@ -54,6 +67,7 @@ private:
     std::mutex _mutex;
     std::unordered_map<int64_t, std::unique_ptr<std::promise<Status>>> _promises;
     std::unordered_map<int64_t, uint64_t> _subtask_nums;
+    std::unordered_map<int64_t, std::shared_ptr<LoadStats>> _stats;
     std::unique_ptr<ThreadPool> _load_thread_pool;
 };
 

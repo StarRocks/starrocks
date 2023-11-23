@@ -14,6 +14,8 @@
 
 #include "storage/lake/pk_index_loader.h"
 
+#include <chrono>
+
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/update_manager.h"
@@ -27,7 +29,7 @@ namespace starrocks::lake {
 class LoadPkIndexSubtask : public Runnable {
 public:
     LoadPkIndexSubtask(Tablet* tablet, uint32_t rowset_id, uint32_t seg_id, std::string seg_name, const Schema& schema,
-                       int64_t version, const MetaFileBuilder* builder, LakePrimaryIndex* index)
+                       int64_t version, const MetaFileBuilder* builder, LakePrimaryIndex* index, std::shared_ptr<LoadStats> load_stats)
             : _tablet(tablet),
               _rowset_id(rowset_id),
               _seg_id(seg_id),
@@ -35,7 +37,8 @@ public:
               _schema(std::move(schema)),
               _version(version),
               _builder(builder),
-              _index(index) {}
+              _index(index),
+              _stats(load_stats) {}
 
     void run() override {
         auto st = Status::OK();
@@ -46,11 +49,19 @@ public:
             ExecEnv::GetInstance()->lake_pk_index_loader()->finish_subtask(_tablet->id(), st);
         });
         size_t footer_size_hint = 16 * 1024;
+        // MonotonicStopWatch watch;
+        // watch.start();
+        auto start = std::chrono::steady_clock::now();
         auto seg = _tablet->load_segment(_seg_name, _seg_id, &footer_size_hint, false, false);
         if (!seg.ok()) {
             st = seg.status();
             return;
         }
+        // auto t = watch.elapsed_time();
+        auto end = std::chrono::steady_clock::now();
+        _stats->mutex.lock();
+        _stats->io_cost += (end - start).count();
+        _stats->mutex.unlock();
         SegmentReadOptions seg_options;
         auto fs = FileSystem::CreateSharedFromString(_tablet->root_location());
         if (!fs.ok()) {
@@ -84,7 +95,14 @@ public:
         while (true) {
             chunk->reset();
             rowids.clear();
+            // watch.reset();
+            start = std::chrono::steady_clock::now();
             st = (*seg_itr)->get_next(chunk, &rowids);
+            // t = watch.elapsed_time();
+            end = std::chrono::steady_clock::now(); 
+            _stats->mutex.lock();
+            _stats->io_cost += (end - start).count();
+            _stats->mutex.unlock();
             if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
@@ -98,7 +116,7 @@ public:
                 } else {
                     pkc = chunk->columns()[0].get();
                 }
-                st = _index->insert(_rowset_id + _seg_id, rowids, *pkc);
+                st = _index->insert(_rowset_id + _seg_id, rowids, *pkc, _stats);
                 if (!st.ok()) {
                     return;
                 }
@@ -116,6 +134,7 @@ private:
     int64_t _version;
     const MetaFileBuilder* _builder;
     LakePrimaryIndex* _index;
+    std::shared_ptr<LoadStats> _stats;
 };
 
 Status PkIndexLoader::init() {
@@ -134,13 +153,14 @@ std::future<Status> PkIndexLoader::load(Tablet* tablet, const std::vector<Rowset
                                         int64_t version, const MetaFileBuilder* builder, LakePrimaryIndex* index) {
     uint64_t subtask_num = 0;
     auto p = std::make_unique<std::promise<Status>>();
+    auto load_stats = std::make_shared<LoadStats>();
     std::future<Status> f = p->get_future();
     std::vector<std::shared_ptr<Runnable>> subtasks;
     for (auto& rowset : rowsets) {
         auto& rowset_meta = rowset->metadata();
         for (uint32_t i = 0; i < rowset_meta.segments_size(); ++i) {
             std::shared_ptr<Runnable> subtask(std::make_shared<LoadPkIndexSubtask>(
-                    tablet, rowset->id(), i, rowset_meta.segments(i), schema, version, builder, index));
+                    tablet, rowset->id(), i, rowset_meta.segments(i), schema, version, builder, index, load_stats));
             subtasks.push_back(subtask);
         }
         subtask_num += rowset_meta.segments_size();
@@ -160,6 +180,7 @@ std::future<Status> PkIndexLoader::load(Tablet* tablet, const std::vector<Rowset
     }
     _subtask_nums.emplace(tablet->id(), subtask_num);
     _promises.emplace(tablet->id(), std::move(p));
+    _stats.emplace(tablet->id(), load_stats);
     return f;
 }
 
@@ -174,6 +195,8 @@ void PkIndexLoader::finish_subtask(int64_t tablet_id, const Status& status) {
         _promises[tablet_id]->set_value(status);
         _subtask_nums.erase(tablet_id);
         _promises.erase(tablet_id);
+        LOG(INFO) << "Load tablet " << tablet_id << ": " << _stats[tablet_id]->to_string();
+        _stats.erase(tablet_id);
         return;
     }
 }

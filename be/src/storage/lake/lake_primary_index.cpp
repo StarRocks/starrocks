@@ -16,6 +16,8 @@
 
 #include <bvar/bvar.h>
 
+#include <chrono>
+
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/pk_index_loader.h"
@@ -54,9 +56,28 @@ bool LakePrimaryIndex::is_load(int64_t base_version) {
     return _loaded && _data_version >= base_version;
 }
 
-Status LakePrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
+Status LakePrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, std::shared_ptr<LoadStats> stats) {
+    if (stats == nullptr) {
+        return PrimaryIndex::insert(rssid, rowids, pks);
+    }
+    // MonotonicStopWatch watch;
+    // watch.start();
+    auto start = std::chrono::system_clock::now();
     std::lock_guard<std::mutex> lg(_mutex);
-    return PrimaryIndex::insert(rssid, rowids, pks);
+    // auto t = watch.elapsed_time();
+    auto end = std::chrono::system_clock::now();
+    stats->mutex.lock();
+    stats->lock_cost += (end - start).count();
+    stats->mutex.unlock();
+    // watch.reset();
+    start = std::chrono::system_clock::now();
+    auto st = PrimaryIndex::insert(rssid, rowids, pks);
+    end = std::chrono::system_clock::now();
+    // t = watch.elapsed_time();
+    stats->mutex.lock();
+    stats->insert_cost += (end - start).count();
+    stats->mutex.unlock();
+    return st;
 }
 
 Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
