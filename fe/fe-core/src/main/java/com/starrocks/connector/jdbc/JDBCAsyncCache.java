@@ -16,30 +16,46 @@
 package com.starrocks.connector.jdbc;
 
 import com.github.benmanes.caffeine.cache.AsyncCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 public class JDBCAsyncCache<K, V> {
 
-    private final AsyncCache<K, V> asyncCache;
+    private AsyncCache<K, V> asyncCache;
+    private long currentExpireSec;
 
-    public JDBCAsyncCache(AsyncCache<K, V> asyncCache) {
-        this.asyncCache = asyncCache;
+    public JDBCAsyncCache() {
+        currentExpireSec = Config.jdbc_meta_cache_expire_sec;
+        this.asyncCache = Caffeine.newBuilder()
+                .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS)
+                .buildAsync();
     }
 
     public @NonNull V get(@NonNull K key, @NonNull Function<K, V> function) {
         try {
             if (Config.jdbc_meta_cache_enable) {
+                checkExpirationTimeChange();
                 return asyncCache.get(key, function).get();
             } else {
                 return function.apply(key);
             }
         } catch (InterruptedException | ExecutionException e) {
+            Thread.currentThread().interrupt();
             throw new StarRocksConnectorException(e.getMessage());
+        }
+    }
+
+    private void checkExpirationTimeChange() {
+        if (currentExpireSec != Config.jdbc_meta_cache_expire_sec) {
+            currentExpireSec = Config.jdbc_meta_cache_expire_sec;
+            this.asyncCache = Caffeine.newBuilder()
+                    .expireAfterWrite(currentExpireSec, TimeUnit.SECONDS).buildAsync();
         }
     }
 }

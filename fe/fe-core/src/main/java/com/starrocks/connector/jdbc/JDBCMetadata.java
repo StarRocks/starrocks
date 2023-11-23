@@ -38,20 +38,18 @@ public class JDBCMetadata implements ConnectorMetadata {
     private static Logger LOG = LogManager.getLogger(JDBCMetadata.class);
 
     private Map<String, String> properties;
-    private String catalogName;
-    private JDBCSchemaResolver schemaResolver;
     private JDBCMetaResolver metaResolver;
 
     private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, List<String>> catalogCache
-            = JDBCCacheBuilder.buildAsync();
+            = new JDBCAsyncCache<>();
     private final @NonNull JDBCAsyncCache<ImmutableMap<String, String>, Table> tableCache
-            = JDBCCacheBuilder.buildAsync();
+            = new JDBCAsyncCache<>();
     private final @NonNull JDBCAsyncCache<ImmutableMap<String, Object>, List<PartitionInfo>> partitionCache
-            = JDBCCacheBuilder.buildAsync();
+            = new JDBCAsyncCache<>();
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
-        this.catalogName = catalogName;
+        JDBCSchemaResolver schemaResolver;
         try {
             Class.forName(properties.get(JDBCResource.DRIVER_CLASS));
         } catch (ClassNotFoundException e) {
@@ -105,7 +103,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         ImmutableMap<String, String> metaInfo =
-                ImmutableMap.of("func", "listPartitionNames", "dbName", dbName, "tblName", tblName);
+                ImmutableMap.of("func", "getTable", "dbName", dbName, "tblName", tblName);
         return tableCache.get(metaInfo, k -> metaResolver.refreshCacheForGetTable(k));
     }
 

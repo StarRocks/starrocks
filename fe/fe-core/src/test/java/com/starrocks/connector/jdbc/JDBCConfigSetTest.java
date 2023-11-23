@@ -57,11 +57,15 @@ public class JDBCConfigSetTest {
     @Test
     public void testSetJDBCCacheExpireSec() {
         try {
+            JDBCAsyncCache<String, String> cache = new JDBCAsyncCache<>();
+            int changeBefore = cache.hashCode();
             String stmt = "admin set frontend config(\"jdbc_meta_cache_expire_sec\" = \"6000\");";
             AdminSetConfigStmt adminSetConfigStmt =
                     (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
             DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
             Assert.assertEquals(6000, Config.jdbc_meta_cache_expire_sec);
+            int changeAfter = cache.hashCode();
+            Assert.assertNotEquals(changeBefore, changeAfter);
         } catch (Exception e) {
             Assert.fail();
         }
