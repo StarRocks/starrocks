@@ -46,11 +46,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
-import com.starrocks.connector.paimon.PaimonPartitionInfo;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.iceberg.Snapshot;
-import org.apache.paimon.table.system.FileMonitorTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -482,59 +480,8 @@ public abstract class ConnectorPartitionTraits {
         @Override
         public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                     MaterializedView.AsyncRefreshContext context) {
-            PaimonTable baseTable = (PaimonTable) table;
-            Set<String> result = Sets.newHashSet();
-            for (BaseTableInfo baseTableInfo : baseTables) {
-                if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
-                    continue;
-                }
-                Map<String, MaterializedView.BasePartitionInfo> partitionVersionMap =
-                        context.getBaseTableRefreshInfo(baseTableInfo);
-                List<String> partitions = getPartitionNames();
-                long latestSnapShotID = Long.MIN_VALUE;
-                for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionVersionMap.entrySet()) {
-                    if (entry.getValue() != null) {
-                        latestSnapShotID = Math.max(latestSnapShotID, entry.getValue().getVersion());
-                    }
-                    // If there are partitions deleted, return all latest partitions.
-                    if (!partitions.contains(entry.getKey())) {
-                        Long id = new FileMonitorTable(baseTable.getNativeTable()).snapshotManager().latestSnapshotId();
-                        baseTable.setLastedSnapshotId(id == null ? Long.MIN_VALUE : id);
-                        result.addAll(partitions);
-                        return result;
-                    }
-                }
-                for (String part : partitions) {
-                    if (!partitionVersionMap.containsKey(part)) {
-                        result.add(part);
-                    }
-                }
-                Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState().getMetadataMgr().
-                        getOptionalMetadata(baseTable.getCatalogName());
-                if (!connectorMetadata.isPresent()) {
-                    LOG.error("Get connectorMetadata failed, catalog:{}.", baseTable.getCatalogName());
-                    return result;
-                }
-                ConnectorMetadata metadata = connectorMetadata.get();
-                List<PartitionInfo> changedPartitionInfo = metadata.getChangedPartitionInfo(baseTable,
-                        latestSnapShotID);
-                for (PartitionInfo partitionInfo : changedPartitionInfo) {
-                    PaimonPartitionInfo info = (PaimonPartitionInfo) partitionInfo;
-                    // Change log record partition which has been deleted.
-                    if (!partitions.contains(info.getPartitionName())) {
-                        continue;
-                    }
-                    if (partitionVersionMap.containsKey(info.getPartitionName()) &&
-                            partitionVersionMap.get(info.getPartitionName()).getVersion() >= info.getModifiedTime()) {
-                        LOG.warn("Paimon changelog out of version, origin:{} , current:{}.",
-                                partitionVersionMap.get(info.getPartitionName()).getVersion(), info.getModifiedTime());
-                        continue;
-                    }
-                    result.add(info.getPartitionName());
-                }
-            }
-            LOG.debug("Get updated partition name of paimon table result: {}", result);
-            return result;
+            // TODO: implement
+            return null;
         }
     }
 
