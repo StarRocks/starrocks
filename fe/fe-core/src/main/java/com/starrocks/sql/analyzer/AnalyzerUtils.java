@@ -570,7 +570,10 @@ public class AnalyzerUtils {
             if (!tables.isEmpty()) {
                 return null;
             }
-            if (!node.getTable().isNativeTableOrMaterializedView()) {
+
+            // Only support olap tables/materialized views without related mvs for non lock optimization
+            if (!(node.getTable().isOlapTableOrMaterializedView() &&
+                    node.getTable().getRelatedMaterializedViews().isEmpty())) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
