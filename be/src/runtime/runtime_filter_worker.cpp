@@ -49,7 +49,7 @@ static inline std::shared_ptr<MemTracker> get_mem_tracker(const PUniqueId& query
 
 static void send_rpc_runtime_filter(const TNetworkAddress& dest, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
                                     int64_t http_min_size, const PTransmitRuntimeFilterParams& request) {
-    doris::PBackendService_Stub* stub = nullptr;
+    PInternalService_Stub* stub = nullptr;
     bool via_http = request.data().size() >= http_min_size;
     if (via_http) {
         if (auto res = HttpBrpcStubCache::getInstance()->get_http_stub(dest); res.ok()) {
@@ -77,6 +77,7 @@ void RuntimeFilterPort::add_listener(RuntimeFilterProbeDescriptor* rf_desc) {
     auto& wait_list = _listeners.find(rf_id)->second;
     wait_list.emplace_back(rf_desc);
 }
+
 std::string RuntimeFilterPort::listeners(int32_t filter_id) {
     std::stringstream ss;
     if (!_listeners.count(filter_id)) {

@@ -202,7 +202,7 @@ private:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    doris::PBackendService_Stub* _stub = nullptr;
+    PInternalService_Stub* _stub = nullptr;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
