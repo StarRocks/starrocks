@@ -123,7 +123,6 @@ jobs:
       # main, so don't check in PRs.
       - run: rm -f docusaurus/docs/README.md
       - run: rm -f docusaurus/docs/feedback-and-contribute.md
-      - run: rm -f docusaurus/docs/introduction/StarRocks_intro.md
       - run: rm -f docusaurus/docs/TOC.md
       - run: rm -rf docusaurus/docs/release_notes
 
