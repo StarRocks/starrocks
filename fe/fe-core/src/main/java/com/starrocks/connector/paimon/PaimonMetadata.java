@@ -382,4 +382,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
         return true;
     }
+
+    public static long getLatestPartitionVersion(PaimonTable table)
+    {
+        FileMonitorTable fileMonitorTable = new FileMonitorTable(table.getNativeTable());
+        Long latestId = fileMonitorTable.snapshotManager().latestSnapshotId();
+        return latestId == null ? Long.MIN_VALUE : latestId;
+    }
 }

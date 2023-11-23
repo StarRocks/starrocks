@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptDistributionPruner;
@@ -109,7 +110,8 @@ public class MVPartitionPruner {
                     scanOperator instanceof LogicalIcebergScanOperator ||
                     scanOperator instanceof LogicalDeltaLakeScanOperator ||
                     scanOperator instanceof LogicalFileScanOperator ||
-                    scanOperator instanceof LogicalEsScanOperator) {
+                    scanOperator instanceof LogicalEsScanOperator ||
+                    scanOperator instanceof LogicalPaimonScanOperator) {
                 Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
                 LogicalScanOperator copiedScanOperator =
                         (LogicalScanOperator) builder.withOperator(scanOperator).build();

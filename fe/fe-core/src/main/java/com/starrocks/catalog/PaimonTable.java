@@ -27,6 +27,7 @@ import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -136,5 +137,25 @@ public class PaimonTable extends Table {
 
     public void setLastedSnapshotId(long lastedSnapshotId) {
         this.lastedSnapshotId = lastedSnapshotId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        PaimonTable that = (PaimonTable) o;
+        return catalogName.equals(that.catalogName) &&
+                databaseName.equals(that.databaseName) &&
+                tableName.equals(that.tableName) &&
+                createTime == that.createTime;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(catalogName, databaseName, tableName, createTime);
     }
 }

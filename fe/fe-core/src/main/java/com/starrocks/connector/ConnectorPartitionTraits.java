@@ -536,6 +536,11 @@ public abstract class ConnectorPartitionTraits {
             LOG.debug("Get updated partition name of paimon table result: {}", result);
             return result;
         }
+
+        @Override
+        public List<PartitionInfo> getPartitions(List<String> partitionNames) {
+            return Lists.newArrayList();
+        }
     }
 
     static class JDBCPartitionTraits extends DefaultTraits {

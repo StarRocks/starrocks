@@ -65,6 +65,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
@@ -939,6 +940,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // check non-ref base tables
             if (isPartitionedMVNeedToRefreshBaseOnNonRefTables(refBaseTable)) {
+                // if non partition table changed, should refresh latest partition version of refBaseTable.
+                refreshPartitionLatestVersion(refBaseTable);
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
                     return mvRangePartitionNames;
@@ -994,6 +997,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException("unsupported partition info type:" + mvPartitionInfo.getClass().getName());
         }
         return needRefreshMvPartitionNames;
+    }
+
+    private void refreshPartitionLatestVersion(Table refBaseTable) {
+        if (refBaseTable.isPaimonTable()) {
+            PaimonTable paimonTable = (PaimonTable) refBaseTable;
+            paimonTable.setLastedSnapshotId(PaimonMetadata.getLatestPartitionVersion(paimonTable));
+        }
     }
 
     private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table refBaseTable,
