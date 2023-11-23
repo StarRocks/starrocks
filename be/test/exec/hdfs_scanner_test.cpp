@@ -1087,7 +1087,7 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(status.ok()) << status.to_string();
     READ_SCANNER_ROWS(scanner, 4);
-    scanner->close();
+    scanner->close(_runtime_state);
 }
 
 // ====================================================================================================
