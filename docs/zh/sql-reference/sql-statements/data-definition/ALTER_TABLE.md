@@ -328,7 +328,8 @@ ADD COLUMN col_name data_type [NULL] AS generation_expr [COMMENT 'string']
 语法：
 
 ```sql
-PROPERTIES ("key"="value")
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
 ```
 
 注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
