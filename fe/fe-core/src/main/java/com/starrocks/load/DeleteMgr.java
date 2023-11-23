@@ -92,6 +92,7 @@ import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -180,7 +181,7 @@ public class DeleteMgr implements Writable {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
                 }
 
-                List<Predicate> conditions = stmt.getDeleteConditions();
+                List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
                 deleteJob = createJob(stmt, conditions, db, (OlapTable) table, partitions);
                 if (deleteJob == null) {
                     return;
@@ -320,7 +321,7 @@ public class DeleteMgr implements Writable {
                                                                    List<Column> partitionColumns)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Predicate> deleteConditions = stmt.getDeleteConditions();
+        List<Predicate> deleteConditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {
             nameToColumn.put(column.getName(), column);

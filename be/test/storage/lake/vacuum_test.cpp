@@ -896,7 +896,7 @@ TEST_P(LakeVacuumTest, test_delete_file_failed) {
         }
         )DEL")));
 
-    SyncPoint::GetInstance()->SetCallBack("vacuum.delete_files", [](void* arg) {
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [](void* arg) {
         auto st = (Status*)arg;
         EXPECT_TRUE(st->ok()) << *st;
         st->update(Status::IOError("injected error"));
@@ -921,7 +921,7 @@ TEST_P(LakeVacuumTest, test_delete_file_failed) {
     EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(500, 3)));
 
-    SyncPoint::GetInstance()->ClearCallBack("vacuum.delete_files");
+    SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
@@ -1209,6 +1209,124 @@ TEST(LakeVacuumTest2, test_delete_files_thread_pool_full) {
     ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, future.get().code());
 
     delete_files_async({"any_non_exist_file"});
+}
+
+TEST(LakeVacuumTest2, test_delete_files_retry) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+
+    int attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        if (attempts++ < 2) {
+            auto st = (Status*)arg;
+            EXPECT_TRUE(st->ok()) << *st;
+            st->update(Status::InternalError("Reduce your request rate"));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto future = delete_files_callable({"test_vacuum_delete_files_retry.txt"});
+    ASSERT_TRUE(future.valid());
+    ASSERT_TRUE(future.get().ok());
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files_retry.txt"));
+    EXPECT_GT(attempts, 1);
+}
+
+TEST(LakeVacuumTest2, test_delete_files_retry2) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry2.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+
+    auto backup = config::lake_vacuum_retry_pattern;
+    config::lake_vacuum_retry_pattern = ""; // Disable retry
+    DeferOp defer0([&]() { config::lake_vacuum_retry_pattern = backup; });
+
+    int attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        auto st = (Status*)arg;
+        EXPECT_TRUE(st->ok()) << *st;
+        st->update(Status::InternalError("Reduce your request rate"));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        attempts++;
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto future2 = delete_files_callable({"test_vacuum_delete_files_retry2.txt"});
+    ASSERT_TRUE(future2.valid());
+    ASSERT_FALSE(future2.get().ok());
+    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry2.txt"));
+    EXPECT_EQ(0, attempts);
+}
+
+TEST(LakeVacuumTest2, test_delete_files_retry3) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry3.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+
+    auto backup = config::lake_vacuum_retry_max_attempts;
+    config::lake_vacuum_retry_max_attempts = 0; // Disable retry
+    DeferOp defer0([&]() { config::lake_vacuum_retry_max_attempts = backup; });
+
+    int attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        auto st = (Status*)arg;
+        EXPECT_TRUE(st->ok()) << *st;
+        st->update(Status::InternalError("Reduce your request rate"));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        attempts++;
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto future = delete_files_callable({"test_vacuum_delete_files_retry3.txt"});
+    ASSERT_TRUE(future.valid());
+    ASSERT_FALSE(future.get().ok());
+    ASSERT_TRUE(fs::path_exist("test_vacuum_delete_files_retry3.txt"));
+    EXPECT_EQ(0, attempts);
+}
+
+TEST(LakeVacuumTest2, test_delete_files_retry4) {
+    WritableFileOptions options;
+    options.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ABORT(auto f1, fs::new_writable_file(options, "test_vacuum_delete_files_retry.txt"));
+    ASSERT_OK(f1->append("111"));
+    ASSERT_OK(f1->close());
+
+    int attempts = 0;
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_file", [&](void* arg) {
+        if (attempts++ < 2) {
+            auto st = (Status*)arg;
+            EXPECT_TRUE(st->ok()) << *st;
+            st->update(Status::ResourceBusy(""));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto future = delete_files_callable({"test_vacuum_delete_files_retry.txt"});
+    ASSERT_TRUE(future.valid());
+    ASSERT_TRUE(future.get().ok());
+    ASSERT_FALSE(fs::path_exist("test_vacuum_delete_files_retry.txt"));
+    EXPECT_GT(attempts, 1);
 }
 
 } // namespace starrocks::lake
