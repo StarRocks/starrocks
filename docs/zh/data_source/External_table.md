@@ -68,7 +68,17 @@ insert into external_t select * from other_table;
 
 * **EXTERNAL**：该关键字指定创建的是 StarRocks 外表。
 * **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址。
-* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值。
+* **port**：该属性描述目标表所属 StarRocks 集群 FE 的 RPC 访问端口。
+
+  :::note
+
+  为确保外表所属集群能够正常访问目标表所属 StarRocks 集群，您需要确保网络策略和防火墙设置允许以下端口的访问：
+
+  * FE 的 RPC 访问端口，可参考配置文件 **fe/fe.conf** 中的 `rpc_port` 配置取值，默认为 `9020`。
+  * BE 的 bRPC 访问端口，可参考配置文件 **be/be.conf** 中的 `brpc_port` 配置取值，默认为 `8060`。
+
+  :::
+
 * **user**：该属性描述目标表所属 StarRocks 集群的访问用户名。
 * **password**：该属性描述目标表所属 StarRocks 集群的访问密码。
 * **database**：该属性描述目标表所属数据库名称。
