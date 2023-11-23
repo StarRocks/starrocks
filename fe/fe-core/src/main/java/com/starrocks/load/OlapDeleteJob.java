@@ -59,7 +59,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -112,7 +111,7 @@ public class OlapDeleteJob extends DeleteJob {
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
+        List<Predicate> conditions = getDeleteConditions();
 
         db.readLock();
         try {
