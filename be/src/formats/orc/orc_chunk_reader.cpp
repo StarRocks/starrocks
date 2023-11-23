@@ -447,16 +447,6 @@ Status OrcChunkReader::_init_cast_exprs() {
             _cast_exprs[column_pos] = slot;
             continue;
         }
-        // we don't support implicit cast column in query external hive table case.
-        // if we query external table, we heavily rely on type match to do optimization.
-        // For example, if we assume column A is an integer column, but it's stored as string in orc file
-        // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
-        // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode && !is_implicit_castable(starrocks_type, orc_type)) {
-            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
-                                                            orc_type.debug_string(), starrocks_type.debug_string(),
-                                                            _current_file_name));
-        }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
             return Status::InternalError(strings::Substitute("Not support cast $0 to $1. file = $2",
@@ -621,6 +611,13 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+
+        // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
+        if (slot->is_nullable()) {
+            // wrap nullable column if necessary
+            col = NullableColumn::wrap_if_necessary(col);
+        }
+
         DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
     }

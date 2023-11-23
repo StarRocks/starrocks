@@ -978,7 +978,7 @@ Stripes:
 
 */
 
-TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
+TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
     SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)},
                                                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
                                                {""}};
@@ -1035,6 +1035,56 @@ TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
         READ_SCANNER_ROWS(scanner, c.exp);
         scanner->close(_runtime_state);
     }
+}
+
+/**
+{"col1":"10"}
+{"col1":"10000"}
+{"col1":"100001"}
+{"col1":"11"}
+
+Type: struct<col1:string>
+
+Stripe Statistics:
+       Stripe 1:
+       Column 0: count: 4 hasNull: false
+       Column 1: count: 4 hasNull: false bytesOnDisk: 21 min: 10 max: 11 sum: 15
+ */
+TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxWithTypeMismatch) {
+    SlotDesc slot_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    // They are a timestamp type, we will ignore all timezone information
+    const std::string orc_file = "./be/test/exec/test_data/orc_scanner/type_mismatch.orc";
+
+    // _create_runtime_state(c.query_timezone);
+    auto* range = _create_scan_range(orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(orc_file, range, tuple_desc);
+
+    param->min_max_tuple_desc = tuple_desc;
+    const TupleDescriptor* min_max_tuple_desc = param->min_max_tuple_desc;
+
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 100);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GT, min_max_tuple_desc->slots()[0], TPrimitiveType::INT,
+                                    lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        param->min_max_conjunct_ctxs.push_back(ctx);
+    }
+
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    scanner->disable_use_orc_sargs();
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok()) << status.to_string();
+    READ_SCANNER_ROWS(scanner, 4);
+    scanner->close(_runtime_state);
 }
 
 // ====================================================================================================
@@ -1104,7 +1154,7 @@ Stripes:
     Stream: column 15 section DICTIONARY_DATA start: 401 length 0
     Stream: column 16 section DATA start: 401 length 0
  */
-TEST_F(HdfsScannerTest, TestZeroSizeStream) {
+TEST_F(HdfsScannerTest, TestOrcZeroSizeStream) {
     SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)},
                              {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
                              {"col_long", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
