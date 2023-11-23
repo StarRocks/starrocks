@@ -386,11 +386,11 @@ public class OlapScanNode extends ScanNode {
                     expectedVersion, -1, schemaHash);
             if (allQueryableReplicas.isEmpty()) {
                 String replicaInfos = ((LocalTablet) selectedTablet).getReplicaInfos();
-                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
-                        tabletId, expectedVersion, replicaInfos);
-                throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
-                                replicaInfos);
+                String message = String.format("Failed to get scan range, no queryable replica found in " +
+                                "tablet=%s replica=%s schemaHash=%d version=%d",
+                        tabletId, replicaInfos, schemaHash, expectedVersion);
+                LOG.error(message);
+                throw new UserException(message);
             }
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
@@ -472,8 +472,6 @@ public class OlapScanNode extends ScanNode {
                 if (tablet instanceof LocalTablet) {
                     replicaInfos = ((LocalTablet) tablet).getReplicaInfos();
                 }
-                LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
-                        tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
                     if (olapTable.isCloudNativeTableOrMaterializedView()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
@@ -484,9 +482,11 @@ public class OlapScanNode extends ScanNode {
                         }
                     }
                 }
-                throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
-                                replicaInfos);
+                String message = String.format("Failed to get scan range, no queryable replica found in " +
+                                "tablet=%s replica=%s schema_hash=%d version=%d",
+                        tabletId, replicaInfos, schemaHash, visibleVersion);
+                LOG.error(message);
+                throw new UserException(message);
             }
 
             List<Replica> replicas = null;
