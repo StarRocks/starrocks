@@ -225,7 +225,7 @@ This section provides an overview of the static parameters that you can configur
 | thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node.                                                                                                                                                                                                                                                                                                              |
 | thrift_client_timeout_ms             | 5000              | The length of time after which idle client connections time out. Unit: ms.                                                                                                                                                                                                                                                                                                                                |
 | thrift_server_queue_size             | 4096              | The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.                                                                                                                                                                    |
-| brpc_idle_wait_max_time              | 10000             | The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms.                                                                                                                                                                                                                                                                                                                    |
+| brpc_idle_wait_max_time              | 10000             | The maximum length of time for which bRPC clients wait as in the idle state. Unit: ms.                                                                                                                                                                                                                                                                                                                    |
 | query_port                           | 9030              | The port on which the MySQL server in the FE node listens.                                                                                                                                                                                                                                                                                                                                                |
 | mysql_service_nio_enabled            | TRUE              | Specifies whether asynchronous I/O is enabled for the FE node.                                                                                                                                                                                                                                                                                                                                            |
 | mysql_service_io_threads_num         | 4                 | The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.                                                                                                                                                                                                                                                                                                   |
@@ -415,13 +415,13 @@ BE static parameters are as follows.
 
 - **Default**: 8060
 - **Unit**: N/A
-- **Description**: The BE BRPC port, which is used to view the network statistics of BRPCs.
+- **Description**: The BE bRPC port, which is used to view the network statistics of bRPCs.
 
 #### brpc_num_threads
 
 - **Default**: -1
 - **Unit**: N/A
-- **Description**: The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads.
+- **Description**: The number of bthreads of a bRPC. The value -1 indicates the same number with the CPU threads.
 
 #### priority_networks
 
@@ -746,7 +746,7 @@ BE static parameters are as follows.
 
 - **Default**: 2147483648
 - **Unit**: Byte
-- **Description**: The maximum body size of a BRPC.
+- **Description**: The maximum body size of a bRPC.
 
 #### tablet_map_shard_size
 
