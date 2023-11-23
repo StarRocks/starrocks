@@ -283,7 +283,8 @@ Currently, StarRocks supports modifying the following table properties:
 Syntax:
 
 ```sql
-PROPERTIES ("key"="value")
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
 ```
 
 Note:
