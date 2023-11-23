@@ -2396,6 +2396,9 @@ public class SchemaChangeHandler extends AlterHandler {
                         newSortKeyIdxes.add(sortKeyIdx);
                     }
                 }
+                if (!newSortKeyIdxes.isEmpty()) {
+                    currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
+                }
                 currentIndexMeta.setSchema(indexSchema);
 
                 int currentSchemaVersion = currentIndexMeta.getSchemaVersion();

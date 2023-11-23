@@ -45,10 +45,9 @@ struct OlapTableIndexSchema {
     int64_t index_id;
     std::vector<SlotDescriptor*> slots;
     int32_t schema_hash;
+    int32_t schema_version = -1;
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
-    int32_t schema_version = -1;
-    ;
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
