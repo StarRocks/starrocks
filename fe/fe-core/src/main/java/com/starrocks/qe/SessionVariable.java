@@ -452,6 +452,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
 
+    public static final String MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT =
+            "materialized_view_join_same_table_permutation_limit";
+
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
@@ -1293,6 +1296,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    @VarAttr(name = MATERIALIZED_VIEW_JOIN_SAME_TABLE_PERMUTATION_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int materializedViewJoinSameTablePermutationLimit = 5;
 
     @VarAttr(name = MATERIALIZED_VIEW_REWRITE_MODE)
     private String materializedViewRewriteMode = MaterializedViewRewriteMode.MODE_DEFAULT;
@@ -2539,6 +2545,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
         this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public int getMaterializedViewJoinSameTablePermutationLimit() {
+        return materializedViewJoinSameTablePermutationLimit;
     }
 
     public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
