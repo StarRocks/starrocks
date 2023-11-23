@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Stopwatch;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Timeout;
@@ -27,7 +28,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 /**
- * Test MV with many tables join
+ * Test MV with many tables join and complex structures.
+ * The main purpose of this case is to guarantee that the rewrite-procedure should not take too long even if
+ * the query/mv is very complex
  */
 public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
 
@@ -83,7 +86,7 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
         LOG.info("create mv {}", mvQuery);
         String mvName = "mv_manyjoin";
         String createMv = "CREATE MATERIALIZED VIEW " + mvName + "\n" +
-                "REFRESH MANUAL\n" +
+                "REFRESH  DEFERRED MANUAL \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\"=\"1\"\n" +
                 ")\n" +
@@ -99,25 +102,98 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
     }
 
     private static Stream<Arguments> generateManyJoinArguments() {
-        final String smallQuery = generateJoinQuery(8);
+        final String smallQuery = generateJoinQuery(3);
         final String bigQuery = generateJoinQuery(20);
         return Stream.of(
+                // join query
                 Arguments.of("small_query-small_mv", smallQuery, smallQuery, true),
                 Arguments.of("small_query-big_mv", smallQuery, bigQuery, false),
                 Arguments.of("big_query-small_mv", bigQuery, smallQuery, false),
-                Arguments.of("big_query-big_mv", bigQuery, bigQuery, true)
+                Arguments.of("big_query-big_mv", bigQuery, bigQuery, true),
+
+                // union&join query
+                Arguments.of("union small-query and small mv",
+                        generateUnionAndJoinQuery(5), generateJoinQuery(5), false),
+                Arguments.of("union bigquery and big join mv",
+                        generateUnionAndJoinQuery(20), generateJoinQuery(20), false),
+                Arguments.of("union bigquery and big union mv",
+                        generateUnionAndJoinQuery(20), generateUnionAndJoinQuery(20), false),
+
+                // union query
+                Arguments.of("union small-query and small mv",
+                        generateUnionAndJoinQuery(5), generateUnionQuery(5), false),
+                Arguments.of("union bigquery and big join mv",
+                        generateUnionAndJoinQuery(20), generateUnionQuery(20), false),
+
+                // query with predicate
+                Arguments.of("query with predicates ",
+                        generateJoinWithManyPredicates(10),
+                        generateJoinWithManyPredicates(5), false),
+                Arguments.of("query with predicates ",
+                        generateJoinWithManyPredicates(5),
+                        generateJoinWithManyPredicates(10), false),
+                Arguments.of("query with predicates ",
+                        generateJoinWithManyPredicates(10),
+                        generateJoinWithManyPredicates(10), false),
+                Arguments.of("query with predicates ",
+                        generateJoinWithManyPredicates(1),
+                        generateJoinWithManyPredicates(50), false)
+
         );
     }
 
     @NotNull
     private static String generateJoinQuery(int numTables) {
-        StringBuilder query = new StringBuilder("SELECT p1.dt FROM tbl_0 AS p0 ");
+        StringBuilder query = new StringBuilder("SELECT p0.dt FROM tbl_0 AS p0 ");
         for (int i = 1; i < numTables; i++) {
             String alias = "p" + i;
             String sourceTableName = String.format("tbl_%d", i);
             query.append(String.format("LEFT OUTER JOIN %s AS %s ON %s.dt=p1.dt\n", sourceTableName, alias, alias));
         }
         return query.toString();
+    }
+
+    /**
+     * Generate a query whose fact-table is a union
+     */
+    private static String generateUnionAndJoinQuery(int numTables) {
+        StringBuilder sb = new StringBuilder("SELECT u0.dt FROM (" +
+                " SELECT p0.dt FROM tbl_0 p0 WHERE p1_col1 = 'a' " +
+                " UNION ALL" +
+                " SELECT p0.dt FROM tbl_0 p0 WHERE p1_col2 = 'b') u0\n");
+        for (int i = 1; i < numTables; i++) {
+            String alias = "p" + i;
+            String sourceTableName = String.format("tbl_%d", i);
+            sb.append(String.format("LEFT OUTER JOIN %s AS %s ON %s.dt=p1.dt\n", sourceTableName, alias, alias));
+        }
+        return sb.toString();
+    }
+
+    private static String generateUnionQuery(int numTables) {
+        StringBuilder sb = new StringBuilder("SELECT u0.dt FROM (" +
+                " SELECT p0.dt FROM tbl_0 p0 WHERE p1_col1 = 'a' " +
+                " UNION ALL" +
+                " SELECT p0.dt FROM tbl_0 p0 WHERE p1_col2 = 'b') u0\n");
+        for (int i = 1; i < numTables; i++) {
+            String alias = "p" + i;
+            String sourceTableName = String.format("tbl_%d", i);
+            sb.append(MessageFormat.format("UNION ALL SELECT {0}.dt FROM {1} AS {0} WHERE {0}.{0}_col1 = ''{2}''\n",
+                    alias, sourceTableName, RandomStringUtils.randomAlphabetic(3)));
+        }
+        return sb.toString();
+    }
+
+    private static String generateJoinWithManyPredicates(int numPredicates) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("SELECT p0.dt FROM tbl_0 p0 " +
+                "LEFT OUTER JOIN tbl_1 AS p1 ON p0.dt=p1.dt \n" +
+                "WHERE p0.p1_col1 = 'a' ");
+        for (int i = 0; i < numPredicates; i++) {
+            sb.append(String.format(" OR (p0.p1_col1 = '%s' AND p0.p1_col2 = '%s' ) ",
+                    RandomStringUtils.randomAlphabetic(2),
+                    RandomStringUtils.randomAlphabetic(5)));
+        }
+        return sb.toString();
     }
 
 }
