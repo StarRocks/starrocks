@@ -374,6 +374,21 @@ public class IcebergMetadataTest extends TableTestBase {
         } catch (Exception e) {
             Assert.fail();
         }
+
+        new MockUp<IcebergMetadata>() {
+            // mock table not exist
+            @Mock
+            Table getTable(String dbName, String tblName) {
+                return null;
+
+            }
+        };
+        try {
+            metadata.dropTable(new DropTableStmt(false, new TableName("iceberg_catalog",
+                    "iceberg_db", "table1"), true));
+        } catch (Exception e) {
+            Assert.fail();
+        }
     }
 
     @Test
