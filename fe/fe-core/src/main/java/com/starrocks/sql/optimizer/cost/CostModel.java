@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -433,6 +435,27 @@ public class CostModel {
         }
 
         @Override
+        public CostEstimate visitLogicalJoin(LogicalJoinOperator join, ExpressionContext context) {
+            Preconditions.checkState(context.arity() == 2);
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            Statistics leftStatistics = context.getChildStatistics(0);
+            Statistics rightStatistics = context.getChildStatistics(1);
+
+            List<BinaryPredicateOperator> eqOnPredicates =
+                    JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
+                            rightStatistics.getUsedColumns(),
+                            Utils.extractConjuncts(join.getOnPredicate()));
+
+            if (eqOnPredicates.isEmpty()) {
+                return computeNestloopJoinCost(join.getJoinType(), context);
+            } else {
+                return computeHashJoinCost(context, eqOnPredicates);
+            }
+        }
+
+        @Override
         public CostEstimate visitPhysicalHashJoin(PhysicalHashJoinOperator join, ExpressionContext context) {
             Preconditions.checkState(context.arity() == 2);
             Statistics statistics = context.getStatistics();
@@ -448,8 +471,7 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates, statistics);
-            return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
+           return computeHashJoinCost(context,eqOnPredicates);
         }
 
         @Override
@@ -480,38 +502,7 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator join, ExpressionContext context) {
-            Statistics leftStatistics = context.getChildStatistics(0);
-            Statistics rightStatistics = context.getChildStatistics(1);
-
-            double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
-            double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-
-            long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
-
-            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
-                    EXECUTE_COST_PENALTY);
-            double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
-
-
-            if (join.getJoinType().isCrossJoin()) {
-                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
-            }
-            // Right cross join could not be parallelized, so apply more punishment
-            if (join.getJoinType().isRightJoin()) {
-                // Add more punishment when right size is 10x greater than left size.
-                if (rightSize > 10 * leftSize) {
-                    cpuCost *= EXECUTE_COST_PENALTY;
-                } else {
-                    cpuCost += EXECUTE_COST_PENALTY;
-                }
-                memCost += rightSize;
-            }
-            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||
-                    join.getJoinType().isAntiJoin()) {
-                cpuCost += leftSize;
-            }
-
-            return CostEstimate.of(cpuCost, memCost, 0);
+            return computeNestloopJoinCost(join.getJoinType(), context);
         }
 
         @Override
@@ -606,6 +597,45 @@ public class CostModel {
                 }
             }
             return Optional.empty();
+        }
+
+        private CostEstimate computeHashJoinCost(ExpressionContext context, List<BinaryPredicateOperator> eqOnPredicates) {
+            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates);
+            return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
+        }
+
+        private CostEstimate computeNestloopJoinCost(JoinOperator joinType, ExpressionContext context) {
+            Statistics leftStatistics = context.getChildStatistics(0);
+            Statistics rightStatistics = context.getChildStatistics(1);
+
+            double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
+            double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
+
+            long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
+
+            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
+                    EXECUTE_COST_PENALTY);
+            double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
+
+
+            if (joinType.isCrossJoin()) {
+                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
+            }
+            // Right cross join could not be parallelized, so apply more punishment
+            if (joinType.isRightJoin()) {
+                // Add more punishment when right size is 10x greater than left size.
+                if (rightSize > 10 * leftSize) {
+                    cpuCost *= EXECUTE_COST_PENALTY;
+                } else {
+                    cpuCost += EXECUTE_COST_PENALTY;
+                }
+                memCost += rightSize;
+            }
+            if (joinType.isOuterJoin() || joinType.isSemiJoin() || joinType.isAntiJoin()) {
+                cpuCost += leftSize;
+            }
+
+            return CostEstimate.of(cpuCost, memCost, 0);
         }
     }
 

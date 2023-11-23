@@ -72,13 +72,13 @@ public class HashJoinCostModel {
     private final Statistics joinStatistics;
 
     public HashJoinCostModel(ExpressionContext context, List<PhysicalPropertySet> inputProperties,
-                             List<BinaryPredicateOperator> eqOnPredicates, final Statistics joinStatistics) {
+                             List<BinaryPredicateOperator> eqOnPredicates) {
         this.context = context;
         this.leftStatistics = context.getChildStatistics(0);
         this.rightStatistics = context.getChildStatistics(1);
+        this.joinStatistics = context.getStatistics();
         this.inputProperties = inputProperties;
         this.eqOnPredicates = eqOnPredicates;
-        this.joinStatistics = joinStatistics;
     }
 
     public double getCpuCost() {
