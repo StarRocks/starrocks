@@ -471,7 +471,7 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-           return computeHashJoinCost(context,eqOnPredicates);
+            return computeHashJoinCost(context, eqOnPredicates);
         }
 
         @Override
