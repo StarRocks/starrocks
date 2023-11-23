@@ -69,6 +69,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private int schemaVersion;
     @SerializedName(value = "schemaHash")
     private int schemaHash;
+    @SerializedName(value = "schemaId")
+    private long schemaId;
     @SerializedName(value = "shortKeyColumnCount")
     private short shortKeyColumnCount;
     @SerializedName(value = "storageType")
@@ -99,6 +101,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         this.schema = schema;
         this.schemaVersion = schemaVersion;
         this.schemaHash = schemaHash;
+        this.schemaId = indexId;
         this.shortKeyColumnCount = shortKeyColumnCount;
         Preconditions.checkState(storageType != null);
         this.storageType = storageType;
@@ -168,6 +171,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public int getSchemaVersion() {
         return schemaVersion;
+    }
+
+    public void setSchemaId(long schemaId) {
+        this.schemaId = schemaId;
+    }
+
+    public long getSchemaId() {
+        return schemaId;
     }
 
     public List<Column> getNonAggregatedColumns() {

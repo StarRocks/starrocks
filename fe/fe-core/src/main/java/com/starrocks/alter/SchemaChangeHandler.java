@@ -2552,6 +2552,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 currentIndexMeta.setSchemaVersion(newSchemaVersion);
                 // update the indexIdToMeta
                 olapTable.getIndexIdToMeta().put(idx, currentIndexMeta);
+                currentIndexMeta.setSchemaId(GlobalStateMgr.getCurrentState().getNextId());
                 schemaChangeJob.addIndexSchema(idx, idx, olapTable.getIndexNameById(idx), newSchemaVersion,
                                                currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
                                                indexSchema);
