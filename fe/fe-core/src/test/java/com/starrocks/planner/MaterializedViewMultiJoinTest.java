@@ -376,6 +376,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             }
         };
         starRocksAssert.query(query).explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
     }
 
     @Test
@@ -401,6 +402,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
             }
         };
         starRocksAssert.query(query).explainWithout(mvName);
+        starRocksAssert.dropMaterializedView(mvName);
     }
 
 }
