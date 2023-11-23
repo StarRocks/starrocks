@@ -69,12 +69,17 @@ void ScanExecutor::worker_thread() {
         int64_t time_spent_ns = 0;
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
-            task.work_function();
+            task.run();
         }
         if (current_thread != nullptr) {
             current_thread->inc_finished_tasks();
         }
         _task_queue->update_statistics(task, time_spent_ns);
+
+        // task
+        if (!task.is_finished()) {
+            _task_queue->force_put(std::move(task));
+        }
     }
 }
 
