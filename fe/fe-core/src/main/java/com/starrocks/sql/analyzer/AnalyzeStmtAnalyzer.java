@@ -121,6 +121,8 @@ public class AnalyzeStmtAnalyzer {
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
+            } else if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                throw new SemanticException("Don't support analyze external table created by resource mapping");
             }
             return null;
         }
@@ -168,6 +170,10 @@ public class AnalyzeStmtAnalyzer {
                     MetaUtils.normalizationTableName(session, statement.getTableName());
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
+
+                    if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
+                        throw new SemanticException("Don't support analyze external table created by resource mapping");
+                    }
 
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
