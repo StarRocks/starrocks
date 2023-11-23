@@ -344,6 +344,8 @@ public class MaterializedViewHandler extends AlterHandler {
         long dbId = db.getId();
         long tableId = olapTable.getId();
         int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
+        // mvSchemaVersion will keep same with the src MaterializedIndex
+        int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
         long mvIndexId = globalStateMgr.getNextId();
@@ -360,7 +362,7 @@ public class MaterializedViewHandler extends AlterHandler {
                     "mv colocate optimization.", olapTable.getName()));
         }
         RollupJobV2 mvJob = new RollupJobV2(jobId, dbId, tableId, olapTable.getName(), timeoutMs,
-                baseIndexId, mvIndexId, baseIndexName, mvName,
+                baseIndexId, mvIndexId, baseIndexName, mvName, mvSchemaVersion, 
                 mvColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 mvKeysType, mvShortKeyColumnCount, origStmt, viewDefineSql, isColocateMv);
 
