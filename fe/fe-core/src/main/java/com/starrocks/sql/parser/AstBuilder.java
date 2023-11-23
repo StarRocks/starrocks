@@ -4262,6 +4262,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitLimitElement(StarRocksParser.LimitElementContext context) {
+        if (context.limit.getText().equals("?") || (context.offset != null && context.offset.getText().equals("?"))) {
+            throw new ParsingException("using parameter(?) as limit or offset not supported");
+        }
         long limit = Long.parseLong(context.limit.getText());
         long offset = 0;
         if (context.offset != null) {
@@ -5449,7 +5452,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 exprs.add(value);
             }
         } catch (Exception e) {
-            throw  new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
+            throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
         }
     }
 
@@ -6616,7 +6619,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         parameters.add(parameter);
         return parameter;
     }
-    
+
     // ------------------------------------------- Util Functions -------------------------------------------
 
     private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {
