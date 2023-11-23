@@ -19,11 +19,14 @@ import com.aliyun.odps.Odps;
 import com.aliyun.odps.OdpsException;
 import com.aliyun.odps.Partition;
 import com.aliyun.odps.PartitionSpec;
+import com.aliyun.odps.Project;
+import com.aliyun.odps.Projects;
 import com.aliyun.odps.Table;
 import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.Tables;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
+import com.aliyun.odps.security.SecurityManager;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.impl.batch.TableBatchReadSessionImpl;
@@ -46,7 +49,9 @@ import java.util.Iterator;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
@@ -55,9 +60,13 @@ public class MockedBase {
     protected OdpsProperties odpsProperties;
     protected Odps odps = Mockito.mock(Odps.class);
     protected Tables tables = Mockito.mock(Tables.class);
+    protected Projects projects = Mockito.mock(Projects.class);
     protected Partition partition = Mockito.mock(Partition.class);
     protected Iterator<Table> tableIterator = Mockito.mock(Iterator.class);
+    protected Iterator<Project> projectIterator = Mockito.mock(Iterator.class);
     protected Table table = Mockito.mock(Table.class);
+    protected Project project = Mockito.mock(Project.class);
+    protected SecurityManager securityManager = Mockito.mock(SecurityManager.class);
     protected Account account = Mockito.mock(AliyunAccount.class);
 
     @Mock
@@ -77,12 +86,27 @@ public class MockedBase {
         when(odps.getDefaultProject()).thenReturn("default_project");
         when(odps.tables()).thenReturn(tables);
         when(odps.getAccount()).thenReturn(account);
+        when(odps.projects()).thenReturn(projects);
 
         when(tables.iterator(anyString())).thenReturn(tableIterator);
         when(tables.get(anyString(), anyString())).thenReturn(table);
 
+        when(projects.iterator(anyString())).thenReturn(projectIterator);
+        when(projects.get()).thenReturn(project);
+
+        when(project.getSecurityManager()).thenReturn(securityManager);
+        when(securityManager.runQuery(eq("whoami"), anyBoolean())).thenReturn("{\n" +
+                "    \"DisplayName\": \"ALIYUN$test@test.aliyun.com\",\n" +
+                "    \"ID\": \"123456789\",\n" +
+                "    \"SourceIP\": \"127.0.0.1\"}");
+
+        when(project.getName()).thenReturn("project");
+
         when(tableIterator.hasNext()).thenReturn(true, false);
         when(tableIterator.next()).thenReturn(table);
+
+        when(projectIterator.hasNext()).thenReturn(true, false);
+        when(projectIterator.next()).thenReturn(project);
 
         when(table.getName()).thenReturn("tableName");
         when(table.getCreatedTime()).thenReturn(new Date());

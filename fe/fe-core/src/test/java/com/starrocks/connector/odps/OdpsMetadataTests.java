@@ -53,7 +53,7 @@ public class OdpsMetadataTests extends MockedBase {
 
     @Test
     public void testListDbNames() {
-        List<String> expectedDbNames = Collections.singletonList(odps.getDefaultProject());
+        List<String> expectedDbNames = Collections.singletonList("project");
         List<String> dbNames = odpsMetadata.listDbNames();
         Assert.assertEquals(dbNames, expectedDbNames);
     }

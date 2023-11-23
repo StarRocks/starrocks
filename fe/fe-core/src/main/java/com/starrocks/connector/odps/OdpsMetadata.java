@@ -18,6 +18,8 @@ import com.aliyun.odps.Odps;
 import com.aliyun.odps.OdpsException;
 import com.aliyun.odps.Partition;
 import com.aliyun.odps.PartitionSpec;
+import com.aliyun.odps.Project;
+import com.aliyun.odps.security.SecurityManager;
 import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
@@ -36,12 +38,15 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.MoreExecutors;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -85,6 +90,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private final AliyunCloudCredential aliyunCloudCredential;
     private final OdpsProperties properties;
 
+    private String catalogOwner;
     private LoadingCache<String, Set<String>> projectCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
     private LoadingCache<OdpsTableName, List<PartitionSpec>> partitionCache;
@@ -138,13 +144,29 @@ public class OdpsMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames() {
-        return ImmutableList.of(odps.getDefaultProject());
+        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        try {
+            if (StringUtils.isNullOrEmpty(catalogOwner)) {
+                SecurityManager sm = odps.projects().get().getSecurityManager();
+                String result = sm.runQuery("whoami", false);
+                JsonObject js = JsonParser.parseString(result).getAsJsonObject();
+                catalogOwner = js.get("DisplayName").getAsString();
+            }
+            Iterator<Project> iterator = odps.projects().iterator(catalogOwner);
+            while (iterator.hasNext()) {
+                Project project = iterator.next();
+                builder.add(project.getName());
+            }
+        } catch (OdpsException odpsException) {
+            throw new StarRocksConnectorException("fail to list project names", odpsException);
+        }
+        return builder.build();
     }
 
     @Override
     public Database getDb(String name) {
         try {
-            return new Database(0, name);
+            return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), name);
         } catch (StarRocksConnectorException e) {
             return null;
         }
