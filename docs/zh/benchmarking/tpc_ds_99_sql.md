@@ -1,7 +1,3 @@
----
-displayed_sidebar: "Chinese"
----
-
 # TPC-DS test SQL
 
 ```sql

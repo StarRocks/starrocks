@@ -1,7 +1,3 @@
----
-displayed_sidebar: "Chinese"
----
-
 # StarRocks 集成 Datadog
 
 本文介绍如何将 StarRocks 集群与监控和安全平台 [Datadog](https://www.datadoghq.com/) 集成。
