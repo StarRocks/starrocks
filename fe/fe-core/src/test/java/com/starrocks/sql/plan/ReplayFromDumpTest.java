@@ -825,4 +825,18 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: 590: user_id = 622: ter_user_id\n" +
                 "  |  equal join conjunct: 589: account_id = 623: terminal_id"));
     }
+
+    @Test
+    public void test() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/top_join_projection"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("57:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1303 <-> [1303: employee_id, BIGINT, true]\n" +
+                "  |  1304 <-> [1304: employee_name, VARCHAR, true]\n" +
+                "  |  1307 <-> [1307: duty_name, VARCHAR, true]\n" +
+                "  |  1322 <-> [1322: arrival_duration, INT, true]\n" +
+                "  |  1347 <-> [1347: responsible_department_name, VARCHAR, true]\n" +
+                "  |  1371 <-> [1371: induction_duration, INT, true]"));
+    }
 }
