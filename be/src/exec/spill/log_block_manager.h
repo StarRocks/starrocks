@@ -60,7 +60,7 @@ public:
 
 private:
     StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id,
-                                                           const std::string& plan_node_name);
+                                                           const std::string& plan_node_name, bool direct_io);
 
 private:
     typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
