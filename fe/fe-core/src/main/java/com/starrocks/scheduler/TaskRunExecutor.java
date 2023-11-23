@@ -15,17 +15,19 @@
 
 package com.starrocks.scheduler;
 
+import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class TaskRunExecutor {
     private static final Logger LOG = LogManager.getLogger(TaskRunExecutor.class);
-    private final ExecutorService taskRunPool = Executors.newCachedThreadPool();
+    private final ExecutorService taskRunPool = ThreadPoolManager
+            .newDaemonCacheThreadPool(Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
 
     public void executeTaskRun(TaskRun taskRun) {
         if (taskRun == null) {
