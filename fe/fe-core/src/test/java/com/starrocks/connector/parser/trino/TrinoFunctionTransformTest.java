@@ -238,6 +238,27 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select length('aaa');";
         assertPlanContains(sql, "char_length('aaa')");
+<<<<<<< HEAD
+=======
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|', ':');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a');";
+        assertPlanContains(sql, "str_to_map(split('a', ','), ':')");
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a:1,b:2,c:null');";
+        assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
+
+        sql = "SELECT replace('hello-world', '-');";
+        assertPlanContains(sql, "replace('hello-world', '-', '')");
+
+        sql = "SELECT replace('hello-world', '-', '$');";
+        assertPlanContains(sql, "replace('hello-world', '-', '$')");
+>>>>>>> 9bff73b4d8 ([Enhancement] Support transform replace function in trino parser (#35587))
     }
 
     @Test
