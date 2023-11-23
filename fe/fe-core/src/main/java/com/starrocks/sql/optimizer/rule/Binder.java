@@ -175,7 +175,7 @@ public class Binder {
         }
 
         private OptExpression enumerate(GroupExpression ge) {
-            if (ge == null) {
+            if (ge == null || !isMultiJoinGE(ge)) {
                 return null;
             }
             List<OptExpression> resultInputs = Lists.newArrayList();
@@ -211,11 +211,43 @@ public class Binder {
             return ge.getOp().getOpType() == OperatorType.LOGICAL_JOIN && isMultiJoinRecursive(ge);
         }
 
+        /**
+         * Recursive check whether the GE is a MULTI_JOIN
+         * For nested-mv, the original GE may be a AGG, after rewriting this group could be put an SCAN, so
+         * we also need to consider this kind of GE as MULTI_JOIN
+         */
         private boolean isMultiJoinRecursive(GroupExpression ge) {
             if (!isMultiJoinOp(ge.getOp().getOpType())) {
                 return false;
             }
-            return ge.getInputs().stream().allMatch(x -> isMultiJoinRecursive(x.getFirstLogicalExpression()));
+
+            for (int i = 0; i < ge.getInputs().size(); i++) {
+                Group child = ge.inputAt(i);
+                if (isMultiJoinRecursive(child.getFirstLogicalExpression())) {
+                    continue;
+                }
+                if (!hasRewrittenMvScan(child)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private boolean hasRewrittenMvScan(Group g) {
+            for (GroupExpression ge : g.getLogicalExpressions()) {
+                if ((isScanOp(ge.getOp().getOpType()))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean isScanOp(OperatorType operatorType) {
+            return Pattern.ALL_SCAN_TYPES.contains(operatorType);
+        }
+
+        private boolean isMultiJoinGE(GroupExpression ge) {
+            return isMultiJoinOp(ge.getOp().getOpType());
         }
 
         private boolean isMultiJoinOp(OperatorType operatorType) {
