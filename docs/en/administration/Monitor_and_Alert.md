@@ -13,7 +13,7 @@ The available metrics are:
 |Metric|Unit|Type|Meaning|
 |---|:---:|:---:|---|
 |be_broker_count|count|average|Number of brokers |
-|be_brpc_endpoint_count|count|average|Number of StubCache in BRPC|
+|be_brpc_endpoint_count|count|average|Number of StubCache in bRPC|
 |be_bytes_read_per_second|bytes/s|average| Read speed of BE |
 |be_bytes_written_per_second|bytes/s|average|Write speed of BE |
 |be_base_compaction_bytes_per_second|bytes/s|average|Base compaction speed of BE|
