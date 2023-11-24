@@ -25,9 +25,9 @@ For CSV data, take note of the following points:
 
 Stream Load and Broker Load both support data transformation at data loading and supports data changes made by UPSERT and DELETE operations during data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
 
-## Loading from a local file system via HTTP PUT
+## Loading from a local file system via Stream Load
 
-Stream Load runs in synchronous loading mode. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
+Stream Load runs in synchronous loading mode based on HTTP PUT. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
 :::notice
 
@@ -126,9 +126,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 `example1.csv` consists of three columns, which are separated by commas (,) and can be mapped in sequence onto the `id`, `name`, and `score` columns of `table1`. Therefore, you need to use the `column_separator` parameter to specify the comma (,) as the column separator. You also need to use the `columns` parameter to temporarily name the three columns of `example1.csv` as `id`, `name`, and `score`, which are mapped in sequence onto the three columns of `table1`.
 
-##### Query data
-
-After the load is complete, query the data of `table1` to verify that the load is successful:
+After the load is complete, you can query `table1` to verify that the load is successful:
 
 ```SQL
 SELECT * FROM table1;
@@ -220,9 +218,7 @@ In the preceding example, the value of `code` in `example2.json` is multiplied b
 
 For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
 
-##### Query data
-
-After the load is complete, query the data of `table2` to verify that the load is successful:
+After the load is complete, you can query `table2` to verify that the load is successful:
 
 ```SQL
 SELECT * FROM table2;
@@ -398,9 +394,9 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 #### Check Broker Load progress
 
-In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the curl command to query the progress of Broker Load jobs.
+In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the curl command to view the progress of Broker Load jobs.
 
-In v3.1 and later, you can query the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view:
+In v3.1 and later, you can view the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view:
 
 ```SQL
 SELECT * FROMinformation_schema.loads;
