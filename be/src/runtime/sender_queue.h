@@ -147,7 +147,10 @@ private:
 class DataStreamRecvr::PipelineSenderQueue final : public DataStreamRecvr::SenderQueue {
 public:
     PipelineSenderQueue(DataStreamRecvr* parent_recvr, int num_senders, int degree_of_parallism);
-    ~PipelineSenderQueue() override { close(); }
+    ~PipelineSenderQueue() override {
+        check_leak_closure();
+        close();
+    }
 
     Status get_chunk(Chunk** chunk, const int32_t driver_sequence = -1) override;
 
@@ -209,6 +212,8 @@ private:
     typedef std::list<ChunkItem> ChunkList;
 
     void clean_buffer_queues();
+
+    void check_leak_closure();
 
     StatusOr<ChunkList> get_chunks_from_pass_through(const int32_t sender_id, size_t& total_chunk_bytes);
 
