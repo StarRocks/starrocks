@@ -132,9 +132,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void doMvRefresh(TaskRunContext context) throws Exception {
-        InsertStmt insertStmt = null;
-        ExecPlan execPlan = null;
         int retryNum = 0;
+
+        Set<String> partitionsToRefresh = null;
+        Map<String, Set<String>> sourceTablePartitions = null;
         boolean checked = false;
         while (!checked) {
             // sync partitions between materialized view and base tables out of lock
@@ -162,8 +163,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     continue;
                 }
                 checked = true;
-
-                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
+                partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                     return;
@@ -172,28 +172,64 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 filterPartitionByRefreshNumber(partitionsToRefresh, materializedView);
 
                 LOG.debug("materialized view partitions to refresh:{}", partitionsToRefresh);
-                Map<String, Set<String>> sourceTablePartitions = getSourceTablePartitions(partitionsToRefresh);
+                sourceTablePartitions = getSourceTablePartitions(partitionsToRefresh);
                 LOG.debug("materialized view:{} source partitions :{}",
                         materializedView.getName(), sourceTablePartitions);
-
-                // create ExecPlan
-                insertStmt = generateInsertStmt(partitionsToRefresh, sourceTablePartitions);
-                execPlan = generateRefreshPlan(mvContext.getCtx(), insertStmt);
-                mvContext.setExecPlan(execPlan);
             } finally {
                 database.readUnlock();
             }
         }
 
+        InsertStmt insertStmt = prepareRefreshPlan(partitionsToRefresh, sourceTablePartitions);
+
         // execute the ExecPlan of insert outside lock
-        refreshMaterializedView(mvContext, execPlan, insertStmt);
+        refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
-        updateMeta(execPlan);
+        updateMeta(mvContext.getExecPlan());
 
         if (mvContext.hasNextBatchPartition()) {
             generateNextTaskRun();
         }
+    }
+
+    /**
+     * Prepare the statement and plan for mv refreshing, considering the partitions of ref table
+     */
+    private InsertStmt prepareRefreshPlan(Set<String> mvToRefreshedPartitions,
+                                          Map<String, Set<String>> refTablePartitionNames) throws AnalysisException {
+        // 1. Prepare context
+        ConnectContext ctx = mvContext.getCtx();
+        ctx.getAuditEventBuilder().reset();
+        ctx.getAuditEventBuilder()
+                .setTimestamp(System.currentTimeMillis())
+                .setClientIp(mvContext.getRemoteIp())
+                .setUser(ctx.getQualifiedUser())
+                .setDb(ctx.getDatabase());
+        ctx.setThreadLocalInfo();
+
+        // 3. AST
+        InsertStmt insertStmt = generateInsertAst(mvToRefreshedPartitions, materializedView, ctx);
+
+        // 4. Analyze and prepare partition
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(ctx, insertStmt);
+        ExecPlan execPlan = null;
+        try {
+            StatementPlanner.lock(dbs);
+
+            insertStmt =
+                    analyzeInsertStmt(insertStmt, mvToRefreshedPartitions, refTablePartitionNames, materializedView);
+            execPlan = StatementPlanner.plan(insertStmt, ctx);
+        } catch (Throwable e) {
+            LOG.warn("prepareRefreshPlan for mv {} failed", materializedView.getName(), e);
+            throw e;
+        } finally {
+            StatementPlanner.unLock(dbs);
+        }
+
+        mvContext.setExecPlan(execPlan);
+
+        return insertStmt;
     }
 
     private void postProcess() {
@@ -676,10 +712,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return StatementPlanner.plan(insertStmt, ctx);
     }
 
-    @VisibleForTesting
-    public InsertStmt generateInsertStmt(Set<String> materializedViewPartitions,
-                                          Map<String, Set<String>> sourceTablePartitions) {
-        ConnectContext ctx = mvContext.getCtx();
+    /**
+     * Build an AST for insert stmt
+     */
+    private InsertStmt generateInsertAst(Set<String> materializedViewPartitions, MaterializedView materializedView,
+                                         ConnectContext ctx) {
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
@@ -695,13 +732,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         insertStmt.setTargetPartitionNames(new PartitionNames(false, new ArrayList<>(materializedViewPartitions)));
         // insert overwrite mv must set system = true
         insertStmt.setSystem(true);
-        Analyzer.analyze(insertStmt, ctx);
+        return insertStmt;
+    }
+
+    @VisibleForTesting
+    public InsertStmt analyzeInsertStmt(InsertStmt insertStmt,
+                                        Set<String> materializedViewPartitions,
+                                        Map<String, Set<String>> refTableRefreshPartitions,
+                                        MaterializedView materializedView) throws AnalysisException {
+        Analyzer.analyze(insertStmt, ConnectContext.get());
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
         Map<String, TableRelation> tableRelations =
                 AnalyzerUtils.collectAllTableRelation(queryStatement);
         for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entrySet()) {
-            Set<String> tablePartitionNames = sourceTablePartitions.get(nameTableRelationEntry.getKey());
+            Set<String> tablePartitionNames = refTableRefreshPartitions.get(nameTableRelationEntry.getKey());
             TableRelation tableRelation = nameTableRelationEntry.getValue();
             tableRelation.setPartitionNames(
                     new PartitionNames(false, tablePartitionNames == null ? null :
