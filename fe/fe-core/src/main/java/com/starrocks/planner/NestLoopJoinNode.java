@@ -96,9 +96,6 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         PlanNode leftChild = getChild(0);
         PlanNode rightChild = getChild(1);
 
-        if (!(leftExpr instanceof SlotRef)) {
-            return false;
-        }
         if (joinExpr instanceof BinaryPredicate && ((BinaryPredicate) joinExpr).getOp().isUnequivalence()) {
             return false;
         }
