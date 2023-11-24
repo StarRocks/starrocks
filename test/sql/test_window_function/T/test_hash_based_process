@@ -7,7 +7,7 @@ CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
- "replication_num" = "3"
+ "replication_num" = "1"
 );
 
 INSERT INTO `t0` (v1, v2, v3) values
@@ -33,7 +33,7 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
- "replication_num" = "3"
+ "replication_num" = "1"
 );
 
 INSERT INTO `t1` (v1, v2, v3, v4) values
@@ -138,7 +138,7 @@ CREATE TABLE `t4` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
- "replication_num" = "3"
+ "replication_num" = "1"
 );
 
 CREATE TABLE `t5` (
@@ -152,7 +152,7 @@ CREATE TABLE `t5` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
- "replication_num" = "3"
+ "replication_num" = "1"
 );
 
 INSERT INTO `t4` (v1, v2, v3, v4, v5, v6)
