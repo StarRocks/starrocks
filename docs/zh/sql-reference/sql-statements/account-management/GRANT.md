@@ -255,6 +255,7 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 
 ## 最佳实践 - 基于使用场景创建自定义角色
 
+import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 <userPrivilegeCase />
 
 有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/User_privilege.md#多业务线权限管理)。

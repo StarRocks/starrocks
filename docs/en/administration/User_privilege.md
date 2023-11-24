@@ -419,4 +419,5 @@ GRANT public_sales TO ROLE lineb_query;
 
 ### Customize roles based on scenarios
 
+import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
 <userPrivilegeCase />
