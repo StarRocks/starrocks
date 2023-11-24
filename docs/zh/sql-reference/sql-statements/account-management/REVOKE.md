@@ -23,7 +23,7 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 REVOKE
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
     ON SYSTEM
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
@@ -159,18 +159,6 @@ REVOKE
 REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>}
 ```
 
-<<<<<<< HEAD
-=======
-#### Storage volume 相关
-
-```SQL
-REVOKE
-    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
-    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
-    FROM { ROLE | USER} {<role_name>|<user_identity>}
-```
-
->>>>>>> fd2d3bb882 ([Doc] update grant syntax (#35719))
 ### 撤销指定角色
 
 ```SQL
