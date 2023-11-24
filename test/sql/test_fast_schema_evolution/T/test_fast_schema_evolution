@@ -257,7 +257,7 @@ insert into tab1 values (700, "k2_700", 700, 700, 700, "v4_700", "v5_700", "111"
 insert into tab1 values (800, "k2_800", 800, 800, 800, "v4_800", "v5_800", "222");
 insert into tab1 values (900, "k2_900", 900, 900, 900, "v4_900", "v5_900", "333");
 
-select * from tabl1;
+select * from tab1;
 
 alter table tab1 add column c2 bigint default "1" after v2;
 function: wait_alter_table_finish()

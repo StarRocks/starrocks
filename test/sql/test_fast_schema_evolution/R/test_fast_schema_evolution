@@ -268,10 +268,10 @@ PROPERTIES (
 -- !result
 select * from tab1;
 -- result:
-400	k2_400	400	400	600	v6_400	v5_400
-600	k2_600	600	600	700	v6_600	v5_600
-500	k2_500	500	500	900	v6_500	v5_500
 100	k2_100	100	100	1000	v6_100	v5_100
+400	k2_400	400	400	600	v6_400	v5_400
+500	k2_500	500	500	900	v6_500	v5_500
+600	k2_600	600	600	700	v6_600	v5_600
 -- !result
 drop table t1;
 -- result:
@@ -642,9 +642,17 @@ insert into tab1 values (800, "k2_800", 800, 800, 800, "v4_800", "v5_800", "222"
 insert into tab1 values (900, "k2_900", 900, 900, 900, "v4_900", "v5_900", "333");
 -- result:
 -- !result
-select * from tabl1;
+select * from tab1;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_fast_schema_evolution_for_rollup.tabl1'.")
+100	k2_100	100	100	100	v4_100	v5_100	0
+200	k2_200	200	200	200	v4_200	v5_200	0
+300	k2_300	300	300	300	v4_300	v5_300	0
+400	k2_400	400	400	400	v4_400	v5_400	0
+500	k2_500	500	500	500	v4_500	v5_500	0
+600	k2_600	600	600	600	v4_600	v5_600	0
+700	k2_700	700	700	700	v4_700	v5_700	111
+800	k2_800	800	800	800	v4_800	v5_800	222
+900	k2_900	900	900	900	v4_900	v5_900	333
 -- !result
 alter table tab1 add column c2 bigint default "1" after v2;
 -- result:
@@ -720,55 +728,25 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
-<<<<<<< HEAD
-<<<<<<< HEAD
 [UC]show alter table rollup where State = "FINISHED";
 -- result:
-15253	tab1	2023-11-24 20:19:27	2023-11-24 20:19:37	tab1	r1	15254	5150	FINISHED		None	86400
-15308	tab1	2023-11-24 20:19:40	2023-11-24 20:19:57	r1	r2	15309	5176	FINISHED		None	86400
--- !result
-[UC]show alter table rollup where CreateTime >= "1970-01-01 pdel00:00:00";
--- result:
-15253	tab1	2023-11-24 20:19:27	2023-11-24 20:19:37	tab1	r1	15254	5150	FINISHED		None	86400
-15308	tab1	2023-11-24 20:19:40	2023-11-24 20:19:57	r1	r2	15309	5176	FINISHED		None	86400
--- !result
-[UC]show alter table rollup where CreateTime > "1970-01-01 00:00:00";
--- result:
-15253	tab1	2023-11-24 20:19:27	2023-11-24 20:19:37	tab1	r1	15254	5150	FINISHED		None	86400
-15308	tab1	2023-11-24 20:19:40	2023-11-24 20:19:57	r1	r2	15309	5176	FINISHED		None	86400
--- !result
-[UC]show alter table rollup where CreateTime <= "1970-01-01 00:00:00";
--- result:
--- !result
-[UC]show alter table rollup where CreateTime < "1970-01-01 00:00:00";
-=======
-show alter table rollup where State = "FINISHED";
-=======
-[UC]show alter table rollup where State = "FINISHED";
->>>>>>> 5a1e1fc850 (update test)
--- result:
-12222	tab1	2023-11-22 16:02:26	2023-11-22 16:02:38	tab1	r1	12223	2198	FINISHED		None	86400
-12268	tab1	2023-11-22 16:02:41	2023-11-22 16:02:58	r1	r2	12269	2223	FINISHED		None	86400
+15650	tab1	2023-11-24 20:25:49	2023-11-24 20:26:07	tab1	r1	15651	5551	FINISHED		None	86400
+15731	tab1	2023-11-24 20:26:09	2023-11-24 20:26:27	r1	r2	15732	5594	FINISHED		None	86400
 -- !result
 [UC]show alter table rollup where CreateTime >= "1970-01-01 00:00:00";
 -- result:
-12222	tab1	2023-11-22 16:02:26	2023-11-22 16:02:38	tab1	r1	12223	2198	FINISHED		None	86400
-12268	tab1	2023-11-22 16:02:41	2023-11-22 16:02:58	r1	r2	12269	2223	FINISHED		None	86400
+15650	tab1	2023-11-24 20:25:49	2023-11-24 20:26:07	tab1	r1	15651	5551	FINISHED		None	86400
+15731	tab1	2023-11-24 20:26:09	2023-11-24 20:26:27	r1	r2	15732	5594	FINISHED		None	86400
 -- !result
 [UC]show alter table rollup where CreateTime > "1970-01-01 00:00:00";
 -- result:
-12222	tab1	2023-11-22 16:02:26	2023-11-22 16:02:38	tab1	r1	12223	2198	FINISHED		None	86400
-12268	tab1	2023-11-22 16:02:41	2023-11-22 16:02:58	r1	r2	12269	2223	FINISHED		None	86400
+15650	tab1	2023-11-24 20:25:49	2023-11-24 20:26:07	tab1	r1	15651	5551	FINISHED		None	86400
+15731	tab1	2023-11-24 20:26:09	2023-11-24 20:26:27	r1	r2	15732	5594	FINISHED		None	86400
 -- !result
 [UC]show alter table rollup where CreateTime <= "1970-01-01 00:00:00";
 -- result:
 -- !result
-<<<<<<< HEAD
-show alter table rollup where CreateTime < "1970-01-01 00:00:00";
->>>>>>> 5c6db65e7c (add test)
-=======
 [UC]show alter table rollup where CreateTime < "1970-01-01 00:00:00";
->>>>>>> 5a1e1fc850 (update test)
 -- result:
 -- !result
 desc r2;
