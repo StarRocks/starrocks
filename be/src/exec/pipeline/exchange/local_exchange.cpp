@@ -172,8 +172,6 @@ Status OrderedPartitionExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(LocalExchanger::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
-    _channel_row_nums.resize(source_dop());
-    _channel_row_nums.assign(source_dop(), 0);
     return Status::OK();
 }
 
@@ -191,78 +189,67 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
         DCHECK(partition_columns[i] != nullptr);
     }
 
-    ChunkPtr output_chunk = chunk;
+    if (_channel_row_nums.empty()) {
+        _channel_row_nums.resize(source_dop());
+        _channel_row_nums.assign(source_dop(), 0);
+    }
 
-    size_t channel_id;
+    std::vector<std::pair<size_t, ChunkPtr>> chunks;
+
     size_t min_channel_id = _find_min_channel_id();
     if (_previous_chunk == nullptr || _previous_channel_id == min_channel_id) {
-        channel_id = min_channel_id;
+        chunks.emplace_back(min_channel_id, chunk);
     } else {
-        // Check if the joint of two consecutive chunks are the same
-        bool is_joint_equal = true;
-        for (size_t i = 0; i < partition_columns.size(); ++i) {
-            auto cmp = partition_columns[i]->compare_at(0, _previous_chunk->num_rows() - 1, *partition_columns[i], 1);
-            if (cmp != 0) {
-                is_joint_equal = false;
-                break;
+        auto is_equal = [](const Columns& columns1, size_t offset1, const Columns& columns2, size_t offset2) {
+            for (size_t i = 0; i < columns1.size(); ++i) {
+                auto cmp = columns1[i]->compare_at(offset1, offset2, *columns2[i], 1);
+                if (cmp != 0) {
+                    return false;
+                }
             }
-        }
+            return true;
+        };
+        // Check if the joint of two consecutive chunks are the same
+        bool is_joint_equal =
+                is_equal(_previous_partition_columns, _previous_chunk->num_rows() - 1, partition_columns, 0);
 
         if (!is_joint_equal) {
             // The first row of current chunk is the start of a new partition, so
             // send the chunk to the channel with the minimum number of rows.
-            channel_id = min_channel_id;
+            chunks.emplace_back(min_channel_id, chunk);
         } else {
-            bool is_current_of_same_partition = true;
-            for (auto& column : partition_columns) {
-                auto cmp = column->compare_at(0, column->size() - 1, *column, 1);
-                if (cmp != 0) {
-                    is_current_of_same_partition = false;
-                    break;
-                }
-            }
+            bool is_current_of_same_partition =
+                    is_equal(partition_columns, 0, partition_columns, chunk->num_rows() - 1);
             if (is_current_of_same_partition) {
-                channel_id = _previous_channel_id;
+                chunks.emplace_back(_previous_channel_id, chunk);
             } else {
                 // Found partition end that belongs to the first row of current chunk, and split the chunk into two parts:
                 // 1. The first part is the rows of the same partition as the last row of previous chunk, and send it to previous channel
                 // 2. The second part is the rows of the different partition, and send it to the channel with the minimum number of rows.
 
-                auto _find_first_not_equal = [](Column* column, int64_t target, int64_t start, int64_t end) {
-                    while (start + 1 < end) {
-                        int64_t mid = start + (end - start) / 2;
-                        if (column->compare_at(target, mid, *column, 1) == 0) {
-                            start = mid;
-                        } else {
-                            end = mid;
-                        }
-                    }
-                    if (column->compare_at(target, end - 1, *column, 1) == 0) {
-                        return end;
-                    }
-                    return end - 1;
-                };
-
                 int64_t end = chunk->num_rows();
                 for (auto& column : partition_columns) {
-                    end = _find_first_not_equal(column.get(), 0, 0, end);
+                    end = ColumnHelper::find_first_not_equal(column.get(), 0, 0, end);
                 }
                 // First part: [0, end)
                 ChunkPtr first_part = chunk->clone_empty();
                 first_part->append(*chunk, 0, end);
-                _source->get_sources()[_previous_channel_id]->add_chunk(first_part);
+                chunks.emplace_back(_previous_channel_id, first_part);
 
                 // Second part: [end, chunk->num_rows())
                 ChunkPtr second_part = chunk->clone_empty();
                 second_part->append(*chunk, end, chunk->num_rows() - end);
-                output_chunk = std::move(second_part);
-                channel_id = min_channel_id;
+                chunks.emplace_back(min_channel_id, second_part);
             }
         }
     }
 
-    _source->get_sources()[channel_id]->add_chunk(output_chunk);
-    _previous_channel_id = channel_id;
+    for (auto& kv : chunks) {
+        _channel_row_nums[kv.first] += kv.second->num_rows();
+        _source->get_sources()[kv.first]->add_chunk(kv.second);
+    }
+
+    _previous_channel_id = chunks.back().first;
     _previous_chunk = chunk;
     _previous_partition_columns = std::move(partition_columns);
 
