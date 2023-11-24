@@ -35,7 +35,7 @@ public class ShowDataStmt extends ShowStmt {
     private static final ShowResultSetMetaData SHOW_INDEX_DATA_META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("TableName", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("LastModificationTime", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("LastUpdateTime", ScalarType.createVarchar(20)))
                     .addColumn(new Column("IndexName", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Size", ScalarType.createVarchar(30)))
                     .addColumn(new Column("ReplicaCount", ScalarType.createVarchar(20)))
