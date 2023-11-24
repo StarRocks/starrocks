@@ -24,7 +24,11 @@ PREPARE stmt2 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
 -- result:
 []
 -- !result
-PREPARE stmt3 FROM 'update prepare_stmt set v8 = ?, v10 = ? where k1 = ? and k2 = ?';
+PREPARE stmt3_err FROM update prepare_stmt set v8 = ?, v10 = ? where k1 = ? and k2 = ?;
+-- result:
+E: (1064, 'using parameter(?) as assignment expr in update statement is not supported')
+-- !result
+PREPARE stmt3 FROM update prepare_stmt set v8 = '2', v10 = '2' where k1 = ? and k2 = ?;
 -- result:
 []
 -- !result
@@ -84,7 +88,7 @@ execute stmt2 using @i2, @i;
 -- result:
 2	1	1	1	1	1	2021-02-01	1	2021-02-01 00:00:12	1	1.00
 -- !result
-execute stmt3 using @v2, @v2, @i, @i;
+execute stmt3 using @i, @i;
 -- result:
 []
 -- !result
@@ -103,10 +107,9 @@ execute stmt6 using @i, @v2;
 2	1
 1	1
 -- !result
-execute stmt6 using @i, @i2;
+execute stmt7 using @i, @i2;
 -- result:
-2	1
-1	1
+[]
 -- !result
 drop prepare stmt1;
 -- result:
