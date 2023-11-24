@@ -1553,10 +1553,10 @@ struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
     3: optional string lock_mode
+    4: optional i64 lock_start_time
     
     11: optional string thread_info
     12: optional bool granted
-    13: optional string wait_start
     14: optional string waiter_list
 }
 

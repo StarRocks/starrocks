@@ -26,9 +26,10 @@ SchemaScanner::ColumnDesc SysFeLocks::_s_columns[] = {
         {"lock_type", TYPE_VARCHAR, sizeof(StringValue), true},
         {"lock_object", TYPE_VARCHAR, sizeof(StringValue), true},
         {"lock_mode", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"lock_start_time", TYPE_BIGINT, sizeof(long), true},
+
         {"thread_info", TYPE_VARCHAR, sizeof(StringValue), true},
         {"granted", TYPE_BOOLEAN, sizeof(bool), true},
-        {"wait_start", TYPE_VARCHAR, sizeof(StringValue), true},
         {"waiter_list", TYPE_VARCHAR, sizeof(StringValue), true},
 
 };
@@ -53,8 +54,9 @@ Status SysFeLocks::_fill_chunk(ChunkPtr* chunk) {
     const TFeLocksItem& info = _result.items[_index];
     DatumArray datum_array{
             // clang-format: off
-            Slice(info.lock_mode), Slice(info.lock_object), Slice(info.lock_mode),   Slice(info.thread_info),
-            (info.granted),        Slice(info.wait_start),  Slice(info.waiter_list),
+            Slice(info.lock_type),   Slice(info.lock_object), Slice(info.lock_mode),   info.lock_start_time,
+
+            Slice(info.thread_info), (info.granted),          Slice(info.waiter_list),
             // clang-format: on
     };
     for (const auto& [slot_id, index] : slot_id_map) {
