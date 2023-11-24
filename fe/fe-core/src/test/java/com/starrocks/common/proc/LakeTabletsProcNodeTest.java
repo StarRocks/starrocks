@@ -37,7 +37,9 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -49,8 +51,18 @@ import java.util.List;
 
 public class LakeTabletsProcNodeTest {
 
+    @Mocked
+    private ConnectContext connectContext;
+
+    public LakeTabletsProcNodeTest() {
+        connectContext = new ConnectContext(null);
+        connectContext.setThreadLocalInfo();
+    }
+
     @Test
-    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr, @Mocked StarOSAgent agent) throws UserException {
+    public void testFetchResult(@Mocked GlobalStateMgr globalStateMgr,
+                                @Mocked StarOSAgent agent,
+                                @Mocked WarehouseManager warehouseManager) throws UserException {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -60,12 +72,19 @@ public class LakeTabletsProcNodeTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentStarOSAgent();
+                ConnectContext.get();
+                result = connectContext;
+
+                globalStateMgr.getCurrentStarOSAgent();
                 result = agent;
                 agent.getBackendIdsByShard(tablet1Id, 0);
                 result = Sets.newHashSet(10000, 10001);
                 agent.getBackendIdsByShard(tablet2Id, 0);
                 result = Sets.newHashSet(10001, 10002);
+
+                globalStateMgr.getCurrentWarehouseMgr();
+                result = warehouseManager;
+
             }
         };
 

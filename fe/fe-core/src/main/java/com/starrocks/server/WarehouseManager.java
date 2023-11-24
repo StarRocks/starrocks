@@ -85,6 +85,13 @@ public class WarehouseManager implements Writable {
         }
     }
 
+    // only for test, do not use it in your codes!!!
+    public static Warehouse defaultWarehouse() {
+        return new LocalWarehouse(DEFAULT_WAREHOUSE_ID,
+                DEFAULT_WAREHOUSE_NAME, DEFAULT_CLUSTER_ID,
+                "An internal warehouse init after FE is ready");
+    }
+
     public Warehouse getAvailbleWarehouse(long warehouseId) throws WarehouseUnavailableException {
         Warehouse warehouse = getWarehouse(warehouseId);
         if (warehouse == null) {

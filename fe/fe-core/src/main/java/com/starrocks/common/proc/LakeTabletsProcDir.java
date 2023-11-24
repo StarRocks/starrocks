@@ -25,8 +25,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,7 +43,7 @@ import java.util.List;
  */
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
+            .add("TabletId").add("NodeId").add("DataSize").add("RowCount")
             .build();
 
     private final Database db;
@@ -69,13 +73,24 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
 
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
+
+        // get current warehouse
+        long workerGroupId;
+        try {
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+        } catch (WarehouseUnavailableException e) {
+            throw new RuntimeException(e.getMessage());
+        }
+
         db.readLock();
         try {
             for (Tablet tablet : index.getTablets()) {
                 List<Comparable> tabletInfo = Lists.newArrayList();
                 LakeTablet lakeTablet = (LakeTablet) tablet;
                 tabletInfo.add(lakeTablet.getId());
-                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds()));
+                tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds(workerGroupId)));
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
                 tabletInfos.add(tabletInfo);
@@ -88,6 +103,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
 
     @Override
     public ProcResult fetchResult() {
+
         List<List<Comparable>> tabletInfos = fetchComparableResult();
 
         // sort by tabletId
@@ -148,16 +164,27 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         }
 
         @Override
-        public ProcResult fetchResult() throws AnalysisException {
+        public ProcResult fetchResult() {
             BaseProcResult result = new BaseProcResult();
             result.setNames(TITLE_NAMES);
-            List<String> row = Arrays.asList(
-                    String.valueOf(tablet.getId()),
-                    new Gson().toJson(tablet.getBackendIds()),
-                    new ByteSizeValue(tablet.getDataSize(true)).toString(),
-                    String.valueOf(tablet.getRowCount(0L))
-            );
-            result.addRow(row);
+
+            try {
+                // get current warehouse
+                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+
+                List<String> row = Arrays.asList(
+                        String.valueOf(tablet.getId()),
+                        new Gson().toJson(tablet.getBackendIds(warehouse.getAnyAvailableCluster().getWorkerGroupId())),
+                        new ByteSizeValue(tablet.getDataSize(true)).toString(),
+                        String.valueOf(tablet.getRowCount(0L))
+                );
+                result.addRow(row);
+
+            } catch (WarehouseUnavailableException e) {
+                throw new RuntimeException(e.getMessage());
+            }
+
             return result;
         }
     }
