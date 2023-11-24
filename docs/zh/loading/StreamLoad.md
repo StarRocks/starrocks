@@ -27,13 +27,11 @@ Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及�
 
 ## 使用 Stream Load 从本地导入
 
-Stream Load 是一种基于 HTTP PUT 的同步导入方式。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
+Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
 
-:::notice
-
-Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
-
-:::
+> **NOTICE**
+>
+> Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
 
 ### 基本原理
 
@@ -125,7 +123,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 `example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 
-导入完成后，您可以查询 `table1` 表，验证数据是否导入成功，如下所示：
+导入完成后，您可以查询 `table1` 表，验证数据导入是否成功，如下所示：
 
 ```SQL
 SELECT * FROM table1;
@@ -195,7 +193,8 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 :::note
 
-您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
+- 如果账号没有设置密码，这里只需要传入 `<username>:`。
+- 您可以通过 [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) 命令查看 FE 节点的 IP 地址和 HTTP 端口号。
 
 :::
 
@@ -217,7 +216,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#列映射)”章节。
 
-导入完成后，您可以查询 `table2` 表，验证数据是否导入成功，如下所示：
+导入完成后，您可以查询 `table2` 表，验证数据导入是否成功，如下所示：
 
 ```SQL
 SELECT * FROM table2;
@@ -243,7 +242,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
 
-- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见 [BE 配置项](../administration/Configuration.md#be-配置项)。
+- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/Configuration.md#配置-be-动态参数)。
 
   建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
 
@@ -258,7 +257,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见 [FE 动态参数](../administration/Configuration.md#配置-fe-动态参数)。
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/Configuration.md#配置-fe-动态参数)。
 
   如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
 
@@ -284,10 +283,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 除 Stream Load 以外，您还可以通过 Broker Load 从本地导入数据。该功能自 v2.5 起支持。
 
-Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks 会异步地执行导入作业，不会直接返回作业结果，您需要手动查询作业结果：
-
-- 在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看作业结果。
-- 在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../reference/information_schema/loads.md) 视图来查看作业结果。
+Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks 会异步地执行导入作业，不会直接返回作业结果，您需要手动查询作业结果。参见[查看 Broker Load 导入进度](#查看-broker-load-导入进度)。
 
 ### 使用限制
 
@@ -300,11 +296,9 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 
 1. 按照“[部署前提条件](../deployment/deployment_prerequisites.md)”、“[检查环境配置](../deployment/environment_configurations.md)”和“[准备部署文件](../deployment/prepare_deployment_files.md)”中的介绍，在本地文件所在机器上完成必要的环境配置。然后，在该机器上部署一个 Broker。具体操作跟在 BE 节点上部署一样，参见[部署 Broker 节点](../deployment/deploy_broker.md)。
 
-   :::notice
-
-   只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
-
-   :::
+   > **NOTICE**
+   >
+   > 只能从单个 Broker 中导入数据，并且 Broker 版本必须为 2.5 及以后。
 
 2. 通过 [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) 语句在 StarRocks 中添加上一步骤中部署好的 Broker（如 `172.26.199.40:8000`），并给 Broker 指定新名称（如 `sole_broker`）：
 
@@ -315,6 +309,8 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 ### 操作示例
 
 Broker Load 支持导入单个数据文件到单张表、导入多个数据文件到单张表、以及导入多个数据文件分别到多张表。这里以导入多个数据文件到单张表为例。
+
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 数据样例
 
@@ -408,7 +404,7 @@ SELECT * FROM information_schema.loads;
 SELECT * FROM information_schema.loads WHERE LABEL = 'label_local';
 ```
 
-确认导入作业完成后，您可以从表内查询数据，验证数据是否已成功导入。例如：
+确认导入作业完成后，您可以从表内查询数据，验证数据导入是否成功。例如：
 
 ```SQL
 SELECT * FROM mytable;
