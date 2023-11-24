@@ -49,6 +49,12 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _index_cache.set_capacity(byte_limits * update_mem_percent);
 }
 
+UpdateManager::~UpdateManager() {
+    _index_cache.clear();
+    _update_state_cache.clear();
+    _compaction_cache.clear();
+}
+
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
     return strings::Substitute("$0_$1", tablet_id, txn_id);
 }

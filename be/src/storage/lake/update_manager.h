@@ -54,7 +54,7 @@ private:
 class UpdateManager {
 public:
     UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker = nullptr);
-    ~UpdateManager() {}
+    ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
 
