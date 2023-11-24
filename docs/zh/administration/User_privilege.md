@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 管理用户权限
 
-import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
 
 本文描述如何在 StarRocks 中管理用户、角色和权限。
 
@@ -419,4 +419,4 @@ GRANT public_sales TO ROLE lineb_query;
 
 ### 基于使用场景创建自定义角色
 
-<userPrivilegeCase />
+<UserPrivilegeCase />

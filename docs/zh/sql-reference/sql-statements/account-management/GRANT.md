@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # GRANT
 
-import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 
 ## 功能
 
@@ -257,6 +257,6 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 
 ## 最佳实践 - 基于使用场景创建自定义角色
 
-<userPrivilegeCase />
+<UserPrivilegeCase />
 
 有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/User_privilege.md#多业务线权限管理)。

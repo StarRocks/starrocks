@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # GRANT
 
-import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 
 ## Description
 
@@ -254,6 +254,6 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 
 ### Customize roles based on scenarios
 
-<userPrivilegeCase />
+<UserPrivilegeCase />
 
 For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).

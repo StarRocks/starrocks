@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Manage user privileges
 
-import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
 
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
@@ -421,4 +421,4 @@ GRANT public_sales TO ROLE lineb_query;
 
 ### Customize roles based on scenarios
 
-<userPrivilegeCase />
+<UserPrivilegeCase />
