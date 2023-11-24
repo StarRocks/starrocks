@@ -121,9 +121,9 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
         context->inherit_upstream_source_properties(hash_partition_source_op.get(), upstream_source_op);
         ops_with_sink.push_back(std::move(hash_partition_source_op));
     } else if (is_skewed) {
-        // The former sort will use passthrough exchange, so we need to add local shuffle exchange here.
-        ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops_with_sink,
-                                                                          _partition_exprs);
+        // The former sort will use passthrough exchange, so we need to add ordered partition local exchange here.
+        ops_with_sink = context->maybe_interpolate_local_ordered_partition_exchange(runtime_state(), id(),
+                                                                                    ops_with_sink, _partition_exprs);
     }
 
     upstream_source_op = context->source_operator(ops_with_sink);

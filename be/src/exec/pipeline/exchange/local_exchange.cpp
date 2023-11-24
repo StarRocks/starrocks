@@ -50,7 +50,8 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
     return Status::OK();
 }
 
-Status Partitioner::send_chunk(const ChunkPtr& chunk, std::shared_ptr<std::vector<uint32_t>> partition_row_indexes) {
+Status Partitioner::send_chunk(const ChunkPtr& chunk,
+                               const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes) {
     size_t num_partitions = _source->get_sources().size();
     for (size_t i = 0; i < num_partitions; ++i) {
         size_t from = partition_begin_offset(i);
@@ -120,23 +121,10 @@ Status RandomPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num
 
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
-                                       const std::vector<ExprContext*>& partition_expr_ctxs)
+                                       std::vector<ExprContext*> partition_expr_ctxs)
         : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source),
           _part_type(part_type),
-          _partition_exprs(partition_expr_ctxs) {}
-
-KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
-                                             LocalExchangeSourceOperatorFactory* source,
-                                             const std::vector<ExprContext*>& partition_expr_ctxs,
-                                             const size_t num_sinks)
-        : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
-          _source(source),
-          _partition_expr_ctxs(partition_expr_ctxs) {
-    _channel_partitions_columns.reserve(num_sinks);
-    for (int i = 0; i < num_sinks; ++i) {
-        _channel_partitions_columns.emplace_back(_partition_expr_ctxs.size());
-    }
-}
+          _partition_exprs(std::move(partition_expr_ctxs)) {}
 
 void PartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
@@ -172,6 +160,130 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
     RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
     return Status::OK();
+}
+
+OrderedPartitionExchanger::OrderedPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                                     LocalExchangeSourceOperatorFactory* source,
+                                                     std::vector<ExprContext*> partition_expr_ctxs)
+        : LocalExchanger("OrderedPartition", memory_manager, source),
+          _partition_exprs(std::move(partition_expr_ctxs)) {}
+
+Status OrderedPartitionExchanger::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(LocalExchanger::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
+    _channel_row_nums.resize(source_dop());
+    _channel_row_nums.assign(source_dop(), 0);
+    return Status::OK();
+}
+
+void OrderedPartitionExchanger::close(RuntimeState* state) {
+    Expr::close(_partition_exprs, state);
+    LocalExchanger::close(state);
+}
+
+Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    DCHECK_EQ(sink_driver_sequence, 0);
+
+    Columns partition_columns(_partition_exprs.size());
+    for (size_t i = 0; i < partition_columns.size(); ++i) {
+        ASSIGN_OR_RETURN(partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
+        DCHECK(partition_columns[i] != nullptr);
+    }
+
+    ChunkPtr output_chunk = chunk;
+
+    size_t channel_id;
+    size_t min_channel_id = _find_min_channel_id();
+    if (_previous_chunk == nullptr || _previous_channel_id == min_channel_id) {
+        channel_id = min_channel_id;
+    } else {
+        // Check if the joint of two consecutive chunks are the same
+        bool is_joint_equal = true;
+        for (size_t i = 0; i < partition_columns.size(); ++i) {
+            auto cmp = partition_columns[i]->compare_at(0, _previous_chunk->num_rows() - 1, *partition_columns[i], 1);
+            if (cmp != 0) {
+                is_joint_equal = false;
+                break;
+            }
+        }
+
+        if (!is_joint_equal) {
+            // The first row of current chunk is the start of a new partition, so
+            // send the chunk to the channel with the minimum number of rows.
+            channel_id = min_channel_id;
+        } else {
+            bool is_current_of_same_partition = true;
+            for (auto& column : partition_columns) {
+                auto cmp = column->compare_at(0, column->size() - 1, *column, 1);
+                if (cmp != 0) {
+                    is_current_of_same_partition = false;
+                    break;
+                }
+            }
+            if (is_current_of_same_partition) {
+                channel_id = _previous_channel_id;
+            } else {
+                // Found partition end that belongs to the first row of current chunk, and split the chunk into two parts:
+                // 1. The first part is the rows of the same partition as the last row of previous chunk, and send it to previous channel
+                // 2. The second part is the rows of the different partition, and send it to the channel with the minimum number of rows.
+
+                auto _find_first_not_equal = [](Column* column, int64_t target, int64_t start, int64_t end) {
+                    while (start + 1 < end) {
+                        int64_t mid = start + (end - start) / 2;
+                        if (column->compare_at(target, mid, *column, 1) == 0) {
+                            start = mid;
+                        } else {
+                            end = mid;
+                        }
+                    }
+                    if (column->compare_at(target, end - 1, *column, 1) == 0) {
+                        return end;
+                    }
+                    return end - 1;
+                };
+
+                int64_t end = chunk->num_rows();
+                for (auto& column : partition_columns) {
+                    end = _find_first_not_equal(column.get(), 0, 0, end);
+                }
+                // First part: [0, end)
+                // Second part: [end, chunk->num_rows())
+                ChunkPtr first_part = chunk->clone_empty();
+                first_part->append(*chunk, 0, end);
+                _source->get_sources()[_previous_channel_id]->add_chunk(chunk);
+
+                ChunkPtr second_part = chunk->clone_empty();
+                second_part->append(*chunk, end, chunk->num_rows() - end);
+                output_chunk = std::move(second_part);
+                channel_id = min_channel_id;
+            }
+        }
+    }
+
+    _source->get_sources()[channel_id]->add_chunk(output_chunk);
+    _previous_channel_id = channel_id;
+    _previous_chunk = chunk;
+    _previous_partition_columns = std::move(partition_columns);
+
+    return Status::OK();
+}
+
+size_t OrderedPartitionExchanger::_find_min_channel_id() {
+    return std::distance(_channel_row_nums.begin(),
+                         std::min_element(_channel_row_nums.begin(), _channel_row_nums.end()));
+}
+
+KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                             LocalExchangeSourceOperatorFactory* source,
+                                             std::vector<ExprContext*> partition_expr_ctxs, const size_t num_sinks)
+        : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
+          _source(source),
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {
+    _channel_partitions_columns.reserve(num_sinks);
+    for (int i = 0; i < num_sinks; ++i) {
+        _channel_partitions_columns.emplace_back(_partition_expr_ctxs.size());
+    }
 }
 
 Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
