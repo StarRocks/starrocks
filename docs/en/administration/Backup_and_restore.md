@@ -190,14 +190,14 @@ During BACKUP and RESTORE a database, StarRocks does as follows:
 - **RESTORE**
 
 1. Restore the tables and materialized views in the order of the BACKUP and RESTORE queue.
-2. Re-build the dependency between them and their base tables, and re-submit the refresh task schedule.
+2. Re-build the dependency between materialized views and their base tables, and re-submit the refresh task schedule.
 
 Any error encountered throughout the RESTORE process will not block the process.
 
 After RESTORE, you can check the state of the materialized view using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW.md).
 
 - If the materialized view is active, it can be used directly.
-- If the materialized view is active, it might because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
+- If the materialized view is inactive, it might because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
 
 ## Usage notes
 
