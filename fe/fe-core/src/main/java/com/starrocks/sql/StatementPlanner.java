@@ -252,7 +252,11 @@ public class StatementPlanner {
     }
 
     // Lock all database before analyze
+<<<<<<< HEAD
     private static void lock(Map<String, Database> dbs) {
+=======
+    public static void lock(Locker locker, Map<String, Database> dbs) {
+>>>>>>> 942ee9868d ([BugFix] fix potential deadlock when refreshing mv (#35736))
         if (dbs == null) {
             return;
         }
@@ -264,7 +268,11 @@ public class StatementPlanner {
     }
 
     // unLock all database after analyze
+<<<<<<< HEAD
     private static void unLock(Map<String, Database> dbs) {
+=======
+    public static void unLock(Locker locker, Map<String, Database> dbs) {
+>>>>>>> 942ee9868d ([BugFix] fix potential deadlock when refreshing mv (#35736))
         if (dbs == null) {
             return;
         }
