@@ -72,12 +72,12 @@ Authorization: Basic <credentials>
 
 ## 响应报文
 
-### 状态码
+### Status code
 
-- HTTP 请求成功，且在发送数据给客户端之前服务器未出现异常，返回 200。
-- HTTP 请求错误，返回 4xx，表示客户端出错。
-- HTTP 请求成功，但是在发送数据给客户端之前出现异常，返回 `500 Internal Server Error`。
-- HTTP 请求成功，但是 FE 当前无法提供服务，返回 503。
+- 200：HTTP 请求成功，且在发送数据给客户端之前服务器未出现异常。
+- 4xx：HTTP 请求错误，表示客户端出错。
+- `500 Internal Server Error`：HTTP 请求成功，但是在发送数据给客户端之前出现异常。
+- 503：HTTP 请求成功，但是 FE 当前无法提供服务。
 
 ### Response header
 
