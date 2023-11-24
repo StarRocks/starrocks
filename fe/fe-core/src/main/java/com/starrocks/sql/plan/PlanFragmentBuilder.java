@@ -3230,8 +3230,9 @@ public class PlanFragmentBuilder {
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.fileList());
 
+            long warehouseId = context.getConnectContext().getCurrentWarehouseId();
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
-                    "FileScanNode", files, table.fileList().size());
+                    "FileScanNode", files, table.fileList().size(), warehouseId);
             List<BrokerFileGroup> fileGroups = new ArrayList<>();
 
             try {

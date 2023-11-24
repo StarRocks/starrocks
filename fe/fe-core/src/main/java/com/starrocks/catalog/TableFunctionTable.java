@@ -21,9 +21,11 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PSlotDescriptor;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,6 +47,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -288,21 +291,29 @@ public class TableFunctionTable extends Table {
             return Lists.newArrayList();
         }
         TNetworkAddress address;
-        List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
-        if (RunMode.isSharedDataMode()) {
-            nodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
-        }
-        if (nodeIds.isEmpty()) {
-            if (RunMode.isSharedNothingMode()) {
-                throw new DdlException("Failed to send proxy request. No alive backends");
-            } else {
-                throw new DdlException("Failed to send proxy request. No alive backends or compute nodes");
+        try {
+            List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+            if (RunMode.isSharedDataMode()) {
+                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+                nodeIds = warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds();
             }
-        }
 
-        Collections.shuffle(nodeIds);
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
-        address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
+            if (nodeIds.isEmpty()) {
+                if (RunMode.isSharedNothingMode()) {
+                    throw new DdlException("Failed to send proxy request. No alive backends");
+                } else {
+                    throw new DdlException("Failed to send proxy request. No alive backends or compute nodes");
+                }
+            }
+
+            Collections.shuffle(nodeIds);
+            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+            address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
+
+        } catch (WarehouseUnavailableException e) {
+            throw new DdlException(e.getMessage());
+        }
 
         PGetFileSchemaResult result;
         try {

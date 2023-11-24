@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
@@ -152,7 +153,8 @@ public class FileScanNodeTest {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -212,7 +214,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 4, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -264,7 +267,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 5, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -312,7 +316,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -345,7 +350,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -381,7 +387,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -421,7 +428,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);

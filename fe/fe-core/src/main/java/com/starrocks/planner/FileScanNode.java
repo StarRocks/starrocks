@@ -170,13 +170,14 @@ public class FileScanNode extends LoadScanNode {
     private List<ParamCreateContext> paramCreateContexts;
 
     public FileScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                        List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded, long warehouseId) {
         super(id, desc, planNodeName);
         this.fileStatusesList = fileStatusesList;
         this.filesAdded = filesAdded;
         this.parallelInstanceNum = 1;
         this.useVectorizedLoad = false;
         this.nullExprInAutoIncrement = true;
+        this.warehouseId = warehouseId;
     }
 
     @Override

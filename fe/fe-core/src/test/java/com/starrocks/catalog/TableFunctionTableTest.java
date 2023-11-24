@@ -14,10 +14,13 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -59,9 +62,15 @@ public class TableFunctionTableTest {
 
     @Test
     public void testGetFileSchema(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Mocked SystemInfoService systemInfoService) throws Exception {
+                                  @Mocked SystemInfoService systemInfoService,
+                                  @Mocked Warehouse warehouse,
+                                  @Mocked ConnectContext context) throws Exception {
         new Expectations() {
             {
+                context.getCurrentWarehouseId();
+                result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+                minTimes = 0;
+
                 globalStateMgr.getCurrentSystemInfo();
                 result = systemInfoService;
                 minTimes = 0;

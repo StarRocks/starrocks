@@ -379,20 +379,18 @@ public class LoadPlanner {
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
                     tupleDesc,
-                    "FileScanNode", fileStatusesList, filesAdded);
+                    "FileScanNode", fileStatusesList, filesAdded, warehouseId);
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
-            fileScanNode.setWarehouseId(warehouseId);
             fileScanNode.setUseVectorizedLoad(true);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
-                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId);
+                    destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
             streamScanNode.setNeedAssignBE(true);
             streamScanNode.setUseVectorizedLoad(true);
-            streamScanNode.setWarehouseId(warehouseId);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
             scanNode = streamScanNode;
