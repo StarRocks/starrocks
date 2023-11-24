@@ -19,9 +19,12 @@
 
 namespace starrocks::workgroup {
 
-ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue)
+ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
+                           bool add_metrics)
         : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
+    if (add_metrics) {
+        REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
+    }
 }
 
 ScanExecutor::~ScanExecutor() {
