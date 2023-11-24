@@ -108,7 +108,7 @@ public class SysFeLocks {
 
             // wait start
             long lockStartTime = lock.getExclusiveLockTime();
-            lockItem.setWait_start(String.valueOf(lockStartTime));
+            lockItem.setLock_start_time(lockStartTime);
         } else if (CollectionUtils.isNotEmpty(sharedLockThreadIds)) {
             lockItem.setLock_mode("SHARED");
             lockItem.setGranted(true);
@@ -116,7 +116,7 @@ public class SysFeLocks {
             // lock start
             long lockStart = ListUtils.emptyIfNull(sharedLockThreadIds).stream().map(lock::getSharedLockTime)
                     .min(Comparator.naturalOrder()).orElse(0L);
-            lockItem.setWait_start(String.valueOf(lockStart));
+            lockItem.setLock_start_time(lockStart);
 
             // thread info
             JsonArray sharedLockInfo = new JsonArray();

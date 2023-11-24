@@ -60,7 +60,7 @@ public class SysFeLocksTest {
 
             assertEquals("EXCLUSIVE", item.getLock_mode());
             assertTrue(item.isGranted());
-            assertTrue(Long.parseLong(item.getWait_start()) > 0);
+            assertTrue(item.getLock_start_time() > 0);
             assertEquals("[]", item.getWaiter_list());
 
             // add a waiter
