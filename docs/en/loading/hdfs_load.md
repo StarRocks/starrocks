@@ -440,6 +440,10 @@ The Pipe method currently supports only the Parquet and ORC file formats.
 
 The load status of each data file is recorded and saved to the `information_schema.pipe_files` view. After a Pipe job associated with the view is deleted, the records about the files loaded in that job will also be deleted.
 
+### Data flow
+
+![Pipe data flow](../assets/pipe_data_flow.png)
+
 ### Differences between Pipe and INSERT+FILES()
 
 A Pipe job is split into one or more transactions based on the size and number of rows in each data file. Users can query the intermediate results during the loading process. In contrast, an INSERT+`FILES()` job is processed as a single transaction, and users are unable to view the data during the loading process.
