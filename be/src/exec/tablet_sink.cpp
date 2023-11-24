@@ -209,11 +209,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         for (int i = 0; i < _output_expr_ctxs.size(); ++i) {
             if (!is_type_compatible(_output_expr_ctxs[i]->root()->type().type,
                                     _output_tuple_desc->slots()[i]->type().type)) {
-                LOG(WARNING) << "type of exprs is not match slot's, expr_type="
-                             << _output_expr_ctxs[i]->root()->type().type
-                             << ", slot_type=" << _output_tuple_desc->slots()[i]->type().type
-                             << ", slot_name=" << _output_tuple_desc->slots()[i]->col_name();
-                return Status::InternalError("expr's type is not same with slot's");
+                auto msg = fmt::format("type of exprs is not match slot's, expr_type={}, slot_type={}, slot_name={}",
+                                       _output_expr_ctxs[i]->root()->type().type,
+                                       _output_tuple_desc->slots()[i]->type().type,
+                                       _output_tuple_desc->slots()[i]->col_name());
+                LOG(WARNING) << msg;
+                return Status::InternalError(msg);
             }
         }
     }
