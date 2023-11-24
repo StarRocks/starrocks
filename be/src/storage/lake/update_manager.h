@@ -183,8 +183,6 @@ private:
 
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
-    // compaction cache
-    DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     LocationProvider* _location_provider = nullptr;
     TabletManager* _tablet_mgr = nullptr;
@@ -194,6 +192,9 @@ private:
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
+
+    // compaction cache
+    DynamicCache<string, CompactionState> _compaction_cache;
 
     std::vector<PkIndexShard> _pk_index_shards;
 };
