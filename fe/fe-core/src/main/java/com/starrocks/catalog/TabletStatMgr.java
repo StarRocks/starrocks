@@ -138,7 +138,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLocalTabletStat() {
-        if (RunMode.isSharedDataMode()) {
+        if (!RunMode.isSharedNothingMode()) {
             return;
         }
         ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
@@ -195,7 +195,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLakeTabletStat() {
-        if (RunMode.isSharedNothingMode()) {
+        if (!RunMode.isSharedDataMode()) {
             return;
         }
 

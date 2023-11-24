@@ -478,7 +478,6 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                                        const ::starrocks::lake::TabletStatRequest* request,
                                        ::starrocks::lake::TabletStatResponse* response,
                                        ::google::protobuf::Closure* done) {
-    static constexpr int64_t kDefaultTimeout = 5 * 60 * 1000L; // 5 minutes
     brpc::ClosureGuard guard(done);
     auto cntl = static_cast<brpc::Controller*>(controller);
 
@@ -486,7 +485,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    int64_t timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeout;
+    int64_t timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForGetTabletStat;
     int64_t due_time = butil::gettimeofday_ms() + timeout_ms;
     auto thread_pool = get_tablet_stats_thread_pool(_env);
     auto latch = BThreadCountDownLatch(request->tablet_infos_size());
