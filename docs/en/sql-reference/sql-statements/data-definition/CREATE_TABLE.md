@@ -41,6 +41,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**: Column name.
 
+Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/Configuration.md#allow_system_reserved_names) to `TRUE`.
+
 **col_type**: Column type. Specific column information, such as types and ranges:
 
 - TINYINT (1 byte): Ranges from -2^7 + 1 to 2^7 - 1.
