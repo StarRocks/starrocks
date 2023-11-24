@@ -120,7 +120,11 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
         message.append(it.first);
         message.append("->");
-        message.append(it.second);
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+            message.append(it.second);
+        } else {
+            message.append("encoded_binary");
+        }
         message.append(", ");
 
         _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);

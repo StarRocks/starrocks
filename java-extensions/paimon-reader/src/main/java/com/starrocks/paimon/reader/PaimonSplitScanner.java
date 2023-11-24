@@ -17,17 +17,11 @@ package com.starrocks.paimon.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
-import com.starrocks.jni.connector.ScannerHelper;
 import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.catalog.Catalog;
-import org.apache.paimon.catalog.CatalogContext;
-import org.apache.paimon.catalog.CatalogFactory;
-import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
-import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
@@ -40,7 +34,6 @@ import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -51,8 +44,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final String tableName;
     private final String splitInfo;
     private final String predicateInfo;
-    private final Map<String, String> paimonOptions = new HashMap<>();
     private final String[] requiredFields;
+    private final String encodedTable;
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
     private Table table;
@@ -69,39 +62,9 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
+        this.encodedTable = params.get("native_table");
 
-        ScannerHelper.parseOptions(params.get("paimon_options"), kv -> {
-            paimonOptions.put(kv[0], kv[1]);
-            return null;
-        }, t -> {
-            LOG.warn("Invalid paimon scanner option argument: " + t);
-            return null;
-        });
-        ScannerHelper.parseFSOptionsProps(params.get("fs_options_props"), kv -> {
-            // see org.apache.paimon.utils.HadoopUtils.CONFIG_PREFIXES ["hadoop."]
-            paimonOptions.put("hadoop." + kv[0], kv[1]);
-            return null;
-        }, t -> {
-            LOG.warn("Invalid paimon scanner fs options props argument: " + t);
-            return null;
-        });
         this.classLoader = this.getClass().getClassLoader();
-    }
-
-    private void initTable() throws IOException {
-        Options options = new Options();
-        for (Map.Entry<String, String> entry : this.paimonOptions.entrySet()) {
-            options.set(entry.getKey(), entry.getValue());
-        }
-        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));
-        Identifier identifier = new Identifier(databaseName, tableName);
-        try {
-            this.table = catalog.getTable(identifier);
-        } catch (Catalog.TableNotExistException e) {
-            String msg = "Failed to init the paimon table.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
-        }
     }
 
     private void parseRequiredTypes() {
@@ -151,7 +114,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            initTable();
+            table = PaimonScannerUtils.decodeStringToObject(encodedTable);
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             initReader();
@@ -208,8 +171,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("paimon_options: ");
-        sb.append(paimonOptions);
         sb.append("\n");
         sb.append("databaseName: ");
         sb.append(databaseName);

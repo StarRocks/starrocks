@@ -121,9 +121,10 @@ public class PaimonScanNode extends ScanNode {
         }
 
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
+        String encodedTable = encodeObjectToString(paimonTable.getNativeTable());
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;
-            addScanRangeLocations(dataSplit, predicateInfo);
+            addScanRangeLocations(dataSplit, predicateInfo, encodedTable);
             BinaryRow partitionValue = dataSplit.partition();
             if (!selectedPartitions.containsKey(partitionValue)) {
                 selectedPartitions.put(partitionValue, nextPartitionId());
@@ -132,13 +133,14 @@ public class PaimonScanNode extends ScanNode {
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
     }
 
-    private void addScanRangeLocations(DataSplit split, String predicateInfo) {
+    private void addScanRangeLocations(DataSplit split, String predicateInfo, String encodedTable) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_paimon_jni_reader(true);
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
+        hdfsScanRange.setPaimon_native_table(encodedTable);
         long totalFileLength = getTotalFileLength(split);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);

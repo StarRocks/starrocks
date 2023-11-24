@@ -356,6 +356,9 @@ struct THdfsScanRange {
 
     // identity partition column slots
     18: optional list<Types.TSlotId> identity_partition_slot_ids;
+
+    // paimon native table
+    19: optional string paimon_native_table;
 }
 
 struct TBinlogScanRange {
