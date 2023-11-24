@@ -298,6 +298,7 @@ public class TabletStatMgr extends FrontendDaemon {
         private final long partitionId;
         private final long version;
         private final Map<Long, Tablet> tablets;
+        private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
 
         CollectTabletStatJob(PartitionSnapshot snapshot) {
@@ -334,6 +335,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 beToTabletInfos.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
             }
 
+            collectStatTime = System.currentTimeMillis();
             responseList = Lists.newArrayListWithCapacity(beToTabletInfos.size());
             for (Map.Entry<ComputeNode, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
                 ComputeNode node = entry.getKey();
@@ -357,13 +359,12 @@ public class TabletStatMgr extends FrontendDaemon {
             for (Future<TabletStatResponse> responseFuture : responseList) {
                 try {
                     TabletStatResponse response = responseFuture.get();
-                    long now = System.currentTimeMillis();
                     if (response != null && response.tabletStats != null) {
                         for (TabletStat stat : response.tabletStats) {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
                             tablet.setRowCount(stat.numRows);
-                            tablet.setDataSizeUpdateTime(now);
+                            tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }
                 } catch (InterruptedException e) {
