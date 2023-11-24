@@ -16,8 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <condition_variable>
 #include <future>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 #include "exec/pipeline/pipeline_fwd.h"
@@ -164,6 +167,28 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
     ASSERT_TRUE(executor->submit(std::move(scan_task)));
     a.get_future().get();
     ASSERT_EQ(res, "0123");
+
+    // test overloaded
+    std::atomic_int finished_tasks = 0;
+    size_t submit_tasks = 0;
+    std::mutex mutex;
+    std::condition_variable cv;
+    for (size_t i = 0; i < 100; ++i) {
+        ScanTask overload_task([&](auto& ctx) {
+            ctx.total_yield_point_cnt = 2;
+            DCHECK_LT(ctx.yield_point, ctx.total_yield_point_cnt);
+            if (ctx.yield_point == 1) {
+                finished_tasks++;
+                cv.notify_one();
+            }
+            ctx.yield_point++;
+        });
+        submit_tasks += executor->submit(std::move(overload_task));
+    }
+    std::unique_lock lock(mutex);
+    cv.wait(lock, [&]() { return submit_tasks == finished_tasks.load(); });
+    ASSERT_EQ(submit_tasks, finished_tasks.load());
+
     executor.reset();
 }
 
