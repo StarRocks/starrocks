@@ -1027,7 +1027,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
     {
         lake::TxnLog txnlog;
         txnlog.set_tablet_id(_tablet_id);
-        txnlog.set_txn_id(2001);
+        txnlog.set_txn_id(1001);
         txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
@@ -1037,7 +1037,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
 
         lake::TxnLog txnlog2;
         txnlog2.set_tablet_id(_tablet_id);
-        txnlog2.set_txn_id(2002);
+        txnlog2.set_txn_id(1002);
         txnlog2.mutable_op_write()->mutable_rowset()->set_overlapped(true);
         txnlog2.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         txnlog2.mutable_op_write()->mutable_rowset()->set_data_size(4096);
@@ -1066,7 +1066,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(2001);
+        request.add_txn_ids(1001);
         brpc::Controller cntl;
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
@@ -1076,8 +1076,8 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(2001);
-        request.add_txn_ids(2002);
+        request.add_txn_ids(1001);
+        request.add_txn_ids(1002);
         request.add_versions(10);
         request.add_versions(11);
         brpc::Controller cntl;
@@ -1087,26 +1087,26 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
         _tablet_mgr->prune_metacache();
-        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 2001).status().is_not_found())
-                << _tablet_mgr->get_txn_log(_tablet_id, 2001).status();
-        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 2002).status().is_not_found())
-                << _tablet_mgr->get_txn_log(_tablet_id, 2002).status();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1002).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1002).status();
 
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_vlog(_tablet_id, 10));
         ASSERT_EQ(_tablet_id, txn_log->tablet_id());
-        ASSERT_EQ(2001, txn_log->txn_id());
+        ASSERT_EQ(1001, txn_log->txn_id());
 
         ASSIGN_OR_ABORT(auto txn_log2, _tablet_mgr->get_txn_vlog(_tablet_id, 11));
         ASSERT_EQ(_tablet_id, txn_log2->tablet_id());
-        ASSERT_EQ(2002, txn_log2->txn_id());
+        ASSERT_EQ(1002, txn_log2->txn_id());
     }
     // duplicate request
     {
         lake::PublishLogVersionBatchRequest request;
         lake::PublishLogVersionResponse response;
         request.add_tablet_ids(_tablet_id);
-        request.add_txn_ids(2001);
-        request.add_txn_ids(2002);
+        request.add_txn_ids(1001);
+        request.add_txn_ids(1002);
         request.add_versions(10);
         request.add_versions(11);
         brpc::Controller cntl;
@@ -1116,19 +1116,19 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
         _tablet_mgr->prune_metacache();
-        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 2001).status().is_not_found())
-                << _tablet_mgr->get_txn_log(_tablet_id, 2001).status();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
 
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_vlog(_tablet_id, 10));
         ASSERT_EQ(_tablet_id, txn_log->tablet_id());
-        ASSERT_EQ(2001, txn_log->txn_id());
+        ASSERT_EQ(1001, txn_log->txn_id());
 
-        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 2002).status().is_not_found())
-                << _tablet_mgr->get_txn_log(_tablet_id, 2002).status();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1002).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1002).status();
 
         ASSIGN_OR_ABORT(auto txn_log2, _tablet_mgr->get_txn_vlog(_tablet_id, 11));
         ASSERT_EQ(_tablet_id, txn_log2->tablet_id());
-        ASSERT_EQ(2002, txn_log2->txn_id());
+        ASSERT_EQ(1002, txn_log2->txn_id());
     }
 
     // not existing txnId
