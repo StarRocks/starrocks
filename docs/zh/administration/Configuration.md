@@ -179,6 +179,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |authentication_ldap_simple_user_search_attr| uid     | LDAP 对象中标识用户的属性名称。                              |
 |max_upload_task_per_be                     | 0       | 单次 BACKUP 操作下，系统向单个 BE 节点下发的最大上传任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v2.5.7 起新增。     |
 |max_download_task_per_be                   | 0       | 单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v2.5.7 起新增。     |
+|allow_system_reserved_names                | FALSE   | 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v2.5.15 起新增。|
 
 ### 配置 FE 静态参数
 
