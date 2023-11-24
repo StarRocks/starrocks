@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # GRANT
 
+import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+
 ## Description
 
 Grants one or more privileges on specific objects to a user or a role.
@@ -29,7 +31,7 @@ Before a GRANT operation is performed, make sure that the related user or role h
 
 ```SQL
 GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -57,10 +59,12 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
+
+Example: `GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
 
 #### Internal catalog
 
@@ -85,11 +89,12 @@ GRANT
 ```SQL
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
-    ON { {DATABASE <database_name> [, <database_name>,...]} | ALL DATABASES }
+    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
 * You must first run SET CATALOG before you run this command.
+* For databases in an External Catalog, you can grant the CREATE TABLE privilege only on Hive (since v3.1) and Iceberg databases (since v3.2).
 
 #### Table
 
@@ -104,6 +109,7 @@ GRANT
 
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<table_name>` to represent a table.
+* You can grant the SELECT privilege on all tables in Internal and External Catalogs to read data from these tables. For tables in Hive and Iceberg Catalogs，you can grant the INSERT privilege to write data into such tables (supported since v3.1 for Iceberg and v3.2 for Hive)
 
   ```SQL
   GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -122,6 +128,7 @@ GRANT
 
 * You must first run SET CATALOG before you run this command.
 * You can also use `<db_name>.<view_name>` to represent a view.
+* For tables in an External Catalog, you can only grant the SELECT privilege on Hive table views (since v3.1).
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
@@ -150,7 +157,7 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name> [, < function_name >,...]
+    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS} IN 
            { { DATABASE <database_name> [, <database_name>,...] } | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
@@ -168,9 +175,21 @@ GRANT
 ```SQL
 GRANT IMPERSONATE
 ON USER <user_identity>
-TO USER <user_identity> [ WITH GRANT OPTION ]
+TO USER <user_identity_1> [ WITH GRANT OPTION ]
 ```
 
+<<<<<<< HEAD
+=======
+#### Storage volume
+
+```SQL
+GRANT  
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
+
+>>>>>>> 81dfaef942 ([Doc] update grant syntax (#35719))
 ### Grant roles to roles or users
 
 ```SQL
@@ -234,10 +253,11 @@ Example 9: Allow user `jack` to perform operations as user `rose`.
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
 
-## Best practices - Customize roles based on scenarios
+## Best practices
 
-We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
+### Customize roles based on scenarios
 
+<<<<<<< HEAD
 ### Grant global read-only privileges on StarRocks tables
 
    ```SQL
@@ -355,5 +375,8 @@ We recommend you customize roles to manage privileges and users. The following e
      -- Grant the privilege to load and export data on the corresponding table.
      GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
+=======
+<UserPrivilegeCase />
+>>>>>>> 81dfaef942 ([Doc] update grant syntax (#35719))
 
 For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).

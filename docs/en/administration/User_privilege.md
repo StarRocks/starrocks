@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Manage user privileges
 
+import UserPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
 StarRocks employs both role-based access control (RBAC) and identity-based access control (IBAC) to manage privileges within a StarRocks cluster, allowing cluster administrators to easily restrict privileges within the cluster on different granular levels.
@@ -419,6 +421,7 @@ GRANT public_sales TO ROLE lineb_query;
 
 ### Customize roles based on scenarios
 
+<<<<<<< HEAD
 We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
 
 1. Grant global read-only privileges on StarRocks tables:
@@ -538,3 +541,6 @@ We recommend you customize roles to manage privileges and users. The following e
      --Grant the privilege to load and export data on the corresponding table.
      GRANT INSERT, EXPORT ON TABLE <tbl_name> TO ROLE recover_par;
      ```
+=======
+<UserPrivilegeCase />
+>>>>>>> 81dfaef942 ([Doc] update grant syntax (#35719))
