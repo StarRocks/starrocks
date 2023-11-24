@@ -753,7 +753,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### allow_system_reserved_names
 
 - **Default**: FALSE
-- Whether to allow users to create columns whose names initiated with two consecutive underscores `__`. To enable this feaure, set this paramter to `TRUE`. Please note that this name format is reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from vx.x.x onwards.
+- Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
 
 ### Configure FE static parameters
 
