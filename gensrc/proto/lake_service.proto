@@ -105,6 +105,7 @@ message TabletStatRequest {
     }
 
     repeated TabletInfo tablet_infos = 1;
+    optional int64 timeout_ms = 2;
 }
 
 message TabletStatResponse {
