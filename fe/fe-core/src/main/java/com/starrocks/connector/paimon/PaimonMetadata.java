@@ -25,7 +25,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -51,25 +50,17 @@ import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.AbstractFileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
-import org.apache.paimon.table.source.OutOfRangeException;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
-import org.apache.paimon.table.source.StreamTableScan;
-import org.apache.paimon.table.source.TableRead;
-import org.apache.paimon.table.source.TableScan;
-import org.apache.paimon.table.system.FileMonitorTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
 
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -300,86 +291,5 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         return 0;
-    }
-
-    public List<PartitionInfo> getChangedPartitionInfo(Table table, long latestSnapShotID) {
-        List<PartitionInfo> result = new ArrayList<>();
-        PaimonTable paimonTable = (PaimonTable) table;
-        Map<String, Long> partitionToSnapshotId = fetchChangedPartitionWithVersion(paimonTable, latestSnapShotID);
-        for (Map.Entry<String, Long> entry : partitionToSnapshotId.entrySet()) {
-            PaimonPartitionInfo partitionInfo = new PaimonPartitionInfo(entry.getKey(), entry.getValue());
-            result.add(partitionInfo);
-            if (entry.getValue() != null) {
-                latestSnapShotID = Math.max(latestSnapShotID, entry.getValue());
-            }
-        }
-        paimonTable.setLastedSnapshotId(latestSnapShotID);
-        LOG.debug("Get changed partitionInfo:{}", result);
-        return result;
-    }
-
-    private Map<String, Long> fetchChangedPartitionWithVersion(PaimonTable paimonTable, long nextSnapshotId) {
-        Map<String, Long> partitionToSnapshotId = new HashMap<>();
-        FileMonitorTable fileMonitorTable = new FileMonitorTable(paimonTable.getNativeTable());
-        Long latestId = fileMonitorTable.snapshotManager().latestSnapshotId();
-        long latestSnapshotId = latestId == null ? Long.MIN_VALUE : latestId;
-        if (nextSnapshotId >= latestSnapshotId) {
-            return partitionToSnapshotId;
-        }
-        ReadBuilder readBuilder = fileMonitorTable.newReadBuilder();
-        StreamTableScan scan = readBuilder.newStreamScan();
-        TableRead read = readBuilder.newRead();
-        if (nextSnapshotId != Long.MIN_VALUE) {
-            scan.restore(nextSnapshotId);
-        } else {
-            scan.restore(null);
-        }
-        try {
-            while (true) {
-                if (!scanMonitorTable(paimonTable, scan, read, partitionToSnapshotId)) {
-                    break;
-                }
-            }
-        } catch (OutOfRangeException e) {
-            partitionToSnapshotId.clear();
-            List<String> parts = listPartitionNames(paimonTable.getDbName(), paimonTable.getTableName());
-            for (String part : parts) {
-                partitionToSnapshotId.put(part, latestSnapshotId);
-            }
-            LOG.info("Paimon snapshot id {} has been out of date, return all latest partitions with latest id {}.",
-                    nextSnapshotId, latestSnapshotId
-            );
-        }
-        return partitionToSnapshotId;
-    }
-
-    private boolean scanMonitorTable(PaimonTable paimonTable, StreamTableScan scan, TableRead read,
-                             Map<String, Long> partitionToSnapshotId) {
-        TableScan.Plan plan = scan.plan();
-        if (plan.splits().isEmpty()) {
-            return false;
-        }
-        try {
-            read.createReader(plan).forEachRemaining(new Consumer<InternalRow>() {
-                @Override
-                public void accept(InternalRow row) {
-                    try {
-                        FileMonitorTable.FileChange fileChange = FileMonitorTable.toFileChange(row);
-                        RowDataConverter converter = new RowDataConverter(paimonTable.getNativeTable().
-                                schema().logicalPartitionType());
-                        List<String> partitionValues = converter.convert(fileChange.partition(),
-                                paimonTable.getPartitionColumnNames());
-                        String partition = FileUtils.makePartName(paimonTable.getPartitionColumnNames(), partitionValues);
-                        partitionToSnapshotId.put(partition, scan.checkpoint());
-                    } catch (IOException e) {
-                        LOG.error("Get fileChange failed.", e);
-                    }
-                }
-            });
-        } catch (IOException e) {
-            LOG.error("Read plan failed.", e);
-            return false;
-        }
-        return true;
     }
 }
