@@ -278,6 +278,24 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
         }
+
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND)) {
+            long interval;
+
+            try {
+                interval = Long.valueOf(jobProperties.get(CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND));
+            } catch (NumberFormatException exception) {
+                throw new UserException("Incorrect format of failure_pause_interval_second", exception);
+            }
+
+            if (interval <= 0) {
+                throw new UserException(
+                        CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND + " must be greater than 0");
+            }
+
+            analyzedJobProperties.put(CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND,
+                    String.valueOf(interval));
+        }
     }
 
     public void checkDataSourceProperties() throws AnalysisException {
