@@ -305,7 +305,8 @@ ORDER BY (column_name1, column_name2, ...)
 语法：
 
 ```sql
-PROPERTIES ("key"="value")
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value",...)
 ```
 
 注意：也可以合并到上面的 schema change 操作中来修改，见[示例](#示例)部分。
