@@ -92,6 +92,16 @@ public:
                      ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
+<<<<<<< HEAD
+=======
+    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
+                                          const int64_t* log_versions, size_t txn_size,
+                                          ::starrocks::lake::PublishLogVersionResponse* response);
+
+private:
+    static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L; // 5 minutes
+
+>>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
 };
