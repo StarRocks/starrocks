@@ -440,6 +440,10 @@ SELECT * from user_behavior LIMIT 3;
 
 导入过程中的文件状态会记录到 `information_schema.pipe_files` 视图下，您可以通过该视图查看 Pipe 导入作业下各文件的导入状态。如果该视图关联的 Pipe 作业被删除，那么该视图下相关的记录也会同步清理。
 
+### 工作原理
+
+![Pipe 工作原理](../assets/pipe_data_flow.png)
+
 ### Pipe 与 INSERT+FILES() 的区别
 
 Pipe 导入操作会根据每个数据文件的大小和包含的行数，分割成一个或多个事务，导入过程中的中间结果对用户可见。INSERT+`FILES()` 导入操作是一个整体事务，导入过程中数据对用户不可见。
