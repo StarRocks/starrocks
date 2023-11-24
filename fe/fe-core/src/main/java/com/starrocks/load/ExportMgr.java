@@ -176,6 +176,7 @@ public class ExportMgr {
 
         long resultNum = limit == -1L ? Integer.MAX_VALUE : limit;
         LinkedList<List<Comparable>> exportJobInfos = new LinkedList<List<Comparable>>();
+        boolean isLimitBreak = orderByPairs == null;
         readLock();
         try {
             int counter = 0;
@@ -270,7 +271,7 @@ public class ExportMgr {
 
                 exportJobInfos.add(jobInfo);
 
-                if (++counter >= resultNum) {
+                if (isLimitBreak && ++counter >= resultNum) {
                     break;
                 }
             }
@@ -278,23 +279,24 @@ public class ExportMgr {
             readUnlock();
         }
 
-        // TODO: fix order by first, then limit
         // order by
-        ListComparator<List<Comparable>> comparator = null;
+        ListComparator<List<Comparable>> comparator;
         if (orderByPairs != null) {
             OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
-            comparator = new ListComparator<List<Comparable>>(orderByPairs.toArray(orderByPairArr));
+            comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
         } else {
             // sort by id asc
-            comparator = new ListComparator<List<Comparable>>(0);
+            comparator = new ListComparator<>(0);
         }
         Collections.sort(exportJobInfos, comparator);
 
         List<List<String>> results = Lists.newArrayList();
-        for (List<Comparable> list : exportJobInfos) {
-            results.add(list.stream().map(e -> e.toString()).collect(Collectors.toList()));
+        for (int i = 0; i < exportJobInfos.size(); i++) {
+            results.add(exportJobInfos.get(i).stream().map(Object::toString).collect(Collectors.toList()));
+            if (i > resultNum - 1) {
+                break;
+            }
         }
-
         return results;
     }
 
