@@ -227,7 +227,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     @NotNull
-    private PartitionSnapshot craetePartitionSnapshot(@NotNull Database db,
+    private PartitionSnapshot createPartitionSnapshot(@NotNull Database db,
                                                       @NotNull OlapTable table,
                                                       @NotNull PhysicalPartition partition) {
         String dbName = db.getFullName();
@@ -248,7 +248,7 @@ public class TabletStatMgr extends FrontendDaemon {
     @Nullable
     private CollectTabletStatJob createCollectTabletStatJob(@NotNull Database db, @NotNull OlapTable table,
                                                             @NotNull PhysicalPartition partition) {
-        PartitionSnapshot snapshot = craetePartitionSnapshot(db, table, partition);
+        PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
         snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
         if (snapshot.tablets.isEmpty()) {
