@@ -1,9 +1,7 @@
 
-### Customize roles based on scenarios
-
 We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
 
-### Grant global read-only privileges on StarRocks tables
+#### Grant global read-only privileges on StarRocks tables
 
    ```SQL
    -- Create a role.
@@ -27,7 +25,7 @@ We recommend you customize roles to manage privileges and users. The following e
    GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
    ```
 
-### Grant global write privileges on StarRocks tables
+#### Grant global write privileges on StarRocks tables
 
    ```SQL
    -- Create a role.
@@ -40,7 +38,7 @@ We recommend you customize roles to manage privileges and users. The following e
    GRANT REFRESH ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE write_only;
    ```
 
-### Grant read-only privileges on a specific external catalog
+#### Grant read-only privileges on a specific external catalog
 
    ```SQL
    -- Create a role.
@@ -56,7 +54,7 @@ We recommend you customize roles to manage privileges and users. The following e
 
    Note: You can query only Hive table views (since v3.1).
 
-### Grant write-only privileges on a specific external catalog
+#### Grant write-only privileges on a specific external catalog
 
 You can only write data into Iceberg tables (since v3.1) and Hive tables (since v3.2).
 
@@ -71,7 +69,7 @@ You can only write data into Iceberg tables (since v3.1) and Hive tables (since 
    GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
    ```
 
-### Grant privileges to perform backup and restore operations on global, database, table, and partition levels
+#### Grant privileges to perform backup and restore operations on global, database, table, and partition levels
 
 - Grant privileges to perform global backup and restore operations:
 

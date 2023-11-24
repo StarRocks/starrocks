@@ -250,6 +250,8 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 
 ## Best practices
 
+### Customize roles based on scenarios
+
 <userPrivilegeCase />
 
 For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).

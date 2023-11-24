@@ -253,7 +253,7 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
 
-## 最佳实践
+## 最佳实践 - 基于使用场景创建自定义角色
 
 <userPrivilegeCase />
 

@@ -417,4 +417,6 @@ GRANT public_sales TO ROLE linea_query;
 GRANT public_sales TO ROLE lineb_query;
 ```
 
+### Customize roles based on scenarios
+
 <userPrivilegeCase />
