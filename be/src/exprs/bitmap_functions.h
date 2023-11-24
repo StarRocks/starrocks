@@ -161,6 +161,37 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(bitmap_to_base64);
+<<<<<<< HEAD
+=======
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_subset_in_range);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(bitmap_subset_limit);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_BITMAP]
+     * @return TYPE_VARCHAR
+     */
+    DEFINE_VECTORIZED_FN(bitmap_to_binary);
+
+    /**
+     * @param
+     * @paramType columns: [TYPE_VARCHAR]
+     * @return TYPE_BITMAP
+     */
+    DEFINE_VECTORIZED_FN(bitmap_from_binary);
+>>>>>>> eb4f6912b2 ([Feature] Add function bitmap_from_binary and bitmap_to_binary (#35621))
 };
 
 } // namespace starrocks
