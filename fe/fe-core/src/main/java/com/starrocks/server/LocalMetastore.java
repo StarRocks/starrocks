@@ -3433,6 +3433,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 setLakeStorageInfo(materializedView, storageVolumeId, properties);
             }
 
+            // datacache.partition_duration
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+                PeriodDuration duration = PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                materializedView.setDataCachePartitionDuration(duration);
+            }
+
             // session properties
             if (!properties.isEmpty()) {
                 // analyze properties
