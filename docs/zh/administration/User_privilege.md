@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # 管理用户权限
 
+import UserPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+
 本文描述如何在 StarRocks 中管理用户、角色和权限。
 
 StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的访问控制 (IBAC) 以管理集群内的权限，使集群管理员可以轻松地在不同粒度级别上限制集群内的权限。
@@ -417,6 +419,7 @@ GRANT public_sales TO ROLE lineb_query;
 
 ### 基于使用场景创建自定义角色
 
+<<<<<<< HEAD
 建议您通过自定义角色管理权限和用户。以下梳理了一些常见场景所需的权限项。
 
 1. StarRocks 内表全局查询权限
@@ -536,3 +539,6 @@ GRANT public_sales TO ROLE lineb_query;
      -- 赋予角色对对应表进行导入的权限。
      GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
+=======
+<UserPrivilegeCase />
+>>>>>>> fd2d3bb882 ([Doc] update grant syntax (#35719))
