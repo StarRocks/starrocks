@@ -58,6 +58,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+            .add(CreateRoutineLoadStmt.FAILURE_PAUSE_INTERVAL_SECOND)
             .build();
 
     private LabelName labelName;

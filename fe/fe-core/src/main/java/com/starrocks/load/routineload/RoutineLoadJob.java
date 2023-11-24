@@ -465,10 +465,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return taskTimeoutSecond;
     }
 
-    public long getFailurePauseIntervalSecond() {
-        return failurePauseIntervalSecond;
-    }
-
     public boolean isTrimspace() {
         return trimspace;
     }
