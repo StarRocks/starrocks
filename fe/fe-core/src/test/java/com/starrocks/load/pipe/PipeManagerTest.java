@@ -836,6 +836,22 @@ public class PipeManagerTest {
                     "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
             dropPipe(pipeName);
         }
+
+        // specify target columns
+        {
+            createPipe("create pipe p_insert_sql properties('batch_size'='10GB') " +
+                    " as insert into tbl1 (col_int) select col_int from files('path'='fake://pipe', 'format'='parquet')");
+            Pipe pipe = getPipe(pipeName);
+            FilePipePiece piece = new FilePipePiece();
+            piece.addFile(new PipeFileRecord(pipe.getId(), "a.parquet", "v1", 1));
+            piece.addFile(new PipeFileRecord(pipe.getId(), "b.parquet", "v1", 1));
+            String sql = FilePipeSource.buildInsertSql(pipe, piece, "insert_label");
+            Assert.assertEquals("INSERT INTO `tbl1` " +
+                    "WITH LABEL `insert_label` " +
+                    "(`col_int`) SELECT `col_int`\n" +
+                    "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+            dropPipe(pipeName);
+        }
     }
 
     @Test
