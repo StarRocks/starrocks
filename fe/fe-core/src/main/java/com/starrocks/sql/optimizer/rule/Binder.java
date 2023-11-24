@@ -235,15 +235,11 @@ public class Binder {
 
         private boolean hasRewrittenMvScan(Group g) {
             for (GroupExpression ge : g.getLogicalExpressions()) {
-                if ((isScanOp(ge.getOp().getOpType()))) {
+                if ((ge.getOp().getOpType() == OperatorType.LOGICAL_OLAP_SCAN)) {
                     return true;
                 }
             }
             return false;
-        }
-
-        private boolean isScanOp(OperatorType operatorType) {
-            return Pattern.ALL_SCAN_TYPES.contains(operatorType);
         }
 
         private boolean isMultiJoinGE(GroupExpression ge) {
