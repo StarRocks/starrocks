@@ -160,6 +160,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
+            .add(FAILURE_PAUSE_INTERVAL_SECOND)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()

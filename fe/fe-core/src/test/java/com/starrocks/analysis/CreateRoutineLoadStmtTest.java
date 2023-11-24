@@ -45,6 +45,7 @@ import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.CreateRoutineLoadAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
@@ -616,5 +617,55 @@ public class CreateRoutineLoadStmtTest {
         customProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");
         customProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, "127.0.0.1:8080");
         return customProperties;
+    }
+
+    @Test
+    public void testFailurePauseIntervalSecond() {
+        {
+            String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                    + " PROPERTIES("
+                    + "\"failure_pause_interval_second\" = \"3600\""
+                    + ")\n"
+                    + "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            Assert.assertEquals(3600, createRoutineLoadStmt.getFailurePauseIntervalSecond());
+        }
+        {
+            String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                    + " PROPERTIES("
+                    + "\"desired_concurrent_number\"=\"3\""
+                    + ")\n"
+                    + "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            Assert.assertEquals(-1, createRoutineLoadStmt.getFailurePauseIntervalSecond());
+        }
+        {
+            String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                    + " PROPERTIES("
+                    + "\"failure_pause_interval_second\" = \"NAN\""
+                    + ")\n"
+                    + "FROM KAFKA\n"
+                    + "(\n"
+                    + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                    + "\"kafka_topic\" = \"topictest\"\n"
+                    + ");";
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+            CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) stmts.get(0);
+            Assert.assertThrows(SemanticException.class, () -> {
+                CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+            });
+        }
     }
 }
