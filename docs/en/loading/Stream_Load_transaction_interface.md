@@ -485,6 +485,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## References
 
-For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Load data from a local file system or a streaming data source using HTTP PUT](../loading/StreamLoad.md).
+For information about the suitable application scenarios and supported data file formats of Stream Load and about how Stream Load works, see [Loading from a local file system via Stream Load](../loading/StreamLoad.md#loading-from-a-local-file-system-via-stream-load).
 
 For information about the syntax and parameters for creating Stream Load jobs, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).
