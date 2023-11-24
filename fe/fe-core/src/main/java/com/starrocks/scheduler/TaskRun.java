@@ -203,8 +203,8 @@ public class TaskRun implements Comparable<TaskRun> {
         if (StringUtils.isNotEmpty(taskRunContext.getPostRun())) {
             try {
                 processor.postTaskRun(taskRunContext);
-            } catch (Exception ignored) {
-                LOG.warn("Execute post taskRun failed {} ", status, ignored);
+            } catch (Exception e) {
+                LOG.warn("Execute post taskRun failed {} ", this, e);
             }
         }
         return true;

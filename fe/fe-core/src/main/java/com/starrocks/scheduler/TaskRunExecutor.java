@@ -54,7 +54,7 @@ public class TaskRunExecutor {
                     status.setState(Constants.TaskRunState.FAILED);
                 }
             } catch (Exception ex) {
-                LOG.warn("failed to execute TaskRun.", ex);
+                LOG.warn("failed to execute task-run: {}", taskRun, ex);
                 status.setState(Constants.TaskRunState.FAILED);
                 status.setErrorCode(-1);
                 status.setErrorMessage(ex.toString());

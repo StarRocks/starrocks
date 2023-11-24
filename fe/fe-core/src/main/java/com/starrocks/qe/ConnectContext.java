@@ -40,6 +40,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.HttpConnectContext;
@@ -840,12 +841,22 @@ public class ConnectContext {
 
 
     public StmtExecutor executeSql(String sql) throws Exception {
-        StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
-        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
-        setExecutor(executor);
-        setThreadLocalInfo();
-        executor.execute();
+        try {
+            setThreadLocalInfo();
+            StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
+            sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
+            StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+            setExecutor(executor);
+            executor.execute();
+        } catch (AnalysisException | SemanticException e) {
+            LOG.warn("execute sql got error: {}", sql, e);
+            getState().setStateType(QueryState.MysqlStateType.ERR);
+            getState().setError(e.getMessage());
+            getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            throw e;
+        } finally {
+            remove();
+        }
         return executor;
     }
 
