@@ -196,6 +196,13 @@ public:
         return {};
     }
 
+    // for type like hll and bitmap, right now only output NULL
+    template <class T>
+    Status do_visit(const ObjectColumn<T>& col) {
+        _add_element(vpack::ValueType::Null);
+        return {};
+    }
+
     template <class ColumnType>
     Status do_visit(const ColumnType& _) {
         return Status::NotSupported("not supported");
