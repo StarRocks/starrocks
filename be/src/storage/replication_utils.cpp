@@ -309,8 +309,8 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
     auto download_cb = [&remote_file_url, timeout_sec, &file_content](HttpClient* client) {
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
-        ASSIGN_OR_RETURN(file_content, client->download());
-        return Status::OK();
+        file_content.clear();
+        return client->execute(&file_content);
     };
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
     return file_content;

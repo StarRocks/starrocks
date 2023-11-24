@@ -133,6 +133,7 @@ message TxnLogPB {
     message OpReplication {
         repeated OpWrite op_writes = 1;
         optional ReplicationTxnMetaPB txn_meta = 2;
+        optional DelvecMetadataPB delvec_meta = 3;
     }
 
     optional int64 tablet_id = 1;

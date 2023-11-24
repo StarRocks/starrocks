@@ -135,6 +135,8 @@ public:
     // for determining whether the rowset is in column partial update is whether it contains the .upt files
     bool is_column_mode_partial_update() const { return _rowset_meta_pb->num_update_files() > 0; }
 
+    const RowsetTxnMetaPB& txn_meta() const { return _rowset_meta_pb->txn_meta(); }
+
     void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb->empty(); }

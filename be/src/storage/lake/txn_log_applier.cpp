@@ -85,6 +85,9 @@ public:
         if (log.has_op_alter_metadata()) {
             RETURN_IF_ERROR(apply_alter_meta_log(log.op_alter_metadata()));
         }
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
+        }
         return Status::OK();
     }
 
@@ -186,6 +189,47 @@ private:
                 }
             }
         }
+        return Status::OK();
+    }
+
+    Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
+        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+            LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
+                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
+            return Status::Corruption("Invalid txn meta state: " +
+                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
+        }
+        if (op_replication.txn_meta().snapshot_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
+                         << ", new version: " << _new_version;
+            return Status::Corruption("mismatched snapshot version and new version");
+        }
+
+        if (op_replication.txn_meta().incremental_snapshot()) {
+            CHECK(_new_version - _base_version == op_replication.op_writes_size());
+
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
+            }
+        } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            auto old_delvec_metadata = std::move(*_metadata->mutable_delvec_meta());
+            _metadata->clear_rowsets();
+            _metadata->clear_delvec_meta();
+
+            _base_version = 1;
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
+            }
+
+            _metadata->mutable_delvec_meta()->CopyFrom(op_replication.delvec_meta());
+            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+            for (auto& pair : *old_delvec_metadata.mutable_version_to_file()) {
+                _metadata->mutable_orphan_files()->Add(std::move(pair.second));
+            }
+        }
+
         return Status::OK();
     }
 
@@ -358,12 +402,21 @@ private:
             return Status::Corruption("mismatched snapshot version and new version");
         }
 
-        if (!op_replication.txn_meta().incremental_snapshot()) {
+        if (op_replication.txn_meta().incremental_snapshot()) {
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write));
+            }
+        } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->clear_rowsets();
+
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write));
+            }
+
+            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
         }
-        for (const auto& op_write : op_replication.op_writes()) {
-            RETURN_IF_ERROR(apply_write_log(op_write));
-        }
+
         return Status::OK();
     }
 
