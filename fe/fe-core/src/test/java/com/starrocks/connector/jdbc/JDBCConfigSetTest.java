@@ -44,11 +44,36 @@ public class JDBCConfigSetTest {
     @Test
     public void testSetJDBCCacheEnable() {
         try {
-            String stmt = "admin set frontend config(\"jdbc_meta_cache_enable\" = \"true\");";
-            AdminSetConfigStmt adminSetConfigStmt =
-                    (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
+            enableJDBCMetaCache();
             Assert.assertTrue(Config.jdbc_meta_cache_enable);
+            disEnableJDBCMetaCache();
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testJDBCCacheGetWithOutEnable() {
+        try {
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>();
+            int step1 = cache.get("testKey", k -> 20231111);
+            int step2 = cache.get("testKey", k -> 20231212);
+            Assert.assertNotEquals(step1, step2);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testJDBCCacheGetWithEnable() {
+        try {
+            enableJDBCMetaCache();
+            Assert.assertTrue(Config.jdbc_meta_cache_enable);
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>();
+            int step1 = cache.get("testKey", k -> 20231111);
+            int step2 = cache.get("testKey", k -> 20231212);
+            Assert.assertEquals(step1, step2);
+            disEnableJDBCMetaCache();
         } catch (Exception e) {
             Assert.fail();
         }
@@ -57,18 +82,39 @@ public class JDBCConfigSetTest {
     @Test
     public void testSetJDBCCacheExpireSec() {
         try {
-            JDBCAsyncCache<String, String> cache = new JDBCAsyncCache<>();
-            int changeBefore = cache.hashCode();
-            String stmt = "admin set frontend config(\"jdbc_meta_cache_expire_sec\" = \"6000\");";
-            AdminSetConfigStmt adminSetConfigStmt =
-                    (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
-            Assert.assertEquals(6000, Config.jdbc_meta_cache_expire_sec);
-            int changeAfter = cache.hashCode();
-            Assert.assertNotEquals(changeBefore, changeAfter);
+            enableJDBCMetaCache();
+            JDBCAsyncCache<String, Integer> cache = new JDBCAsyncCache<>();
+            int changeBefore = cache.get("testKey", k -> 20231111);
+            Assert.assertEquals(changeBefore, 20231111);
+            changeJDBCCacheExpireSec();
+            int changeAfter = cache.get("testKey", k -> 20231212);
+            Assert.assertEquals(changeAfter, 20231212);
+            disEnableJDBCMetaCache();
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    private static void enableJDBCMetaCache() throws Exception {
+        String stmt = "admin set frontend config(\"jdbc_meta_cache_enable\" = \"true\");";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
+    }
+
+    public static void disEnableJDBCMetaCache() throws Exception {
+        String stmt = "admin set frontend config(\"jdbc_meta_cache_enable\" = \"false\");";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+        DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
+    }
+
+    private static void changeJDBCCacheExpireSec() throws Exception {
+        String setStmt = "admin set frontend config(\"jdbc_meta_cache_expire_sec\" = \"6000\");";
+        AdminSetConfigStmt adminSetConfigStmt =
+                (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(setStmt, connectContext);
+        DDLStmtExecutor.execute(adminSetConfigStmt, connectContext);
+        Assert.assertEquals(6000, Config.jdbc_meta_cache_expire_sec);
     }
 
 }
