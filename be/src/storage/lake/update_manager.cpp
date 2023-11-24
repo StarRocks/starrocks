@@ -43,11 +43,16 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
     _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state_cache", mem_tracker);
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
-    _compaction_cache.set_mem_tracker(_compaction_state_mem_tracker.get());
 
     int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _index_cache.set_capacity(byte_limits * update_mem_percent);
+}
+
+UpdateManager::~UpdateManager() {
+    _index_cache.clear();
+    _update_state_cache.clear();
+    _compaction_cache.clear();
 }
 
 inline std::string cache_key(uint32_t tablet_id, int64_t txn_id) {
