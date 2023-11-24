@@ -598,6 +598,7 @@ void DataStreamRecvr::PipelineSenderQueue::check_leak_closure() {
         while (chunk_queue.size_approx() > 0) {
             if (chunk_queue.try_dequeue(item)) {
                 if (item.closure != nullptr) {
+                    DCHECK(false) << "leak closure detected";
                     LOG(WARNING) << "leak closure detected in fragment:" << print_id(_recvr->fragment_instance_id());
                 }
             }
@@ -608,6 +609,7 @@ void DataStreamRecvr::PipelineSenderQueue::check_leak_closure() {
         for (auto& [_, chunk_queue] : chunk_queues) {
             for (auto& item : chunk_queue) {
                 if (item.closure != nullptr) {
+                    DCHECK(false) << "leak closure detected";
                     LOG(WARNING) << "leak closure detected in fragment:" << print_id(_recvr->fragment_instance_id());
                 }
             }
