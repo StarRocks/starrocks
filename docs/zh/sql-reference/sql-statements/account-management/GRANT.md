@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # GRANT
 
+import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+
 ## 功能
 
 该语句用于将一个或多个权限授予给角色或用户，以及将角色授予给用户或其他角色。
@@ -28,7 +30,7 @@ displayed_sidebar: "Chinese"
 
 ```SQL
 GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -56,10 +58,12 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
+
+示例：`GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
 
 #### Internal catalog 相关
 
@@ -84,11 +88,14 @@ GRANT
 ```SQL
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
-    ON { {DATABASE <database_name> [, <database_name>,...]} | ALL DATABASES }
+    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-*注意：需要执行 SET CATALOG 之后才能使用。
+**注意**
+>
+> 1. 需要执行 SET CATALOG 之后才能使用。
+> 2. 对于 External Catalog 下的数据库，只有 Hive 和 Iceberg 数据库支持赋予 CREATE TABLE 权限。
 
 #### Table 相关
 
@@ -101,7 +108,10 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-*注意：需要执行 SET CATALOG 之后才能使用。table 还可以用 `<db_name>.<table_name>` 的方式来进行表示。
+> **注意**
+>
+> 1. 需要执行 SET CATALOG 之后才能使用。table 还可以用 `<db_name>.<table_name>` 的方式来进行表示。
+> 2. 所有 Internal Catalog 和 External Catalog 下的表，都支持赋予 SELECT 权限。Hive 和 Iceberg catalog 下的表，还支持赋予 INSERT 权限 (从 3.1 版本起，支持赋予 Iceberg 表的 INSERT 权限；从 3.2 版本起，支持赋予 Hive 表的 INSERT 权限)。
 
 ```SQL
 GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -118,7 +128,14 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
+<<<<<<< HEAD
 注意：需要执行 SET CATALOG 之后才能使用。view 还可以用 `<db_name>.<view_name>` 的方式来进行表示。
+=======
+> **注意**
+>
+> 1. 需要执行 SET CATALOG 之后才能使用。view 还可以用 `<db_name>.<view_name>` 的方式来进行表示。
+> 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 及以后）
+>>>>>>> fd2d3bb882 ([Doc] update grant syntax (#35719))
 
 ```SQL
 GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
@@ -146,7 +163,7 @@ GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USE
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name> [, < function_name >,...]
+    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
     TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
@@ -161,9 +178,21 @@ GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <
 #### User 相关
 
 ```SQL
-GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ]
+GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity_1> [ WITH GRANT OPTION ]
 ```
 
+<<<<<<< HEAD
+=======
+#### Storage volume 相关
+
+```SQL
+GRANT
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
+```
+
+>>>>>>> fd2d3bb882 ([Doc] update grant syntax (#35719))
 ### 授予角色给用户或者其他角色
 
 ```SQL
@@ -233,8 +262,9 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
 
-## 最佳实践 - 常见场景所需的权限项
+## 最佳实践 - 基于使用场景创建自定义角色
 
+<<<<<<< HEAD
 ### StarRocks 内表全局查询权限
 
    ```SQL
@@ -351,5 +381,8 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
      -- 赋予角色对对应表进行导入的权限。
      GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
+=======
+<UserPrivilegeCase />
+>>>>>>> fd2d3bb882 ([Doc] update grant syntax (#35719))
 
 有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/User_privilege.md#多业务线权限管理)。
