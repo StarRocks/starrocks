@@ -956,7 +956,10 @@ public class OlapScanNode extends ScanNode {
 
     // export some tablets
     public static OlapScanNode createOlapScanNodeByLocation(
-            PlanNodeId id, TupleDescriptor desc, String planNodeName, List<TScanRangeLocations> locationsList) {
+            PlanNodeId id, TupleDescriptor desc,
+            String planNodeName,
+            List<TScanRangeLocations> locationsList,
+            long warehouseId) {
         OlapScanNode olapScanNode = new OlapScanNode(id, desc, planNodeName);
         olapScanNode.numInstances = 1;
         olapScanNode.selectedIndexId = olapScanNode.olapTable.getBaseIndexId();
@@ -965,6 +968,7 @@ public class OlapScanNode extends ScanNode {
         olapScanNode.totalTabletsNum = 1;
         olapScanNode.isPreAggregation = false;
         olapScanNode.isFinalized = true;
+        olapScanNode.warehouseId = warehouseId;
         olapScanNode.result.addAll(locationsList);
 
         return olapScanNode;

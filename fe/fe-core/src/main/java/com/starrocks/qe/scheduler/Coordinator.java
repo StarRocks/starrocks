@@ -72,7 +72,8 @@ public abstract class Coordinator {
                                                 List<PlanFragment> fragments,
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
-                                                long execMemLimit);
+                                                long execMemLimit,
+                                                long warehouseId);
     }
 
     // ------------------------------------------------------------------------------------

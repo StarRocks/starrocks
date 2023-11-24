@@ -60,6 +60,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -129,7 +130,7 @@ public class ExportMgr {
     }
 
     private ExportJob createJob(long jobId, UUID queryId, ExportStmt stmt) throws Exception {
-        ExportJob job = new ExportJob(jobId, queryId);
+        ExportJob job = new ExportJob(jobId, queryId, ConnectContext.get().getCurrentWarehouseId());
         job.setJob(stmt);
         return job;
     }
@@ -299,6 +300,15 @@ public class ExportMgr {
                     jobInfo.add("type:" + failMsg.getCancelType() + "; msg:" + failMsg.getMsg());
                 } else {
                     jobInfo.add(FeConstants.NULL_STRING);
+                }
+
+                // warehouse
+                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                        getWarehouse(job.getWarehouseId());
+                if (warehouse != null) {
+                    jobInfo.add(warehouse.getName());
+                } else {
+                    jobInfo.add("");
                 }
 
                 exportJobInfos.add(jobInfo);

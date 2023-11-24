@@ -48,7 +48,7 @@ public class ExportProcNode implements ProcNodeInterface {
             .add("JobId").add("QueryId").add("State").add("Progress")
             .add("TaskInfo").add("Path")
             .add("CreateTime").add("StartTime").add("FinishTime")
-            .add("Timeout").add("ErrorMsg")
+            .add("Timeout").add("ErrorMsg").add("Warehouse")
             .build();
 
     private static final int LIMIT = 2000;

@@ -209,6 +209,7 @@ public class JobSpec {
                     .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
+                    .warehouseId(context.getCurrentWarehouseId())
                     .commonProperties(context)
                     .build();
         }
