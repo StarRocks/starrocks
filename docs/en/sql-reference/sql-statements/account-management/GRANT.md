@@ -253,6 +253,7 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ### Customize roles based on scenarios
 
 import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+
 <userPrivilegeCase />
 
 For the best practices of multi-service access control, see [Multi-service access control](../../../administration/User_privilege.md#multi-service-access-control).
