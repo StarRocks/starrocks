@@ -55,7 +55,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
                           long pauseIntervalS) {
         super(UUID.randomUUID(), pulsarTaskInfo.getJobId(), pulsarTaskInfo.getTaskScheduleIntervalMs(),
                 timeToExecuteMs, pulsarTaskInfo.getBeId(), pauseIntervalS);
-        super.setLastSuccessTime(pulsarTaskInfo.getLastSuccessTime());
         this.partitions = pulsarTaskInfo.getPartitions();
         this.initialPositions.putAll(initialPositions);
     }

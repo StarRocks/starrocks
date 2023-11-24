@@ -541,4 +541,40 @@ public class RoutineLoadJobTest {
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
     }
+
+    @Test
+    public void testAfterAbortedExceptionPaused(@Mocked GlobalStateMgr globalStateMgr,
+                                                @Injectable TransactionState transactionState,
+                                                @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+        routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        long txnId = 1L;
+
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                times = 1;
+                result = txnId;
+                routineLoadTaskInfo.getTxnId();
+                times = 1;
+                result = txnId;
+                routineLoadTaskInfo.afterAborted(withAny(new TransactionState()), anyBoolean, anyString);
+                times = 1;
+                result = new UserException("some exception");
+            }
+        };
+
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        String txnStatusChangeReasonString = TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+
+        Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+    }
 }

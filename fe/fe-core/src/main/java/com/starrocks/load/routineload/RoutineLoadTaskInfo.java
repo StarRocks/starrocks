@@ -169,13 +169,6 @@ public abstract class RoutineLoadTaskInfo {
         this.lastScheduledTime = lastScheduledTime;
     }
 
-    public LocalDateTime getLastSuccessTime() {
-        return lastSuccessTime;
-    }
-    public void setLastSuccessTime(LocalDateTime successTime) {
-        this.lastSuccessTime = successTime;
-    }
-
     public long getTaskScheduleIntervalMs() {
         return taskScheduleIntervalMs;
     }
