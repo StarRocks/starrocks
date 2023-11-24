@@ -204,12 +204,6 @@ public class TabletStatMgrTest {
 
         new Expectations() {
             {
-<<<<<<< HEAD
-                systemInfoService.getBackend(anyLong);
-                result = new Backend(1000L, "", 123);
-
-=======
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
                 lakeService.getTabletStats((TabletStatRequest) any);
                 minTimes = 1;
                 maxTimes = 1;

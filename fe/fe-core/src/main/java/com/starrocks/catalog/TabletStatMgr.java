@@ -51,11 +51,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
-<<<<<<< HEAD
-import com.starrocks.system.SystemInfoService;
-=======
 import com.starrocks.system.ComputeNode;
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTabletStat;
@@ -207,45 +203,18 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
 
-<<<<<<< HEAD
-            List<OlapTable> tables = Lists.newArrayList();
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        tables.add((OlapTable) table);
-                    }
-                }
-            } finally {
-                db.readUnlock();
-            }
-
-            for (OlapTable table : tables) {
-                updateLakeTableTabletStat(db, table);
-=======
             List<Table> tables = db.getTables();
             for (Table table : tables) {
                 if (table.isCloudNativeTableOrMaterializedView()) {
                     updateLakeTableTabletStat(db, (OlapTable) table);
                 }
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
             }
         }
     }
 
-<<<<<<< HEAD
-    @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
-    private void updateLakeTableTabletStat(Database db, OlapTable table) {
-        // prepare tablet infos
-        Map<Long, List<TabletInfo>> beToTabletInfos = Maps.newHashMap();
-        Map<Long, Long> partitionToVersion = Maps.newHashMap();
-        db.readLock();
-=======
     @NotNull
     private Collection<PhysicalPartition> getPartitions(@NotNull Database db, @NotNull OlapTable table) {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
+        db.readLock();
         try {
             return table.getPhysicalPartitions();
         } finally {
@@ -260,15 +229,14 @@ public class TabletStatMgr extends FrontendDaemon {
         String dbName = db.getFullName();
         String tableName = table.getName();
         long partitionId = partition.getId();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        db.readLock();
         try {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
             List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
             return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            db.readUnlock();
         }
     }
 
@@ -314,18 +282,6 @@ public class TabletStatMgr extends FrontendDaemon {
             this.tablets = Objects.requireNonNull(tablets);
         }
 
-<<<<<<< HEAD
-        // get tablet stats from be
-        List<Future<TabletStatResponse>> responseList = Lists.newArrayListWithCapacity(beToTabletInfos.size());
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        Map<Long, TabletStat> idToStat = Maps.newHashMap();
-        long start = System.currentTimeMillis();
-        try {
-            for (Map.Entry<Long, List<TabletInfo>> entry : beToTabletInfos.entrySet()) {
-                Backend backend = systemInfoService.getBackend(entry.getKey());
-                if (backend == null) {
-                    continue;
-=======
         private String debugName() {
             return String.format("%s.%s.%d version %d", dbName, tableName, partitionId, visibleVersion);
         }
@@ -367,7 +323,6 @@ public class TabletStatMgr extends FrontendDaemon {
                 if (node == null) {
                     LOG.warn("Stop sending tablet stat task for partition {} because no alive node", debugName());
                     return;
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
                 }
                 TabletInfo tabletInfo = new TabletInfo();
                 tabletInfo.tabletId = tablet.getId();
@@ -381,12 +336,6 @@ public class TabletStatMgr extends FrontendDaemon {
                 ComputeNode node = entry.getKey();
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
-<<<<<<< HEAD
-
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
-                responseList.add(responseFuture);
-=======
                 request.timeoutMs = LakeService.TIMEOUT_GET_TABLET_STATS;
                 try {
                     LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -398,48 +347,11 @@ public class TabletStatMgr extends FrontendDaemon {
                     LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(), debugName(),
                             e.getMessage());
                 }
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
             }
         }
 
         private void waitResponse() {
             for (Future<TabletStatResponse> responseFuture : responseList) {
-<<<<<<< HEAD
-                TabletStatResponse response = responseFuture.get();
-                if (response != null && response.tabletStats != null) {
-                    for (TabletStat tabletStat : response.tabletStats) {
-                        idToStat.put(tabletStat.tabletId, tabletStat);
-                    }
-                }
-            }
-        } catch (Throwable e) {
-            LOG.warn("failed to get lake tablet stats. table id: {}", table.getId(), e);
-            return;
-        }
-        LOG.info("finished to get lake tablet stats. db id: {}, table id: {}, cost: {} ms", db.getId(), table.getId(),
-                (System.currentTimeMillis() - start));
-
-        if (idToStat.isEmpty()) {
-            return;
-        }
-
-        // update tablet stats
-        db.writeLock();
-        try {
-            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-                long partitionId = partition.getId();
-                if (!partitionToVersion.containsKey(partitionId)) {
-                    continue;
-                }
-
-                boolean allTabletsUpdated = true;
-                for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    for (Tablet tablet : index.getTablets()) {
-                        TabletStat stat = idToStat.get(tablet.getId());
-                        if (stat == null) {
-                            allTabletsUpdated = false;
-                            continue;
-=======
                 try {
                     TabletStatResponse response = responseFuture.get();
                     if (response != null && response.tabletStats != null) {
@@ -448,7 +360,6 @@ public class TabletStatMgr extends FrontendDaemon {
                             tablet.setDataSize(stat.dataSize);
                             tablet.setRowCount(stat.numRows);
                             tablet.setDataSizeUpdateTime(collectStatTime);
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
                         }
                     }
                 } catch (InterruptedException e) {
@@ -457,11 +368,6 @@ public class TabletStatMgr extends FrontendDaemon {
                     LOG.warn("Fail to collect tablet stat for partition {}: {}", debugName(), e.getMessage());
                 }
             }
-<<<<<<< HEAD
-        } finally {
-            db.writeUnlock();
-=======
->>>>>>> 8c2e4dde96 ([Enhancement] Reduce database lock holding time in TabletStatMgr (#35593))
         }
     }
 }
