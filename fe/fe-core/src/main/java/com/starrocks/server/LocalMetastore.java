@@ -4737,10 +4737,12 @@ public class LocalMetastore implements ConnectorMetadata {
         Set<Tablet> oldTablets = Sets.newHashSet();
         for (Partition newPartition : newPartitions) {
             Partition oldPartition = olapTable.replacePartition(newPartition);
-            // save old tablets to be removed
-            for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                // let HashSet do the deduplicate work
-                oldTablets.addAll(index.getTablets());
+            for (PhysicalPartition physicalPartition : oldPartition.getSubPartitions()) {
+                // save old tablets to be removed
+                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    // let HashSet do the deduplicate work
+                    oldTablets.addAll(index.getTablets());
+                }
             }
         }
 
@@ -4777,19 +4779,21 @@ public class LocalMetastore implements ConnectorMetadata {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
                             partitionId).getStorageMedium();
-                    for (MaterializedIndex mIndex : partition.getMaterializedIndices(
-                            MaterializedIndex.IndexExtState.ALL)) {
-                        long indexId = mIndex.getId();
-                        int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
-                        TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
-                                partitionId, indexId, schemaHash, medium,
-                                olapTable.isCloudNativeTableOrMaterializedView());
-                        for (Tablet tablet : mIndex.getTablets()) {
-                            long tabletId = tablet.getId();
-                            invertedIndex.addTablet(tabletId, tabletMeta);
-                            if (olapTable.isOlapTable()) {
-                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                    invertedIndex.addReplica(tabletId, replica);
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex mIndex : physicalPartition.getMaterializedIndices(
+                                MaterializedIndex.IndexExtState.ALL)) {
+                            long indexId = mIndex.getId();
+                            int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
+                            TabletMeta tabletMeta = new TabletMeta(db.getId(), olapTable.getId(),
+                                    physicalPartition.getId(), indexId, schemaHash, medium,
+                                    olapTable.isCloudNativeTableOrMaterializedView());
+                            for (Tablet tablet : mIndex.getTablets()) {
+                                long tabletId = tablet.getId();
+                                invertedIndex.addTablet(tabletId, tabletMeta);
+                                if (olapTable.isOlapTable()) {
+                                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                        invertedIndex.addReplica(tabletId, replica);
+                                    }
                                 }
                             }
                         }

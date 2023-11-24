@@ -1854,7 +1854,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 0;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
@@ -2334,6 +2334,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
+    public static int lake_publish_version_max_threads = 128;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2624,6 +2627,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    // This limit limits the maximum size of json file to load.
+    @ConfField(mutable = true)
+    public static long json_file_size_limit = 4294967296L;
 
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
