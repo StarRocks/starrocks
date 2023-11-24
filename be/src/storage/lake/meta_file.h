@@ -55,6 +55,9 @@ public:
     // collect files that need to removed
     std::shared_ptr<std::vector<std::string>> trash_files() { return _trash_files; }
 
+    // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
+    Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
