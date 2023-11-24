@@ -415,7 +415,8 @@ GRANT public_sales TO ROLE linea_query;
 GRANT public_sales TO ROLE lineb_query;
 ```
 
+import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+
 ### 基于使用场景创建自定义角色
 
-import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
 <userPrivilegeCase />

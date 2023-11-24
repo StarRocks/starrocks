@@ -253,9 +253,10 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
 
+import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+
 ## 最佳实践 - 基于使用场景创建自定义角色
 
-import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 <userPrivilegeCase />
 
 有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/User_privilege.md#多业务线权限管理)。
