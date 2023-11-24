@@ -264,7 +264,7 @@ public class StatementPlanner {
     }
 
     // Lock all database before analyze
-    private static void lock(Locker locker, Map<String, Database> dbs) {
+    public static void lock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
@@ -276,7 +276,7 @@ public class StatementPlanner {
     }
 
     // unLock all database after analyze
-    private static void unLock(Locker locker, Map<String, Database> dbs) {
+    public static void unLock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
