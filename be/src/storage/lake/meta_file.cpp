@@ -42,7 +42,7 @@ MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> 
     _trash_files = std::make_shared<std::vector<std::string>>();
 }
 
-void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
+void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
         const uint64_t offset = _buf.size();
         std::string delvec_str;
@@ -53,6 +53,12 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
         _delvecs[segment_id].set_size(size);
         _segmentid_to_delvec[segment_id] = delvec;
     }
+}
+
+void MetaFileBuilder::clear_delvecs() {
+    _buf.clear();
+    _delvecs.clear();
+    _segmentid_to_delvec.clear();
 }
 
 void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,

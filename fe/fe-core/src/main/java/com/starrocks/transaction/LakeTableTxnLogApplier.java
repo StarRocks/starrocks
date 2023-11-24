@@ -39,9 +39,8 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            Partition partition = table.getPartition(partitionId);
             if (partition == null) {
-                LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
                 continue;
             }
 

@@ -1395,20 +1395,6 @@ struct TGetProfileResponse {
     2: optional list<string> query_result
 }
 
-<<<<<<< HEAD
-=======
-struct TGetDictQueryParamRequest {
-    1: optional string db_name
-    2: optional string table_name
-}
-
-struct TGetDictQueryParamResponse {
-  1: required Descriptors.TOlapTableSchemaParam schema
-  2: required Descriptors.TOlapTablePartitionParam partition
-  3: required Descriptors.TOlapTableLocationParam location
-  4: required Descriptors.TNodesInfo nodes_info
-}
-
 struct TReplicaReplicationInfo {
     1: optional Types.TBackend src_backend
 }
@@ -1446,7 +1432,6 @@ struct TTableReplicationResponse {
     1: optional Status.TStatus status
 }
 
->>>>>>> 09ff1b6857 ([Feature] Support table replication from another cluster)
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1530,4 +1515,3 @@ service FrontendService {
 
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 }
-
