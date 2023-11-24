@@ -248,11 +248,11 @@ Status OrderedPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t si
                     end = _find_first_not_equal(column.get(), 0, 0, end);
                 }
                 // First part: [0, end)
-                // Second part: [end, chunk->num_rows())
                 ChunkPtr first_part = chunk->clone_empty();
                 first_part->append(*chunk, 0, end);
-                _source->get_sources()[_previous_channel_id]->add_chunk(chunk);
+                _source->get_sources()[_previous_channel_id]->add_chunk(first_part);
 
+                // Second part: [end, chunk->num_rows())
                 ChunkPtr second_part = chunk->clone_empty();
                 second_part->append(*chunk, end, chunk->num_rows() - end);
                 output_chunk = std::move(second_part);
