@@ -364,6 +364,14 @@ vectorized_functions = [
     [50221, 'current_date', 'DATE', [], 'TimeFunctions::curdate'],
     [50230, 'from_days', 'DATE', ['INT'], 'TimeFunctions::from_days'],
     [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
+<<<<<<< HEAD:gensrc/script/vectorized/vectorized_functions.py
+=======
+    [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+    [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+
+    # From string to DATE/DATETIME
+    # the function will call by FE getStrToDateFunction, and is invisible to user
+>>>>>>> eb4f6912b2 ([Feature] Add function bitmap_from_binary and bitmap_to_binary (#35621)):gensrc/script/functions.py
     [50240, 'str_to_date', 'DATETIME', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str_to_date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format',
      'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
@@ -371,6 +379,21 @@ vectorized_functions = [
      'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
     # cast string to date, the function will call by FE getStrToDateFunction, and is invisible to user
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
+<<<<<<< HEAD:gensrc/script/vectorized/vectorized_functions.py
+=======
+
+    # Joda Time parse & format
+    [50244, 'str_to_jodatime', 'DATETIME', ['VARCHAR', 'VARCHAR'],
+            'TimeFunctions::parse_jodatime',
+            'TimeFunctions::parse_joda_prepare',
+            'TimeFunctions::parse_joda_close'],
+
+    [50260, 'jodatime_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::jodadatetime_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
+    [50261, 'jodatime_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::jodadate_format', 'TimeFunctions::jodatime_format_prepare', 'TimeFunctions::jodatime_format_close'],
+
+    [50262, 'to_iso8601', 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
+    [50263, 'to_iso8601', 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
+>>>>>>> eb4f6912b2 ([Feature] Add function bitmap_from_binary and bitmap_to_binary (#35621)):gensrc/script/functions.py
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
@@ -524,6 +547,13 @@ vectorized_functions = [
     [90801, 'bitmap_to_base64', 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64', False],
     [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
     [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
+<<<<<<< HEAD:gensrc/script/vectorized/vectorized_functions.py
+=======
+    [91001, 'bitmap_subset_limit', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_limit', False],
+    [91002, 'bitmap_subset_in_range', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::bitmap_subset_in_range', False],
+    [91003, 'bitmap_to_binary', 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary', False],
+    [91004, 'bitmap_from_binary', 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary', False],
+>>>>>>> eb4f6912b2 ([Feature] Add function bitmap_from_binary and bitmap_to_binary (#35621)):gensrc/script/functions.py
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
