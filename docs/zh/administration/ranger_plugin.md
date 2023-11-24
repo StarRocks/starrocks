@@ -142,7 +142,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-7. 修改所有 FE 的配置文件，添加 `a`*`ccess_control=ranger`**。*
+7. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
    ```SQL
    vim fe.conf
