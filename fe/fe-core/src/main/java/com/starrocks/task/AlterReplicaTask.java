@@ -146,11 +146,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
             long rollupIndexId, long rollupTabletId, long baseTabletId,
             long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-            long jobId, RollupJobV2Params rollupJobV2Params) {
+            long jobId, RollupJobV2Params rollupJobV2Params, List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
-                Collections.emptyList(), rollupJobV2Params);
+                baseSchemaColumns, rollupJobV2Params);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
