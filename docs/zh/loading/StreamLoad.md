@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks 提供两种导入方式支持您从本地文件系统导入数据：
+StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
 - 使用 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) 进行同步导入。
 - 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
@@ -25,9 +25,9 @@ StarRocks 提供两种导入方式支持您从本地文件系统导入数据：
 
 Stream Load 和 Broker Load 均支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
-## 使用 HTTP PUT 从本地导入
+## 使用 Stream Load 从本地导入
 
-Stream Load 是一种同步的导入方式。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
+Stream Load 是一种基于 HTTP PUT 的同步导入方式。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。
 
 :::notice
 
@@ -125,9 +125,7 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 `example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 
-##### 查询数据
-
-导入完成后，查询 `table1` 表的数据，如下所示：
+导入完成后，您可以查询 `table1` 表，验证数据是否导入成功，如下所示：
 
 ```SQL
 SELECT * FROM table1;
@@ -219,9 +217,7 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#列映射)”章节。
 
-##### 查询数据
-
-导入完成后，查询 `table2` 表的数据，如下所示：
+导入完成后，您可以查询 `table2` 表，验证数据是否导入成功，如下所示：
 
 ```SQL
 SELECT * FROM table2;
@@ -288,7 +284,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 除 Stream Load 以外，您还可以通过 Broker Load 从本地导入数据。该功能自 v2.5 起支持。
 
-Broker Load 是一种异步的导入方式。提交导入作业以后，StarRocks 会异步地执行导入作业，不会直接返回作业结果，您需要手动查询作业结果：
+Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks 会异步地执行导入作业，不会直接返回作业结果，您需要手动查询作业结果：
 
 - 在 v3.0 及以前版本，您需要通过 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句或者 curl 命令来查看作业结果。
 - 在 v3.1 及以后版本，您可以通过 [`information_schema.loads`](../reference/information_schema/loads.md) 视图来查看作业结果。
