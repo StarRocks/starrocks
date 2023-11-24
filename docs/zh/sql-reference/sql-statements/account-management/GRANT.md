@@ -92,10 +92,7 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-**注意**
->
-> 1. 需要执行 SET CATALOG 之后才能使用。
-> 2. 对于 External Catalog 下的数据库，只有 Hive 和 Iceberg 数据库支持赋予 CREATE TABLE 权限。
+**注意**: 需要执行 SET CATALOG 之后才能使用。
 
 #### Table 相关
 
