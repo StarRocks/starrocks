@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # 管理用户权限
 
+import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+
 本文描述如何在 StarRocks 中管理用户、角色和权限。
 
 StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的访问控制 (IBAC) 以管理集群内的权限，使集群管理员可以轻松地在不同粒度级别上限制集群内的权限。
@@ -416,7 +418,5 @@ GRANT public_sales TO ROLE lineb_query;
 ```
 
 ### 基于使用场景创建自定义角色
-
-import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
 
 <userPrivilegeCase />

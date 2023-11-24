@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # GRANT
 
+import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+
 ## 功能
 
 该语句用于将一个或多个权限授予给角色或用户，以及将角色授予给用户或其他角色。
@@ -254,8 +256,6 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
 
 ## 最佳实践 - 基于使用场景创建自定义角色
-
-import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 
 <userPrivilegeCase />
 

@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # GRANT
 
+import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
+
 ## Description
 
 Grants one or more privileges on specific objects to a user or a role.
@@ -251,8 +253,6 @@ GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ## Best practices
 
 ### Customize roles based on scenarios
-
-import userPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 
 <userPrivilegeCase />
 

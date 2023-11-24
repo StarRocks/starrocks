@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Manage user privileges
 
+import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
+
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
 StarRocks employs both role-based access control (RBAC) and identity-based access control (IBAC) to manage privileges within a StarRocks cluster, allowing cluster administrators to easily restrict privileges within the cluster on different granular levels.
@@ -418,7 +420,5 @@ GRANT public_sales TO ROLE lineb_query;
 ```
 
 ### Customize roles based on scenarios
-
-import userPrivilegeCase from '../assets/commonMarkdown/userPrivilegeCase.md'
 
 <userPrivilegeCase />
