@@ -87,23 +87,29 @@ public class MvRewritePreprocessor {
         try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
             Set<Table> queryTables = MvUtils.getAllTables(optExpression).stream().collect(Collectors.toSet());
             logMVPrepare(connectContext, "Query input tables: {}", queryTables);
-
+            logMVPrepare(connectContext, "Materialized views params, " +
+                            "enable_experimental_mv:{}, enable_materialized_view_rewrite:{}," +
+                            "isRuleBased:{}",
+                    Config.enable_experimental_mv,
+                    connectContext.getSessionVariable().isEnableMaterializedViewRewrite(),
+                    context.getOptimizerConfig().isRuleBased());
             try {
                 Set<MaterializedView> relatedMVs =
                         getRelatedMVs(connectContext, queryTables, context.getOptimizerConfig().isRuleBased());
                 Set<Pair<MaterializedView, MvPlanContext>> validMVs = filterValidMVs(connectContext, relatedMVs);
                 prepareRelatedMVs(queryTables, validMVs);
             } catch (Exception e) {
-                // MV's prepare should not affect query's process, this may be caused by MV's concurrent process.
+                // TODO: MV's prepare should not affect query's process which maybe caused by MV's concurrent process.
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 LOG.warn("Prepare query tables {} for mv failed: {}", tableNames, e);
+                throw e;
             }
         }
     }
 
     private MaterializedView copyOnlyMaterializedView(MaterializedView mv) {
         // TODO: add read lock?
-        // Query will not lock dbs in the optimizer stage, so use a shadow copy of mv to avoid
+        // Query will not lock dbs in the optimizer stage, so use a shallow copy of mv to avoid
         // metadata race for different operations.
         // Ensure to re-optimize if the mv's version has changed after the optimization.
         MaterializedView copiedMV = new MaterializedView();
@@ -123,12 +129,6 @@ public class MvRewritePreprocessor {
             }
             return relatedMVs;
         } else {
-            if (!isRuleBased) {
-                logMVPrepare(connectContext, "Do not prepare materialized views, " +
-                                "enable_experimental_mv:{}, enable_materialized_view_rewrite:{}",
-                        Config.enable_experimental_mv,
-                        connectContext.getSessionVariable().isEnableMaterializedViewRewrite());
-            }
             return Sets.newHashSet();
         }
     }
@@ -381,13 +381,9 @@ public class MvRewritePreprocessor {
             refTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(refBaseTable, true);
         }
 
-        MaterializedView copiedMV = mv;
-        if (context.getQueryTables() != null) {
-            // If query tables are set which means use related mv for non lock optimization,
-            // copy mv's metadata into a ready-only object.
-            copiedMV = copyOnlyMaterializedView(mv);
-        }
-
+        // If query tables are set which means use related mv for non lock optimization,
+        // copy mv's metadata into a ready-only object.
+        MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
         MaterializationContext materializationContext =
                 new MaterializationContext(context, copiedMV, mvPlan, queryColumnRefFactory,
                         mvPlanContext.getRefFactory(), partitionNamesToRefresh,

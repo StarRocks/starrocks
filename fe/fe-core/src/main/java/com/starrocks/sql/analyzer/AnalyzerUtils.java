@@ -610,7 +610,10 @@ public class AnalyzerUtils {
                 return null;
             }
 
-            if (!node.getTable().isOlapTableOrMaterializedView()) {
+            int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
+            boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
+                    relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
+            if (!(node.getTable().isOlapTableOrMaterializedView() && useNonLockOptimization)) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;

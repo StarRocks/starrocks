@@ -347,7 +347,7 @@ public class OlapTable extends Table {
             olapTable.tableProperty = this.tableProperty.copy();
         }
 
-        // Shadow copy shared data to check whether the copied table has changed or not.
+        // Shallow copy shared data to check whether the copied table has changed or not.
         olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
         olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
         olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
