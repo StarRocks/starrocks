@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # HTTP SQL API
 
 ## 功能

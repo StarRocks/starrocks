@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "English"
+---
+
 # HTTP SQL API
 
 ## Description
