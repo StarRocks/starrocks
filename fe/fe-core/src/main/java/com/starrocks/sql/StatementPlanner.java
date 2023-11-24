@@ -22,7 +22,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.http.HttpConnectContext;
-import com.starrocks.planner.OlapScanNode;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -74,8 +75,9 @@ public class StatementPlanner {
         boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
+        Locker locker = new Locker();
         try {
-            lock(dbs);
+            lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -90,7 +92,7 @@ public class StatementPlanner {
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
             if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-                unLock(dbs);
+                unLock(locker, dbs);
                 needWholePhaseLock = false;
                 return planQuery(stmt, resultSinkType, session, true);
             }
@@ -106,7 +108,7 @@ public class StatementPlanner {
             }
         } finally {
             if (needWholePhaseLock) {
-                unLock(dbs);
+                unLock(locker, dbs);
             }
         }
 
@@ -178,25 +180,15 @@ public class StatementPlanner {
         boolean isSchemaValid = true;
 
         // Because we don't hold db lock outer, if the olap table schema change, we need to regenerate the query plan
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
+        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        // TODO: double check relatedMvs for OlapTable
+        // only collect once to save the original olapTable info
+        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = System.currentTimeMillis();
-
-            // TODO: double check relatedMvs for OlapTable
-            Set<OlapTable> olapTables = Sets.newHashSet();
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, queryStmt);
-            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-
-            try {
-                // Need lock to avoid olap table metas ConcurrentModificationException
-                lock(dbs);
-                AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
-
-                // Only need to re analyze and re transform when schema isn't valid
-                if (!isSchemaValid) {
-                    Analyzer.analyze(queryStmt, session);
-                }
-            } finally {
-                unLock(dbs);
+            if (!isSchemaValid) {
+                colNames = reAnalyzeStmt(queryStmt, dbs, session);
             }
 
             LogicalPlan logicalPlan;
@@ -229,15 +221,11 @@ public class StatementPlanner {
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-
-                // Check rewritten tables in case of there are some materialized views
-                List<OlapTable> hitTables = plan.getScanNodes().stream()
-                        .filter(scan -> scan instanceof OlapScanNode)
-                        .map(scan -> ((OlapScanNode) scan).getOlapTable())
-                        .collect(Collectors.toList());
-                isSchemaValid = hitTables.stream().noneMatch(t -> hasSchemaChange(t, planStartTime));
-                isSchemaValid = isSchemaValid && hitTables.stream().allMatch(
-                        t -> noVersionChange(t, buildFragmentStartTime));
+                isSchemaValid = olapTables.stream().noneMatch(t ->
+                        t.lastSchemaUpdateTime.get() > planStartTime);
+                isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
+                        t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
+                                t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
                     return plan;
                 }
@@ -248,34 +236,52 @@ public class StatementPlanner {
         return null;
     }
 
-    private static boolean hasSchemaChange(OlapTable table, long since) {
-        return table.lastSchemaUpdateTime.get() > since;
+    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+        Set<OlapTable> olapTables = Sets.newHashSet();
+        Locker locker = new Locker();
+        try {
+            // Need lock to avoid olap table metas ConcurrentModificationException
+            lock(locker, dbs);
+            AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
+            return olapTables;
+        } finally {
+            unLock(locker, dbs);
+        }
     }
 
-    private static boolean noVersionChange(OlapTable table, long since) {
-        return (table.lastVersionUpdateEndTime.get() < since &&
-                table.lastVersionUpdateEndTime.get() >= table.lastVersionUpdateStartTime.get());
+    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+        Locker locker = new Locker();
+        try {
+            lock(locker, dbs);
+            // analyze to obtain the latest table from metadata
+            Analyzer.analyze(queryStmt, session);
+            // only copy the latest olap table
+            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
+            return queryStmt.getQueryRelation().getColumnOutputNames();
+        } finally {
+            unLock(locker, dbs);
+        }
     }
 
     // Lock all database before analyze
-    private static void lock(Map<String, Database> dbs) {
+    private static void lock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         List<Database> dbList = new ArrayList<>(dbs.values());
         dbList.sort(Comparator.comparingLong(Database::getId));
         for (Database db : dbList) {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
         }
     }
 
     // unLock all database after analyze
-    private static void unLock(Map<String, Database> dbs) {
+    private static void unLock(Locker locker, Map<String, Database> dbs) {
         if (dbs == null) {
             return;
         }
         for (Database db : dbs.values()) {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

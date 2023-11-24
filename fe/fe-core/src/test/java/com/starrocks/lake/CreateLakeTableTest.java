@@ -32,6 +32,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -69,6 +70,15 @@ public class CreateLakeTableTest {
         String createDbStmtStr = "create database lake_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+
+        // partial mock RoutineLoadMgr, don't do the updateBeTaskSlot in shared-data mode testing
+        RoutineLoadMgr routineLoadMgr = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        new Expectations(routineLoadMgr) {
+            {
+                routineLoadMgr.updateBeTaskSlot();
+                minTimes = 0;
+            }
+        };
 
         new MockUp<RunMode>() {
             @Mock

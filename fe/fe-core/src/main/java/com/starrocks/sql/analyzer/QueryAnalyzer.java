@@ -47,6 +47,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.ranger.SecurityPolicyRewriteRule;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -298,7 +300,6 @@ public class QueryAnalyzer {
                     QueryStatement queryStatement = view.getQueryStatement();
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
-
                     r = viewRelation;
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
@@ -686,11 +687,11 @@ public class QueryAnalyzer {
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
             Scope queryOutputScope;
-            try {
+            if (node.getView().isAnalyzed()) {
+                queryOutputScope = node.getQueryStatement().getQueryRelation().getScope();
+            } else {
+                // TODO support hiveView cache
                 queryOutputScope = process(node.getQueryStatement(), scope);
-            } catch (SemanticException e) {
-                throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
-                        "function(s) or definer/invoker of view lack rights to use them");
             }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
@@ -923,8 +924,9 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
 
-            Database database = metadataMgr.getDb(catalogName, dbName);
-            MetaUtils.checkDbNullAndReport(database, dbName);
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            MetaUtils.checkDbNullAndReport(db, dbName);
+            Locker locker = new Locker();
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
@@ -936,14 +938,14 @@ public class QueryAnalyzer {
                     Preconditions.checkState(mvTable instanceof OlapTable);
                     try {
                         // Add read lock to avoid concurrent problems.
-                        database.readLock();
+                        locker.lockDatabase(db, LockType.READ);
                         OlapTable mvOlapTable = new OlapTable();
                         ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
                         // Copy the necessary olap table meta to avoid changing original meta;
                         mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
                         table = mvOlapTable;
                     } finally {
-                        database.readUnlock();
+                        locker.unLockDatabase(db, LockType.READ);
                     }
                 }
             } else {

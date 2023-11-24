@@ -814,6 +814,15 @@ public class Config extends ConfigBase {
     @ConfField
     public static int load_checker_interval_second = 5;
 
+    @ConfField(mutable = true)
+    public static long lock_checker_interval_second = 30;
+
+    /**
+     * Check of deadlock is time consuming. Open it only when tracking problems.
+     */
+    @ConfField(mutable = true)
+    public static boolean lock_checker_enable_deadlock_check = false;
+
     /**
      * Default broker load timeout
      */
@@ -1019,6 +1028,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int task_runs_concurrency = 4;
+
+    /**
+     * max num of thread to handle task runs in task runs executor thread-pool.
+     */
+    @ConfField
+    public static int max_task_runs_threads_num = 512;
+
     /**
      * Default timeout of export jobs.
      */
@@ -2047,12 +2063,6 @@ public class Config extends ConfigBase {
     public static long es_state_sync_interval_second = 10;
 
     /**
-     * If set to true, StarRocks will check if the compiled and running versions of Java are compatible
-     */
-    @ConfField
-    public static boolean check_java_version = true;
-
-    /**
      * connection and socket timeout for broker client
      */
     @ConfField
@@ -2613,10 +2623,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long json_file_size_limit = 4294967296L;
 
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static boolean use_lock_manager = false;
+
     /*
      * The routine load is set as paused after any task of this job has failed for more than the interval.
      */
     @ConfField(mutable = true)
     public static long routine_load_failure_pause_interval_second = 24L * 3600L;
-
 }

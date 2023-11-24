@@ -913,6 +913,9 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
+CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
+CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
+CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1040,6 +1043,8 @@ CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
 // enable use bloom filter for pindex or not
 CONF_mBool(enable_pindex_filter, "true");
+// enable persistent index compression
+CONF_mBool(enable_pindex_compression, "true");
 // use bloom filter in pindex can reduce disk io, but in the following scenarios, we should skip the bloom filter
 // 1. The records to be found are in the index, bloom filter is no usage
 // 2. The records to be found is very small but bloom filter is very large, read bloom filter may cost a lot of disk io

@@ -57,8 +57,11 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -111,9 +114,10 @@ public class OlapDeleteJob extends DeleteJob {
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        List<Predicate> conditions = stmt.getDeleteConditions();
+        List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
@@ -190,7 +194,7 @@ public class OlapDeleteJob extends DeleteJob {
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         LOG.info("countDownLatch count: {}", countDownLatch.getCount());
 
@@ -219,7 +223,7 @@ public class OlapDeleteJob extends DeleteJob {
             LOG.warn("InterruptedException: ", e);
         }
         LOG.info("delete job finish, countDownLatch count: {}", countDownLatch.getCount());
- 
+
         String errMsg = "";
         List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
         Status st = countDownLatch.getStatus();
@@ -257,7 +261,7 @@ public class OlapDeleteJob extends DeleteJob {
                     long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
                     // if job's state is quorum_finished then wait for a period of time and commit it.
                     while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs
-                          && countDownLatch.getCount() > 0) {
+                            && countDownLatch.getCount() > 0) {
                         checkAndUpdateQuorum();
                         Thread.sleep(1000);
                         nowQuorumTimeMs = System.currentTimeMillis();
