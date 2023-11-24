@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.Config;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
@@ -53,6 +54,7 @@ public class MvTaskRunContext extends TaskRunContext {
     private ExecPlan execPlan = null;
 
     private int partitionTTLNumber = TableProperty.INVALID;
+    private boolean partitionRefreshReverse = false;
 
     public MvTaskRunContext(TaskRunContext context) {
         this.ctx = context.ctx;
@@ -61,6 +63,7 @@ public class MvTaskRunContext extends TaskRunContext {
         this.properties = context.properties;
         this.type = context.type;
         this.status = context.status;
+        this.partitionRefreshReverse = Config.default_mv_partition_refresh_reverse;
     }
 
     public Map<String, Set<String>> getRefBaseTableMVIntersectedPartitions() {
@@ -159,5 +162,13 @@ public class MvTaskRunContext extends TaskRunContext {
     public void setRefBaseTablePartitionColumn(Column refBaseTablePartitionColumn) {
         Preconditions.checkNotNull(refBaseTablePartitionColumn);
         this.refBaseTablePartitionColumn = refBaseTablePartitionColumn;
+    }
+
+    public boolean isPartitionRefreshReverse() {
+        return partitionRefreshReverse;
+    }
+
+    public void setPartitionRefreshReverse(boolean partitionRefreshReverse) {
+        this.partitionRefreshReverse = partitionRefreshReverse;
     }
 }

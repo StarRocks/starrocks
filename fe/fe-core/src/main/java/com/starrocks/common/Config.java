@@ -2568,6 +2568,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long mv_active_checker_interval_seconds = 60;
 
+    // TODO: change the default value to true
+    @ConfField(mutable = true)
+    public static boolean default_mv_partition_refresh_reverse = false;
+
     /**
      * Whether analyze the mv after refresh in async mode.
      */
