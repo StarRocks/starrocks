@@ -1,0 +1,18 @@
+-- name: test_global_runtime_filter_exceed_limit
+create table t1 (
+    k1 int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 32
+properties("replication_num" = "1");
+
+insert into t1 select generate_series FROM TABLE(generate_series(1, 65535));
+insert into t1 select k1 + 65535 from t1;
+insert into t1 select k1 + 65535*2 from t1;
+insert into t1 select k1 + 65535*3 from t1;
+
+with tw1 as (
+    select t1.k1 from t1 join [broadcast] t1 t2 using(k1)
+)
+select /*+SET_VAR(global_runtime_filter_build_max_size=1,global_runtime_filter_probe_min_size=0)*/ 
+    count(1) from tw1 join [broadcast] t1 t3 using(k1);

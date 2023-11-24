@@ -230,9 +230,9 @@ private:
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
-    int _log_num_buckets;
+    int _log_num_buckets = 0;
     // directory_mask_ is (1 << log_num_buckets_) - 1
-    uint32_t _directory_mask;
+    uint32_t _directory_mask = 0;
     Bucket* _directory = nullptr;
 };
 
