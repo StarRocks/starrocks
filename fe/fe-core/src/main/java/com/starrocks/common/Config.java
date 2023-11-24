@@ -1854,7 +1854,7 @@ public class Config extends ConfigBase {
      * default bucket size of automatic bucket table
      */
     @ConfField(mutable = true)
-    public static long default_automatic_bucket_size = 4 * 1024 * 1024 * 1024L;
+    public static long default_automatic_bucket_size = 0;
 
     /**
      * Used to limit num of agent task for one be. currently only for drop task.
