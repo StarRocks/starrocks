@@ -609,7 +609,8 @@ public class AnalyzerUtils {
             if (!tables.isEmpty()) {
                 return null;
             }
-            if (!node.getTable().isNativeTableOrMaterializedView()) {
+
+            if (!node.getTable().isOlapTableOrMaterializedView()) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
