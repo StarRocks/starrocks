@@ -16,7 +16,7 @@ StarRocks provides two methods of loading data from a local file system:
 Each of these options has its own advantages:
 
 - Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
-- Broker Load supports Parquet, ORC, and CSV file formats. This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in your network attached storage (NAS) device. **This feature is supported from v2.5 onwards. Note that if you choose this method, you must [deploy a broker](../deployment/deploy_broker.md) on the machine on which your data files are located.**
+- Broker Load supports Parquet, ORC, and CSV file formats. This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **This feature is supported from v2.5 onwards. Note that if you choose this method, you must [deploy a broker](../deployment/deploy_broker.md) on the machine on which your data files are located.**
 
 For CSV data, take note of the following points:
 
@@ -29,11 +29,9 @@ Stream Load and Broker Load both support data transformation at data loading and
 
 Stream Load runs in synchronous loading mode based on HTTP PUT. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
-:::notice
-
-After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
-
-:::
+> **NOTICE**
+>
+> After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
 
 ### How it works
 
@@ -99,7 +97,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 :::
 
@@ -175,7 +173,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
 
 :::
 
@@ -194,7 +192,8 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 :::note
 
-You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
+- If you use an account for which no password is set, you need to input only `<username>:`.
+- You can use [SHOW FRONTENDS](../sql-reference/sql-statements/Administration/SHOW_FRONTENDS.md) to view the IP address and HTTP port of the FE node.
 
 :::
 
@@ -244,7 +243,7 @@ Stream Load does not allow you to cancel a load job. If a load job times out or 
 
 This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [BE configuration items](../administration/Configuration.md#be-configuration-items).
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [Configure BE dynamic parameters](../administration/Configuration.md#configure-be-dynamic-parameters).
   
   We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
@@ -260,7 +259,7 @@ This section describes some system parameters that you need to configure if you 
 
   :::
 
-- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [FE configuration items](../administration/Configuration.md#fe-configuration-items).
+- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [Configure FE dynamic parameters](../administration/Configuration.md#configure-fe-dynamic-parameters).
   
   If many of the load jobs that you create time out, you can increase the value of this parameter based on the calculation result that you obtain from the following formula:
 
@@ -286,10 +285,7 @@ For example, if the field that represents city ID in the preceding `example2.jso
 
 In addition to Stream Load, you can also use Broker Load to load data from a local file system. This feature is supported from v2.5 onwards.
 
-Broker Load is an asynchronous loading method. After you submit a load job, StarRocks asynchronously runs the job and does not immediately return the job result. You need to query the job result by hand:
-
-- In v3.0 and earlier, use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) statement or the curl command to query the job result.
-- In v3.1 and later, query the job result from the [`information_schema.loads`](../reference/information_schema/loads.md) view.
+Broker Load is an asynchronous loading method. After you submit a load job, StarRocks asynchronously runs the job and does not immediately return the job result. You need to query the job result by hand. See [Check Broker Load progress](#check-broker-load-progress).
 
 ### Limits
 
@@ -302,11 +298,9 @@ Before you can use Broker Load to load data from a local file system, finish the
 
 1. Configure the machine on which your local files are located as instructed in "[Deployment prerequisites](../deployment/deployment_prerequisites.md)", "[Check environment configurations](../deployment/environment_configurations.md)", and "[Prepare deployment files](../deployment/prepare_deployment_files.md). Then, deploy a broker on that machine. The operations are the same as you deploy brokers on BE nodes. For detailed operations, see [Deploy and manage Broker node](../deployment/deploy_broker.md).
 
-   :::notice
-
-   Deploy only a single broker and make sure that the broker version is v2.5 or later.
-
-   :::
+   > **NOTICE**
+   >
+   > Deploy only a single broker and make sure that the broker version is v2.5 or later.
 
 2. Execute [ALTER SYSTEM](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md#broker) to add the broker you have deployed in the previous step to your StarRocks cluster, and define a new name for the broker. The following example adds a broker `172.26.199.40:8000` to the StarRocks cluster and defines the broker name as `sole_broker`:
 
@@ -317,6 +311,8 @@ Before you can use Broker Load to load data from a local file system, finish the
 ### Typical example
 
 Broker Load supports loading from a single data file to a single table, loading from multiple data files to a single table, and loading from multiple data files to multiple tables. This section uses loading from multiple data files to a single table as an example.
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../sql-reference/sql-statements/keywords.md).
 
 #### Prepare datasets
 
