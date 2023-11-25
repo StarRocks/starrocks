@@ -846,6 +846,11 @@ under the License.
             <groupId>io.airlift</groupId>
             <artifactId>concurrent</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

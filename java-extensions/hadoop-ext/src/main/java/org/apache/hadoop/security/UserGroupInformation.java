@@ -28,6 +28,7 @@ import static org.apache.hadoop.security.UGIExceptionMessages.*;
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 import static org.apache.hadoop.util.StringUtils.getTrimmedStringCollection;
 
+import com.starrocks.connector.hadoop.CelerDataUGIManager;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.io.File;
@@ -386,7 +387,13 @@ public class UserGroupInformation {
    * @return true if UGI is working in a secure environment
    */
   public static boolean isSecurityEnabled() {
-    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+    //    return !isAuthenticationMethodEnabled(AuthenticationMethod.SIMPLE);
+    AuthenticationMethod method = authenticationMethod;
+    UserGroupInformation ugi = CelerDataUGIManager.getCurrentUser();
+    if (ugi != null) {
+      method = ugi.getAuthenticationMethod();
+    }
+    return !(method == AuthenticationMethod.SIMPLE);
   }
   
   @InterfaceAudience.Private
@@ -572,6 +579,10 @@ public class UserGroupInformation {
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation getCurrentUser() throws IOException {
+    UserGroupInformation ugi = CelerDataUGIManager.getCurrentUser();
+    if (ugi != null) {
+      return ugi;
+    }
     ensureInitialized();
     AccessControlContext context = AccessController.getContext();
     Subject subject = Subject.getSubject(context);
