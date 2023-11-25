@@ -26,6 +26,7 @@ import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TListPipeFilesParams;
 import com.starrocks.thrift.TListPipeFilesResult;
 import com.starrocks.thrift.TListPipesParams;
@@ -850,6 +852,7 @@ public class PipeManagerTest {
                     "WITH LABEL `insert_label` " +
                     "(`col_int`) SELECT `col_int`\n" +
                     "FROM FILES('format'='parquet','path'='a.parquet,b.parquet')", sql);
+            SqlParser.parse(sql, new SessionVariable());
             dropPipe(pipeName);
         }
     }
