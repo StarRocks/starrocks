@@ -64,9 +64,15 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
     private RoutineLoadProgress progress;
     private String errorLogUrl;
     private long loadedBytes;
+    private long timestampMs;
 
     public RLTaskTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK);
+    }
+
+    public RLTaskTxnCommitAttachment(TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment, long timestampMs) {
+        this(rlTaskTxnCommitAttachment);
+        this.timestampMs = timestampMs;
     }
 
     public RLTaskTxnCommitAttachment(TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment) {
@@ -94,6 +100,10 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         if (rlTaskTxnCommitAttachment.isSetErrorLogUrl()) {
             this.errorLogUrl = rlTaskTxnCommitAttachment.getErrorLogUrl();
         }
+    }
+
+    public long getTimestampMs() {
+        return timestampMs;
     }
 
     public long getJobId() {

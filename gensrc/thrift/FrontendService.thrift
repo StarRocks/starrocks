@@ -948,6 +948,7 @@ struct TTxnCommitAttachment {
     2: optional TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment
     3: optional TMiniLoadTxnCommitAttachment mlTxnCommitAttachment
     10: optional TManualLoadTxnCommitAttachment manualLoadTxnCommitAttachment
+    11: optional i64 timestampMs
 }
 
 struct TLoadTxnCommitRequest {

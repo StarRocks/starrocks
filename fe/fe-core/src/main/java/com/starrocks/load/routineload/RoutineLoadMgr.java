@@ -46,6 +46,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
@@ -66,6 +67,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,6 +78,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -613,6 +616,22 @@ public class RoutineLoadMgr implements Writable {
                 .add("current_state", operation.getJobState())
                 .add("msg", "replay change routine load job")
                 .build());
+    }
+
+    public void setRoutineLoadJobOtherMsg(String reason, TxnCommitAttachment txnCommitAttachment) {
+        RLTaskTxnCommitAttachment rLTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) txnCommitAttachment;
+        long jobId = rLTaskTxnCommitAttachment.getJobId();
+        if (jobId == 0) {
+            return;
+        }
+        RoutineLoadJob routineLoadJob = getJob(jobId);
+        if (routineLoadJob != null && reason != null) {
+            String otherMsg = String.format("The %s task have complained: %s at %s",
+                    DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()),
+                    reason,
+                    new Date(rLTaskTxnCommitAttachment.getTimestampMs()));
+            routineLoadJob.setOtherMsg(otherMsg);
+        }
     }
 
     /**

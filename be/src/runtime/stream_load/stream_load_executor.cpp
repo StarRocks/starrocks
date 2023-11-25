@@ -32,10 +32,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/stream_load/stream_load_executor.h"
-
+#include <chrono>
 #include <fmt/format.h>
-
 #include <string_view>
 
 #include "agent/master_info.h"
@@ -48,6 +46,7 @@
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_executor.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
@@ -375,6 +374,8 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
 
     // set attachment if has
     TTxnCommitAttachment attachment;
+    using namespace std::chrono;
+    attachment.__set_timestampMs(duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count());
     if (collect_load_stat(ctx, &attachment)) {
         request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
