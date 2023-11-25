@@ -53,11 +53,14 @@ public class LakeTablet extends Tablet {
 
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
+    private static final String JSON_KEY_DATA_SIZE_UPDATE_TIME = "dataSizeUpdateTime";
 
     @SerializedName(value = JSON_KEY_DATA_SIZE)
-    private long dataSize = 0L;
+    private volatile long dataSize = 0L;
     @SerializedName(value = JSON_KEY_ROW_COUNT)
-    private long rowCount = 0L;
+    private volatile long rowCount = 0L;
+    @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
+    private volatile long dataSizeUpdateTime = 0L;
 
     public LakeTablet(long id) {
         super(id);
@@ -75,6 +78,14 @@ public class LakeTablet extends Tablet {
 
     public void setDataSize(long dataSize) {
         this.dataSize = dataSize;
+    }
+
+    public void setDataSizeUpdateTime(long dataSizeUpdateTime) {
+        this.dataSizeUpdateTime = dataSizeUpdateTime;
+    }
+
+    public long getDataSizeUpdateTime() {
+        return dataSizeUpdateTime;
     }
 
     // version is not used
