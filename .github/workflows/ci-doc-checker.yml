@@ -99,6 +99,19 @@ jobs:
             --config docs/lychee.toml
             --offline "docs/**/*.md"
 
+      - name: Docusaurus build
+        env:
+          DISABLE_VERSIONING: true
+        working-directory: ./docs/docusaurus
+        run: |
+          rm -rf ./docs
+          rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
+          mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
+          mv ../en ./docs
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          yarn install --frozen-lockfile
+          yarn build
+
   behavior-unchange:
     runs-on: ubuntu-latest
     needs: add-doc-label
