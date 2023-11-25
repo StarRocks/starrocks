@@ -15,6 +15,7 @@
 #include "util/logging.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -566,6 +567,33 @@ void DataStreamRecvr::PipelineSenderQueue::clean_buffer_queues() {
     }
 }
 
+void DataStreamRecvr::PipelineSenderQueue::check_leak_closure() {
+    std::lock_guard<Mutex> l(_lock);
+    for (size_t i = 0; i < _chunk_queues.size(); i++) {
+        auto& chunk_queue = _chunk_queues[i];
+        ChunkItem item;
+        while (chunk_queue.size_approx() > 0) {
+            if (chunk_queue.try_dequeue(item)) {
+                if (item.closure != nullptr) {
+                    DCHECK(false) << "leak closure detected";
+                    LOG(WARNING) << "leak closure detected in fragment:" << print_id(_recvr->fragment_instance_id());
+                }
+            }
+        }
+    }
+
+    for (auto& [_, chunk_queues] : _buffered_chunk_queues) {
+        for (auto& [_, chunk_queue] : chunk_queues) {
+            for (auto& item : chunk_queue) {
+                if (item.closure != nullptr) {
+                    DCHECK(false) << "leak closure detected";
+                    LOG(WARNING) << "leak closure detected in fragment:" << print_id(_recvr->fragment_instance_id());
+                }
+            }
+        }
+    }
+}
+
 Status DataStreamRecvr::PipelineSenderQueue::try_to_build_chunk_meta(const PTransmitChunkParams& request,
                                                                      Metrics& metrics) {
     ScopedTimer<MonotonicStopWatch> wait_timer(metrics.wait_lock_timer);
@@ -750,12 +778,13 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
                 // We cannot early-return for short circuit, it may occur for parts of parallelism,
                 // and the other parallelism may need to proceed.
             }
-            if (_is_cancelled) {
-                clean_buffer_queues();
-                return Status::OK();
-            }
             _recvr->_num_buffered_bytes += chunk_bytes;
         }
+    }
+
+    // if senderqueue is cancelled clear all closure buffers
+    if (_is_cancelled) {
+        clean_buffer_queues();
     }
 
     return Status::OK();
