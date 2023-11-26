@@ -40,6 +40,8 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.StarRocksParser.IndexTypeContext;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collections;
@@ -216,6 +218,18 @@ public class IndexDef implements ParseNode {
 
         public String getDisplayName() {
             return displayName;
+        }
+
+        public static IndexDef.IndexType getIndexType(IndexTypeContext indexTypeContext) {
+            IndexDef.IndexType index;
+            if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
+                index = IndexDef.IndexType.BITMAP;
+            } else if (indexTypeContext.GIN() != null) {
+                index = IndexDef.IndexType.GIN;
+            } else {
+                throw new ParsingException("Not specify index type");
+            }
+            return index;
         }
     }
 }

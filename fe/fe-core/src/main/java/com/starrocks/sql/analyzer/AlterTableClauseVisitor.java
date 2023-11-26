@@ -104,7 +104,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexDef indexDef = clause.getIndexDef();
         indexDef.analyze();
-        clause.setIndex(IndexFactory.createIndexFromDef(table, indexDef));
+        clause.setIndex(IndexFactory.createIndexFromDef(indexDef));
 
         return null;
     }

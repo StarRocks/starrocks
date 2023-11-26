@@ -65,9 +65,7 @@ public class GINIndexTest extends PlanTestBase {
                 new HashMap<String, String>() {{
                     put("tmp_test_param", "1");
                 }});
-        Table table = connectContext.getGlobalStateMgr().getDb("test").getTable("test_index_tbl");
-        Index indexFromDef = IndexFactory.createIndexFromDef(table, indexDef);
-        Assertions.assertEquals(indexFromDef.getIndexId(), 0);
+        Index indexFromDef = IndexFactory.createIndexFromDef(indexDef);
         Assertions.assertEquals(indexFromDef.getIndexName(), indexDef.getIndexName());
         Assertions.assertEquals(indexFromDef.getIndexType(), indexDef.getIndexType());
         Assertions.assertEquals(indexFromDef.getColumns(), indexDef.getColumns());
@@ -127,32 +125,11 @@ public class GINIndexTest extends PlanTestBase {
     @Test
     public void testCreateIndexFromStmt() {
         Column c1 = new Column("f1", Type.STRING, true);
-        Column c2 = new Column("f2", Type.INT, true);
-
         Index index1 = new Index("idx1", Collections.singletonList(c1.getName()), IndexType.GIN, "", Collections.emptyMap());
-        Index index2 = new Index("idx2", Collections.singletonList(c2.getName()), IndexType.GIN, "", Collections.emptyMap());
 
-        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr().getDb("test").getTable("test_index_tbl");
-
-        Assertions.assertTrue(IndexFactory.createIndexesFromCreateStmt(Collections.emptyList(), table).getIndexes().isEmpty());
-
-        index1.setIndexId(100);
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> IndexFactory.createIndexesFromCreateStmt(Arrays.asList(index1, index2), null),
-                "All status of index indexId should be consistent");
-        index1.setIndexId(-1);
-
-        TableIndexes tableIndexes =
-                Assertions.assertDoesNotThrow(
-                        () -> IndexFactory.createIndexesFromCreateStmt(Arrays.asList(index1, index2), null));
-        Assertions.assertTrue(tableIndexes.getIndexes().stream().allMatch(index -> index.getIndexId() >= 0));
-        index1.setIndexId(-1);
-        index2.setIndexId(-1);
-
-        table.setMaxIndexId(10);
-        IndexFactory.createIndexesFromCreateStmt(Arrays.asList(index1, index2), table);
-        Assertions.assertTrue(tableIndexes.getIndexes().stream().allMatch(index -> index.getIndexId() >= 10));
-        table.setMaxIndexId(-1);
+        Assertions.assertTrue(IndexFactory.createIndexesFromCreateStmt(Collections.emptyList()).getIndexes().isEmpty());
+        Assertions.assertTrue(
+                IndexFactory.createIndexesFromCreateStmt(Collections.singletonList(index1)).getIndexes().size() > 0);
     }
 
     @Test

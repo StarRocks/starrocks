@@ -42,12 +42,16 @@ public class InvertedIndexUtil {
         return parser != null ? parser : INVERTED_INDEX_PARSER_NONE;
     }
 
+    private static boolean validGinColumnType(Column column) {
+        return (column.getType() instanceof ScalarType)
+                && (column.getPrimitiveType() == PrimitiveType.CHAR || column.getPrimitiveType() == PrimitiveType.VARCHAR);
+    }
 
     public static void checkInvertedIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
         if (keysType != KeysType.DUP_KEYS) {
             throw new SemanticException("The inverted index can only be build on DUPLICATE table.");
         }
-        if (!(column.getType() instanceof ScalarType)) {
+        if (!validGinColumnType(column)) {
             throw new SemanticException("The inverted index can only be build on column with type of scalar type.");
         }
 
@@ -68,14 +72,14 @@ public class InvertedIndexUtil {
         if (colType.isStringType()) {
             if (!(parser.equals(INVERTED_INDEX_PARSER_NONE)
                     || parser.equals(INVERTED_INDEX_PARSER_STANDARD)
-                        || parser.equals(INVERTED_INDEX_PARSER_ENGLISH)
-                            || parser.equals(INVERTED_INDEX_PARSER_CHINESE))) {
+                    || parser.equals(INVERTED_INDEX_PARSER_ENGLISH)
+                    || parser.equals(INVERTED_INDEX_PARSER_CHINESE))) {
                 throw new SemanticException("INVERTED index parser: " + parser
-                    + " is invalid for column: " + indexColName + " of type " + colType);
+                        + " is invalid for column: " + indexColName + " of type " + colType);
             }
         } else if (!parser.equals(INVERTED_INDEX_PARSER_NONE)) {
             throw new SemanticException("INVERTED index with parser: " + parser
-                + " is not supported for column: " + indexColName + " of type " + colType);
+                    + " is not supported for column: " + indexColName + " of type " + colType);
         }
     }
 }

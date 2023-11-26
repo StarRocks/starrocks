@@ -57,8 +57,6 @@ import java.util.Objects;
  * This class will used in olaptable
  */
 public class Index implements Writable {
-    @SerializedName(value = "indexId")
-    private long indexId;
     @SerializedName(value = "indexName")
     private String indexName;
     @SerializedName(value = "columns")
@@ -71,17 +69,11 @@ public class Index implements Writable {
     private Map<String, String> properties;
 
     public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment) {
-        this(-1, indexName, columns, indexType, comment, Collections.emptyMap());
+        this(indexName, columns, indexType, comment, Collections.emptyMap());
     }
 
     public Index(String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
             Map<String, String> properties) {
-        this(-1, indexName, columns, indexType, comment, properties);
-    }
-
-    public Index(long indexId, String indexName, List<String> columns, IndexDef.IndexType indexType, String comment,
-            Map<String, String> properties) {
-        this.indexId = indexId;
         this.indexName = indexName;
         this.columns = columns;
         this.indexType = indexType;
@@ -91,7 +83,6 @@ public class Index implements Writable {
 
 
     public Index() {
-        this.indexId = 0;
         this.indexName = null;
         this.columns = null;
         this.indexType = null;
@@ -131,14 +122,6 @@ public class Index implements Writable {
         this.comment = comment;
     }
 
-    public long getIndexId() {
-        return indexId;
-    }
-
-    public void setIndexId(long indexId) {
-        this.indexId = indexId;
-    }
-
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -146,7 +129,6 @@ public class Index implements Writable {
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
     }
-
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -160,7 +142,7 @@ public class Index implements Writable {
 
     @Override
     public int hashCode() {
-        return 31 * (((int) indexId) + indexName.hashCode() + columns.hashCode() + indexType.hashCode() + properties.hashCode());
+        return 31 * (indexName.hashCode() + columns.hashCode() + indexType.hashCode() + properties.hashCode());
     }
 
     @Override
@@ -181,7 +163,7 @@ public class Index implements Writable {
 
     @Override
     public Index clone() {
-        return new Index(indexId, indexName, new ArrayList<>(columns), indexType, comment, properties);
+        return new Index(indexName, new ArrayList<>(columns), indexType, comment, properties);
     }
 
     @Override

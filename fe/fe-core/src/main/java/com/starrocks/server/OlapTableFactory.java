@@ -179,7 +179,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         LOG.debug("create table[{}] short key column count: {}", tableName, shortKeyColumnCount);
         // indexes
         List<Index> stmtIndexes = stmt.getIndexes();
-        TableIndexes indexes = IndexFactory.createIndexesFromCreateStmt(stmtIndexes, null);
+        TableIndexes indexes = IndexFactory.createIndexesFromCreateStmt(stmtIndexes);
 
 
         // set base index info to table
@@ -225,9 +225,6 @@ public class OlapTableFactory implements AbstractTableFactory {
         } else {
             throw new DdlException("Unrecognized engine \"" + stmt.getEngineName() + "\"");
         }
-
-        // Index creation before table, so we should set maxIndexId to table
-        table.setMaxIndexId(stmtIndexes.size());
 
         try {
             table.setComment(stmt.getComment());

@@ -420,7 +420,6 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 import com.starrocks.sql.common.EngineType;
-import com.starrocks.sql.parser.StarRocksParser.IndexTypeContext;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
@@ -448,6 +447,7 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.IndexDef.IndexType.getIndexType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
@@ -819,18 +819,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             indexDefList.add(indexDef);
         }
         return indexDefList;
-    }
-
-    private IndexDef.IndexType getIndexType(IndexTypeContext indexTypeContext) {
-        IndexDef.IndexType index;
-        if (indexTypeContext == null || indexTypeContext.BITMAP() != null) {
-            index = IndexDef.IndexType.BITMAP;
-        } else if (indexTypeContext.GIN() != null) {
-            index = IndexDef.IndexType.GIN;
-        } else {
-            throw new ParsingException("Not specify index type");
-        }
-        return index;
     }
 
     private List<ColumnDef> getColumnDefs(List<StarRocksParser.ColumnDescContext> columnDesc) {
