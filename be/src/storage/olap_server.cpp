@@ -713,10 +713,12 @@ void* StorageEngine::_finish_publish_version_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         int32_t interval = config::finish_publish_version_internal;
         {
+            // wait cv for at most one second and then wake up to check if has pending tasks or stopping in progress
+            auto wait_timeout = std::chrono::seconds(1);
             std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
             while (!_publish_version_manager->has_pending_task() &&
                    !_bg_worker_stopped.load(std::memory_order_consume)) {
-                _finish_publish_version_cv.wait(wl);
+                _finish_publish_version_cv.wait_for(wl, wait_timeout);
             }
             _publish_version_manager->finish_publish_version_task();
             if (interval <= 0) {
