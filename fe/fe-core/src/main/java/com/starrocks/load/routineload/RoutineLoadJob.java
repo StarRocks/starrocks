@@ -105,6 +105,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -1092,6 +1094,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 }
                 routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
                 ++abortedTaskNum;
+                setOtherMsg(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                        + " Last task error: " + txnStatusChangeReasonString);
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
