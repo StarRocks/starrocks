@@ -183,5 +183,18 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         Assert.assertEquals("FAILED", jsonObject.get("status").toString());
         Assert.assertEquals("Need auth information.",
                 jsonObject.get("msg").toString());
+
+        body = RequestBody.create(JSON, "{ \"query\" :  \" select 1;\", \"sessionVariables\":{\"timeout\":\"10\"}}");
+        request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(BASE_URL + QUERY_EXECUTE_API)
+                .post(body)
+                .build();
+        response = networkClient.newCall(request).execute();
+        respStr = Objects.requireNonNull(response.body()).string();
+        jsonObject = new JSONObject(respStr);
+        Assert.assertEquals("FAILED", jsonObject.get("status").toString());
+        Assert.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
     }
 }
