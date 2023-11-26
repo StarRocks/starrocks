@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 部署前提条件
 
 本文描述了部署 StarRocks 的服务器必须满足哪些软硬件要求。关于 StarRocks 集群的推荐硬件规格，请参阅[规划您的 StarRocks 集群](../deployment/plan_cluster.md)。
@@ -36,7 +40,7 @@ StarRocks 支持 HDD 和 SSD 作为存储介质。
 
 ## 操作系统
 
-StarRocks 支持在 CentOS 7.9 和 Ubuntu 22.04 上部署。
+StarRocks 支持在 CentOS Linux 7.9 和 Ubuntu Linux 22.04 上部署。
 
 ## 软件
 

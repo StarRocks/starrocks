@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE TABLE
 
 ## 功能
@@ -40,6 +44,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 说明：
 
 **col_name**：列名称
+
+注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/Configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 **col_type**：列数据类型
 
@@ -133,7 +139,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](/using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -147,9 +153,9 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
 **从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog 直接查询，不再推荐外部表的方式。具体参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)。**
 
-**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/insert.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
+**从 3.1 版本起，支持直接在 Iceberg catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Iceberg 表中。参见 [创建 Iceberg 表](../../../data_source/catalog/iceberg_catalog.md#创建-iceberg-表)。**
 
-**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/insert.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
+**从 3.2 版本起，支持直接在 Hive catalog 内创建表（当前仅支持 Parquet 格式的表），您可以通过 [INSERT INTO](../data-manipulation/INSERT.md) 把数据插入到 Hive 表中。参见 [创建 Hive 表](../../../data_source/catalog/hive_catalog.md#创建-hive-表)。**
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -416,7 +422,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     * 当分区列为整数类型时，START 值、END 值仍需要用双引号包裹。
     * 仅支持指定一列作为分区列。
 
-    更多信息，请参见[批量创建分区](/table_design/Data_distribution.md#range-分区)。
+    更多信息，请参见[批量创建分区](../../../table_design/Data_distribution.md#range-分区)。
 
     示例：
 
@@ -586,7 +592,7 @@ PROPERTIES (
 )
 ```
 
-详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](/using_starrocks/Colocate_join.md) 章节。
+详细的 Colocate Join 使用方法及应用场景请参考 [Colocate Join](../../../using_starrocks/Colocate_join.md) 章节。
 
 #### 设置动态分区
 
@@ -737,6 +743,15 @@ PROPERTIES (
 
   * 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
   * 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
+
+#### 设置 fast schema evolution
+
+`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
+
+> **NOTE**
+>
+> * StarRocks 存算分离集群不支持该参数。
+> * 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`fast_schema_evolution`](../../../administration/Configuration.md#fast_schema_evolution)。
 
 ## 示例
 
@@ -1007,7 +1022,7 @@ PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.prefix" = "p"
 );
 ```
 

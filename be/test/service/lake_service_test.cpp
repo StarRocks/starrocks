@@ -729,6 +729,7 @@ TEST_F(LakeServiceTest, test_abort) {
 
     lake::AbortTxnRequest request;
     request.add_tablet_ids(_tablet_id);
+    request.set_skip_cleanup(false);
     for (auto&& log : logs) {
         request.add_txn_ids(log.txn_id());
     }
@@ -1083,6 +1084,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
         _tablet_mgr->prune_metacache();
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
@@ -1111,6 +1113,7 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
         _tablet_mgr->prune_metacache();
         ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
@@ -1404,6 +1407,21 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(_tablet_id, response.tablet_stats(0).tablet_id());
     ASSERT_EQ(0, response.tablet_stats(0).num_rows());
     ASSERT_EQ(0, response.tablet_stats(0).data_size());
+
+    // test timeout
+    response.clear_tablet_stats();
+    request.set_timeout_ms(5);
+
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::get_tablet_stats:before_submit",
+                                          [](void*) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::get_tablet_stats:before_submit");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    _lake_service.get_tablet_stats(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.tablet_stats_size());
 }
 
 // NOLINTNEXTLINE
@@ -1697,10 +1715,32 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         lake::AbortTxnResponse response;
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(txn_id);
+        request.set_skip_cleanup(false);
         _lake_service.abort_txn(nullptr, &request, &response, nullptr);
     }
 
     t1.join();
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_abort3) {
+    auto txn_id = next_id();
+    lake::TxnLog log;
+    log.set_tablet_id(_tablet_id);
+    log.set_txn_id(txn_id);
+    ASSERT_OK(_tablet_mgr->put_txn_log(log));
+
+    lake::AbortTxnRequest request;
+    lake::AbortTxnResponse response;
+    request.add_tablet_ids(_tablet_id);
+    request.set_skip_cleanup(true);
+    request.add_txn_ids(log.txn_id());
+
+    _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
 }
 
 } // namespace starrocks

@@ -530,7 +530,7 @@ Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& sta
     if (stat.num_segment <= 1) {
         rowset->rowset_meta()->set_segments_overlap_pb(NONOVERLAPPING);
     }
-    rowset->rowset_meta()->clear_txn_meta();
+    (void)rowset->reload();
     return Status::OK();
 }
 
@@ -617,6 +617,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     watch.start();
 
     DCHECK(rowset->num_update_files() == _partial_update_states.size());
+    DCHECK(rowset->rowset_meta()->get_meta_pb().has_txn_meta())
+            << fmt::format("tablet_id: {} rowset_id: {}", tablet->tablet_id(), rowset_id);
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
 
     // 1. resolve conflicts and generate `ColumnPartialUpdateState` finally.
@@ -668,6 +670,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
                                                   latest_applied_version.major_number() + 1, idx);
     };
     // 2. getter all rss_rowid_to_update_rowid, and prepare .col writer by the way
+    int64_t insert_rows = 0;
     // rss_id -> rowid -> <update file id, update_rowids>
     std::map<uint32_t, RowidsToUpdateRowids> rss_rowid_to_update_rowid;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
@@ -676,6 +679,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             auto rowid = (uint32_t)(each.first & ROWID_MASK);
             rss_rowid_to_update_rowid[rssid][rowid] = std::make_pair(upt_id, each.second);
         }
+        insert_rows += _partial_update_states[upt_id].insert_rowids.size();
     }
     cost_str << " [generate delta column group writer] " << watch.elapsed_time();
     watch.reset();
@@ -774,9 +778,10 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             "avg_finalize_dcg_time(ms):$3 ",
             total_seek_source_segment_time, total_read_column_from_update_time, total_merge_column_time,
             total_finalize_dcg_time);
-    cost_str << strings::Substitute("rss_cnt:$0 update_cnt:$1 column_cnt:$2 update_rows:$3 handle_cnt:$4",
-                                    rss_rowid_to_update_rowid.size(), _partial_update_states.size(),
-                                    update_column_ids.size(), update_rows, handle_cnt);
+    cost_str << strings::Substitute(
+            "rss_cnt:$0 update_cnt:$1 column_cnt:$2 update_rows:$3 handle_cnt:$4 insert_rows:$5",
+            rss_rowid_to_update_rowid.size(), _partial_update_states.size(), update_column_ids.size(), update_rows,
+            handle_cnt, insert_rows);
 
     LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
               << ", finalize cost:" << cost_str.str();

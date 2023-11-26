@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 使用 Stream Load 事务接口导入
 
 为了支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能，StarRocks 自 2.4 版本起提供 Stream Load 事务接口。
@@ -481,6 +485,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## 相关文档
 
-有关 Stream Load 适用的业务场景、支持的数据文件格式、基本原理等信息，参见[通过 HTTP PUT 从本地文件系统或流式数据源导入数据](../loading/StreamLoad.md)。
+有关 Stream Load 适用的业务场景、支持的数据文件格式、基本原理等信息，参见[使用 Stream Load 从本地导入](../loading/StreamLoad.md#使用-stream-load-从本地导入)。
 
 有关创建 Stream Load 作业的语法和参数，参见[STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。

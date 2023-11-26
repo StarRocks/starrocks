@@ -1,10 +1,14 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # FILES
 
 ## 功能
 
 定义远程存储中的数据文件。
 
-从 v3.1.0 版本开始，StarRocks 支持使用表函数 FILES() 在远程存储中定义只读文件。该函数根据给定的数据路径等参数读取数据，并自动根据数据文件的格式、列信息等推断出 Table Schema，最终以数据行形式返回文件中的数据。您可以通过 [SELECT](../../sql-statements/data-manipulation/SELECT.md) 直接直接查询该数据，通过 [INSERT](../../sql-statements/data-manipulation/insert.md) 导入数据，或通过 [CREATE TABLE AS SELECT](../../sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 建表并导入数据。
+从 v3.1.0 版本开始，StarRocks 支持使用表函数 FILES() 在远程存储中定义只读文件。该函数根据给定的数据路径等参数读取数据，并自动根据数据文件的格式、列信息等推断出 Table Schema，最终以数据行形式返回文件中的数据。您可以通过 [SELECT](../../sql-statements/data-manipulation/SELECT.md) 直接直接查询该数据，通过 [INSERT](../../sql-statements/data-manipulation/INSERT.md) 导入数据，或通过 [CREATE TABLE AS SELECT](../../sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 建表并导入数据。
 
 从 v3.2.0 版本开始，FILES() 支持在远程存储中定义可写入的数据文件。您可以[使用 INSERT INTO FILES() 将数据从 StarRocks 导出到远程存储](../../../unloading/unload_using_insert_into_files.md)。
 
@@ -23,7 +27,7 @@
 
 ```SQL
 FILES( data_location , data_format [, StorageCredentialParams ] 
-    [, columns_from_path ] [, schema_detect ] [, unload_data ] )
+    [, columns_from_path ] [, unload_data ] )
 
 data_location ::=
     "path" = { "hdfs://<hdfs_host>:<hdfs_port>/<hdfs_path>"
@@ -36,16 +40,9 @@ data_location ::=
 data_format ::=
     "format" = { "parquet" | "orc" }
 
-
 -- 自 v3.2 起支持。
 columns_from_path ::=
     "columns_from_path" = <column_name> [, ...]
-
-
--- 自 v3.2 起支持。
-schema_detect::=
-    [ "schema_auto_detect_sample_rows" = "<INT>" ]
-    [, "schema_auto_detect_sample_files" = "<INT>" ]
 
 -- 自 v3.2 起支持。
 unload_data::=
@@ -183,6 +180,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 假设数据文件 **file1** 存储在路径 `/geo/country=US/city=LA/` 下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回的列的值。详细使用方法请见以下示例四。
 
+<!--
+
 ### schema_detect
 
 自 v3.2 版本起，FILES() 支持为批量数据文件执行自动 Schema 检测和 Union 操作。StarRocks 首先扫描同批次中随机数据文件的数据进行采样，以检测数据的 Schema。然后，StarRocks 将对同批次中所有数据文件的列进行 Union 操作。
@@ -202,6 +201,8 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 > **注意**
 >
 > 单个批次中的所有数据文件必须为相同的文件格式。
+
+-->
 
 ### unload_data
 

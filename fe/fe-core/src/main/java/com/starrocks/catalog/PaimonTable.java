@@ -41,6 +41,7 @@ public class PaimonTable extends Table {
     private final AbstractFileStoreTable paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
+    private long lastedSnapshotId;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        Options paimonOptions, org.apache.paimon.table.Table paimonNativeTable, long createTime) {
@@ -127,5 +128,13 @@ public class PaimonTable extends Table {
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
         return tTableDescriptor;
+    }
+
+    public long getLastedSnapshotId() {
+        return lastedSnapshotId;
+    }
+
+    public void setLastedSnapshotId(long lastedSnapshotId) {
+        this.lastedSnapshotId = lastedSnapshotId;
     }
 }

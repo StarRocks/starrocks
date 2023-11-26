@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.DeallocateStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
 
@@ -32,9 +33,16 @@ public class PrepareAnalyzer {
 
     public void analyze(PrepareStmt prepareStmt) {
         StatementBase innerStmt = prepareStmt.getInnerStmt();
-        if (innerStmt instanceof PrepareStmt || innerStmt instanceof  ExecuteStmt
+        if (innerStmt instanceof PrepareStmt || innerStmt instanceof ExecuteStmt
                 || innerStmt instanceof DeallocateStmt) {
             throw new ValidateException("Invalid statement type for prepared statement", ErrorType.USER_ERROR);
+        }
+        if (innerStmt instanceof UpdateStmt) {
+            UpdateStmt updateStmt = (UpdateStmt) innerStmt;
+            if (updateStmt.assignmentsContainsParameter()) {
+                throw new ValidateException("using parameter(?) as assignment expr in update statement is not supported",
+                        ErrorType.USER_ERROR);
+            }
         }
     }
 

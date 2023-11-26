@@ -75,7 +75,9 @@ private:
     int _num_build_chunks() const;
     void _move_build_chunk_index(int index);
     void _reset_build_chunk_index();
-    void _next_build_chunk_index();
+    void _next_build_chunk_index_for_other_join();
+    void _next_probe_row_index_for_inner_join();
+    void _next_build_row_index_for_inner_join();
 
     ChunkPtr _init_output_chunk(size_t chunk_size) const;
     Status _probe_for_other_join(const ChunkPtr& chunk);
@@ -85,7 +87,10 @@ private:
     void _check_post_probe() const;
     void _init_build_match() const;
     void _permute_probe_row(const ChunkPtr& chunk);
-    ChunkPtr _permute_chunk(size_t chunk_size);
+    ChunkPtr _permute_chunk_for_other_join(size_t chunk_size);
+    ChunkPtr _permute_chunk_for_inner_join(size_t chunk_size);
+    void _permute_chunk_base_left(ChunkPtr* chunk);
+    void _permute_chunk_base_right(ChunkPtr* chunk);
     Status _permute_right_join(size_t chunk_size);
     void _permute_left_join(const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
@@ -117,6 +122,7 @@ private:
     size_t _curr_build_chunk_index = 0;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
+    size_t _build_row_current = 0;
     mutable std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states

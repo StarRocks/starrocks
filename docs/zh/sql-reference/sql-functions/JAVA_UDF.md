@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Java UDF
 
 自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数（User Defined Function，简称 UDF）。
@@ -139,6 +143,7 @@ public class UDFJsonGet {
 用户自定义类必须实现如下方法：
 
 > **说明**
+>
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
 
 | 方法                        | 含义                                                   |
@@ -191,7 +196,9 @@ public class SumInt {
 用户自定义类必须实现如下方法：
 
 > **说明**
+>
 > 方法中传入参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
+
 |               **方法**             |                    **含义**                                 |
 | --------------------------------- | ------------------------------------------------------------ |
 | State create()                    | 创建 State。                                                 |
@@ -359,7 +366,7 @@ StarRocks 内提供了两种 Namespace 的 UDF：一种是 Database 级 Namespac
 
 > **注意**
 >
-> 创建 Global UDF 需要有 System 级的 CREATE GLOBAL FUNCTION 权限；创建数据库级别的 UDF 需要有数据库级的 CREATE FUNCTION 权限；使用 UDF 需要有对应 UDF 的 USAGE 权限。关于如何赋权，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+> 创建 Global UDF 需要有 System 级的 CREATE GLOBAL FUNCTION 权限；创建数据库级别的 UDF 需要有数据库级的 CREATE FUNCTION 权限；使用 UDF 需要有对应 UDF 的 USAGE 权限。关于如何赋权，参见 [GRANT](../sql-statements/account-management/GRANT.md)。
 
 JAR 包上传完成后，您需要在 StarRocks 中，按需创建相对应的 UDF。如果创建 Global UDF，只需要在 SQL 语句中带上 `GLOBAL` 关键字即可。
 
@@ -390,7 +397,7 @@ RETURNS return_type
 ```SQL
 CREATE [GLOBAL] FUNCTION MY_UDF_JSON_GET(string, string) 
 RETURNS string
-properties (
+PROPERTIES (
     "symbol" = "com.starrocks.udf.sample.UDFJsonGet", 
     "type" = "StarrocksJar",
     "file" = "http://http_host:http_port/udf-1.0-SNAPSHOT-jar-with-dependencies.jar"
@@ -427,7 +434,7 @@ PROPERTIES 里的参数说明与 [创建 Scalar UDF](#创建-scalar-udf) 相同�
 ```SQL
 CREATE [GLOBAL] AGGREGATE FUNCTION MY_WINDOW_SUM_INT(Int)
 RETURNS Int
-properties 
+PROPERTIES 
 (
     "analytic" = "true",
     "symbol" = "com.starrocks.udf.sample.WindowSumInt", 
@@ -445,7 +452,7 @@ properties
 ```SQL
 CREATE [GLOBAL] TABLE FUNCTION MY_UDF_SPLIT(string)
 RETURNS string
-properties 
+PROPERTIES 
 (
     "symbol" = "com.starrocks.udf.sample.UDFSplit", 
     "type" = "StarrocksJar", 
@@ -520,7 +527,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md)。
+更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md)。
 
 ## 删除 UDF
 
@@ -530,7 +537,7 @@ SHOW [GLOBAL] FUNCTIONS;
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/drop-function.md)。
+更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md)。
 
 ## 类型映射关系
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 临时分区
 
 本文介绍如何使用临时分区功能。
@@ -103,7 +107,7 @@ SHOW TEMPORARY PARTITIONS FROM site_access;
 
 ### 通过 `INSERT INTO` 命令导入
 
-您可以通过如下 [INSERT INTO](../sql-reference/sql-statements/data-manipulation/insert.md) 命令将数据导入临时分区。
+您可以通过如下 [INSERT INTO](../sql-reference/sql-statements/data-manipulation/INSERT.md) 命令将数据导入临时分区。
 
 ```SQL
 INSERT INTO site_access TEMPORARY PARTITION (tp1) VALUES ("2020-01-01",1,"ca","lily",4);

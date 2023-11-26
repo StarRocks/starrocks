@@ -1,8 +1,12 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # STREAM LOAD
 
 ## 功能
 
-Stream Load 是一种基于 HTTP 协议的同步导入方式，支持将本地文件或数据流导入到 StarRocks 中。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。有关 Stream Load 的应用场景、使用限制、基本原理、以及支持的数据文件格式等信息，请参见[通过 HTTP Push 从本地文件系统或流式数据源导入数据](../../../loading/StreamLoad.md)。
+Stream Load 是一种基于 HTTP 协议的同步导入方式，支持将本地文件或数据流导入到 StarRocks 中。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。有关 Stream Load 的应用场景、使用限制、基本原理、以及支持的数据文件格式等信息，请参见[使用 Stream Load 从本地导入](../../../loading/StreamLoad.md#使用-stream-load-从本地导入)。
 
 > **注意**
 >
@@ -29,7 +33,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 - 必须在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](/sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../../../sql-reference/sql-statements/keywords.md)。
 
 ## 参数说明
 

@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # hex_decode_binary
 
 ## 功能

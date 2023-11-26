@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 从 Apache Kafka® 持续导入
 
 本文介绍 Routine Load 的基本原理、以及如何通过 Routine Load 持续消费 Apache Kafka® 的消息并导入至 StarRocks 中。
@@ -6,7 +10,7 @@
 
 Routine Load 支持 Exactly-Once 语义，能够保证数据不丢不重。
 
-Routine Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
+Routine Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](../loading/Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
 
 > **注意**
 >
@@ -211,7 +215,7 @@ FROM KAFKA
 
 #### 目标数据库和表
 
-根据 JSON 数据中需要导入的 key，在StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl2` 。
+根据 JSON 数据中需要导入的 key，在 StarRocks 集群的目标数据库 `example_db` 中创建表 `example_tbl2` 。
 
 ```SQL
 CREATE TABLE `example_tbl2` ( 
@@ -233,7 +237,7 @@ DISTRIBUTED BY HASH(`commodity_id`);
 
 #### 导入作业
 
-通过如下语句，向 StarRocks  提交一个 Routine Load 导入作业 `example_tbl2_ordertest2`，持续消费 Kafka 集群中 Topic `ordertest2` 的消息，并导入至 `example_tbl2` 表中。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
+通过如下语句，向 StarRocks 提交一个 Routine Load 导入作业 `example_tbl2_ordertest2`，持续消费 Kafka 集群中 Topic `ordertest2` 的消息，并导入至 `example_tbl2` 表中。并且导入作业会从此 Topic 所指定分区的最早位点开始消费。
 
 ```SQL
 CREATE ROUTINE LOAD example_db.example_tbl2_ordertest2 ON example_tbl2
@@ -257,7 +261,7 @@ FROM KAFKA
 
 - **数据格式**
 
-  需要`PROPERTIES`子句的`"format" = "json"`中指定数据格式为 JSON。
+  需要 `PROPERTIES` 子句的 `"format" = "json"` 中指定数据格式为 JSON。
 
 - **数据提取和转换**
 
@@ -503,7 +507,7 @@ RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 ## 修改导入作业
 
-修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
+修改前，您需要先执行 PAUSE ROUTINE LOAD 暂停导入作业。然后执行 [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md) 语句，修改导入作业的参数配置。修改成功后，您需要执行 [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD.md)，恢复导入作业。然后执行  [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 语句查看修改后的导入作业。
 
 例如，当存活 BE 节点数增至 6 个，待消费分区为`"0,1,2,3,4,5,6,7"`时，如果您希望提高实际的导入并行度，则可以通过以下语句，将期望任务并行度`desired_concurrent_number` 增加至 `6`（大于等于存活 BE 节点数），并且调整待消费分区和起始消费位点。
 

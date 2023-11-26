@@ -77,6 +77,8 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -197,7 +199,7 @@ public class LeaderImpl {
         ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
 
         if (cn == null) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
             }
             if (cn == null) {
@@ -463,7 +465,8 @@ public class LeaderImpl {
         }
         LOG.debug("push report state: {}", pushState.name());
 
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             if (olapTable == null) {
@@ -538,7 +541,7 @@ public class LeaderImpl {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             LOG.warn("finish push replica error", e);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -701,14 +704,15 @@ public class LeaderImpl {
                 return;
             }
 
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, task.getBackendId());
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
@@ -822,8 +826,9 @@ public class LeaderImpl {
             return response;
         }
 
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
 
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -1030,7 +1035,7 @@ public class LeaderImpl {
             LOG.info("error msg: {}", e.getMessage(), e);
             response.setStatus(status);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return response;
     }

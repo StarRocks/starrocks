@@ -1,14 +1,18 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # CREATE EXTERNAL CATALOG
 
 ## 功能
 
 该语句用于创建 External Catalog。创建后，无需数据导入或创建外部表即可查询外部数据。当前支持创建如下 External Catalog：
 
-- [Hive catalog](/data_source/catalog/hive_catalog.md)：用于查询 Apache Hive™ 集群中的数据。
-- [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)：用于查询 Apache Iceberg 集群中的数据。
-- [Hudi catalog](/data_source/catalog/hudi_catalog.md)：用于查询 Apache Hudi 集群中的数据。
-- [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)：用于查询 Delta Lake 数据。
-- [JDBC catalog](/data_source/catalog/jdbc_catalog.md)：用于查询 JDBC 数据源的数据。
+- [Hive catalog](../../../data_source/catalog/hive_catalog.md)：用于查询 Apache Hive™ 集群中的数据。
+- [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)：用于查询 Apache Iceberg 集群中的数据。
+- [Hudi catalog](../../../data_source/catalog/hudi_catalog.md)：用于查询 Apache Hudi 集群中的数据。
+- [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md)：用于查询 Delta Lake 数据。
+- [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)：用于查询 JDBC 数据源的数据。
 
 > **注意**
 >
@@ -29,7 +33,7 @@ PROPERTIES ("key"="value", ...)
 | ------------ | ---- | ------------------------------------------------------------ |
 | catalog_name | 是   | External catalog 的名称，命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。</li><li>总长度不能超过 1023 个字符。</li><li>Catalog 名称大小写敏感。</li></ul> |
 | comment      | 否   | External catalog 的描述。 |
-| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](/data_source/catalog/hive_catalog.md)、[Iceberg catalog](/data_source/catalog/iceberg_catalog.md)、[Hudi catalog](/data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](/data_source/catalog/deltalake_catalog.md) 和 [JDBC Catalog](/data_source/catalog/jdbc_catalog.md)。 |
+| PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) 和 [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md)。 |
 
 ## 示例
 
@@ -128,6 +132,6 @@ PROPERTIES(
 
 ## 相关操作
 
-- 如要查看所有 Catalog，参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)。
-- 如要查看某个 External Catalog 的创建语句，参见 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md)。
-- 如要删除 External Catalog，参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md)。
+- 如要查看所有 Catalog，参见 [SHOW CATALOGS](../../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md)。
+- 如要查看某个 External Catalog 的创建语句，参见 [SHOW CREATE CATALOG](../../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md)。
+- 如要删除 External Catalog，参见 [DROP CATALOG](../../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md)。

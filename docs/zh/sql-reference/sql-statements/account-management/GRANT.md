@@ -1,4 +1,10 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # GRANT
+
+import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.md'
 
 ## 功能
 
@@ -24,7 +30,7 @@
 
 ```SQL
 GRANT
-    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE } 
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | CREATE STORAGE VOLUME } 
     ON SYSTEM
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
@@ -52,10 +58,12 @@ GRANT
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
+    ON { GLOBAL FUNCTION <function_name>(input_data_type) [, < function_name>(input_data_type),...]    
        | ALL GLOBAL FUNCTIONS }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
+
+示例：`GRANT usage ON GLOBAL FUNCTION a(string) to kevin;`
 
 #### Internal catalog 相关
 
@@ -80,11 +88,14 @@ GRANT
 ```SQL
 GRANT
     { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
-    ON { {DATABASE <database_name> [, <database_name>,...]} | ALL DATABASES }
+    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-*注意：需要执行 SET CATALOG 之后才能使用。
+**注意**
+>
+> 1. 需要执行 SET CATALOG 之后才能使用。
+> 2. 对于 External Catalog 下的数据库，只有 Hive 和 Iceberg 数据库支持赋予 CREATE TABLE 权限。
 
 #### Table 相关
 
@@ -97,7 +108,10 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-*注意：需要执行 SET CATALOG 之后才能使用。table 还可以用 `<db_name>.<table_name>` 的方式来进行表示。
+> **注意**
+>
+> 1. 需要执行 SET CATALOG 之后才能使用。table 还可以用 `<db_name>.<table_name>` 的方式来进行表示。
+> 2. 所有 Internal Catalog 和 External Catalog 下的表，都支持赋予 SELECT 权限。Hive 和 Iceberg catalog 下的表，还支持赋予 INSERT 权限 (从 3.1 版本起，支持赋予 Iceberg 表的 INSERT 权限；从 3.2 版本起，支持赋予 Hive 表的 INSERT 权限)。
 
 ```SQL
 GRANT <priv> ON TABLE <db_name>.<table_name> TO {ROLE <role_name> | USER <user_name>}
@@ -114,7 +128,10 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-*注意：需要执行 SET CATALOG 之后才能使用。view 还可以用 `<db_name>.<view_name>` 的方式来进行表示。
+> **注意**
+>
+> 1. 需要执行 SET CATALOG 之后才能使用。view 还可以用 `<db_name>.<view_name>` 的方式来进行表示。
+> 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 及以后）
 
 ```SQL
 GRANT <priv> ON VIEW <db_name>.<view_name> TO {ROLE <role_name> | USER <user_name>}
@@ -142,7 +159,7 @@ GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO {ROLE <role_name> | USE
 ```SQL
 GRANT
     { USAGE | DROP | ALL [PRIVILEGES]} 
-    ON { FUNCTION <function_name> [, < function_name >,...]
+    ON { FUNCTION <function_name>(input_data_type) [, < function_name >(input_data_type),...]
        ｜ ALL FUNCTIONS IN 
            { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }}
     TO { ROLE | USER } {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
@@ -157,20 +174,15 @@ GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <
 #### User 相关
 
 ```SQL
-GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ]
+GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity_1> [ WITH GRANT OPTION ]
 ```
 
 #### Storage volume 相关
 
 ```SQL
 GRANT
-    CREATE STORAGE VOLUME 
-    ON SYSTEM
-    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
-
-GRANT  
     { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
-    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUME} 
+    ON { STORAGE VOLUME < name > [, < name >,...] ｜ ALL STORAGE VOLUMES} 
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
@@ -243,140 +255,8 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
 ```
 
-## 最佳实践 - 常见场景所需的权限项
+## 最佳实践 - 基于使用场景创建自定义角色
 
-### StarRocks 内表全局查询权限
-
-   ```SQL
-   -- 创建自定义角色。
-   CREATE ROLE read_only;
-   -- 赋予角色所有 Catalog 的使用权限。
-   GRANT USAGE ON ALL CATALOGS TO ROLE read_only;
-   -- 赋予角色所有表的查询权限。
-   GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_only;
-   -- 赋予角色所有视图的查询权限。
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_only;
-   -- 赋予角色所有物化视图的查询和加速权限。
-   GRANT SELECT ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE read_only;
-   ```
-
-   您还可以进一步授予角色在查询中使用 UDF 的权限：
-
-   ```SQL
-   -- 赋予角色所有库级别 UDF 的使用权限。
-   GRANT USAGE ON ALL FUNCTIONS IN ALL DATABASES TO ROLE read_only;
-   -- 赋予角色所有全局 UDF 的使用权限。
-   GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
-   ```
-
-### StarRocks 内表全局写权限
-
-   ```SQL
-   -- 创建自定义角色。
-   CREATE ROLE write_only;
-   -- 赋予角色所有 Catalog 的使用权限。
-   GRANT USAGE ON ALL CATALOGS TO ROLE write_only;
-   -- 赋予角色所有表的导入、更新权限。
-   GRANT INSERT, UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE write_only;
-   -- 赋予角色所有物化视图的更新权限。
-   GRANT REFRESH ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE write_only;
-   ```
-
-### 指定 External Catalog 下的查询权限
-
-   ```SQL
-   -- 创建自定义角色。
-   CREATE ROLE read_catalog_only;
-   -- 赋予角色目标 Catalog 的 USAGE 权限。
-   GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
-   -- 切换到对应数据目录。
-   SET CATALOG hive_catalog;
-   -- 赋予角色所有表和视图的查询权限。注意当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
-   GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
-   ```
-
-### 指定 External Catalog 下的写权限
-
-当前仅支持写入数据到 Iceberg 表 (自 3.1 版本起)。
-
-   ```SQL
-   -- 创建自定义角色。
-   CREATE ROLE write_catalog_only;
-  -- 赋予角色目标 Catalog 的 USAGE 权限。
-   GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
-   -- 切换到对应数据目录。
-   SET CATALOG iceberg_catalog;
-   -- 赋予角色所有 Iceberg 表的写入权限。
-   GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
-   ```
-
-### 全局、数据库级、表级以及分区级备份恢复权限
-
-- 全局备份恢复权限
-
-     全局备份恢复权限可以对任意库、表、分区进行备份恢复。需要 SYSTEM 级的 REPOSITORY 权限，在 Default Catalog 下创建数据库的权限，在任意数据库下创建表的权限，以及对任意表进行导入、导出的权限。
-
-     ```SQL
-     -- 创建自定义角色。
-     CREATE ROLE recover;
-     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
-     GRANT REPOSITORY ON SYSTEM TO ROLE recover;
-     -- 赋予角色创建数据库的权限。
-     GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
-     -- 赋予角色创建任意表的权限。
-     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover;
-     -- 赋予角色向任意表导入、导出数据的权限。
-     GRANT INSERT, EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
-     ```
-
-- 数据库级备份恢复权限
-
-     数据库级备份恢复权限可以对整个数据库进行备份恢复，需要 SYSTEM 级的 REPOSITORY 权限，在 Default Catalog 下创建数据库的权限，在任意数据库下创建表的权限，以及待备份数据库下所有表的导出权限。
-
-     ```SQL
-     -- 创建自定义角色。
-     CREATE ROLE recover_db;
-     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
-     GRANT REPOSITORY ON SYSTEM TO ROLE recover_db;
-     -- 赋予角色创建数据库的权限。
-     GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
-     -- 赋予角色创建任意表的权限。
-     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover_db;
-     -- 赋予角色向任意表导入数据的权限。
-     GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
-     -- 赋予角色向待备份数据库下所有表的导出权限。
-     GRANT EXPORT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
-     ```
-
-- 表级备份恢复权限
-
-     表级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，在待备份数据库下创建表及导入数据的权限，以及待备份表的导出权限。
-
-     ```SQL
-     -- 创建自定义角色。
-     CREATE ROLE recover_tbl;
-     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
-     GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
-     -- 赋予角色在对应数据库下创建表的权限。
-     GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
-     -- 赋予角色向任意表导入数据的权限。
-     GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
-     -- 赋予角色导出待备份表数据的权限。
-     GRANT EXPORT ON TABLE <table_name> TO ROLE recover_tbl;     
-     ```
-
-- 分区级备份恢复权限
-
-     分区级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及对待备份表的导入、导出权限。
-
-     ```SQL
-     -- 创建自定义角色。
-     CREATE ROLE recover_par;
-     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
-     GRANT REPOSITORY ON SYSTEM TO ROLE recover_par;
-     -- 赋予角色对对应表进行导入的权限。
-     GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
-     ```
+<UserPrivilegeCase />
 
 有关多业务线权限管理的相关实践，参见 [多业务线权限管理](../../../administration/User_privilege.md#多业务线权限管理)。

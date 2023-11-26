@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Default catalog
 
 本文介绍什么是 Default Catalog，以及如何使用 Default Catalog 查询 StarRocks 内部数据。
@@ -9,7 +13,7 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
 1. 连接 StarRocks。
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
-2. （可选）通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看数据库：
+2. （可选）通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看数据库：
 
    ```SQL
    SHOW DATABASES;
@@ -39,7 +43,7 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
    USE <catalog_name>.<db_name>;
    ```
 
-4. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询内部数据：
+4. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询内部数据：
 
    ```SQL
    SELECT * FROM <table_name>;
@@ -80,4 +84,4 @@ SELECT * FROM default_catalog.olap_db.olap_table limit 1;
 
 ## 更多操作
 
-如要查询外部数据，请参见[查询外部数据](/data_source/catalog/query_external_data.md)。
+如要查询外部数据，请参见[查询外部数据](./query_external_data.md)。

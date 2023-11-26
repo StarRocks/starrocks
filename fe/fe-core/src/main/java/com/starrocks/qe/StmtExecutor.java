@@ -90,6 +90,8 @@ import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.meta.SqlBlackList;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -194,6 +196,7 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -208,6 +211,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -241,11 +245,11 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+    private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
 
     private HttpResultSender httpResultSender;
 
     private PrepareStmtContext prepareStmtContext;
-
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -335,15 +339,39 @@ public class StmtExecutor {
         return profile;
     }
 
+    /**
+     * Whether to forward to leader from follower which should be the same in the StmtExecutor's lifecycle.
+     */
     public boolean isForwardToLeader() {
+        return getIsForwardToLeaderOrInit(true);
+    }
+
+    public boolean getIsForwardToLeaderOrInit(boolean isInitIfNoPresent) {
+        if (!isForwardToLeaderOpt.isPresent()) {
+            if (!isInitIfNoPresent) {
+                return false;
+            }
+            isForwardToLeaderOpt = Optional.of(initForwardToLeaderState());
+        }
+        return isForwardToLeaderOpt.get();
+    }
+
+    private boolean initForwardToLeaderState() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if (parsedStmt instanceof QueryStatement && !GlobalStateMgr.getCurrentState().isLeader()
-                && !GlobalStateMgr.getCurrentState().canRead()) {
-            return true;
+        if (parsedStmt instanceof QueryStatement) {
+            // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
+            if (context != null && context.getSessionVariable() != null &&
+                    context.getSessionVariable().isFollowerForwardToLeaderOpt().isPresent()) {
+                return context.getSessionVariable().isFollowerForwardToLeaderOpt().get();
+            }
+
+            if (!GlobalStateMgr.getCurrentState().canRead()) {
+                return true;
+            }
         }
 
         if (redirectStatus == null) {
@@ -407,27 +435,16 @@ public class StmtExecutor {
             // parsedStmt may already by set when constructing this StmtExecutor();
             resolveParseStmtForForward();
 
-            // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
             if (parsedStmt != null) {
-                Map<String, String> optHints = null;
-                if (parsedStmt instanceof QueryStatement &&
-                        ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
-                    SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
-                    optHints = selectRelation.getSelectList().getOptHints();
-                }
+                boolean isQuery = parsedStmt instanceof QueryStatement;
+                // set isQuery before `forwardToLeader` to make it right for audit log.
+                context.getState().setIsQuery(isQuery);
+            }
 
-                if (optHints != null) {
-                    SessionVariable sessionVariable = (SessionVariable) sessionVariableBackup.clone();
-                    for (String key : optHints.keySet()) {
-                        VariableMgr.setSystemVariable(sessionVariable,
-                                new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
-                    }
-                    context.setSessionVariable(sessionVariable);
-                }
+            processVarHint(sessionVariableBackup);
 
-                if (parsedStmt.isExplain()) {
-                    context.setExplainLevel(parsedStmt.getExplainLevel());
-                }
+            if (parsedStmt.isExplain()) {
+                context.setExplainLevel(parsedStmt.getExplainLevel());
             }
 
             // execPlan is the output of new planner
@@ -461,7 +478,8 @@ public class StmtExecutor {
                         prepareStmtContext = context.getPreparedStmt(executeStmt.getStmtName());
                         if (null == prepareStmtContext) {
                             throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR,
-                                    "prepare statement can't be found @ %s, maybe has expired", executeStmt.getStmtName());
+                                    "prepare statement can't be found @ %s, maybe has expired",
+                                    executeStmt.getStmtName());
                         }
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
@@ -503,7 +521,6 @@ public class StmtExecutor {
             }
 
             if (parsedStmt instanceof QueryStatement) {
-                context.getState().setIsQuery(true);
                 final boolean isStatisticsJob = AnalyzerUtils.isStatisticsJob(context, parsedStmt);
                 context.setStatisticsJob(isStatisticsJob);
 
@@ -725,6 +742,34 @@ public class StmtExecutor {
             }
 
             context.setSessionVariable(sessionVariableBackup);
+        }
+    }
+
+    // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
+    private void processVarHint(SessionVariable variables) throws DdlException, CloneNotSupportedException {
+        if (parsedStmt == null) {
+            return;
+        }
+        Map<String, String> optHints = null;
+        if (parsedStmt instanceof QueryStatement &&
+                ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
+            optHints = selectRelation.getSelectList().getOptHints();
+        } else if (parsedStmt instanceof DmlStmt) {
+            DmlStmt dml = (DmlStmt) parsedStmt;
+            optHints = dml.getOptHints();
+        } else if (parsedStmt instanceof DdlStmt) {
+            DdlStmt ddl = (DdlStmt) parsedStmt;
+            optHints = ddl.getOptHints();
+        }
+
+        if (MapUtils.isNotEmpty(optHints)) {
+            SessionVariable sessionVariable = (SessionVariable) variables.clone();
+            for (String key : optHints.keySet()) {
+                VariableMgr.setSystemVariable(sessionVariable,
+                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+            }
+            context.setSessionVariable(sessionVariable);
         }
     }
 
@@ -1558,7 +1603,8 @@ public class StmtExecutor {
         // proxy send show export result
         String db = exportStmt.getTblName().getDb();
         String showStmt = String.format("SHOW EXPORT FROM %s WHERE QueryId = \"%s\";", db, queryId);
-        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
+        StatementBase statementBase =
+                com.starrocks.sql.parser.SqlParser.parse(showStmt, context.getSessionVariable()).get(0);
         ShowExportStmt showExportStmt = (ShowExportStmt) statementBase;
         showExportStmt.setQueryId(queryId);
         ShowExecutor executor = new ShowExecutor(context, showExportStmt);
@@ -1660,7 +1706,8 @@ public class StmtExecutor {
     }
 
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
-        Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        Database db = MetaUtils.getDatabase(context, insertStmt.getTableName());
+        Locker locker = new Locker();
         Table table = insertStmt.getTargetTable();
         if (!(table instanceof OlapTable)) {
             LOG.warn("insert overwrite table:{} type:{} is not supported", table.getName(), table.getClass());
@@ -1668,9 +1715,9 @@ public class StmtExecutor {
         }
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         InsertOverwriteJob job = new InsertOverwriteJob(GlobalStateMgr.getCurrentState().getNextId(),
-                insertStmt, database.getId(), olapTable.getId());
-        if (!database.writeLockAndCheckExist()) {
-            throw new DmlException("database:%s does not exist.", database.getFullName());
+                insertStmt, db.getId(), olapTable.getId());
+        if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+            throw new DmlException("database:%s does not exist.", db.getFullName());
         }
         try {
             // add an edit log
@@ -1678,7 +1725,7 @@ public class StmtExecutor {
                     job.getTargetDbId(), job.getTargetTableId(), job.getSourcePartitionIds());
             GlobalStateMgr.getCurrentState().getEditLog().logCreateInsertOverwrite(info);
         } finally {
-            database.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         insertStmt.setOverwriteJobId(job.getJobId());
         InsertOverwriteJobMgr manager = GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr();
@@ -1801,14 +1848,14 @@ public class StmtExecutor {
             authenticateParams.setDb_name(externalTable.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(externalTable.getSourceTableName()));
             transactionId = transactionMgr.beginRemoteTransaction(externalTable.getSourceTableDbId(),
-                                    Lists.newArrayList(externalTable.getSourceTableId()), label,
-                                    externalTable.getSourceTableHost(),
-                                    externalTable.getSourceTablePort(),
-                                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                                            FrontendOptions.getLocalHostAddress()),
-                                    sourceType,
-                                    context.getSessionVariable().getQueryTimeoutS(),
-                                    authenticateParams);
+                    Lists.newArrayList(externalTable.getSourceTableId()), label,
+                    externalTable.getSourceTableHost(),
+                    externalTable.getSourceTablePort(),
+                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                            FrontendOptions.getLocalHostAddress()),
+                    sourceType,
+                    context.getSessionVariable().getQueryTimeoutS(),
+                    authenticateParams);
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable()) {
             // schema table and iceberg and hive table does not need txn

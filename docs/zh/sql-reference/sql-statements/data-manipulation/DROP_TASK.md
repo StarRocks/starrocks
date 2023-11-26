@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # DROP TASK
 
 ## 功能
@@ -22,7 +26,7 @@ DROP TASK '<task_name>'
 
 ## 使用说明
 
-您可以通过查询 Information Schema 中的元数据表 `tasks` 和 `task_runs` 来查看异步任务的信息。
+您可以通过查询 Information Schema 中的元数据视图 `tasks` 和 `task_runs` 来查看异步任务的信息。
 
 ```SQL
 SELECT * FROM INFORMATION_SCHEMA.tasks;

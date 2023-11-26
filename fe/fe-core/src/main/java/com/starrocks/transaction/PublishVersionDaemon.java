@@ -48,10 +48,13 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -73,8 +76,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends FrontendDaemon {
@@ -83,7 +85,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
     private static final long RETRY_INTERVAL_MS = 1000;
 
-    private Executor lakeTaskExecutor;
+    private ThreadPoolExecutor lakeTaskExecutor;
     private Set<Long> publishingLakeTransactions;
 
     private Set<Long> publishingLakeTransactionsBatchTableId;
@@ -97,7 +99,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         try {
             GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
-            if (Config.lake_enable_batch_publish_version && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
                 // batch publish
                 List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
                         getReadyPublishTransactionsBatch();
@@ -116,7 +118,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
             // TODO: need to refactor after be split into cn + dn
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
             }
 
@@ -152,9 +154,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
-    private @NotNull Executor getLakeTaskExecutor() {
+    private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
         if (lakeTaskExecutor == null) {
-            lakeTaskExecutor = Executors.newCachedThreadPool();
+            // Create a new thread for every task if there is no idle threads available.
+            // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
+            lakeTaskExecutor = ThreadPoolManager.newDaemonCacheThreadPool(Config.lake_publish_version_max_threads,
+                    "lake-publish-task", true);
+
+            // register ThreadPool config change listener
+            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+                int newMaxThreads = Config.lake_publish_version_max_threads;
+                if (lakeTaskExecutor != null && newMaxThreads > 0
+                        && lakeTaskExecutor.getMaximumPoolSize() != newMaxThreads) {
+                    lakeTaskExecutor.setMaximumPoolSize(Config.lake_publish_version_max_threads);
+                }
+            });
         }
         return lakeTaskExecutor;
     }
@@ -295,7 +309,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         if (db == null) {
             return false;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
@@ -304,7 +319,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return false;
     }
@@ -389,7 +404,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     public boolean publishPartitionBatch(Database db, long tableId, long partitionId, List<Long> txnIds,
                                          List<Long> versions, List<TransactionState> transactionStates,
                                          TransactionStateBatch stateBatch) {
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         // version -> shadowTablets
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
         Set<Tablet> normalTablets = null;
@@ -437,7 +453,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -639,7 +655,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> normalTablets = null;
         List<Tablet> shadowTablets = null;
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             if (table == null) {
@@ -671,7 +688,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         try {
@@ -708,11 +725,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         for (long tableId : transactionState.getTableIdList()) {
             Table table;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 table = db.getTable(tableId);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
@@ -723,7 +741,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             while (mvIdIterator.hasNext()) {
                 MvId mvId = mvIdIterator.next();
                 Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                mvDb.readLock();
+                locker.lockDatabase(mvDb, LockType.READ);
                 try {
                     MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
                     if (materializedView == null) {
@@ -737,7 +755,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
-                    mvDb.readUnlock();
+                    locker.unLockDatabase(mvDb, LockType.READ);
                 }
             }
         }

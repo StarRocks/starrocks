@@ -55,6 +55,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -303,7 +305,8 @@ public class BackupHandler extends FrontendDaemon implements Writable {
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
@@ -350,7 +353,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
             }
             curBackupMeta = new BackupMeta(backupTbls);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // Check if label already be used

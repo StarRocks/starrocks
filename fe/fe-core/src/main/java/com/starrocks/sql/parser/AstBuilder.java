@@ -1355,12 +1355,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Map<String, String> properties = new HashMap<>();
         if (context.setVarHint() != null) {
-            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
-                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    properties.put(hintMapContext.k.getText(),
-                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
-                }
-            }
+            properties = visitVarHints(context.setVarHint());
         }
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
@@ -1713,15 +1708,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionNames = (PartitionNames) visit(context.partitionNames());
             }
 
-            return new InsertStmt(targetTableName, partitionNames,
+            InsertStmt stmt = new InsertStmt(targetTableName, partitionNames,
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                     createPos(context));
+            stmt.setOptHints(visitVarHints(context.setVarHint()));
+            return stmt;
         }
 
         // INSERT INTO FILES(...)
         Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
-        return new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
+        InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
+        res.setOptHints(visitVarHints(context.setVarHint()));
+        return res;
     }
 
     @Override
@@ -1751,6 +1750,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
         }
+        ret.setOptHints(visitVarHints(context.setVarHint()));
         return ret;
     }
 
@@ -1776,6 +1776,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
         }
+        ret.setOptHints(visitVarHints(context.setVarHint()));
         return ret;
     }
 
@@ -2351,7 +2352,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.system != null) {
             cluster = ((Identifier) visit(context.system)).getValue();
         }
-        return new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
+        LoadStmt stmt = new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
+        stmt.setOptHints(visitVarHints(context.setVarHint()));
+        return stmt;
     }
 
     private LabelName getLabelName(StarRocksParser.LabelNameContext context) {
@@ -4066,6 +4069,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
+    private Map<String, String> visitVarHints(List<StarRocksParser.SetVarHintContext> hints) {
+        Map<String, String> selectHints = new HashMap<>();
+        for (StarRocksParser.SetVarHintContext hintContext : ListUtils.emptyIfNull(hints)) {
+            for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
+                selectHints.put(hintMapContext.k.getText(),
+                        ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
+            }
+        }
+        return selectHints;
+    }
+
     @Override
     public ParseNode visitQuerySpecification(StarRocksParser.QuerySpecificationContext context) {
         Relation from = null;
@@ -4104,14 +4118,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
         if (context.setVarHint() != null) {
-            Map<String, String> selectHints = new HashMap<>();
-            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
-                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    selectHints.put(hintMapContext.k.getText(),
-                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
-                }
-            }
-            selectList.setOptHints(selectHints);
+            selectList.setOptHints(visitVarHints(context.setVarHint()));
         }
 
         SelectRelation resultSelectRelation = new SelectRelation(
@@ -4311,6 +4318,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitLimitElement(StarRocksParser.LimitElementContext context) {
+        if (context.limit.getText().equals("?") || (context.offset != null && context.offset.getText().equals("?"))) {
+            throw new ParsingException("using parameter(?) as limit or offset not supported");
+        }
         long limit = Long.parseLong(context.limit.getText());
         long offset = 0;
         if (context.offset != null) {
@@ -5498,7 +5508,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 exprs.add(value);
             }
         } catch (Exception e) {
-            throw  new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
+            throw new IllegalArgumentException(String.format("Cast argument %s to int type failed.", value.toSql()));
         }
     }
 
@@ -6665,7 +6675,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         parameters.add(parameter);
         return parameter;
     }
-    
+
     // ------------------------------------------- Util Functions -------------------------------------------
 
     private <T> List<T> visit(List<? extends ParserRuleContext> contexts, Class<T> clazz) {

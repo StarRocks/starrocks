@@ -1,8 +1,12 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # RECOVER
 
 ## 功能
 
-恢复之前删除的 database、table 或者 partition。通过 [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE_TABLE.md) 命令删除的数据无法恢复。
+恢复之前删除的 database、table 或者 partition。通过 [TRUNCATE TABLE](./TRUNCATE_TABLE.md) 命令删除的数据无法恢复。
 
 > **注意**
 >

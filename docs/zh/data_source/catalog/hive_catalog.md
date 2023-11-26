@@ -1,10 +1,14 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # Hive catalog
 
 Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hive Catalog，您可以：
 
 - 无需手动建表，通过 Hive Catalog 直接查询 Hive 内的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
-- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（3.1 版本及以上）将 Hive 内的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Hive 库表，或通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 把 StarRocks 表数据写入到 Parquet 格式的 Hive 表中（3.2 版本及以上）。
 
 为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
 
@@ -783,13 +787,13 @@ PROPERTIES
 
 ## 查看 Hive Catalog
 
-您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hive Catalog `hive_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hive Catalog `hive_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_glue;
@@ -816,7 +820,7 @@ SHOW CREATE CATALOG hive_catalog_glue;
 
 ## 删除 Hive Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Hive Catalog `hive_catalog_glue`：
 
@@ -842,7 +846,7 @@ DROP Catalog hive_catalog_glue;
 
 ## 查询 Hive 表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hive 集群中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hive 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -850,7 +854,7 @@ DROP Catalog hive_catalog_glue;
 
 2. [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。
 
-3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -908,7 +912,7 @@ GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 
 ```SQL
 CREATE DATABASE <database_name>
-[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
+[PROPERTIES ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
 ```
 
 `location` 参数用于指定数据库所在的文件路径，支持 HDFS 和对象存储：
@@ -948,13 +952,13 @@ DROP DATABASE <database_name>
 
 ## 创建 Hive 表
 
-同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Hive 数据库下创建表。本功能自 3.2 版本起开始支持。
+同 StarRocks 内部数据库一致，如果您拥有 Hive 数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该 Hive 数据库下创建 Managed Table。本功能自 3.2 版本起开始支持。
 
 > **说明**
 >
 > 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-[切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。然后通过如下语法创建 Hive 表：
+[切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。然后通过如下语法创建 Hive 的 Managed Table：
 
 ### 语法
 
@@ -1002,17 +1006,17 @@ PARTITION BY (par_col1[, par_col2...])
 >
 > 分区列必须在最后声明，支持除 FLOAT、DOUBLE、DECIMAL、DATETIME 以外的数据类型，不支持 `NULL` 值。而且，`partition_desc` 中声明的分区列的顺序必须与 `column_definition` 中定义的列的顺序一致。
 
-#### properties
+#### PROPERTIES
 
-可以在 `properties` 中通过 `"key" = "value"` 的形式声明 Hive 表的属性。
+可以在 `PROPERTIES` 中通过 `"key" = "value"` 的形式声明 Hive 表的属性。
 
-以下为常见的几个 Hive 表属性：
+以下为常见的几个属性：
 
 | **属性**          | **描述**                                                     |
 | ----------------- | ------------------------------------------------------------ |
-| location          | Hive 表所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
-| file_format       | Hive 表的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
-| compression_codec | Hive 表的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
+| location          | Managed Table 所在的文件路径。使用 HMS 作为元数据服务时，您无需指定 `location` 参数。使用 AWS Glue 作为元数据服务时：<ul><li>如果在创建当前数据库时指定了 `location` 参数，那么在当前数据库下建表时不需要再指定 `location` 参数，StarRocks 默认把表建在当前数据库所在的文件路径下。</li><li>如果在创建当前数据库时没有指定 `location` 参数，那么在当前数据库建表时必须指定 `location` 参数。</li></ul> |
+| file_format       | Managed Table 的文件格式。当前仅支持 Parquet 格式。默认值：`parquet`。 |
+| compression_codec | Managed Table 的压缩格式。当前支持 SNAPPY、GZIP、ZSTD 和 LZ4。默认值：`gzip`。 |
 
 ### 示例
 
@@ -1048,7 +1052,7 @@ PARTITION BY (par_col1[, par_col2...])
 
 ## 向 Hive 表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Hive 表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/insert.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Hive 表（Managed Table 或 External Table）的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该 Hive 表中（当前仅支持写入到 Parquet 格式的 Hive 表）。本功能自 3.2 版本起开始支持。需要注意的是，写数据到 External Table 的功能默认是关闭的，您可以通过[系统变量 ENABLE_WRITE_HIVE_EXTERNAL_TABLE](../../reference/System_variable.md) 打开。
 
 > **说明**
 >
@@ -1137,7 +1141,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 
 ## 删除 Hive 表
 
-同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。
+同 StarRocks 内表一致，如果您拥有 Hive 表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该 Hive 表。本功能自 3.2 版本起开始支持。注意当前只支持删除 Hive 的 Managed Table。
 
 > **说明**
 >

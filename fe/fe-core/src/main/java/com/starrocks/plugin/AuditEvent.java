@@ -135,6 +135,8 @@ public class AuditEvent {
     @AuditField(value = "HitMvs", ignore_zero = true)
     public String hitMVs;
 
+    @AuditField(value = "IsForwardToLeader")
+    public boolean isForwardToLeader = false;
 
     public static class AuditEventBuilder {
 
@@ -307,6 +309,11 @@ public class AuditEvent {
 
         public String getHitMvs() {
             return this.auditEvent.hitMVs;
+        }
+
+        public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
+            auditEvent.isForwardToLeader = isForwardToLeader;
+            return this;
         }
 
         public AuditEvent build() {

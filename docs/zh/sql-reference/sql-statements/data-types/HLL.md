@@ -1,8 +1,12 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # HLL (HyperLogLog)
 
 ## 描述
 
-HyperLogLog 类型，用于近似去重。详细的使用方法请参考 [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)。
+HyperLogLog 类型，用于近似去重。详细的使用方法请参考 [使用 HyperLogLog 实现近似去重](../../../using_starrocks/Using_HLL.md)。
 
 HLL 是基于 HyperLogLog 算法的工程实现，用于保存 HyperLogLog 计算过程的中间结果，HLL 类型的列只能作为表的 value 列类型，通过聚合来不断的减少数据量，以此来实现加快查询的目的。基于 HLL 到的是一个估算结果，误差大概在 1% 左右。
 
@@ -24,7 +28,7 @@ HLL类型使用的存储空间取决于 HLL 中插入的 hash 值的去重数量
 
 ## 相关函数
 
-**[HLL_UNION_AGG(hll)](/sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持 window 子句。
+**[HLL_UNION_AGG(hll)](../../sql-functions/aggregate-functions/hll_union_agg.md)**：此函数为聚合函数，用于计算满足条件的所有数据的基数估算。此函数还可用于分析函数，只支持默认窗口，不支持 window 子句。
 
 **[HLL_RAW_AGG(hll)](../../sql-functions/aggregate-functions/hll_raw_agg.md)**：此函数为聚合函数，用于聚合 hll 类型字段，并且返回的还是 hll 类型。
 
