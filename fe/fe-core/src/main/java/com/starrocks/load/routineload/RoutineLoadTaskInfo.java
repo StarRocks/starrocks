@@ -193,8 +193,6 @@ public abstract class RoutineLoadTaskInfo {
         this.msg = msg;
     }
 
-    abstract String getAssignment();
-
     public boolean isRunningTimeout() {
         if (txnStatus == TransactionStatus.COMMITTED || txnStatus == TransactionStatus.VISIBLE) {
             // the corresponding txn is already finished, this task can not be treated as timeout.
@@ -258,10 +256,10 @@ public abstract class RoutineLoadTaskInfo {
 
             if (ChronoUnit.SECONDS.between(lastSuccessTime, LocalDateTime.now()) > interval) {
                 throw new UserException("Routine load task has failed consistently for more than " +
-                        "routine_load_failure_pause_interval_second, last err: " + txnStatusChangeReason +
-                        ", assignment: " + getAssignment() +
+                        "failure_pause_interval_second" +
+                        ", last err: " + txnStatusChangeReason +
                         ", lastSuccessTime: " + lastSuccessTime +
-                        ", pause_interval: " + interval);
+                        ", task info: " + this);
             }
         }
     }

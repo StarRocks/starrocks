@@ -96,11 +96,6 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
-    public String getAssignment() {
-        return "Partitions: " + getPartitions().toString();
-    }
-
-    @Override
     public boolean readyToExecute() throws UserException {
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         if (routineLoadJob == null) {
@@ -230,5 +225,10 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
         tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;
+    }
+
+    @Override
+    public String toString() {
+        return "task_id: " + getId() + "partition offset: " + partitionIdToOffset;
     }
 }

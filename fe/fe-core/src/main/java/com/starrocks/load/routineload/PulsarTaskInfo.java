@@ -63,11 +63,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         return partitions;
     }
 
-    @Override
-    public String getAssignment() {
-        return "Partitions: " + getPartitions().toString();
-    }
-
     public Map<String, Long> getInitialPositions() {
         return initialPositions;
     }
