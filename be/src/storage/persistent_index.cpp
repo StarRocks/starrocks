@@ -3325,6 +3325,7 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     index_meta.clear_l0_meta();
     index_meta.clear_l1_version();
     index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
     lastest_applied_version.to_pb(index_meta.mutable_version());
@@ -4911,8 +4912,10 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));
         // delete useless files
+        const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+        EditVersion l0_version = l0_meta.snapshot().version();
         RETURN_IF_ERROR(_delete_expired_index_file(
-                _version, _l1_version,
+                l0_vesion, _l1_version,
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
     }
     (void)_delete_major_compaction_tmp_index_file();
