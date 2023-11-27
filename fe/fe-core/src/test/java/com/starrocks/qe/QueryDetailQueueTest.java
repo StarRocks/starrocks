@@ -47,7 +47,16 @@ public class QueryDetailQueueTest {
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
                 "root", "");
+<<<<<<< HEAD
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(startQueryDetail);
+=======
+        startQueryDetail.setScanRows(100);
+        startQueryDetail.setScanBytes(10001);
+        startQueryDetail.setReturnRows(1);
+        startQueryDetail.setCpuCostNs(1002);
+        startQueryDetail.setMemCostBytes(100003);
+        QueryDetailQueue.addQueryDetail(startQueryDetail);
+>>>>>>> edc7608139 ([Enhancement] remove lock for QueryDetailQueue (#35645))
 
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
         Assert.assertEquals(1, queryDetails.size());
@@ -71,15 +80,8 @@ public class QueryDetailQueueTest {
         QueryDetail endQueryDetail = startQueryDetail.copy();
         endQueryDetail.setLatency(1);
         endQueryDetail.setState(QueryDetail.QueryMemState.FINISHED);
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(endQueryDetail);
+        QueryDetailQueue.addQueryDetail(endQueryDetail);
 
-        queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
-        Assert.assertEquals(2, queryDetails.size());
-
-        //set first element eventTime to 1min ago to simulate queryDetail timeout
-        startQueryDetail.setEventTime(startQueryDetail.getEventTime() - 60000000000L);
-        //add new queryDetail, this will trigger delete
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(new QueryDetail());
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
         Assert.assertEquals(2, queryDetails.size());
     }

@@ -263,7 +263,22 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+<<<<<<< HEAD
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+=======
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        PQueryStatistics statistics = executor.getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+
+        QueryDetailQueue.addQueryDetail(queryDetail);
+>>>>>>> edc7608139 ([Enhancement] remove lock for QueryDetailQueue (#35645))
     }
 
     protected void addRunningQueryDetail(StatementBase parsedStmt) {
@@ -291,8 +306,13 @@ public class ConnectProcessor {
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
         ctx.setQueryDetail(queryDetail);
+<<<<<<< HEAD
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+=======
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
+>>>>>>> edc7608139 ([Enhancement] remove lock for QueryDetailQueue (#35645))
     }
 
     // process COM_QUERY statement,
