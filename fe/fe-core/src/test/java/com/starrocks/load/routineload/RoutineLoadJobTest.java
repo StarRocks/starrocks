@@ -158,16 +158,20 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testGetShowInfo(@Mocked KafkaProgress kafkaProgress) {
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
         ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
                 TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
         Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
         Deencapsulation.setField(routineLoadJob, "progress", kafkaProgress);
 
+        routineLoadJob.setPartitionOffset(0, 12345);
+
         List<String> showInfo = routineLoadJob.getShowInfo();
         Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                 .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+        Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(15));
     }
 
     @Test
