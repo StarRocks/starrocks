@@ -71,6 +71,9 @@ void ExchangeSourceOperatorFactory::close_stream_recvr() {
 
 bool ExchangeSourceOperatorFactory::could_local_shuffle() const {
     DCHECK(_texchange_node.__isset.partition_type);
+    if (!_enable_pipeline_level_shuffle) {
+        return true;
+    }
     // There are two ways of shuffle
     // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
     // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
