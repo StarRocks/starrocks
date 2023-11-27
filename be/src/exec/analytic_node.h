@@ -45,6 +45,7 @@ private:
     const TupleDescriptor* _result_tuple_desc;
     AnalytorPtr _analytor = nullptr;
     bool _use_hash_based_partition = false;
+<<<<<<< HEAD
     std::vector<ExprContext*> _hash_partition_exprs;
 
     Status _get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
@@ -56,5 +57,8 @@ private:
 
     Status _fetch_next_chunk(RuntimeState* state);
     Status _try_fetch_next_partition_data(RuntimeState* state);
+=======
+    std::vector<ExprContext*> _partition_exprs;
+>>>>>>> ebe9f77304 ([Enhancement] Support skew hint for window partition clause (#35486))
 };
 } // namespace starrocks
