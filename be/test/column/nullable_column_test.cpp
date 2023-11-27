@@ -368,4 +368,23 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
     ASSERT_EQ(4, c2->get(6).get_int32());
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+PARALLEL_TEST(NullableColumnTest, test_remove_first_n_values) {
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    column->append_datum((int32_t)1);
+    column->append_datum({});
+    column->append_datum((int32_t)4);
+
+    ASSERT_TRUE(column->has_null());
+    column->remove_first_n_values(1);
+    ASSERT_TRUE(column->has_null());
+    column->remove_first_n_values(1);
+    ASSERT_FALSE(column->has_null());
+    column->remove_first_n_values(1);
+    ASSERT_FALSE(column->has_null());
+}
+
+} // namespace starrocks
+>>>>>>> 9c2fc49c1f ([BugFix] Fix NullableColumn::remove_first_n_values not maintaining has_null field (#35842))
