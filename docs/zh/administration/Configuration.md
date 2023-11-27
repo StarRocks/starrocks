@@ -509,6 +509,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：86400
 
+##### fast_schema_evolution
+
+- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
+  > **NOTE**
+  >
+  > - StarRocks 存算分离集群不支持该参数。
+  > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
+- 默认值：TRUE
+- 引入版本：3.2.0
+
 ##### recover_with_empty_tablet
 
 - 含义：在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br />这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。
@@ -665,6 +675,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：单次 RESTORE 操作下，系统向单个 BE 节点下发的最大下载任务数。设置为小于或等于 0 时表示不限制任务数。该参数自 v3.1.0 起新增。
 - 默认值：0
+
+##### allow_system_reserved_names
+
+- **默认值**: FALSE
+- 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.2.0 起新增。
 
 ### 配置 FE 静态参数
 
@@ -1988,3 +2003,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE
+
+#### routine_load_failure_pause_interval_second
+- 含义：Routine Load 导入作业中任务持续失败重试时间，单位为秒。当导入作业的任一任务持续失败超过该值时，任务将会转为 PAUSED 状态。对于由于持续失败而暂停的任务，请务必检查任务失败原因，避免长时间无法同步数据导致数据源数据过期。该参数针对所有导入作业。但是，当在任务参数中配置 `failure_pause_interval_second` 时 `routine_load_failure_pause_interval_second` 则不会生效。

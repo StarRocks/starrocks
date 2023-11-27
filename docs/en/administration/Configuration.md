@@ -2100,6 +2100,11 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
 
+#### routine_load_failure_pause_interval_second
+- **Default**: 86400 (24 hours)
+- **Unit**: Second
+- **Description**: The continuous failure retry time in seconds for each task of Routine Load job. When any task of the job fails continuously for more than this value, the task will turn to PAUSED status. For tasks that are suspended due to persistent failures, be sure to check the reason for the task failure to avoid data expiration due to a long period of inability to load data. This parameter is for all Routine Load jobs. However, `routine_load_failure_pause_interval_second` does not take effect when `failure_pause_interval_second` is configured in the job properties.
+
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
 | be_service_threads | 64 | N/A | |
