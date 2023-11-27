@@ -2496,6 +2496,7 @@ public class PlanFragmentBuilder {
                     orderByElements,
                     node.getAnalyticWindow(),
                     node.isUseHashBasedPartition(),
+                    node.isSkewed(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -2521,6 +2522,8 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
+                // If the data is skewed, we prefer to perform the standard sort-merge process to enhance performance.
+                sortNode.setAnalyticPartitionSkewed(node.isSkewed());
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);
