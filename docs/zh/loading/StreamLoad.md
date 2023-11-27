@@ -20,11 +20,6 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 
 对于 CSV 格式的数据，需要注意以下两点：
 
-<<<<<<< HEAD
-Stream Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](./Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
-
-> 注意：Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
-=======
 - StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 - 空值 (null) 用 `\N` 表示。比如，数据文件一共有三列，其中某行数据的第一列、第三列数据分别为 `a` 和 `b`，第二列没有数据，则第二列需要用 `\N` 来表示空值，写作 `a,\N,b`，而不是 `a,,b`。`a,,b` 表示第二列是一个空字符串。
 
@@ -37,7 +32,6 @@ Stream Load 是一种基于 HTTP PUT 的同步导入方式。提交导入作业�
 > **NOTICE**
 >
 > Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
->>>>>>> ac7270c82a ([Doc] Add content about using broker load for loading from local file system and NAS (#35775))
 
 ### 基本原理
 
@@ -120,8 +114,6 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
 ```
 
-<<<<<<< HEAD
-=======
 :::note
 
 - 如果账号没有设置密码，这里只需要传入 `<username>:`。
@@ -129,7 +121,6 @@ curl --location-trusted -u <username>:<password> -H "label:123" \
 
 :::
 
->>>>>>> ac7270c82a ([Doc] Add content about using broker load for loading from local file system and NAS (#35775))
 `example1.csv` 文件中包含三列，跟 `table1` 表的 `id`、`name`、`score` 三列一一对应，并用逗号 (,) 作为列分隔符。因此，需要通过 `column_separator` 参数指定列分隔符为逗号 (,)，并且在 `columns` 参数中按顺序把 `example1.csv` 文件中的三列临时命名为 `id`、`name`、`score`。`columns` 参数中声明的三列，按名称对应 `table1` 表中的三列。
 
 导入完成后，您可以查询 `table1` 表，验证数据导入是否成功，如下所示：
@@ -200,8 +191,6 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
     http://<fe_host>:<fe_http_port>/api/mydatabase/table2/_stream_load
 ```
 
-<<<<<<< HEAD
-=======
 :::note
 
 - 如果账号没有设置密码，这里只需要传入 `<username>:`。
@@ -209,7 +198,6 @@ curl -v --location-trusted -u <username>:<password> -H "strict_mode: true" \
 
 :::
 
->>>>>>> ac7270c82a ([Doc] Add content about using broker load for loading from local file system and NAS (#35775))
 `example2.json` 文件中包含 `name` 和 `code` 两个键，跟 `table2` 表中的列之间的对应关系如下图所示。
 
 ![JSON 映射图](../assets/4.2-2.png)
