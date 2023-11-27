@@ -757,9 +757,5 @@ select count() from orders;
 0
 -- !result
 drop materialized view order_mv2;
-<<<<<<< HEAD
--- result:
-=======
 -- result:
 -- !result
->>>>>>> 17a5ad049a ([Refactor] Rename light schema change to fast schema evolution (#34472))
