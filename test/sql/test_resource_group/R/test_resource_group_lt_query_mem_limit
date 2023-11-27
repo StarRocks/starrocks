@@ -29,7 +29,7 @@ alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_
 -- !result
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea736e46-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
 -- result:
@@ -43,7 +43,7 @@ alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_
 -- !result
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea7a732a-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 -- result:
@@ -57,35 +57,35 @@ alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_
 -- !result
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea80669e-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea826270-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea826270-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the big query limit of the resource group [Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea826270-8cfa-11ee-a48e-3a680bfb1cc8]. You can change the limit by modifying [big_query_mem_limit] of this group')
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea84fa82-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea86f654-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea86f654-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the big query limit of the resource group [Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea86f654-8cfa-11ee-a48e-3a680bfb1cc8]. You can change the limit by modifying [big_query_mem_limit] of this group')
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea88cb16-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
 -- result:
@@ -99,7 +99,7 @@ alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_
 -- !result
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea8ce9ca-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 -- result:
@@ -113,140 +113,140 @@ alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_
 -- !result
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea90e16e-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea92b630-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea92b630-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the big query limit of the resource group [Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea92b630-8cfa-11ee-a48e-3a680bfb1cc8]. You can change the limit by modifying [big_query_mem_limit] of this group')
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of rg_6a1d1474629c459b9de7e924f273ce6d exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea948af2-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 0. Mem usage has exceed the limit of the resource group [rg_6a1d1474629c459b9de7e924f273ce6d]. You can change the limit by modifying [mem_limit] of this group')
+[REGEX].*Mem usage has exceed the limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea965fb4-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea965fb4-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the big query limit of the resource group [Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryea965fb4-8cfa-11ee-a48e-3a680bfb1cc8]. You can change the limit by modifying [big_query_mem_limit] of this group')
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryea980d66-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea980d66-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryea99bb18-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea99bb18-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryea9b41ba-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea9b41ba-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryea9cc85c-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea9cc85c-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryea9e760e-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea9e760e-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryea9ffcb0-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: ea9ffcb0-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaa18352-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaa18352-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaa33104-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaa33104-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaa4b7a6-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaa4b7a6-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaa66558-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaa66558-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaa8130a-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaa8130a-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaa9c0bc-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaa9c0bc-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaab6e6e-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaab6e6e-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryeaad1c20-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaad1c20-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1020. Mem usage has exceed the big query limit of the resource group [Group=rg_6a1d1474629c459b9de7e924f273ce6d, Queryeaad1c20-8cfa-11ee-a48e-3a680bfb1cc8]. You can change the limit by modifying [big_query_mem_limit] of this group')
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeaaec9d2-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eaaec9d2-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 -- result:
 -- !result
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 -- result:
-E: (1064, 'Memory of Queryeab07784-8cfa-11ee-a48e-3a680bfb1cc8 exceed limit. Pipeline Backend: 172.26.92.195, fragment: eab07784-8cfa-11ee-a48e-3a680bfb1cca Used: 6480, Limit: 1024. Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.')
+[REGEX].*Mem usage has exceed the limit of single query.*
 -- !result
 drop resource group rg_${uuid0};
 -- result:
