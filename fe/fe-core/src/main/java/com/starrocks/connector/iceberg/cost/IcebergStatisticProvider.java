@@ -17,7 +17,6 @@ package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.AbstractSequentialIterator;
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -71,9 +70,32 @@ public class IcebergStatisticProvider {
     // table uuid -> <partition column id -> partition column values>
     private final Map<String, HashMultimap<Integer, Object>> uuidToPartitionFieldIdToValues = new HashMap<>();
     private final Map<IcebergFilter, IcebergFileStats> icebergFileStatistics = new HashMap<>();
-    private final Multimap<IcebergFilter, String> scannedFiles = HashMultimap.create();
+    private final Map<IcebergFilter, Set<String>> scannedFiles = new HashMap<>();
+
+    // only used for iceberg job planning without column statistics.
+    private final Map<IcebergFilter, Long> icebergCardinality = new HashMap<>();
 
     public IcebergStatisticProvider() {
+    }
+
+    public Statistics getCardinalityStats(IcebergTable icebergTable,
+                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                          ScalarOperator predicate) {
+        Statistics.Builder statisticsBuilder = Statistics.builder();
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        if (snapshot.isPresent()) {
+            IcebergFilter key = IcebergFilter.of(icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(),
+                    snapshot.get().snapshotId(), predicate);
+            if (icebergCardinality.containsKey(key)) {
+                statisticsBuilder.setOutputRowCount(icebergCardinality.get(key));
+            } else {
+                statisticsBuilder.setOutputRowCount(1);
+            }
+        } else {
+            statisticsBuilder.setOutputRowCount(1);
+        }
+        statisticsBuilder.addColumnStatistics(buildUnknownColumnStatistics(colRefToColumnMetaMap.keySet()));
+        return statisticsBuilder.build();
     }
 
     public Statistics getTableStatistics(IcebergTable icebergTable,
@@ -129,6 +151,18 @@ public class IcebergStatisticProvider {
         return columns.stream().collect(Collectors.toMap(column -> column, column -> ColumnStatistic.unknown()));
     }
 
+    public void updateCardinality(IcebergFilter key, FileScanTask fileScanTask) {
+        DataFile dataFile = fileScanTask.file();
+        Set<String> files = scannedFiles.computeIfAbsent(key, ignored -> new HashSet<>());
+        if (files.contains(dataFile.path().toString())) {
+            return;
+        }
+
+        files.add(dataFile.path().toString());
+        long rowNum = fileScanTask.file().recordCount();
+        icebergCardinality.compute(key, (k, v) -> (v == null) ? rowNum : v + rowNum);
+    }
+
     public void updateIcebergFileStats(IcebergTable icebergTable, FileScanTask fileScanTask,
                                        Map<Integer, Type.PrimitiveType> idToTypeMapping,
                                        List<Types.NestedField> nonPartitionPrimitiveColumns,
@@ -145,11 +179,12 @@ public class IcebergStatisticProvider {
             return;
         }
 
-        if (scannedFiles.containsEntry(key, dataFile.path().toString())) {
+        Set<String> files = scannedFiles.computeIfAbsent(key, ignored -> new HashSet<>());
+        if (files.contains(dataFile.path().toString())) {
             return;
         }
 
-        scannedFiles.put(key, dataFile.path().toString());
+        files.add(dataFile.path().toString());
 
         PartitionData partitionData = (PartitionData) fileScanTask.file().partition();
         for (int i = 0; i < partitionData.size(); i++) {

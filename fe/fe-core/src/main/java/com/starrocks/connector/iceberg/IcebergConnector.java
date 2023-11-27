@@ -26,6 +26,7 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
@@ -33,6 +34,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 import java.util.Properties;
+
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -98,8 +101,23 @@ public class IcebergConnector implements Connector {
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
-            this.icebergNativeCatalog = buildIcebergNativeCatalog();
+            IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
+            boolean enableMetadataCache = Boolean.parseBoolean(
+                    properties.getOrDefault("enable_iceberg_metadata_cache", "true"));
+            if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
+                long ttl = Long.parseLong(properties.getOrDefault("iceberg_cache_ttl_seconds", "1800"));
+                nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl);
+                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerCachingIcebergCatalog(catalogName, nativeCatalog);
+            }
+            this.icebergNativeCatalog = nativeCatalog;
         }
+
         return icebergNativeCatalog;
+    }
+
+    @Override
+    public void shutdown() {
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }

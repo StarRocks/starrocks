@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg.hive;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -34,9 +35,12 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableScan;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -52,6 +56,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
@@ -202,6 +207,26 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         } catch (Exception e) {
             LOG.error("Failed to delete uncommitted files", e);
         }
+    }
+
+    @Override
+    public List<String> listPartitionNames(String dbName, String tableName) {
+        org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
+        List<String> partitionNames = Lists.newArrayList();
+
+        // all partitions specs are unpartitioned
+        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
+            return partitionNames;
+        }
+
+        TableScan tableScan = icebergTable.newScan();
+        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+
+        for (FileScanTask fileScanTask : tasks) {
+            StructLike partition = fileScanTask.file().partition();
+            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
+        }
+        return partitionNames;
     }
 
     public String toString() {

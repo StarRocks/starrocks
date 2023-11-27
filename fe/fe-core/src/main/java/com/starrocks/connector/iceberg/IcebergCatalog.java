@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -56,8 +57,14 @@ public interface IcebergCatalog {
 
     Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
 
+    default List<String> listPartitionNames(String dbName, String tableName) {
+        return Lists.newArrayList();
+    }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
+    }
+
+    default void refreshTable(String dbName, String tableName) {
     }
 
 }
