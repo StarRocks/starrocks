@@ -383,6 +383,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select isnull(null)";
         assertPlanContains(sql, "<slot 2> : TRUE");
 
+        sql = "select isnull(1, 2)";
+        analyzeFail(sql, "isnull function must have 1 argument");
+
         sql = "select isnotnull(1)";
         assertPlanContains(sql, "<slot 2> : TRUE");
 
@@ -391,5 +394,8 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select isnotnull(null)";
         assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnotnull(1, 2)";
+        analyzeFail(sql, "isnotnull function must have 1 argument");
     }
 }
