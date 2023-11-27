@@ -309,6 +309,8 @@ public class Optimizer {
     private OptExpression logicalRuleRewrite(ConnectContext connectContext,
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
+        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        // for short circuit
         Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
         if (result.isPresent()) {
             return result.get();
