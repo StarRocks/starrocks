@@ -26,6 +26,7 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -92,6 +93,15 @@ public class AnalyzeMgrTest {
                         new ConnectorTableColumnStats(new ColumnStatistic(0, 100, 0, 200, 50), 50)
                 );
                 minTimes = 1;
+            }
+        };
+        analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
+                ImmutableList.of("c1", "c2"), false);
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tableName) {
+                throw new RuntimeException("mock get table exception");
             }
         };
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
