@@ -166,4 +166,10 @@ public class DataCachePlanTest extends PlanTestBase {
             Assert.assertFalse(tScanRangeLocations.scan_range.hdfs_scan_range.isSetDatacache_options());
         }
     }
+
+    @Test
+    public void testForBlackHoleSink() throws Exception {
+        String sql = "explain blackhole as select * from hive0.datacache_db.multi_partition_table where l_shipdate>='1998-01-03'";
+        assertPlanContains(sql, "BLACKHOLE");
+    }
 }

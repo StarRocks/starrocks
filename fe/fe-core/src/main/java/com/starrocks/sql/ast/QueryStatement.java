@@ -25,6 +25,9 @@ public class QueryStatement extends StatementBase {
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
 
+    // If enable black hole sink, we will eat all rows returned by query sql
+    private boolean enableBlackHoleSink = false;
+
     public QueryStatement(QueryRelation queryRelation, OriginStatement originStatement) {
         super(queryRelation.getPos());
         this.queryRelation = queryRelation;
@@ -50,6 +53,14 @@ public class QueryStatement extends StatementBase {
 
     public boolean hasOutFileClause() {
         return outFileClause != null;
+    }
+
+    public boolean isEnableBlackHoleSink() {
+        return enableBlackHoleSink;
+    }
+
+    public void setEnableBlackHoleSink(boolean enableBlackHoleSink) {
+        this.enableBlackHoleSink = enableBlackHoleSink;
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

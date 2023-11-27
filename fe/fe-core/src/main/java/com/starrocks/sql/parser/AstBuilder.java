@@ -3009,6 +3009,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ClearDataCacheRulesStmt(createPos(ctx));
     }
 
+    // ---------------------------------------- Black Hole Query Statement ---------------------------------------------
+    @Override
+    public ParseNode visitBlackHoleAsQueryStatement(StarRocksParser.BlackHoleAsQueryStatementContext ctx) {
+        QueryRelation queryRelation = (QueryRelation) visit(ctx.queryRelation());
+        QueryStatement queryStatement = new QueryStatement(queryRelation);
+
+        if (ctx.explainDesc() != null) {
+            queryStatement.setIsExplain(true, getExplainType(ctx.explainDesc()));
+        }
+
+        queryStatement.setEnableBlackHoleSink(true);
+
+        return queryStatement;
+    }
+
     // ----------------------------------------------- Export Statement ------------------------------------------------
     @Override
     public ParseNode visitExportStatement(StarRocksParser.ExportStatementContext context) {

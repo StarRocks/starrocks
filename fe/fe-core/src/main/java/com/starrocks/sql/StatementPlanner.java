@@ -59,6 +59,9 @@ import java.util.stream.Collectors;
 public class StatementPlanner {
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
+        if (stmt instanceof QueryStatement && ((QueryStatement) stmt).isEnableBlackHoleSink()) {
+            return plan(stmt, session, TResultSinkType.BLACKHOLE);
+        }
         if (session instanceof HttpConnectContext) {
             return plan(stmt, session, TResultSinkType.HTTP_PROTOCAL);
         }

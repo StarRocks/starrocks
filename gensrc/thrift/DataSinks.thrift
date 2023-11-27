@@ -62,7 +62,8 @@ enum TResultSinkType {
     FILE,
     STATISTIC,
     VARIABLE,
-    HTTP_PROTOCAL
+    HTTP_PROTOCAL,
+    BLACKHOLE
 }
 
 enum TResultSinkFormatType {

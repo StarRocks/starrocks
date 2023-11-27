@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "exprs/expr.h"
+#include "runtime/black_hole_sink.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/http_result_writer.h"
 #include "runtime/mysql_result_writer.h"
@@ -47,6 +48,9 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         break;
     case TResultSinkType::HTTP_PROTOCAL:
         _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
+        break;
+    case TResultSinkType::BLACKHOLE:
+        _writer = std::make_shared<BlackHoleSink>(_sender.get(), _profile.get());
         break;
     default:
         return Status::InternalError("Unknown result sink type");

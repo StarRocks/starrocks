@@ -67,9 +67,7 @@ public class ResultSink extends DataSink {
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
-        StringBuilder strBuilder = new StringBuilder();
-        strBuilder.append(prefix + "RESULT SINK\n");
-        return strBuilder.toString();
+        return prefix + "RESULT SINK: " + sinkType + "\n";
     }
 
     @Override
