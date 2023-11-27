@@ -1226,4 +1226,102 @@ public class WindowTest extends PlanTestBase {
                 "args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
     }
+
+    @Test
+    public void testSkewPartition() throws Exception {
+        String sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over([skewed]partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over([skewed]partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over([skewed]partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over([skewed]partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over([skewed]partition by v2 order by v3), " +
+                "avg(v1) over([skewed]partition by v2 order by v3), " +
+                "max(v1) over([skewed]partition by v2 order by v3), " +
+                "min(v1) over([skewed]partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+    }
 }

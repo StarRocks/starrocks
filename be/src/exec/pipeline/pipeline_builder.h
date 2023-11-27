@@ -78,6 +78,12 @@ public:
                                                          OpFactories& pred_operators,
                                                          const PartitionExprsGenerator& self_partition_exprs_generator);
 
+    // The intput data is already ordered by partition_exprs. Then we can use a simply approach to split them into different channels
+    // as long as the data of the same partition_exprs are in the same channel.
+    OpFactories maybe_interpolate_local_ordered_partition_exchange(
+            RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
+            const std::vector<ExprContext*>& partition_expr_ctxs);
+
     void interpolate_spill_process(size_t plan_node_id, const SpillProcessChannelFactoryPtr& channel_factory,
                                    size_t dop);
 

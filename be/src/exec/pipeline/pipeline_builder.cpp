@@ -93,7 +93,7 @@ OpFactories PipelineBuilderContext::_maybe_interpolate_local_passthrough_exchang
     // streams and produce one output stream piping into the sort operator.
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_op = source_operator(pred_operators);
-    if (!force && source_op->degree_of_parallelism() == num_receivers) {
+    if (!force && source_op->degree_of_parallelism() == num_receivers && !source_op->is_skewed()) {
         return pred_operators;
     }
 
@@ -234,6 +234,39 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
             std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), part_type, partition_expr_ctxs);
     auto local_shuffle_sink =
             std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), plan_node_id, local_shuffle);
+    pred_operators.emplace_back(std::move(local_shuffle_sink));
+    add_pipeline(pred_operators);
+
+    return {std::move(local_shuffle_source)};
+}
+
+OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_exchange(
+        RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
+        const std::vector<ExprContext*>& partition_expr_ctxs) {
+    DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
+
+    // If DOP is one, we needn't partition input chunks.
+    size_t shuffle_partitions_num = degree_of_parallelism();
+    if (shuffle_partitions_num <= 1) {
+        return pred_operators;
+    }
+
+    auto* pred_source_op = source_operator(pred_operators);
+
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
+    auto local_shuffle_source =
+            std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
+    local_shuffle_source->set_runtime_state(state);
+    inherit_upstream_source_properties(local_shuffle_source.get(), pred_source_op);
+    local_shuffle_source->set_could_local_shuffle(pred_source_op->partition_exprs().empty());
+    local_shuffle_source->set_degree_of_parallelism(shuffle_partitions_num);
+
+    auto local_shuffle =
+            std::make_shared<OrderedPartitionExchanger>(mem_mgr, local_shuffle_source.get(), partition_expr_ctxs);
+    auto local_shuffle_sink =
+            std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), plan_node_id, local_shuffle);
+
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
