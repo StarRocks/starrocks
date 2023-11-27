@@ -150,11 +150,10 @@ public class PruneGroupByKeysRule extends TransformationRule {
                 // for queries with all constant in project and group by keys,
                 // like `select 'a','b' from table group by 'c','d'`,
                 // we can remove agg node and rewrite it to `select 'a','b' from table limit 1`
-                OptExpression childInput = OptExpression.create(projectOperator, input.getInputs().get(0).getInputs());
-                LogicalLimitOperator local = LogicalLimitOperator.local(1);
-                LogicalLimitOperator global = LogicalLimitOperator.global(1, DEFAULT_OFFSET);
                 OptExpression result = OptExpression.create(
-                        global, OptExpression.create(local, childInput));
+                        LogicalLimitOperator.init(1),
+                        OptExpression.create(
+                                projectOperator, input.getInputs().get(0).getInputs()));
                 return Lists.newArrayList(result);
             }
         }
