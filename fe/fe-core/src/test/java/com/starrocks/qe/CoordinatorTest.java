@@ -23,6 +23,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.UserException;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -66,7 +67,7 @@ public class CoordinatorTest extends PlanTestBase {
     CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
-    public void setUp() throws IOException {
+    public void setUp() throws IOException, UserException {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);

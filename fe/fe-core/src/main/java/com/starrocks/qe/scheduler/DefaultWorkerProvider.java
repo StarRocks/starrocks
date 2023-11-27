@@ -20,6 +20,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.UserException;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -87,7 +89,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                              boolean preferComputeNode,
                                                              int numUsedComputeNodes,
-                                                             long warehouseId) {
+                                                             long warehouseId) throws UserException {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, warehouseId);
@@ -282,9 +284,15 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes,
-                                                                        long warehouseId) {
+                                                                        long warehouseId)
+            throws NonRecoverableException {
         if (RunMode.isSharedDataMode()) {
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse(warehouseId);
+            try {
+                return GlobalStateMgr.getCurrentWarehouseMgr().
+                        getComputeNodesFromAvailableWarehouse(warehouseId);
+            } catch (WarehouseUnavailableException e) {
+                throw new NonRecoverableException(e.getMessage());
+            }
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

@@ -451,7 +451,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
         return new DefaultCoordinator.Factory();
     }
 
-    private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes) {
+    private void genCoordinators(ExportStmt stmt, List<PlanFragment> fragments, List<ScanNode> nodes)
+            throws UserException {
         UUID uuid = UUID.randomUUID();
         for (int i = 0; i < fragments.size(); ++i) {
             PlanFragment fragment = fragments.get(i);

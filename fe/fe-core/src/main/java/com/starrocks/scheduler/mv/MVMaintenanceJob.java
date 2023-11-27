@@ -21,6 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -227,7 +228,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         }
     }
 
-    void buildContext() {
+    void buildContext() throws UserException {
         // TODO(murphy) fill current user
         // Build connection context
         this.connectContext = StatisticUtils.buildConnectContext();

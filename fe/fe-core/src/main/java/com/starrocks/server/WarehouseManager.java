@@ -98,7 +98,7 @@ public class WarehouseManager implements Writable {
             throw new WarehouseUnavailableException("warehouse " + warehouseId + " not exist");
         }
         if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
-            throw new WarehouseUnavailableException("warehouse " + warehouseId + " has been suspended");
+            throw new WarehouseUnavailableException("warehouse " + warehouse.getName() + " has been suspended");
         }
         return warehouse;
     }
@@ -156,9 +156,12 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+    // will check whether warehouse is available first
+    public ImmutableMap<Long, ComputeNode> getComputeNodesFromAvailableWarehouse(long warehouseId)
+            throws WarehouseUnavailableException {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-        Warehouse warehouse = getWarehouse(warehouseId);
+        Warehouse warehouse = getAvailbleWarehouse(warehouseId);
+        // check if warehouse available
         warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds().forEach(
                 nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();

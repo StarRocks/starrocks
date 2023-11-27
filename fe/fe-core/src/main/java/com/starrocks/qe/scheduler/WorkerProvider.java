@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.starrocks.common.UserException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 
@@ -40,7 +41,7 @@ public interface WorkerProvider {
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
-                                               long warehouseId);
+                                               long warehouseId) throws UserException;
     }
 
     /**
