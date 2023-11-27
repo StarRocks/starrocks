@@ -275,7 +275,7 @@ public class ConnectProcessor {
             queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
         }
 
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
     protected void addRunningQueryDetail(StatementBase parsedStmt) {
@@ -303,8 +303,13 @@ public class ConnectProcessor {
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
         ctx.setQueryDetail(queryDetail);
+<<<<<<< HEAD
         //copy queryDetail, cause some properties can be changed in future
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+=======
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
+>>>>>>> edc7608139 ([Enhancement] remove lock for QueryDetailQueue (#35645))
     }
 
     // process COM_QUERY statement,
