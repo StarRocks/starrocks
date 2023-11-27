@@ -15,16 +15,10 @@ create resource group rg_${uuid0}
     to ( user='user_${uuid0}' ) 
     with ('cpu_core_limit' = '1', 'mem_limit' = '0.0000000000001', 'concurrency_limit'='2');
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
@@ -33,16 +27,10 @@ select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
@@ -51,16 +39,10 @@ select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=0,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
@@ -69,16 +51,10 @@ select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group=
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
@@ -87,16 +63,10 @@ select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group=
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=1073741824000,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
@@ -105,16 +75,10 @@ select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uui
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
@@ -123,16 +87,10 @@ select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uui
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=1020,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='0');
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='0');
-select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1073741824000');
@@ -141,16 +99,10 @@ select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uui
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1073741824000');
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1020');
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.99','big_query_mem_limit'='1020');
-select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
-
-alter resource group rg_${uuid0} with ('mem_limit'='0','big_query_mem_limit'='1024');
 select /*+SET_VAR(query_mem_limit=1024,exec_mem_limit=0,resource_group='rg_${uuid0}')*/ count(1) from t1 where k1 > 0;
 
 alter resource group rg_${uuid0} with ('mem_limit'='0.0000000000001','big_query_mem_limit'='1024');
