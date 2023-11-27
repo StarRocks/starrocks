@@ -39,6 +39,17 @@ select /*+SET_VAR(query_mem_limit=107374182400,resource_group='rg_${uuid0}')*/ c
 -- result:
 524280
 -- !result
+alter resource group rg_${uuid0} with ('big_query_mem_limit'='1024');
+-- result:
+-- !result
+select /*+SET_VAR(query_mem_limit=1073741824000,resource_group='rg_${uuid0}')*/ count(1) from t1;
+-- result:
+[REGEX].*Mem usage has exceed the big query limit of the resource group.*
+-- !result
+select /*+SET_VAR(query_mem_limit=1022,resource_group='rg_${uuid0}')*/ count(1) from t1;
+-- result:
+[REGEX].*Mem usage has exceed the limit of single query.*
+-- !result
 drop resource group rg_${uuid0};
 -- result:
 -- !result
