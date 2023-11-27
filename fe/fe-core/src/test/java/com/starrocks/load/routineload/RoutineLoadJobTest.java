@@ -171,7 +171,7 @@ public class RoutineLoadJobTest {
         Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                 .anyMatch(entity -> entity.equals(errorReason.toString())));
 
-        Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(15));
+        Assert.assertEquals("{\"0\":\"12345\"}", showInfo.get(19));
     }
 
     @Test
