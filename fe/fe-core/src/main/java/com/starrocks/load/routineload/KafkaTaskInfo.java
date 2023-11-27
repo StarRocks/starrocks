@@ -107,6 +107,10 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
                 new ArrayList<>(partitionIdToOffset.keySet()));
         for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
+            kafkaRoutineLoadJob.setPartitionOffset(entry.getKey(), entry.getValue());
+        }
+
+        for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
             int partitionId = entry.getKey();
             Long latestOffset = latestOffsets.get(partitionId);
             Long consumeOffset = entry.getValue();
