@@ -92,7 +92,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
             for (RoutineLoadJob job : runningJobs) {
                 job.updateState(RoutineLoadJob.JobState.NEED_SCHEDULE, null, false);
             }
-            Log.info("new all routine load jobs are rescheduled, job num: ", runningJobs.size());
+            LOG.info("All routine load jobs have been rescheduled, job num: {}", runningJobs.size());
             needReschedule.set(false);
         }
 
