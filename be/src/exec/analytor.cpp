@@ -1063,7 +1063,7 @@ void Analytor::_find_partition_end() {
                 _partition.end = _find_first_not_equal_for_hash_based_partition(target, start, _partition.end);
             } else {
                 for (auto& column : _partition_columns) {
-                    _partition.end = _find_first_not_equal(column.get(), target, start, _partition.end);
+                    _partition.end = ColumnHelper::find_first_not_equal(column.get(), target, start, _partition.end);
                 }
             }
         }
@@ -1109,8 +1109,8 @@ void Analytor::_find_peer_group_end() {
         SCOPED_TIMER(_peer_group_search_timer);
         if (_peer_group.start < _peer_group.end) {
             for (auto& column : _order_columns) {
-                _peer_group.end =
-                        _find_first_not_equal(column.get(), _peer_group.start, _peer_group.start, _peer_group.end);
+                _peer_group.end = ColumnHelper::find_first_not_equal(column.get(), _peer_group.start, _peer_group.start,
+                                                                     _peer_group.end);
             }
         }
     }
@@ -1130,21 +1130,6 @@ void Analytor::_find_peer_group_end() {
     }
 
     _peer_group.is_real = false;
-}
-
-int64_t Analytor::_find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end) {
-    while (start + 1 < end) {
-        int64_t mid = start + (end - start) / 2;
-        if (column->compare_at(target, mid, *column, 1) == 0) {
-            start = mid;
-        } else {
-            end = mid;
-        }
-    }
-    if (column->compare_at(target, end - 1, *column, 1) == 0) {
-        return end;
-    }
-    return end - 1;
 }
 
 int64_t Analytor::_find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end) {
