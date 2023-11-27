@@ -571,6 +571,7 @@ public class ExpressionRangePartitionInfoTest {
         expressionRangePartitionInfo.write(buffer);
         DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
         PartitionInfo deserialized = ExpressionRangePartitionInfo.read(input);
+        Assert.assertNotNull(deserialized);
     }
 
     @Test
