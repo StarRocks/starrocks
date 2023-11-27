@@ -1,22 +1,30 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # xx_hash3_64
 
-## Description
+## 功能
 
-Returns the 64-bit xxhash3 hash value of the input string. xx_hash3_64 has better performance than [murmur_hash3_32](./murmur_hash3_32.md) by using AVX2 instruction and has state-of-art hash quality which is broadly integrated with many software.
+返回输入字符串的 64 位 xxhash3 hash 值。xx_hash3_64 使用 AVX2 指令集，能提供比比 [murmur_hash3_32](./murmur_hash3_32.md) 更快的速度和更优的性能。
 
-This function is supported from v3.2.0.
+该函数从 3.2.0 版本开始支持。
 
-## Syntax
+## 语法
 
 ```Haskell
 BIGINT XX_HASH3_64(VARCHAR input, ...)
 ```
 
-## Examples
+## 参数说明
+
+`input`: 支持的数据类型为 VARCHAR。
+
+## 返回值说明
+
+返回值的数据类型为 BIGINT。如果输入值为 NULL，则返回 NULL。
+
+## 示例
 
 ```Plain Text
 MySQL > select xx_hash3_64(null);
@@ -43,4 +51,4 @@ MySQL > select xx_hash3_64("hello", "world");
 
 ## keyword
 
-XX_HASH3_64,HASH,,xxHash3
+XX_HASH3_64,HASH,xxHash3

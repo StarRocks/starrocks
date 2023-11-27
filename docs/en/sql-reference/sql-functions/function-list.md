@@ -257,6 +257,7 @@ You can find a function based on the following categories:
 ## Hash functions
 
 - [murmur_hash3_32](../sql-functions/hash-functions/murmur_hash3_32.md)
+- [xx_hash3_64](./hash-functions/xx_hash3_64.md)
 
 ## JSON functions
 
