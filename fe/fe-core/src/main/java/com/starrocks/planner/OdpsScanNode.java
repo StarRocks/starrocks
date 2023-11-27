@@ -117,8 +117,6 @@ public class OdpsScanNode extends ScanNode {
                     RowRangeInputSplit split1 = (RowRangeInputSplit) inputSplit;
                     splitInfo.put("start_index", String.valueOf(split1.getRowRange().getStartIndex()));
                     splitInfo.put("num_record", String.valueOf(split1.getRowRange().getNumRecord()));
-                    hdfsScanRange.setOffset(split1.getRowRange().getStartIndex());
-                    hdfsScanRange.setLength(split1.getRowRange().getNumRecord() - split1.getRowRange().getStartIndex());
                     break;
                 default:
                     throw new StarRocksConnectorException(
@@ -127,6 +125,8 @@ public class OdpsScanNode extends ScanNode {
             hdfsScanRange.setOdps_split_info(splitInfo);
             hdfsScanRange.setUse_odps_jni_reader(true);
             hdfsScanRange.setFile_length(1);
+            // backend selector use length to load balancing
+            hdfsScanRange.setLength(1);
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocations.setScan_range(scanRange);
