@@ -61,7 +61,9 @@ public class SubfieldExprNoCopyRule extends TransformationRule {
                 allSubfieldExpr.addAll(collector.getComplexExpressions());
                 // normalize access path
                 SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
-                normalizer.collect(allSubfieldExpr);
+                for (ScalarOperator expr : allSubfieldExpr) {
+                    expr.accept(normalizer, null);
+                }
                 // no other usage
                 if (!normalizer.hasPath(col)) {
                     subfield.setCopyFlag(false);

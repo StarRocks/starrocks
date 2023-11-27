@@ -25,6 +25,7 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
 import java.util.List;
+import java.util.Objects;
 
 public class SubfieldExpr extends Expr {
 
