@@ -335,7 +335,6 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterTableStatement(AlterTableStmt stmt, ConnectContext context) {
-            LOG.info("vist AlterTableStatement");
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterTable(stmt);
             });
