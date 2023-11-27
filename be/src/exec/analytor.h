@@ -203,7 +203,6 @@ private:
 
     void _find_partition_end();
     void _find_peer_group_end();
-    int64_t _find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
     int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();

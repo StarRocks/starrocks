@@ -115,7 +115,7 @@ FROM (
     FROM `t0`
 ) tmp;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> COUNT <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= COUNT =========================================================
 
 -- COUNT(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -244,7 +244,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(v4) OVER(PARTITION 
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(v4) OVER(PARTITION BY v1 ORDER BY v8 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT COUNT(v4) OVER(PARTITION BY v1 ORDER BY v9 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> SUM <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= SUM =========================================================
 
 -- SUM(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -373,7 +373,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v4) OVER(PARTITION BY
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v4) OVER(PARTITION BY v1 ORDER BY v8 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT SUM(v4) OVER(PARTITION BY v1 ORDER BY v9 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> AVG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= AVG =========================================================
 
 -- AVG(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT AVG(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -502,7 +502,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT AVG(v4) OVER(PARTITION BY
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT AVG(v4) OVER(PARTITION BY v1 ORDER BY v8 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT AVG(v4) OVER(PARTITION BY v1 ORDER BY v9 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> MIN <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= MIN =========================================================
 
 -- MIN(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MIN(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -601,7 +601,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MIN(v4) OVER(PARTITION BY
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MIN(v4) OVER(PARTITION BY v1 ORDER BY v8 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MIN(v4) OVER(PARTITION BY v1 ORDER BY v9 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> MAX <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= MAX =========================================================
 
 -- MAX(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MAX(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -700,7 +700,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MAX(v4) OVER(PARTITION BY
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MAX(v4) OVER(PARTITION BY v1 ORDER BY v8 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT MAX(v4) OVER(PARTITION BY v1 ORDER BY v9 RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> FIRST_VALUE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= FIRST_VALUE =========================================================
 
 -- FIRST_VALUE(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT FIRST_VALUE(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -817,7 +817,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT FIRST_VALUE(v4 IGNORE NUL
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT FIRST_VALUE(v4 IGNORE NULLS) OVER(PARTITION BY v1 ORDER BY v5 ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT FIRST_VALUE(v4 IGNORE NULLS) OVER(PARTITION BY v1 ORDER BY v5 ROWS BETWEEN CURRENT ROW AND 5 FOLLOWING) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> LAST_VALUE <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= LAST_VALUE =========================================================
 
 -- LAST_VALUE(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LAST_VALUE(v2) OVER(ORDER BY v5 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS wv FROM t1) a;
@@ -934,7 +934,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LAST_VALUE(v4 IGNORE NULL
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LAST_VALUE(v4 IGNORE NULLS) OVER(PARTITION BY v1 ORDER BY v5 ROWS BETWEEN 5 PRECEDING AND CURRENT ROW) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LAST_VALUE(v4 IGNORE NULLS) OVER(PARTITION BY v1 ORDER BY v5 ROWS BETWEEN CURRENT ROW AND 5 FOLLOWING) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> RANKING <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= RANKING =========================================================
 
 -- row_number
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT ROW_NUMBER() OVER(ORDER BY v4) AS wv FROM t1) a;
@@ -1032,7 +1032,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT DENSE_RANK() OVER(PARTITI
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT DENSE_RANK() OVER(PARTITION BY v4 ORDER BY v8) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT DENSE_RANK() OVER(PARTITION BY v4 ORDER BY v9) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> LEAD <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= LEAD =========================================================
 
 -- LEAD(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LEAD(v2) OVER(ORDER BY v5) AS wv FROM t1) a;
@@ -1077,7 +1077,7 @@ SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LEAD(v4 IGNORE NULLS) OVE
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LEAD(v4 IGNORE NULLS, 3) OVER(PARTITION BY v1 ORDER BY v5) AS wv FROM t1) a;
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LEAD(v4 IGNORE NULLS, 5, -1) OVER(PARTITION BY v1 ORDER BY v5) AS wv FROM t1) a;
 
--- >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> LAG <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-- ========================================================= LAG =========================================================
 
 -- LAG(HAS_NULL) without partition by
 SELECT SUM(wv), AVG(wv), MIN(wv), MAX(wv) FROM (SELECT LAG(v2) OVER(ORDER BY v5) AS wv FROM t1) a;

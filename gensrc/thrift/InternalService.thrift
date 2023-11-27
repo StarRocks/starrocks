@@ -233,6 +233,7 @@ struct TQueryOptions {
   109: optional i64 big_query_profile_second_threshold;
 
   110: optional TQueryQueueOptions query_queue_options;
+  112: optional bool enable_pipeline_level_shuffle;
 }
 
 
