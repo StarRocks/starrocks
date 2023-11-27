@@ -436,6 +436,8 @@ private:
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
 
+    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size);
+
 private:
     Tablet& _tablet;
 
