@@ -371,11 +371,25 @@ public class AstToSQLBuilder {
 
             // target
             sb.append(insert.getTableName().toSql()).append(" ");
-            // TODO: not support specify partition and columns
+
+            // target partition
+            if (insert.getTargetPartitionNames() != null &&
+                    CollectionUtils.isNotEmpty(insert.getTargetPartitionNames().getPartitionNames())) {
+                List<String> names = insert.getTargetPartitionNames().getPartitionNames();
+                sb.append("PARTITION (").append(Joiner.on(",").join(names)).append(") ");
+            }
 
             // label
             if (StringUtils.isNotEmpty(insert.getLabel())) {
                 sb.append("WITH LABEL `").append(insert.getLabel()).append("` ");
+            }
+
+            // target column
+            if (CollectionUtils.isNotEmpty(insert.getTargetColumnNames())) {
+                String columns = insert.getTargetColumnNames().stream()
+                        .map(x -> '`' + x + '`')
+                        .collect(Collectors.joining(","));
+                sb.append("(").append(columns).append(") ");
             }
 
             // source

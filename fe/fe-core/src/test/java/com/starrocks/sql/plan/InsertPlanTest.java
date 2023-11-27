@@ -21,13 +21,16 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
 import org.apache.iceberg.BaseTable;
@@ -866,5 +869,24 @@ public class InsertPlanTest extends PlanTestBase {
                 "     constant exprs: \n" +
                 "         NULL\n";
         Assert.assertEquals(expected, actualRes);
+    }
+
+    @Test
+    public void insertToSql() {
+        String sql = "insert into test_all_type_partition_by_date " +
+                "partition(p1992) (t1a, id_date) SELECT `t1a`, `id_date` FROM `test_all_type_partition_by_date` ";
+        var stmts = SqlParser.parse(sql, new SessionVariable());
+        Assert.assertEquals(1, stmts.size());
+
+        // verify generated SQL
+        String genSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        Assert.assertEquals("INSERT INTO `test_all_type_partition_by_date` " +
+                "PARTITION (p1992) (`t1a`,`id_date`) " +
+                "SELECT `t1a`, `id_date`\n" +
+                "FROM `test_all_type_partition_by_date`", genSql);
+
+        // parse it again
+        var stmts2 = SqlParser.parse(genSql, new SessionVariable());
+        Assert.assertEquals(genSql, AstToSQLBuilder.toSQL(stmts2.get(0)));
     }
 }
