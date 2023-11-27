@@ -23,6 +23,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,6 +38,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -561,6 +565,12 @@ public class ExpressionRangePartitionInfoTest {
         // deserialize
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         Assert.assertNotNull(readTable);
+
+        DataOutputBuffer buffer = new DataOutputBuffer(1024);
+        expressionRangePartitionInfo.write(buffer);
+        DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
+        PartitionInfo deserialized = ExpressionRangePartitionInfo.read(input);
+        Assert.assertNotNull(deserialized);
     }
 
     @Test
