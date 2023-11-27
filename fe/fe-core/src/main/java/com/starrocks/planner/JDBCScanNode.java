@@ -114,17 +114,20 @@ public class JDBCScanNode extends ScanNode {
         List<SlotRef> slotRefs = Lists.newArrayList();
         Expr.collectList(conjuncts, SlotRef.class, slotRefs);
         ExprSubstitutionMap sMap = new ExprSubstitutionMap();
-        for (SlotRef slotRef : slotRefs) {
-            SlotRef tmpRef = (SlotRef) slotRef.clone();
-            tmpRef.setTblName(null);
-
-            sMap.put(slotRef, tmpRef);
-        }
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
         // Compatible with jdbc catalog
         String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getProperty(JDBCResource.URI);
         boolean isMySQL = jdbcURI.startsWith("jdbc:mysql");
+        for (SlotRef slotRef : slotRefs) {
+            SlotRef tmpRef = (SlotRef) slotRef.clone();
+            tmpRef.setTblName(null);
+            if (isMySQL && tmpRef.getLabel() != null && !tmpRef.getLabel().startsWith("`")) {
+                tmpRef.setLabel("`" + tmpRef.getLabel() + "`");
+            }
+            sMap.put(slotRef, tmpRef);
+        }
+
         ArrayList<Expr> mysqlConjuncts = Expr.cloneList(conjuncts, sMap);
         for (Expr p : mysqlConjuncts) {
             filters.add(p.toJDBCSQL(isMySQL));
