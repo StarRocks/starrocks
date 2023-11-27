@@ -41,7 +41,7 @@ private:
     RuntimeProfile* _parent_profile; // parent profile from result sink. not owned
     // number of rows eat
     RuntimeProfile::Counter* _eat_rows_counter = nullptr;
-    int64_t _eaten_rows_num = 0;
+    int64_t _eaten_rows_num;
 };
 
 } // namespace starrocks

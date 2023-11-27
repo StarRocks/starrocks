@@ -17,7 +17,7 @@
 namespace starrocks {
 
 BlackHoleSink::BlackHoleSink(BufferControlBlock* sinker, RuntimeProfile* parent_profile)
-        : _sinker(sinker), _parent_profile(parent_profile) {}
+        : _sinker(sinker), _parent_profile(parent_profile), _eaten_rows_num(0) {}
 
 Status BlackHoleSink::init(RuntimeState* state) {
     _eat_rows_counter = ADD_COUNTER(_parent_profile, "BlackHoleEatenRows", TUnit::UNIT);
