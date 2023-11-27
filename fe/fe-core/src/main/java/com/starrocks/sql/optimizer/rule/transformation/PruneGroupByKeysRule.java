@@ -40,8 +40,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.optimizer.operator.Operator.DEFAULT_OFFSET;
-
 // for aggregate queries with group by keys like `group by col,expr(col),constant` or `group by constant`,
 // these expr and constant won't affect the effect of aggregation grouping, we can remove them
 public class PruneGroupByKeysRule extends TransformationRule {
