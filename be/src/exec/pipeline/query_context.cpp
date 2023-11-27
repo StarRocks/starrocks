@@ -119,10 +119,6 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
         }
     }
 
-    if (parent_mem_limit > 0 && mem_limit > parent_mem_limit) {
-        return -1;
-    }
-
     return mem_limit;
 }
 
