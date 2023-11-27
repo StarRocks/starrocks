@@ -119,8 +119,11 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
         }
     }
 
-    // query's mem_limit never exceeds its parent's limit if it exists
-    return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
+    if (parent_mem_limit > 0 && mem_limit > parent_mem_limit) {
+        return -1;
+    }
+
+    return mem_limit;
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,

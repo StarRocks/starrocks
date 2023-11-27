@@ -1,0 +1,28 @@
+-- name: test_resource_group_lt_query_mem_limit
+create table t1 (
+    k1 int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 32
+properties("replication_num" = "1");
+
+insert into t1 select generate_series FROM TABLE(generate_series(1, 65535));
+insert into t1 select k1 + 65535 from t1;
+insert into t1 select k1 + 65535*2 from t1;
+insert into t1 select k1 + 65535*3 from t1;
+
+create resource group rg_${uuid0} 
+    to ( user='user_${uuid0}' ) 
+    with ('cpu_core_limit' = '1', 'mem_limit' = '0.0000000000001', 'concurrency_limit'='2');
+
+-- group.mem_limit < query_mem_limit and exceed memory limit.
+select /*+SET_VAR(query_mem_limit=1073741824,resource_group='rg_${uuid0}')*/ count(1) from t1;
+
+-- group.mem_limit > query_mem_limit and exceed memory limit.
+alter resource group rg_${uuid0} with ('mem_limit'='0.99');
+select /*+SET_VAR(query_mem_limit=1024,resource_group='rg_${uuid0}')*/ count(1) from t1;
+
+-- Does not exceed memory limit.
+select /*+SET_VAR(query_mem_limit=107374182400,resource_group='rg_${uuid0}')*/ count(1) from t1;
+
+drop resource group rg_${uuid0};
