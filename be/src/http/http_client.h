@@ -93,7 +93,11 @@ public:
     // used to get content length
     int64_t get_content_length() const {
         double cl = 0.0f;
+#if (CURLVERSION_NOW >= CURLVERSION_TENTH)
+        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
+#else
         curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+#endif
         return cl;
     }
 
