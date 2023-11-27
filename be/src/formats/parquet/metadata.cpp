@@ -24,7 +24,7 @@ Status FileMetaData::init(tparquet::FileMetaData& t_metadata, bool case_sensitiv
     // construct schema from thrift
     RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema, case_sensitive));
     _num_rows = t_metadata.num_rows;
-    _t_metadata = std::move(t_metadata);
+    tparquet::swap(_t_metadata, t_metadata);
     if (_t_metadata.__isset.created_by) {
         _writer_version = ApplicationVersion(_t_metadata.created_by);
     } else {

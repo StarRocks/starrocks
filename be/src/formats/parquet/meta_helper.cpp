@@ -20,8 +20,9 @@ namespace starrocks::parquet {
 
 void ParquetMetaHelper::set_existed_column_names(std::unordered_set<std::string>* names) const {
     names->clear();
+    names->reserve(_file_metadata->schema().get_fields_size());
     for (size_t i = 0; i < _file_metadata->schema().get_fields_size(); i++) {
-        names->emplace(_file_metadata->schema().get_stored_column_by_field_idx(i)->name);
+        names->insert(_file_metadata->schema().get_stored_column_by_field_idx(i)->name);
     }
 }
 
@@ -76,12 +77,13 @@ void IcebergMetaHelper::set_existed_column_names(std::unordered_set<std::string>
     names->clear();
     // build column name set from iceberg schema
     const auto& fields = _t_iceberg_schema->fields;
+    names->reserve(fields.size());
     for (const auto& field : fields) {
         if (_file_metadata->schema().contain_field_id(field.field_id)) {
             // We can't use _file_metadata->schema()'s column name, because column name from
             // _file_metadata->schema() was set by parquet metadata, it may not the same as column name from FE.
             // names->emplace(_file_metadata->schema().get_stored_column_by_field_id(field.field_id)->name);
-            names->emplace(_case_sensitive ? field.name : boost::algorithm::to_lower_copy(field.name));
+            names->insert(_case_sensitive ? field.name : boost::algorithm::to_lower_copy(field.name));
         }
     }
 }

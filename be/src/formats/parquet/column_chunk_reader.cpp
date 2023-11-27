@@ -61,8 +61,7 @@ Status ColumnChunkReader::init(int chunk_size) {
 }
 
 Status ColumnChunkReader::load_header() {
-    RETURN_IF_ERROR(_parse_page_header());
-    return Status::OK();
+    return _parse_page_header();
 }
 
 Status ColumnChunkReader::load_page() {
