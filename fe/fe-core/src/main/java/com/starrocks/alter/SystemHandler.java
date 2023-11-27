@@ -149,6 +149,8 @@ public class SystemHandler extends AlterHandler {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
+            // When a new be is added, all routine load jobs should be rescheduled to balance the task to new be.
+            GlobalStateMgr.getCurrentState().getRoutineLoadScheduler().setNeedReschedule();
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
@@ -199,6 +201,8 @@ public class SystemHandler extends AlterHandler {
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            // When a new cn is added, all routine load jobs should be rescheduled to balance the task to new be.
+            GlobalStateMgr.getCurrentState().getRoutineLoadScheduler().setNeedReschedule();
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());

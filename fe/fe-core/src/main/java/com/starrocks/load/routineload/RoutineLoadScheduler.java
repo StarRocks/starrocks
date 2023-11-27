@@ -43,14 +43,18 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.server.GlobalStateMgr;
+import jline.internal.Log;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RoutineLoadScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
+
+    AtomicBoolean needReschedule = new AtomicBoolean(false);
 
     private RoutineLoadMgr routineLoadManager;
 
@@ -74,9 +78,24 @@ public class RoutineLoadScheduler extends FrontendDaemon {
         }
     }
 
+    public void setNeedReschedule() {
+        needReschedule.set(true);
+    }
+
     private void process() throws UserException {
         // update
         routineLoadManager.updateRoutineLoadJob();
+
+        if (needReschedule.get()) {
+            // reschedule routine load job to balance tasks to new be.
+            List<RoutineLoadJob> runningJobs = getRunningRoutineJobs();
+            for (RoutineLoadJob job : runningJobs) {
+                job.updateState(RoutineLoadJob.JobState.NEED_SCHEDULE, null, false);
+            }
+            Log.info("new all routine load jobs are rescheduled, job num: ", runningJobs.size());
+            needReschedule.set(false);
+        }
+
         // get need schedule routine jobs
         List<RoutineLoadJob> routineLoadJobList = getNeedScheduleRoutineJobs();
 
@@ -137,5 +156,9 @@ public class RoutineLoadScheduler extends FrontendDaemon {
 
     private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {
         return routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
+    }
+
+    private List<RoutineLoadJob> getRunningRoutineJobs() {
+        return routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.RUNNING));
     }
 }
